@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+uploads/menu_images/
+frontend_dist/
+*.db
+.DS_Store
