@@ -20,5 +20,25 @@ class Settings(BaseSettings):
     NGROK_AUTHTOKEN: str = ""
     NGROK_STATIC_DOMAIN: str = ""
 
+    # Cloudflare R2 (S3-compatible). Leave empty to use local filesystem.
+    R2_ENDPOINT: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET: str = ""
+    R2_PUBLIC_BASE_URL: str = ""  # e.g. https://pub-xxxx.r2.dev or custom domain
+
+    PORT: int = 8000
+
+
+def _normalize_db_url(url: str) -> str:
+    # Render / Heroku-style URLs come as postgres:// or postgresql:// — async
+    # SQLAlchemy needs the asyncpg driver. Add it if missing.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+    return url
+
 
 settings = Settings()
+settings.DATABASE_URL = _normalize_db_url(settings.DATABASE_URL)
