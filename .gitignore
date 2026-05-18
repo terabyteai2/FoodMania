@@ -1,9 +1,27 @@
-backend/.env
-backend/__pycache__/
-backend/routers/__pycache__/
-backend/uploads/
-backend/*.pyc
+# ============================================
+# Root .gitignore — Rastarant monorepo
+# Goal: push everything EXCEPT large/regenerable build artifacts.
+# GitHub hard limit: 100MB per file, 50MB warning.
+# ============================================
 
-# Node
+# ---------- OS junk ----------
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---------- Python caches (regenerable) ----------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ---------- Node deps (HUGE, regenerable via npm/yarn install) ----------
 node_modules/
-.vite/
+
+# ---------- Logs ----------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+cloudflared.log
+ngrok.log

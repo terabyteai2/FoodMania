@@ -39,6 +39,7 @@ def _start_ngrok() -> str | None:
 async def lifespan(app: FastAPI):
     await create_tables()
     os.makedirs(settings.IMAGES_DIR, exist_ok=True)
+    os.makedirs(settings.HERO_MEDIA_DIR, exist_ok=True)
     os.makedirs(settings.OUTLET_IMAGES_DIR, exist_ok=True)
     os.makedirs(settings.OUTLET_VIDEOS_DIR, exist_ok=True)
 
@@ -96,7 +97,10 @@ async def serve_menu_spa(full_path: str):
     """Serve the customer React SPA for all /menu/* routes."""
     index = FRONTEND_DIST / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(
+            str(index),
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     return JSONResponse(status_code=503, content={"error": "Customer menu not built yet. Run: bash build_frontend.sh"})
 
 
@@ -105,7 +109,10 @@ async def serve_root():
     """Redirect root to docs in dev; serve index.html if built."""
     index = FRONTEND_DIST / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(
+            str(index),
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/docs")
 

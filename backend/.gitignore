@@ -1,8 +1,24 @@
-.env
+# ============================================
+# Backend .gitignore
+# Only excludes regenerable caches and runtime junk.
+# .env WILL be pushed.
+# ============================================
+
+# Python caches
 __pycache__/
 *.pyc
 *.pyo
-uploads/menu_images/
-frontend_dist/
-*.db
+
+# Virtual envs (HUGE, regenerable)
+venv/
+.venv/
+env/
+
+# Logs / pids
+cloudflared.log
+ngrok.log
+*.pid
+*.log
+
+# OS
 .DS_Store

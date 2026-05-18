@@ -129,7 +129,7 @@ class _SplashScreenState extends State<SplashScreen>
                           return PosGradients.brandDeep.createShader(rect);
                         },
                         child: Icon(
-                          Icons.point_of_sale_rounded,
+                          Icons.whatshot_rounded,
                           color: PosColors.slate,
                           size: 48,
                         ),
@@ -137,11 +137,12 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     SizedBox(height: 22),
                     Text(
-                      'REs Admin',
+                      'Foodmania',
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                         color: PosColors.slate,
-                        letterSpacing: 0,
-                        fontSize: 32,
+                        letterSpacing: -0.5,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                     SizedBox(height: 8),
@@ -174,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                           SizedBox(width: 8),
                           Text(
-                            'Cloud Restaurant Suite',
+                            'Restaurant POS',
                             style: TextStyle(
                               color: PosColors.slate,
                               fontWeight: FontWeight.w800,

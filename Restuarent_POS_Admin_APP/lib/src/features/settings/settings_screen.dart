@@ -71,6 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _restaurantController.addListener(_scheduleAutoSave);
     _outletController.addListener(_scheduleAutoSave);
     _cloudUrlController.addListener(_scheduleAutoSave);
+    _outletIdController.addListener(_scheduleAutoSave);
     _syncIntervalController.addListener(_scheduleAutoSave);
     _hydrated = true;
   }
@@ -111,6 +112,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? 'Setup'
                 : app.serverConfig.restaurantName,
             onTap: _openRestaurantInfo,
+          ),
+          _SettingActionData(
+            title: 'Server & Menu URLs',
+            subtitle: 'Tunnel URL, outlet ID, and customer menu link',
+            icon: Icons.link_rounded,
+            trailing: app.cloudConfig.baseUrl.trim().isEmpty
+                ? 'Not set'
+                : 'Configured',
+            onTap: _openConnectionUrls,
           ),
           _SettingActionData(
             title: 'Hero Media',
@@ -692,6 +702,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openConnectionUrls() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _ConnectionUrlsPage(
+          urlController: _cloudUrlController,
+          outletIdController: _outletIdController,
         ),
       ),
     );
@@ -2181,20 +2202,41 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   }
 
   Future<void> _fetchInfo() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final uri = Uri.parse('${widget.baseUrl.trimRight()}/customer/${widget.outletId}/info');
+      final base = widget.baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      if (base.isEmpty) {
+        throw Exception(
+          'Cloud API URL is not configured. Open Settings → Connection URLs and set it.',
+        );
+      }
+      final uri = Uri.parse('$base/customer/${widget.outletId}/info');
       final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('Server returned HTTP ${res.statusCode}.');
+      }
       final data = jsonDecode(res.body);
-      final info = data['data'] is Map ? Map<String, dynamic>.from(data['data'] as Map) : <String, dynamic>{};
+      final info = data['data'] is Map
+          ? Map<String, dynamic>.from(data['data'] as Map)
+          : <String, dynamic>{};
       final rawGallery = info['galleryImages'];
       setState(() {
-        _gallery = rawGallery is List ? rawGallery.map((e) => e.toString()).toList() : [];
-        _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true ? null : info['videoUrl']?.toString().trim();
+        _gallery = rawGallery is List
+            ? rawGallery.map((e) => e.toString()).toList()
+            : [];
+        _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true
+            ? null
+            : info['videoUrl']?.toString().trim();
         _loading = false;
       });
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
@@ -2209,16 +2251,25 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       final dataUrl = await _imageService.pickMenuImageDataUrl();
       if (dataUrl == null) return;
       setState(() => _saving = true);
-      final updated = await widget.cloudApiService.uploadOutletImage(dataUrl) as List<String>;
-      setState(() { _gallery = updated; _saving = false; });
+      final updated =
+          await widget.cloudApiService.uploadOutletImage(dataUrl)
+              as List<String>;
+      setState(() {
+        _gallery = updated;
+        _saving = false;
+      });
     } on MenuImageException catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -2228,20 +2279,32 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       builder: (_) => AlertDialog(
         title: const Text('Remove image?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
     try {
       setState(() => _saving = true);
-      final updated = await widget.cloudApiService.deleteOutletImage(index) as List<String>;
-      setState(() { _gallery = updated; _saving = false; });
+      final updated =
+          await widget.cloudApiService.deleteOutletImage(index) as List<String>;
+      setState(() {
+        _gallery = updated;
+        _saving = false;
+      });
     } catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -2257,21 +2320,32 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
     if (bytes.length > maxBytes) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video is too large. Please use a clip under 50 MB.')),
+        const SnackBar(
+          content: Text('Video is too large. Please use a clip under 50 MB.'),
+        ),
       );
       return;
     }
 
     setState(() => _saving = true);
     try {
-      final url = await widget.cloudApiService.uploadOutletVideo(bytes, video.name) as String;
-      setState(() { _currentVideoUrl = url; _saving = false; });
+      final url =
+          await widget.cloudApiService.uploadOutletVideo(bytes, video.name)
+              as String;
+      setState(() {
+        _currentVideoUrl = url;
+        _saving = false;
+      });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video uploaded!')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Video uploaded!')));
     } catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -2279,145 +2353,349 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
     setState(() => _saving = true);
     try {
       await widget.cloudApiService.updateOutletMedia(videoUrl: null);
-      setState(() { _currentVideoUrl = null; _saving = false; });
+      setState(() {
+        _currentVideoUrl = null;
+        _saving = false;
+      });
     } catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hero Media'),
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('Hero Media'), centerTitle: false),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_error!, textAlign: TextAlign.center),
-                    SizedBox(height: 12),
-                    FilledButton(onPressed: _fetchInfo, child: const Text('Retry')),
-                  ],
-                ))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Hero Photos', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Up to 5 photos shown as a carousel when no video is set.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        height: 110,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            ..._gallery.asMap().entries.map((e) => Padding(
-                              padding: const EdgeInsets.only(right: 10),
-                              child: Stack(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(
-                                      e.value,
-                                      width: 110,
-                                      height: 110,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        width: 110, height: 110,
-                                        color: Colors.grey.shade200,
-                                        child: const Icon(Icons.broken_image_outlined),
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!, textAlign: TextAlign.center),
+                  SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _fetchInfo,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hero Photos',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Up to 5 photos shown as a sliding carousel on the menu page hero.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 110,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        ..._gallery.asMap().entries.map(
+                          (e) => Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    e.value,
+                                    width: 110,
+                                    height: 110,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                              width: 110,
+                                              height: 110,
+                                              color: Colors.grey.shade200,
+                                              child: const Icon(
+                                                Icons.broken_image_outlined,
+                                              ),
+                                            ),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: GestureDetector(
+                                    onTap: _saving
+                                        ? null
+                                        : () => _deleteImage(e.key),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
                                       ),
                                     ),
                                   ),
-                                  Positioned(
-                                    top: 4, right: 4,
-                                    child: GestureDetector(
-                                      onTap: _saving ? null : () => _deleteImage(e.key),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: const Icon(Icons.close, color: Colors.white, size: 16),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )),
-                            if (_gallery.length < 5)
-                              GestureDetector(
-                                onTap: _saving ? null : _addImage,
-                                child: Container(
-                                  width: 110, height: 110,
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Theme.of(context).colorScheme.outlineVariant,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: _saving
-                                      ? const Center(child: CircularProgressIndicator())
-                                      : const Icon(Icons.add_photo_alternate_outlined, size: 32),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_gallery.length < 5)
+                          GestureDetector(
+                            onTap: _saving ? null : _addImage,
+                            child: Container(
+                              width: 110,
+                              height: 110,
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
+                                  width: 1.5,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      Text('Hero Video', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Pick a short clip (up to 30 s, 50 MB). Takes priority over photos.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 14),
-                      if (_currentVideoUrl != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(12),
+                              child: _saving
+                                  ? const Center(
+                                      child: CircularProgressIndicator(),
+                                    )
+                                  : const Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      size: 32,
+                                    ),
+                            ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.videocam_rounded),
-                              const SizedBox(width: 10),
-                              const Expanded(child: Text('Video set', style: TextStyle(fontWeight: FontWeight.w600))),
-                              OutlinedButton.icon(
-                                onPressed: _saving ? null : _clearVideo,
-                                icon: const Icon(Icons.delete_outline, size: 18),
-                                label: const Text('Remove'),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
                       ],
-                      FilledButton.icon(
-                        onPressed: _saving ? null : _pickAndUploadVideo,
-                        icon: _saving
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.video_library_outlined),
-                        label: Text(_currentVideoUrl != null ? 'Replace Video' : 'Pick Video from Gallery'),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    'Welcome Video',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Short clip (up to 30 s, 50 MB) played on the customer welcome screen.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 14),
+                  if (_currentVideoUrl != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
+                      child: Row(
+                        children: [
+                          const Icon(Icons.videocam_rounded),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Video set',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _saving ? null : _clearVideo,
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            label: const Text('Remove'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  FilledButton.icon(
+                    onPressed: _saving ? null : _pickAndUploadVideo,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.video_library_outlined),
+                    label: Text(
+                      _currentVideoUrl != null
+                          ? 'Replace Video'
+                          : 'Pick Video from Gallery',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+// ─── Table Settings Page ──────────────────────────────────────────────────────
+
+// ─── Connection URLs Page ─────────────────────────────────────────────────────
+
+class _ConnectionUrlsPage extends StatefulWidget {
+  const _ConnectionUrlsPage({
+    required this.urlController,
+    required this.outletIdController,
+  });
+
+  final TextEditingController urlController;
+  final TextEditingController outletIdController;
+
+  @override
+  State<_ConnectionUrlsPage> createState() => _ConnectionUrlsPageState();
+}
+
+class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
+  @override
+  void initState() {
+    super.initState();
+    widget.urlController.addListener(_rebuild);
+    widget.outletIdController.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    widget.urlController.removeListener(_rebuild);
+    widget.outletIdController.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  void _rebuild() => setState(() {});
+
+  String get _menuUrl {
+    final base = widget.urlController.text.trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    final outlet = widget.outletIdController.text.trim();
+    if (base.isEmpty || outlet.isEmpty) return '';
+    return '$base/menu/$outlet';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final menuUrl = _menuUrl;
+    return _SettingsSectionPage(
+      title: 'Server & Menu URLs',
+      child: _SectionCard(
+        title: 'Connection Settings',
+        subtitle: 'Tunnel URL, outlet ID, and customer menu link',
+        icon: Icons.link_rounded,
+        children: [
+          Text('Server URL', style: Theme.of(context).textTheme.titleSmall),
+          SizedBox(height: 6),
+          TextField(
+            controller: widget.urlController,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: InputDecoration(
+              hintText: 'https://your-tunnel.trycloudflare.com',
+              prefixIcon: Icon(Icons.dns_rounded),
+            ),
+          ),
+          SizedBox(height: 16),
+          Text('Outlet ID', style: Theme.of(context).textTheme.titleSmall),
+          SizedBox(height: 6),
+          TextField(
+            controller: widget.outletIdController,
+            autocorrect: false,
+            decoration: InputDecoration(
+              hintText: 'outlet UUID',
+              prefixIcon: Icon(Icons.pin_drop_outlined),
+              helperText:
+                  'Auto-generated. Only change if re-registering the outlet.',
+            ),
+          ),
+          SizedBox(height: 20),
+          Text(
+            'Customer Menu URL',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: menuUrl.isEmpty
+                  ? PosColors.background
+                  : PosColors.primarySoft,
+              borderRadius: BorderRadius.circular(PosRadii.md),
+              border: Border.all(
+                color: menuUrl.isEmpty
+                    ? PosColors.lineStrong.withValues(alpha: 0.48)
+                    : PosColors.primary.withValues(alpha: 0.50),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    menuUrl.isEmpty
+                        ? 'Set server URL and outlet ID above'
+                        : menuUrl,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: menuUrl.isEmpty
+                          ? PosColors.muted
+                          : PosColors.primaryDark,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
+                if (menuUrl.isNotEmpty) ...[
+                  SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(Icons.copy_rounded, size: 18),
+                    tooltip: 'Copy URL',
+                    style: IconButton.styleFrom(
+                      foregroundColor: PosColors.primaryDark,
+                      backgroundColor: PosColors.primary.withValues(
+                        alpha: 0.20,
+                      ),
+                      minimumSize: Size(36, 36),
+                    ),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: menuUrl));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Menu URL copied')),
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Share this link with customers to let them view your menu.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
+          ),
+        ],
+      ),
     );
   }
 }

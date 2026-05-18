@@ -83,7 +83,7 @@ class PosAppController extends ChangeNotifier {
   String? lastBkashTransactionId;
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
-  double uiScale = 0.9;
+  double uiScale = 1.06;
   String? lastError;
   bool isLoggedIn = false;
   String accountEmail = '';
@@ -174,7 +174,7 @@ class PosAppController extends ChangeNotifier {
             )
           : deviceLanguage;
       themePreference = AppThemePreference.white;
-      uiScale = (preferences.getDouble(_uiScaleKey) ?? 0.9)
+      uiScale = (preferences.getDouble(_uiScaleKey) ?? 1.06)
           .clamp(minUiScale, maxUiScale)
           .toDouble();
       serverConfig = ServerConfig(
@@ -307,9 +307,13 @@ class PosAppController extends ChangeNotifier {
     required String restaurantName,
     required String outletName,
   }) async {
+    final cleanRestaurantName = restaurantName.trim();
+    final cleanOutletName = outletName.trim().isEmpty
+        ? 'Main Outlet'
+        : outletName.trim();
     serverConfig = serverConfig.copyWith(
-      restaurantName: restaurantName.trim(),
-      outletName: outletName.trim().isEmpty ? 'Main Outlet' : outletName.trim(),
+      restaurantName: cleanRestaurantName,
+      outletName: cleanOutletName,
     );
     isLoggedIn = true;
     hasSeenIntro = true;
@@ -317,6 +321,16 @@ class PosAppController extends ChangeNotifier {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(_seenIntroKey, true);
     await preferences.setBool(_accountLoggedInKey, true);
+    if (cloudConfig.canConnect) {
+      try {
+        await _provisionTenantInternal(
+          restaurantName: cleanRestaurantName,
+          outletName: cleanOutletName,
+        );
+      } catch (error) {
+        lastError = error.toString();
+      }
+    }
     notifyListeners();
   }
 
@@ -373,8 +387,13 @@ class PosAppController extends ChangeNotifier {
       inventoryItems.where((i) => i.isLowStock || i.isOutOfStock).length;
 
   List<String> get inventoryCategories {
-    final cats = inventoryItems.map((i) => i.category).where((c) => c.isNotEmpty).toSet().toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final cats =
+        inventoryItems
+            .map((i) => i.category)
+            .where((c) => c.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return cats;
   }
 
@@ -425,7 +444,12 @@ class PosAppController extends ChangeNotifier {
         cloudConfig: cloudConfig,
         serverConfig: serverConfig,
       );
-      if (isCloudReady && cloudConfig.canSync) {
+      if (cloudConfig.canConnect) {
+        await _provisionTenantInternal(
+          restaurantName: serverConfig.restaurantName,
+          outletName: serverConfig.outletName,
+        );
+      } else if (isCloudReady && cloudConfig.canSync) {
         unawaited(syncService.syncNow());
       }
     });
@@ -580,7 +604,7 @@ class PosAppController extends ChangeNotifier {
       updatedAt: now,
     );
     await database.upsertMenuItem(item);
-    unawaited(syncService.syncNow());
+    await _syncWithFreshTenantToken();
   }
 
   Future<String> uploadMenuImageDataUrl(String dataUrl) async {
@@ -590,12 +614,12 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> deleteMenuItem(String id) async {
     await database.deleteMenuItem(id);
-    unawaited(syncService.syncNow());
+    await _syncWithFreshTenantToken();
   }
 
   Future<void> toggleMenuAvailability(String id, bool isAvailable) async {
     await database.toggleMenuAvailability(id, isAvailable);
-    unawaited(syncService.syncNow());
+    await _syncWithFreshTenantToken();
   }
 
   // ── Inventory ─────────────────────────────────────────────────────────────
@@ -640,7 +664,7 @@ class PosAppController extends ChangeNotifier {
       tableNo: tableNo,
       note: note,
       source: OrderSource.manual,
-      initialStatus: OrderStatus.accepted,
+      initialStatus: OrderStatus.served,
     );
     unawaited(syncService.syncNow());
     return order;
@@ -648,6 +672,12 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> updateOrderStatus(String id, OrderStatus status) async {
     await database.updateOrderStatus(id, status);
+    if (status == OrderStatus.accepted || status == OrderStatus.served) {
+      final order = await database.getOrderById(id);
+      if (order != null) {
+        await _printAcceptedOrderIfNeeded(order);
+      }
+    }
     unawaited(syncService.syncNow());
   }
 
@@ -660,7 +690,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> syncNow() async {
-    return _runBusy(syncService.syncNow);
+    return _runBusy(_syncWithFreshTenantToken);
   }
 
   Future<bool> retryFailedSync() async {
@@ -815,12 +845,26 @@ class PosAppController extends ChangeNotifier {
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     for (final order in newOrders) {
-      _autoPrintInFlight.add(order.id);
-      try {
-        await printOrderTicket(order);
-      } finally {
-        _autoPrintInFlight.remove(order.id);
-      }
+      await _printAcceptedOrderIfNeeded(order);
+    }
+  }
+
+  Future<void> _printAcceptedOrderIfNeeded(OrderModel order) async {
+    final status = order.status.adminStatus;
+    final isAccepted =
+        status == OrderStatus.accepted || status == OrderStatus.served;
+    if (!isAccepted ||
+        !printerState.autoPrintEnabled ||
+        !printerState.hasSelectedPrinter ||
+        printerService.hasPrintedOrder(order.id) ||
+        _autoPrintInFlight.contains(order.id)) {
+      return;
+    }
+    _autoPrintInFlight.add(order.id);
+    try {
+      await printOrderTicket(order);
+    } finally {
+      _autoPrintInFlight.remove(order.id);
     }
   }
 
@@ -925,7 +969,23 @@ class PosAppController extends ChangeNotifier {
     );
     await _persistSettings();
     syncService.configure(cloudConfig: cloudConfig, serverConfig: serverConfig);
-    unawaited(syncService.syncNow());
+    await syncService.syncNow();
+  }
+
+  Future<void> _syncWithFreshTenantToken() async {
+    if (cloudConfig.canConnect && isTenantReady) {
+      try {
+        await _provisionTenantInternal(
+          restaurantName: serverConfig.restaurantName,
+          outletName: serverConfig.outletName,
+        );
+        return;
+      } catch (_) {
+        // Fall through to the normal sync path so the sync screen shows the
+        // backend error instead of hiding it behind token refresh.
+      }
+    }
+    await syncService.syncNow();
   }
 
   Future<void> _persistBkashPayment(BkashPaymentSession session) async {
@@ -985,6 +1045,6 @@ class PosAppController extends ChangeNotifier {
   static final String _accountPasswordKey = 'local_pos_account_password';
   static final String _accountLoggedInKey = 'local_pos_account_logged_in';
   static final String _tableCountKey = 'local_pos_table_count';
-  static double minUiScale = 0.78;
-  static double maxUiScale = 1.08;
+  static double minUiScale = 0.96;
+  static double maxUiScale = 1.18;
 }

@@ -37,10 +37,10 @@ class AppStrings {
 
   bool get isBn => language == AppLanguage.bn;
 
-  String get appTitle => 'REs Admin';
-  String get cloudSuite => isBn ? 'ক্লাউড POS স্যুট' : 'Cloud POS Suite';
+  String get appTitle => 'Foodmania';
+  String get cloudSuite => isBn ? 'রেস্টুরেন্ট POS' : 'Restaurant POS';
   String get cloudRestaurantSuite =>
-      isBn ? 'ক্লাউড রেস্টুরেন্ট স্যুট' : 'Cloud Restaurant Suite';
+      isBn ? 'ফুডম্যানিয়া POS' : 'Foodmania POS';
 
   String get dashboard => isBn ? 'ড্যাশবোর্ড' : 'Dashboard';
   String get home => isBn ? 'হোম' : 'Home';

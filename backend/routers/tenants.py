@@ -47,6 +47,17 @@ async def bootstrap_tenant(
         await db.refresh(restaurant)
     else:
         restaurant = (await db.execute(select(Restaurant).where(Restaurant.id == outlet.restaurant_id))).scalar_one()
+        changed = False
+        if body.restaurantName.strip() and restaurant.name != body.restaurantName:
+            restaurant.name = body.restaurantName
+            changed = True
+        if body.outletName.strip() and outlet.name != body.outletName:
+            outlet.name = body.outletName
+            changed = True
+        if changed:
+            await db.commit()
+            await db.refresh(outlet)
+            await db.refresh(restaurant)
 
     token = create_device_token(outlet.id)
     return ok({

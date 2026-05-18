@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 const API_BASE = ''
+const MENU_REFRESH_MS = 5000
 
 // ── PDF receipt generator ─────────────────────────────────────────────────────
-// jsPDF built-in fonts only cover Latin — use "Tk" instead of the Bengali ৳ glyph
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
 
 async function generateReceipt(order, info, cartItems) {
@@ -12,7 +12,6 @@ async function generateReceipt(order, info, cartItems) {
   const W = doc.internal.pageSize.getWidth()
   let y = 44
 
-  // ── Header ──────────────────────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
   doc.setTextColor(0, 0, 0)
@@ -31,8 +30,7 @@ async function generateReceipt(order, info, cartItems) {
   doc.text(new Date().toLocaleString('en-BD'), W / 2, y, { align: 'center' }); y += 22
   doc.setTextColor(0, 0, 0)
 
-  // ── Order number block ───────────────────────────────────────────────────────
-  doc.setDrawColor(160, 31, 51)
+  doc.setDrawColor(255, 106, 61)
   doc.setLineWidth(0.75)
   doc.line(30, y, W - 30, y); y += 18
 
@@ -42,13 +40,11 @@ async function generateReceipt(order, info, cartItems) {
   doc.text('ORDER NUMBER', W / 2, y, { align: 'center' }); y += 6
 
   doc.setFontSize(44)
-  doc.setTextColor(160, 31, 51)
+  doc.setTextColor(255, 181, 71)
   doc.text(`#${order.serialNumber}`, W / 2, y + 34, { align: 'center' }); y += 50
   doc.setTextColor(0, 0, 0)
   doc.line(30, y, W - 30, y); y += 20
 
-  // ── Items ────────────────────────────────────────────────────────────────────
-  // Column header
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
   doc.setTextColor(140, 140, 140)
@@ -64,16 +60,13 @@ async function generateReceipt(order, info, cartItems) {
   doc.setFontSize(10)
   for (const item of cartItems) {
     doc.setFont('helvetica', 'normal')
-    // Wrap long item names
     const nameLines = doc.splitTextToSize(item.name, W / 2 - 10)
     doc.text(nameLines, 30, y)
-    doc.setFont('helvetica', 'normal')
     doc.setTextColor(80, 80, 80)
     doc.text(`x${item.qty}`, W / 2, y, { align: 'center' })
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(0, 0, 0)
     doc.text(pdfTk(item.price * item.qty), W - 30, y, { align: 'right' })
-    // Unit price hint
     if (item.qty > 1) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
@@ -85,7 +78,6 @@ async function generateReceipt(order, info, cartItems) {
     doc.setTextColor(0, 0, 0)
   }
 
-  // ── Notes ────────────────────────────────────────────────────────────────────
   if (order.notes) {
     y += 4
     doc.setFont('helvetica', 'italic')
@@ -96,19 +88,17 @@ async function generateReceipt(order, info, cartItems) {
     doc.setTextColor(0, 0, 0)
   }
 
-  // ── Total ────────────────────────────────────────────────────────────────────
   y += 4
   doc.setLineWidth(0.75)
-  doc.setDrawColor(160, 31, 51)
+  doc.setDrawColor(255, 106, 61)
   doc.line(30, y, W - 30, y); y += 16
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
   doc.text('Total', 30, y)
-  doc.setTextColor(160, 31, 51)
+  doc.setTextColor(255, 181, 71)
   doc.text(pdfTk(order.total), W - 30, y, { align: 'right' }); y += 30
   doc.setTextColor(0, 0, 0)
 
-  // ── Footer ───────────────────────────────────────────────────────────────────
   doc.setLineWidth(0.3)
   doc.setDrawColor(220, 220, 220)
   doc.line(30, y, W - 30, y); y += 14
@@ -122,27 +112,45 @@ async function generateReceipt(order, info, cartItems) {
   doc.save(`receipt-${order.serialNumber ?? order.orderId?.slice(0, 8) ?? 'order'}.pdf`)
 }
 
-// ── Palette ───────────────────────────────────────────────────────────────────
-const C = {
-  bg:       '#160204',
-  surface:  '#280509',
-  surface2: '#3A080E',
-  surface3: '#4D0C14',
-  wine:     '#C8101E',
-  wineRich: '#D91B28',
-  wineDark: '#0D0103',
-  gold:     '#C9A86C',
-  goldLt:   '#E8D5A3',
-  cream:    '#F5EDEA',
-  text:     '#F5EDEA',
-  muted:    '#C49098',
-  border:   '#5C0C14',
-  overlay:  'rgba(15,2,4,0.95)',
+// ── Theme ─────────────────────────────────────────────────────────────────────
+const T = {
+  bg:      '#1c1410',
+  bgWarm:  '#241914',
+  bgCard:  '#2b1f18',
+  ink:     '#fff3e0',
+  inkSoft: 'rgba(255,243,224,.65)',
+  inkFaint:'rgba(255,243,224,.4)',
+  ember:   '#ff6a3d',
+  amber:   '#ffb547',
+  line:    'rgba(255,243,224,.12)',
+  display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
+  body:    '"Hind Siliguri", system-ui, -apple-system, sans-serif',
 }
+
+// ── Demo data ─────────────────────────────────────────────────────────────────
+const DEMO_INFO = {
+  restaurantName: 'Helium',
+  outletName: 'Main Outlet',
+  bannerUrl: null,
+  galleryImages: [],
+  videoUrl: null,
+}
+
+const DEMO_ITEMS = [
+  { id: 'kacchi',   name: 'Mutton Kacchi Biryani', category: 'Biryani',  price: 450, description: 'Slow-cooked basmati with marinated mutton, potato, saffron and ghee.', tag: "Chef's pick", imageUrl: null },
+  { id: 'chickenb', name: 'Chicken Biryani',        category: 'Biryani',  price: 320, description: 'Aromatic basmati layered with spiced chicken thigh.',                  tag: null,          imageUrl: null },
+  { id: 'beeft',    name: 'Beef Tehari',             category: 'Mains',   price: 280, description: 'Short-grain rice cooked with tender beef cubes and green chillies.',   tag: null,          imageUrl: null },
+  { id: 'pizza',    name: 'Margherita Pizza',        category: 'Mains',   price: 1299,description: 'Wood-fired crust, San Marzano tomato, fior di latte, basil.',          tag: 'Popular',     imageUrl: null },
+  { id: 'samosa',   name: 'Keema Samosa',            category: 'Snacks',  price: 60,  description: 'Crisp pastry with spiced minced beef. Served with tamarind chutney.',  tag: null,          imageUrl: null },
+  { id: 'firni',    name: 'Saffron Firni',           category: 'Desserts',price: 120, description: 'Slow-cooked rice pudding with cardamom, saffron and pistachio.',       tag: null,          imageUrl: null },
+  { id: 'borhani',  name: 'Borhani',                 category: 'Drinks',  price: 80,  description: 'Spiced yogurt drink with mint and roasted cumin.',                     tag: null,          imageUrl: null },
+  { id: 'kebab',    name: 'Sheekh Kebab',            category: 'Mains',   price: 240, description: 'Charcoal-grilled minced beef skewers with cumin and onion.',           tag: null,          imageUrl: null },
+]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getOutletId() {
   const p = new URLSearchParams(window.location.search)
+  if (p.get('demo') === '1') return '__demo__'
   if (p.get('outlet')) return p.get('outlet')
   const parts = window.location.pathname.split('/').filter(Boolean)
   const idx = parts.indexOf('menu')
@@ -166,15 +174,26 @@ function buildMedia(item) {
   return media
 }
 
-// ── Gold divider ornament ─────────────────────────────────────────────────────
-function GoldLine() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 auto', width: 140 }}>
-      <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, transparent, ${C.gold})` }} />
-      <div style={{ width: 5, height: 5, borderRadius: '50%', background: C.gold, flexShrink: 0 }} />
-      <div style={{ flex: 1, height: 1, background: `linear-gradient(to left, transparent, ${C.gold})` }} />
-    </div>
-  )
+function unwrapApi(res) {
+  if (res?.ok === true) return res.data
+  if (res?.error == null && Object.prototype.hasOwnProperty.call(res || {}, 'data')) {
+    return res.data
+  }
+  throw new Error(res?.detail || res?.error || 'Could not load menu')
+}
+
+async function loadJson(path) {
+  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' })
+  let body = null
+  try {
+    body = await res.json()
+  } catch {
+    // Keep the clearer status error below.
+  }
+  if (!res.ok) {
+    throw new Error(body?.detail || body?.error || `${res.status} ${res.statusText}: ${path}`)
+  }
+  return unwrapApi(body)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -194,15 +213,47 @@ export default function App() {
 
   useEffect(() => {
     if (!outletId) { setPhase('error'); setErr('Invalid menu link.'); return }
-    Promise.all([
-      fetch(`${API_BASE}/customer/${outletId}/info`).then(r => r.json()),
-      fetch(`${API_BASE}/customer/${outletId}/menu`).then(r => r.json()),
-    ]).then(([infoRes, menuRes]) => {
-      if (!infoRes.ok || !menuRes.ok) throw new Error('Could not load menu')
-      setInfo(infoRes.data)
-      setItems(menuRes.data)
-      setPhase('menu')
-    }).catch(e => { setPhase('error'); setErr(e.message || 'Could not load menu.') })
+    if (outletId === '__demo__') {
+      setInfo(DEMO_INFO)
+      setItems(DEMO_ITEMS)
+      setPhase('welcome')
+      return
+    }
+    let cancelled = false
+
+    const refresh = async (silent = false) => {
+      try {
+        const [infoData, menuData] = await Promise.all([
+          loadJson(`/customer/${outletId}/info`),
+          loadJson(`/customer/${outletId}/menu`),
+        ])
+        if (cancelled) return
+        setInfo(infoData)
+        setItems(menuData)
+        setCart(current => {
+          const liveIds = new Set(menuData.map(item => item.id))
+          return Object.fromEntries(Object.entries(current).filter(([id]) => liveIds.has(id)))
+        })
+        setErr('')
+        setPhase(current => (current === 'loading' || current === 'error') ? 'welcome' : current)
+      } catch (e) {
+        if (cancelled || silent) return
+        setPhase('error')
+        setErr(e.message || 'Could not load menu.')
+      }
+    }
+
+    refresh(false)
+    const timer = window.setInterval(() => refresh(true), MENU_REFRESH_MS)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh(true)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [outletId])
 
   const categories = ['All', ...new Set(items.map(i => i.category).filter(Boolean))]
@@ -219,6 +270,18 @@ export default function App() {
 
   async function placeOrder() {
     setSub(true)
+    if (outletId === '__demo__') {
+      await new Promise(r => setTimeout(r, 800))
+      const demoCartItems = Object.entries(cart).map(([id, qty]) => {
+        const item = items.find(i => i.id === id)
+        return { name: item.name, qty, price: item.price }
+      })
+      setLastCart(demoCartItems)
+      setOrderRef({ serialNumber: Math.floor(Math.random() * 90) + 10, total: cartTotal(cart, items), orderId: 'demo-order-001', notes: note || null })
+      setPhase('success')
+      setSub(false)
+      return
+    }
     try {
       const orderItems = Object.entries(cart).map(([id, qty]) => {
         const item = items.find(i => i.id === id)
@@ -230,12 +293,13 @@ export default function App() {
         body: JSON.stringify({ items: orderItems, note: note || null }),
       })
       const data = await res.json()
-      if (!data.ok) throw new Error(data.detail || 'Order failed')
+      if (!res.ok) throw new Error(data.detail || data.error || 'Order failed')
+      const orderData = unwrapApi(data)
       setLastCart(Object.entries(cart).map(([id, qty]) => {
         const item = items.find(i => i.id === id)
         return { name: item.name, qty, price: item.price }
       }))
-      setOrderRef(data.data)
+      setOrderRef(orderData)
       setPhase('success')
     } catch (e) { alert(e.message || 'Could not place order.') }
     finally { setSub(false) }
@@ -245,12 +309,15 @@ export default function App() {
   if (phase === 'error')   return <ErrorScreen message={errorMsg} />
   if (phase === 'success') return (
     <SuccessScreen order={orderRef} info={info} cartItems={lastCart}
-      onBack={() => { setCart({}); setLastCart([]); setPhase('menu') }} />
+      onBack={() => { setCart({}); setLastCart([]); setNote(''); setPhase('menu') }} />
   )
   if (phase === 'cart') return (
     <CartScreen cart={cart} items={items} note={note} onNote={setNote}
       onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
       onPlace={placeOrder} submitting={submitting} info={info} />
+  )
+  if (phase === 'welcome') return (
+    <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
   )
 
   return (
@@ -278,9 +345,19 @@ export default function App() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function LoadingScreen() {
   return (
-    <div style={S.centerPage}>
-      <div style={S.wineSpinner} />
-      <p style={{ color: C.muted, marginTop: 20, fontWeight: 500, letterSpacing: 2, fontSize: 11, textTransform: 'uppercase' }}>
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      background: T.bg, padding: 24, fontFamily: T.body,
+    }}>
+      <div style={{
+        width: 40, height: 40,
+        border: `2px solid rgba(255,243,224,.1)`,
+        borderTop: `2px solid ${T.amber}`,
+        borderRadius: '50%',
+        animation: 'spin .9s linear infinite',
+      }} />
+      <p style={{ color: T.inkSoft, marginTop: 20, fontWeight: 500, letterSpacing: 2, fontSize: 11, textTransform: 'uppercase' }}>
         Loading…
       </p>
     </div>
@@ -289,98 +366,210 @@ function LoadingScreen() {
 
 function ErrorScreen({ message }) {
   return (
-    <div style={S.centerPage}>
-      <div style={{ fontSize: 42, marginBottom: 16 }}>🍷</div>
-      <p style={{ color: C.gold, fontFamily: 'Cormorant Garamond, serif', fontSize: 18, textAlign: 'center', padding: '0 32px' }}>
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      background: T.bg, padding: 24, fontFamily: T.body,
+    }}>
+      <div style={{ fontSize: 42, marginBottom: 16 }}>🍽️</div>
+      <p style={{ color: T.amber, fontFamily: T.display, fontSize: 18, textAlign: 'center', padding: '0 32px' }}>
         {message}
       </p>
     </div>
   )
 }
 
-function SuccessScreen({ order, info, cartItems, onBack }) {
+// ── Welcome Screen ────────────────────────────────────────────────────────────
+function WelcomeScreen({ info, onEnter }) {
+  const videoRef = useRef(null)
+  const [slide, setSlide] = useState(0)
+  const touchX = useRef(null)
+  const gallery = info?.galleryImages || []
+  const hasVideo = !!info?.videoUrl
+  const hasGallery = !hasVideo && gallery.length > 0
+  const hasBanner = !hasVideo && !hasGallery && !!info?.bannerUrl
+  const hasMedia = hasVideo || hasGallery || hasBanner
+
+  useEffect(() => {
+    if (!hasGallery || gallery.length < 2) return
+    const id = setInterval(() => setSlide(i => (i + 1) % gallery.length), 4000)
+    return () => clearInterval(id)
+  }, [hasGallery, gallery.length])
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.play().catch(() => {})
+  }, [info?.videoUrl])
+
+  function onTouchStart(e) { touchX.current = e.touches[0].clientX }
+  function onTouchEnd(e) {
+    if (touchX.current === null || !hasGallery) return
+    const dx = e.changedTouches[0].clientX - touchX.current
+    if (dx < -48) setSlide(i => (i + 1) % gallery.length)
+    if (dx > 48)  setSlide(i => (i - 1 + gallery.length) % gallery.length)
+    touchX.current = null
+  }
+
   return (
-    <div style={S.centerPage}>
-      <div className="fade-up" style={S.successCard}>
-        <div style={S.checkRing}>
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <path d="M6 16l7 7 13-13" stroke={C.gold} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+    <div
+      style={{ width: '100%', minHeight: '100vh', position: 'relative', overflow: 'hidden', background: T.bg, fontFamily: T.body }}
+      onTouchStart={hasGallery ? onTouchStart : undefined}
+      onTouchEnd={hasGallery ? onTouchEnd : undefined}
+    >
+      {/* Background media */}
+      {hasVideo ? (
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : hasGallery ? (
+        gallery.map((url, i) => (
+          <img key={url} src={url} alt="" style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+            opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
+          }} />
+        ))
+      ) : hasBanner ? (
+        <img src={info.bannerUrl} alt=""
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <>
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: `repeating-linear-gradient(135deg,
+              rgba(255,243,224,.04) 0 12px,
+              rgba(255,243,224,.08) 12px 24px)`,
+          }} />
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(80% 50% at 50% 35%, rgba(255,181,71,.10) 0%, transparent 60%)',
+          }} />
+        </>
+      )}
+
+      {/* Gradient overlay */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: hasMedia
+          ? 'linear-gradient(180deg, rgba(28,20,16,.55) 0%, rgba(28,20,16,.25) 40%, rgba(28,20,16,.88) 100%)'
+          : 'transparent',
+      }} />
+
+      {/* Centered content */}
+      <div style={{
+        position: 'relative', minHeight: '100vh',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '60px 28px', textAlign: 'center',
+      }}>
+        {/* Logo mark */}
+        <div style={{
+          width: 96, height: 96, borderRadius: 48,
+          background: 'rgba(28,20,16,.65)', border: `1.5px solid ${T.amber}`,
+          display: 'grid', placeItems: 'center',
+          fontFamily: T.display, fontSize: 56, color: T.amber, lineHeight: 1,
+          boxShadow: '0 12px 40px rgba(255,181,71,.2)',
+        }}>
+          {info?.restaurantName?.[0]?.toUpperCase() || 'R'}
         </div>
-        <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 30, fontWeight: 600, color: C.cream, marginTop: 20 }}>
-          Order Placed
-        </h2>
-        <p style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>অর্ডার নেওয়া হয়েছে</p>
-        <GoldLine />
 
-        {/* Serial number */}
-        {order?.serialNumber != null && (
-          <>
-            <p style={{ color: C.muted, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', marginTop: 10 }}>
-              Order Number
-            </p>
-            <div style={{
-              fontFamily: 'Cormorant Garamond, serif',
-              fontSize: 80, fontWeight: 700, color: C.gold,
-              lineHeight: 1, letterSpacing: -3,
-            }}>
-              #{order.serialNumber}
-            </div>
-          </>
-        )}
+        {/* Restaurant name */}
+        <div style={{
+          fontFamily: T.display, fontSize: 60, color: '#fff', marginTop: 24, lineHeight: .9,
+          textTransform: 'uppercase', letterSpacing: '-.015em',
+          textShadow: '0 2px 20px rgba(0,0,0,.5)',
+        }}>{info?.restaurantName || 'Restaurant'}</div>
 
-        {/* Total */}
-        {order && (
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 700, color: C.cream, marginTop: 6 }}>
-            {taka(order.total)}
+        {/* Outlet subtitle */}
+        {info?.outletName && (
+          <div style={{ marginTop: 8, fontSize: 13, color: T.inkSoft, letterSpacing: '.05em' }}>
+            {info.outletName}
           </div>
         )}
 
-        {info?.restaurantName && (
-          <p style={{ color: C.muted, fontSize: 11, marginTop: 4, letterSpacing: 1, textTransform: 'uppercase' }}>
-            {info.restaurantName}{info.outletName ? ` · ${info.outletName}` : ''}
-          </p>
-        )}
-        <p style={{ color: C.muted, fontSize: 13, marginTop: 10, textAlign: 'center', lineHeight: 1.6 }}>
-          Your order is being prepared.<br />Please wait.
-        </p>
-        <button style={S.btnGold} onClick={onBack}>Order Again</button>
+        {/* CTA button */}
         <button
-          style={{ ...S.btnGold, background: 'transparent', border: `1px solid ${C.gold}`, color: C.gold, marginTop: 0 }}
-          onClick={() => generateReceipt(order, info, cartItems)}
+          style={{
+            marginTop: 40, padding: '14px 30px',
+            background: T.ember, color: '#1a0c08', border: 'none', borderRadius: 12,
+            fontFamily: T.display, fontSize: 20, fontWeight: 700, textTransform: 'uppercase',
+            cursor: 'pointer', letterSpacing: '.04em',
+            display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 14px 30px rgba(255,106,61,.4)',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          onClick={onEnter}
         >
-          Download Receipt · রিসিট ডাউনলোড
+          <span>See the Menu</span>
+          <span style={{ fontSize: 22, lineHeight: 1 }}>→</span>
         </button>
+
+        {/* Gallery dots */}
+        {hasGallery && gallery.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 20 }}>
+            {gallery.map((_, i) => (
+              <div key={i} onClick={() => setSlide(i)} style={{
+                width: i === slide ? 18 : 6, height: 6, borderRadius: 3,
+                background: i === slide ? T.amber : 'rgba(255,181,71,.35)',
+                transition: 'all 0.3s', cursor: 'pointer',
+              }} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Menu Screen ───────────────────────────────────────────────────────────────
 function MenuScreen({ info, items, allItems, cart, categories, activeCategory, onCategory, onAdd, onRemove, onOpenCart, onOpenDetail }) {
   const count = cartCount(cart)
   const total = cartTotal(cart, allItems)
 
   return (
-    <div style={S.screen}>
-      <HeroSection info={info} />
+    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
+      {/* Short hero */}
+      <MenuHero info={info} />
 
-      {/* Category bar */}
-      <div style={S.catBar}>
-        {categories.map(cat => (
-          <button key={cat}
-            style={{ ...S.catChip, ...(cat === activeCategory ? S.catChipActive : {}) }}
-            onClick={() => onCategory(cat)}
-          >
-            {cat === 'All' ? 'সব · All' : cat}
-          </button>
-        ))}
+      {/* Category tabs */}
+      <div style={{
+        display: 'flex', padding: '14px 18px 0',
+        overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
+        background: T.bg, flexShrink: 0,
+        borderBottom: `1px solid ${T.line}`,
+      }}>
+        {categories.map(cat => {
+          const active = cat === activeCategory
+          return (
+            <button key={cat}
+              onClick={() => onCategory(cat)}
+              style={{
+                flex: '0 0 auto', padding: '0 0 12px', marginRight: 20,
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                fontFamily: T.display, fontSize: 17, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '.01em',
+                color: active ? T.amber : T.inkSoft,
+                borderBottom: active ? `2.5px solid ${T.ember}` : '2.5px solid transparent',
+                transition: 'color .15s',
+                WebkitTapHighlightColor: 'transparent',
+                whiteSpace: 'nowrap',
+              }}>
+              {cat === 'All' ? 'All' : cat}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Menu list */}
-      <div style={{ flex: 1, paddingBottom: 100 }}>
+      {/* 2-col grid */}
+      <div style={{
+        padding: '9px 12px',
+        paddingBottom: count > 0 ? 110 : 24,
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+        flex: 1,
+        alignContent: 'start',
+      }}>
         {items.length === 0 ? (
-          <div style={{ textAlign: 'center', color: C.muted, padding: '60px 0', fontStyle: 'italic' }}>
+          <div style={{
+            gridColumn: '1 / -1', textAlign: 'center',
+            color: T.inkSoft, padding: '60px 0', fontStyle: 'italic',
+          }}>
             No items available
           </div>
         ) : (
@@ -400,168 +589,195 @@ function MenuScreen({ info, items, allItems, cart, categories, activeCategory, o
 
       {/* Cart bar */}
       {count > 0 && (
-        <div className="slide-up" style={S.cartBar} onClick={onOpenCart}>
-          <div style={S.cartBadge}>{count}</div>
-          <span style={S.cartPrice}>{taka(total)}</span>
+        <div className="slide-up" onClick={onOpenCart} style={{
+          position: 'fixed', left: 18, right: 18, bottom: 18, zIndex: 30,
+          background: T.ember, color: '#1a0c08', padding: '13px 18px', borderRadius: 14,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 14px 30px rgba(255,106,61,.45)',
+          fontFamily: T.display, textTransform: 'uppercase', letterSpacing: '.02em',
+          cursor: 'pointer',
+          WebkitTapHighlightColor: 'transparent',
+        }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              width: 26, height: 26, borderRadius: 13, background: '#1a0c08', color: T.amber,
+              display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700,
+              fontFamily: T.body, flexShrink: 0,
+            }}>{count}</span>
+            <span style={{ fontSize: 18, fontWeight: 700 }}>ORDER</span>
+          </span>
+          <span style={{ fontSize: 18, fontWeight: 700 }}>{taka(total)} →</span>
         </div>
       )}
     </div>
   )
 }
 
-// ── Hero ──────────────────────────────────────────────────────────────────────
-function HeroSection({ info }) {
+// ── Menu Hero (short, inside menu page) ───────────────────────────────────────
+function MenuHero({ info }) {
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
-  const touchX = useRef(null)
   const gallery = info?.galleryImages || []
-  const hasVideo = !!info?.videoUrl
-  const hasGallery = !hasVideo && gallery.length > 0
+  const hasGallery = gallery.length > 0
+  const hasVideo = !hasGallery && !!info?.videoUrl
 
-  // Auto-advance carousel
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return
     const id = setInterval(() => setSlide(i => (i + 1) % gallery.length), 4000)
     return () => clearInterval(id)
   }, [hasGallery, gallery.length])
 
-  // Auto-play video
   useEffect(() => {
     if (videoRef.current) videoRef.current.play().catch(() => {})
   }, [info?.videoUrl])
 
-  function onTouchStart(e) { touchX.current = e.touches[0].clientX }
-  function onTouchEnd(e) {
-    if (touchX.current === null) return
-    const dx = e.changedTouches[0].clientX - touchX.current
-    if (dx < -48) setSlide(i => (i + 1) % gallery.length)
-    if (dx > 48)  setSlide(i => (i - 1 + gallery.length) % gallery.length)
-    touchX.current = null
-  }
-
   return (
-    <div style={S.hero} onTouchStart={hasGallery ? onTouchStart : undefined} onTouchEnd={hasGallery ? onTouchEnd : undefined}>
-      {/* Background: video → gallery carousel → bannerImage → gradient */}
+    <div style={{ position: 'relative', height: 200, flexShrink: 0, background: T.bgWarm, overflow: 'hidden' }}>
       {hasVideo ? (
-        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline style={S.heroMedia} />
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : hasGallery ? (
-        <>
-          {gallery.map((url, i) => (
-            <img
-              key={url}
-              src={url}
-              alt=""
-              style={{
-                ...S.heroMedia,
-                opacity: i === slide ? 1 : 0,
-                transition: 'opacity 0.7s ease',
-              }}
-            />
-          ))}
-        </>
+        gallery.map((url, i) => (
+          <img key={url} src={url} alt="" style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+            opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
+          }} />
+        ))
       ) : info?.bannerUrl ? (
-        <img src={info.bannerUrl} alt="" style={S.heroMedia} />
-      ) : (
-        <div style={S.heroGradient} />
-      )}
+        <img src={info.bannerUrl} alt=""
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : null}
 
-      {/* Vignette overlay */}
-      <div style={S.heroOverlay} />
+      {/* Gradient overlay */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(180deg, rgba(28,20,16,.65) 0%, rgba(28,20,16,.1) 40%, rgba(28,20,16,.92) 100%)',
+      }} />
 
-      {/* Decorative rings */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-        <div style={S.heroRing1} />
-        <div style={S.heroRing2} />
+      {/* Top bar */}
+      <div style={{
+        position: 'absolute', top: 52, left: 0, right: 0,
+        display: 'flex', justifyContent: 'space-between', padding: '0 18px',
+        alignItems: 'center',
+      }}>
+        <div style={{ fontSize: 11, letterSpacing: '.3em', color: T.amber, fontFamily: T.body, fontWeight: 600 }}>
+          {info?.restaurantName?.toUpperCase() || 'MENU'}
+        </div>
+        {info?.outletName && (
+          <div style={{ fontSize: 11, color: T.inkSoft, fontFamily: T.body }}>{info.outletName}</div>
+        )}
       </div>
 
-      {/* Content */}
-      <div style={S.heroContent}>
-        <div style={S.heroBrandMark}>
-          {info?.restaurantName?.[0]?.toUpperCase() || 'R'}
-        </div>
-        <h1 style={S.heroTitle}>
-          {info?.restaurantName || 'Our Menu'}
-        </h1>
-        {info?.outletName && (
-          <p style={S.heroSub}>{info.outletName}</p>
-        )}
-        <GoldLine />
-
-        {/* Carousel dots */}
-        {hasGallery && gallery.length > 1 && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-            {gallery.map((_, i) => (
-              <div
-                key={i}
-                onClick={() => setSlide(i)}
-                style={{
-                  width: i === slide ? 18 : 6,
-                  height: 6,
-                  borderRadius: 3,
-                  background: i === slide ? C.gold : 'rgba(201,168,108,0.35)',
-                  transition: 'all 0.3s',
-                  cursor: 'pointer',
-                }}
-              />
-            ))}
-          </div>
-        )}
+      {/* Bottom: big name */}
+      <div style={{ position: 'absolute', left: 18, right: 18, bottom: 16 }}>
+        <div style={{
+          fontFamily: T.display, fontSize: 42, lineHeight: .88,
+          textTransform: 'uppercase', letterSpacing: '-.01em',
+          color: '#fff', fontWeight: 800,
+          textShadow: '0 2px 12px rgba(0,0,0,.5)',
+        }}>{info?.restaurantName || 'Menu'}</div>
       </div>
     </div>
   )
 }
 
-// ── Menu Card ─────────────────────────────────────────────────────────────────
+// ── Menu Card (2-col grid) ────────────────────────────────────────────────────
 function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
-  const hasMedia = !!(item.imageUrl || item.videoUrl)
+  const hasImage = !!item.imageUrl
 
   return (
-    <div className="fade-up"
-      style={{ ...S.card, animationDelay: `${Math.min(delay * 0.04, 0.3)}s` }}
+    <div
+      className="fade-up"
+      style={{
+        background: T.bgCard, borderRadius: 14, overflow: 'hidden',
+        border: `1px solid ${T.line}`,
+        display: 'flex', flexDirection: 'column',
+        minHeight: 0,
+        animationDelay: `${Math.min(delay * 0.04, 0.3)}s`,
+        cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
       onClick={onOpenDetail}
     >
-      {/* Image thumbnail */}
-      {hasMedia && (
-        <div style={S.cardImgWrap}>
-          <img
-            src={item.imageUrl}
-            alt={item.name}
-            style={S.cardImg}
-            onError={e => { e.target.parentElement.style.display = 'none' }}
-          />
-          {item.videoUrl && (
-            <div style={S.playBadge}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <polygon points="3,1 13,7 3,13" fill={C.gold}/>
-              </svg>
+      {/* Image area */}
+      <div style={{
+        width: '100%', aspectRatio: '1.28 / 1', maxHeight: 92, position: 'relative',
+        background: T.bgWarm,
+        ...(hasImage ? {
+          backgroundImage: `url(${item.imageUrl})`,
+          backgroundSize: 'cover', backgroundPosition: 'center',
+        } : {}),
+        flexShrink: 0,
+      }}>
+        {!hasImage && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+            fontSize: 28, opacity: .3,
+          }}>🍽️</div>
+        )}
+        {item.tag && (
+          <span style={{
+            position: 'absolute', top: 7, left: 7,
+            padding: '2px 7px', background: 'rgba(28,20,16,.82)', backdropFilter: 'blur(4px)',
+            color: T.amber, fontSize: 9, letterSpacing: '.14em', borderRadius: 3, fontWeight: 700,
+            whiteSpace: 'nowrap', fontFamily: T.body,
+          }}>★ {item.tag.toUpperCase()}</span>
+        )}
+        {item.videoUrl && (
+          <div style={{
+            position: 'absolute', top: 7, left: item.tag ? undefined : 7,
+            right: 7, bottom: undefined,
+            width: 22, height: 22, borderRadius: 11,
+            background: 'rgba(28,20,16,.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <polygon points="2,1 9,5 2,9" fill={T.amber}/>
+            </svg>
+          </div>
+        )}
+        {/* Add / qty control */}
+        <div style={{ position: 'absolute', top: 7, right: 7 }}
+          onClick={e => e.stopPropagation()}>
+          {qty === 0 ? (
+            <button onClick={onAdd} style={{
+              width: 28, height: 28, borderRadius: 14, border: 'none',
+              background: T.ember, color: '#1a0c08', fontSize: 20, lineHeight: 1,
+              cursor: 'pointer', fontWeight: 700, display: 'grid', placeItems: 'center',
+              WebkitTapHighlightColor: 'transparent',
+            }}>+</button>
+          ) : (
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              background: 'rgba(28,20,16,.88)', borderRadius: 8,
+              border: `1px solid ${T.line}`, height: 28,
+              fontFamily: T.display, fontSize: 13,
+            }}>
+              <span onClick={onRemove} style={{ padding: '0 7px', cursor: 'pointer', color: T.inkSoft, lineHeight: '28px' }}>−</span>
+              <span style={{ padding: '0 2px', color: '#fff', fontWeight: 700, lineHeight: '28px' }}>{qty}</span>
+              <span onClick={onAdd} style={{ padding: '0 7px', cursor: 'pointer', color: T.amber, lineHeight: '28px' }}>+</span>
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Info */}
-      <div style={S.cardBody}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={S.cardName}>{item.name}</div>
-          <div style={S.cardPrice}>{taka(item.price)}</div>
-        </div>
-
-        {/* Quantity control — stop propagation so card tap doesn't open detail */}
-        <div style={{ flexShrink: 0, WebkitTapHighlightColor: 'transparent' }} onClick={e => e.stopPropagation()}>
-          {qty === 0 ? (
-            <button style={S.addBtn} onClick={onAdd}>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M8 2v12M2 8h12" stroke={C.bg} strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          ) : (
-            <div style={S.qtyRow}>
-              <button style={S.qtyBtn} onClick={onRemove}>−</button>
-              <span style={S.qtyNum}>{qty}</span>
-              <button style={S.qtyBtn} onClick={onAdd}>+</button>
-            </div>
-          )}
-        </div>
+      <div style={{ padding: '8px 9px 9px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 70 }}>
+        <div style={{
+          fontFamily: T.display, fontSize: 14, fontWeight: 700, lineHeight: 1.05,
+          textTransform: 'uppercase', color: '#fff',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{item.name}</div>
+        {item.description && (
+          <div style={{
+            fontSize: 10, color: T.inkSoft, marginTop: 3,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{item.description}</div>
+        )}
+        <div style={{ flex: 1 }} />
+        <div style={{
+          fontFamily: T.display, fontSize: 15, color: T.amber, marginTop: 5,
+        }}>{taka(item.price)}</div>
       </div>
     </div>
   )
@@ -571,6 +787,7 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
 function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
   const media = buildMedia(item)
   const videoRef = useRef(null)
+  const current = media[0]
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.play().catch(() => {})
@@ -582,58 +799,122 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const current = media[0]
-
   return (
-    <div className="fade-in" style={S.lbOverlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="slide-up" style={S.lbSheet}>
-
-        {/* Close */}
-        <button style={S.lbClose} onClick={onClose}>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M2 2l14 14M16 2L2 16" stroke={C.cream} strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </button>
-
-        {/* Media stage */}
-        <div style={S.lbStage}>
-          {media.length === 0 ? (
-            <div style={S.lbNoMedia}><div style={{ fontSize: 40 }}>🍽️</div></div>
-          ) : current?.type === 'video' ? (
-            <video
-              ref={videoRef}
-              key={current.url}
-              src={current.url}
-              controls
-              autoPlay
-              muted
-              playsInline
-              style={S.lbVideo}
-            />
-          ) : (
-            <img src={current?.url} alt={item.name} style={S.lbImage} />
+    <div
+      className="fade-in"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        background: 'rgba(0,0,0,.6)',
+        display: 'flex', alignItems: 'flex-end',
+        backdropFilter: 'blur(3px)',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="slide-up"
+        style={{
+          width: '100%', maxHeight: '90vh',
+          background: T.bg,
+          borderTopLeftRadius: 22, borderTopRightRadius: 22,
+          boxShadow: '0 -20px 50px rgba(0,0,0,.5)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          border: `1px solid ${T.line}`, borderBottom: 'none',
+        }}
+      >
+        {/* Photo header */}
+        <div style={{
+          height: 200, position: 'relative', flexShrink: 0,
+          background: T.bgCard,
+          ...(current?.type === 'image' ? {
+            backgroundImage: `url(${current.url})`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+          } : {}),
+        }}>
+          {current?.type === 'video' && (
+            <video ref={videoRef} src={current.url} autoPlay muted loop playsInline
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          )}
+          <div style={{
+            position: 'absolute', inset: 0,
+            borderTopLeftRadius: 22, borderTopRightRadius: 22,
+            background: 'linear-gradient(180deg, rgba(28,20,16,.45) 0%, transparent 40%, rgba(28,20,16,.95) 100%)',
+          }} />
+          {/* Drag handle */}
+          <div style={{
+            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+            width: 44, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.4)',
+          }} />
+          {/* Close */}
+          <button onClick={onClose} style={{
+            position: 'absolute', top: 14, right: 14,
+            width: 32, height: 32, borderRadius: 16,
+            background: 'rgba(28,20,16,.75)',
+            color: '#fff', border: 'none', fontSize: 16, cursor: 'pointer',
+            display: 'grid', placeItems: 'center',
+            WebkitTapHighlightColor: 'transparent',
+          }}>✕</button>
+          {!current && (
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 40 }}>🍽️</div>
           )}
         </div>
 
-        {/* Item detail */}
-        <div style={{ ...S.lbDetail, flex: 1, overflowY: 'auto' }}>
-          <div style={S.lbItemName}>{item.name}</div>
-          {item.description && <div style={S.lbItemDesc}>{item.description}</div>}
-          <div style={S.lbItemPrice}>{taka(item.price)}</div>
+        {/* Scrolling body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 4px' }}>
+          <div style={{
+            fontFamily: T.display, fontSize: 26, lineHeight: .92, textTransform: 'uppercase',
+            color: '#fff', fontWeight: 800, letterSpacing: '-.01em',
+          }}>{item.name}</div>
+          {item.description && (
+            <div style={{ marginTop: 10, fontSize: 13, color: T.inkSoft, lineHeight: 1.55 }}>
+              {item.description}
+            </div>
+          )}
+          <div style={{
+            fontFamily: T.display, fontSize: 22, color: T.amber, marginTop: 10, letterSpacing: '-.01em',
+          }}>{taka(item.price)}</div>
+          <div style={{ height: 80 }} />
         </div>
 
-        {/* Footer: add to cart */}
-        <div style={S.lbFooter}>
+        {/* Bottom add bar */}
+        <div style={{
+          padding: '14px 18px 30px',
+          borderTop: `1px solid ${T.line}`,
+          background: T.bg, flexShrink: 0,
+          display: 'flex', gap: 10, alignItems: 'center',
+        }}>
           {qty === 0 ? (
-            <button style={S.btnGold} onClick={onAdd}>
-              Add to Order · অর্ডারে যোগ করুন
+            <button onClick={onAdd} style={{
+              flex: 1, height: 50, background: T.ember, color: '#1a0c08', border: 'none', borderRadius: 12,
+              fontFamily: T.display, fontSize: 16, fontWeight: 700, textTransform: 'uppercase',
+              cursor: 'pointer', letterSpacing: '.02em',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px',
+              WebkitTapHighlightColor: 'transparent',
+            }}>
+              <span>Add to Order · যোগ করুন</span>
+              <span>{taka(item.price)}</span>
             </button>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}>
-              <button style={{ ...S.qtyBtn, width: 44, height: 44, fontSize: 20, borderRadius: 10 }} onClick={onRemove}>−</button>
-              <span style={{ ...S.qtyNum, fontSize: 20, minWidth: 32 }}>{qty}</span>
-              <button style={{ ...S.qtyBtn, width: 44, height: 44, fontSize: 20, borderRadius: 10 }} onClick={onAdd}>+</button>
-            </div>
+            <>
+              <div style={{
+                display: 'flex', alignItems: 'center', height: 50,
+                border: `1px solid ${T.line}`, borderRadius: 12,
+                fontFamily: T.display, fontSize: 18, flexShrink: 0,
+              }}>
+                <span onClick={onRemove} style={{ padding: '0 14px', color: T.inkSoft, cursor: 'pointer', fontSize: 22 }}>−</span>
+                <span style={{ padding: '0 4px', color: '#fff', fontWeight: 700 }}>{qty}</span>
+                <span onClick={onAdd} style={{ padding: '0 14px', color: T.amber, cursor: 'pointer', fontSize: 22 }}>+</span>
+              </div>
+              <button onClick={onAdd} style={{
+                flex: 1, height: 50, background: T.ember, color: '#1a0c08', border: 'none', borderRadius: 12,
+                fontFamily: T.display, fontSize: 15, fontWeight: 700, textTransform: 'uppercase',
+                cursor: 'pointer', letterSpacing: '.02em',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px',
+                WebkitTapHighlightColor: 'transparent',
+              }}>
+                <span>Add More</span>
+                <span>{taka(item.price * (qty + 1))}</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -641,7 +922,7 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Cart Screen ───────────────────────────────────────────────────────────────
 function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlace, submitting, info }) {
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
@@ -649,379 +930,255 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
   const total = cartTotal(cart, items)
 
   return (
-    <div style={S.screen}>
+    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
       {/* Header */}
-      <div style={S.cartHeader}>
-        <button style={S.backBtn} onClick={onBack}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M13 4L7 10l6 6" stroke={C.cream} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <div>
-          <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 24, fontWeight: 600, color: C.cream }}>
-            Your Order
-          </h2>
+      <div style={{
+        padding: '54px 20px 14px', borderBottom: `1px solid ${T.line}`, flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 12,
+        background: T.bg, position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <button onClick={onBack} style={{
+          width: 36, height: 36, borderRadius: 18, flexShrink: 0,
+          background: 'rgba(255,243,224,.06)', color: T.ink, border: 'none',
+          fontSize: 18, cursor: 'pointer', display: 'grid', placeItems: 'center',
+          WebkitTapHighlightColor: 'transparent',
+        }}>←</button>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontFamily: T.display, fontSize: 26, textTransform: 'uppercase',
+            color: '#fff', lineHeight: 1, letterSpacing: '-.005em',
+          }}>Your Order</div>
           {info?.restaurantName && (
-            <p style={{ color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>
-              {info.restaurantName}
-            </p>
+            <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3 }}>
+              {info.restaurantName}{info.outletName ? ` · ${info.outletName}` : ''}
+            </div>
           )}
         </div>
       </div>
 
       {/* Items */}
-      <div style={{ flex: 1, paddingBottom: 160, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 20px 180px' }}>
         {cartItems.map((item, i) => (
-          <div key={item.id} className="fade-up"
-            style={{ ...S.cartItem, animationDelay: `${i * 0.05}s` }}>
+          <div key={item.id} className="fade-up" style={{
+            padding: '14px 0',
+            borderBottom: i === cartItems.length - 1 ? 'none' : `1px solid ${T.line}`,
+            display: 'flex', gap: 12, alignItems: 'flex-start',
+            animationDelay: `${i * 0.05}s`,
+          }}>
+            {item.imageUrl && (
+              <div style={{
+                width: 56, height: 56, borderRadius: 10, flexShrink: 0,
+                backgroundColor: T.bgCard,
+                backgroundImage: `url(${item.imageUrl})`,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+              }} />
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={S.cartItemName}>{item.name}</div>
-              <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{taka(item.price)} each</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <div style={S.qtyRow}>
-                <button style={S.qtyBtn} onClick={() => onRemove(item.id)}>−</button>
-                <span style={S.qtyNum}>{item.qty}</span>
-                <button style={S.qtyBtn} onClick={() => onAdd(item.id)}>+</button>
-              </div>
-              <div style={{ color: C.gold, fontWeight: 700, fontSize: 14, minWidth: 60, textAlign: 'right' }}>
-                {taka(item.price * item.qty)}
+              <div style={{
+                fontFamily: T.display, fontSize: 16, textTransform: 'uppercase',
+                color: '#fff', fontWeight: 700, lineHeight: 1.1,
+              }}>{item.name}</div>
+              <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{taka(item.price)} each</div>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center',
+                  border: `1px solid ${T.line}`, borderRadius: 8, height: 28,
+                  fontFamily: T.display, fontSize: 14,
+                }}>
+                  <span onClick={() => onRemove(item.id)} style={{ padding: '0 10px', cursor: 'pointer', color: T.inkSoft }}>−</span>
+                  <span style={{ padding: '0 2px', color: '#fff', fontWeight: 700 }}>{item.qty}</span>
+                  <span onClick={() => onAdd(item.id)} style={{ padding: '0 10px', cursor: 'pointer', color: T.amber }}>+</span>
+                </div>
+                <div style={{ fontFamily: T.display, fontSize: 17, color: T.amber, whiteSpace: 'nowrap' }}>
+                  {taka(item.price * item.qty)}
+                </div>
               </div>
             </div>
           </div>
         ))}
 
-        {/* Separator */}
-        <div style={{ height: 1, background: C.border, margin: '16px 20px' }} />
+        {/* Divider */}
+        <div style={{ height: 1, background: T.line, margin: '12px 0' }} />
 
         {/* Note */}
-        <div style={{ padding: '0 20px' }}>
-          <label style={{ display: 'block', color: C.muted, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-            Special Instructions
-          </label>
+        <div style={{ marginTop: 4 }}>
+          <div style={{
+            fontFamily: T.display, fontSize: 13, color: T.amber,
+            letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+          }}>Note for kitchen</div>
           <textarea
-            style={S.noteInput}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 10,
+              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+              fontSize: 13, fontFamily: T.body, resize: 'none', outline: 'none',
+            }}
             placeholder="e.g. no onion, extra spicy · বিশেষ নির্দেশনা"
             value={note}
             onChange={e => onNote(e.target.value)}
             rows={3}
           />
         </div>
+
+        {/* Total */}
+        <div style={{ marginTop: 12, padding: '14px 0', borderTop: `1px solid ${T.line}` }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            fontFamily: T.display, textTransform: 'uppercase',
+          }}>
+            <span style={{ fontSize: 18, color: '#fff' }}>Total · মোট</span>
+            <span style={{ fontSize: 22, color: T.amber, whiteSpace: 'nowrap' }}>{taka(total)}</span>
+          </div>
+        </div>
       </div>
 
       {/* Footer */}
-      <div style={S.cartFooter}>
-        <div style={S.dividerLine} />
-        <div style={S.totalRow}>
-          <span style={{ color: C.muted, fontSize: 13, fontWeight: 500 }}>Total · মোট</span>
-          <span style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 700, color: C.gold }}>
-            {taka(total)}
-          </span>
-        </div>
-        <button style={{ ...S.btnGold, opacity: submitting ? 0.7 : 1 }}
-          disabled={submitting} onClick={onPlace}>
-          {submitting ? 'Placing Order…' : 'Place Order · অর্ডার করুন'}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        padding: '12px 18px 30px',
+        borderTop: `1px solid ${T.line}`, background: T.bg, flexShrink: 0,
+      }}>
+        <button
+          style={{
+            width: '100%', padding: '15px 16px', borderRadius: 14,
+            background: T.ember, color: '#1a0c08', border: 'none',
+            fontFamily: T.display, fontSize: 18, textTransform: 'uppercase',
+            cursor: 'pointer', letterSpacing: '.04em', fontWeight: 700,
+            boxShadow: '0 14px 30px rgba(255,106,61,.35)',
+            opacity: submitting ? 0.7 : 1,
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          disabled={submitting}
+          onClick={onPlace}
+        >
+          {submitting ? 'Placing Order…' : <>Place Order · অর্ডার করুন <span style={{ fontSize: 20 }}>→</span></>}
         </button>
       </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Styles
-const S = {
-  // Layout
-  screen:    { minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' },
-  centerPage:{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: C.bg, padding: 24 },
+// ── Success Screen ────────────────────────────────────────────────────────────
+function SuccessScreen({ order, info, cartItems, onBack }) {
+  const totalItems = cartItems.reduce((s, i) => s + i.qty, 0)
 
-  // Loading spinner
-  wineSpinner: {
-    width: 40, height: 40,
-    border: `2px solid ${C.surface3}`,
-    borderTop: `2px solid ${C.gold}`,
-    borderRadius: '50%',
-    animation: 'spin .9s linear infinite',
-  },
+  return (
+    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {/* Hero check */}
+        <div style={{
+          paddingTop: 90, paddingBottom: 24,
+          background: 'radial-gradient(140% 100% at 50% 0%, rgba(255,106,61,.22) 0%, transparent 60%)',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            width: 84, height: 84, borderRadius: 42, margin: '0 auto',
+            background: T.ember, color: '#1a0c08',
+            display: 'grid', placeItems: 'center', fontSize: 42,
+            boxShadow: '0 12px 40px rgba(255,106,61,.5)',
+          }}>✓</div>
+          <div style={{
+            fontFamily: T.display, fontSize: 38, textTransform: 'uppercase',
+            color: '#fff', marginTop: 18, lineHeight: .95, letterSpacing: '-.01em',
+          }}>Order Placed</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: T.inkSoft, letterSpacing: '.18em' }}>
+            ORDER PLACED · অর্ডার গৃহীত
+          </div>
+        </div>
 
-  // Hero
-  hero: { position: 'relative', height: 260, overflow: 'hidden', flexShrink: 0 },
-  heroMedia: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
-  heroGradient: {
-    position: 'absolute', inset: 0,
-    background: `radial-gradient(ellipse at 30% 40%, ${C.wineRich}66 0%, ${C.wineDark}90 45%, ${C.bg} 100%)`,
-  },
-  heroOverlay: {
-    position: 'absolute', inset: 0,
-    background: 'linear-gradient(to bottom, rgba(8,1,2,.25) 0%, rgba(8,1,2,.5) 60%, rgba(8,1,2,.95) 100%)',
-  },
-  heroRing1: {
-    position: 'absolute', width: 340, height: 340, borderRadius: '50%',
-    border: `1px solid rgba(201,168,108,.08)`,
-    top: -120, right: -80,
-  },
-  heroRing2: {
-    position: 'absolute', width: 220, height: 220, borderRadius: '50%',
-    border: `1px solid rgba(201,168,108,.06)`,
-    bottom: -60, left: -40,
-  },
-  heroContent: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: '0 24px 24px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-  },
-  heroBrandMark: {
-    width: 52, height: 52, borderRadius: '50%',
-    border: `2px solid ${C.gold}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 24, fontWeight: 700, color: C.gold,
-    background: 'rgba(8,1,2,.65)',
-    marginBottom: 4,
-  },
-  heroTitle: {
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 32, fontWeight: 600, fontStyle: 'italic',
-    color: C.cream, textAlign: 'center', lineHeight: 1.1,
-    textShadow: '0 2px 12px rgba(0,0,0,.6)',
-  },
-  heroSub: {
-    color: C.muted, fontSize: 11, letterSpacing: 2,
-    textTransform: 'uppercase', textAlign: 'center',
-  },
+        {/* Order number card */}
+        <div style={{ padding: '8px 22px 0' }}>
+          <div style={{
+            padding: '22px 20px 24px', borderRadius: 18,
+            background: T.bgCard, border: `1px solid ${T.line}`,
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 10, color: T.inkSoft, letterSpacing: '.3em' }}>ORDER NUMBER</div>
+            {order?.serialNumber != null && (
+              <div style={{
+                fontFamily: T.display, fontSize: 56, color: T.amber, lineHeight: 1,
+                marginTop: 6, letterSpacing: '-.01em',
+              }}>#{order.serialNumber}</div>
+            )}
+            <div style={{
+              marginTop: 14, paddingTop: 14, borderTop: `1px dashed ${T.line}`,
+              display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start', gap: 12,
+            }}>
+              <div>
+                <div style={{ fontSize: 10, color: T.inkSoft, letterSpacing: '.18em' }}>ITEMS</div>
+                <div style={{ fontFamily: T.display, fontSize: 22, color: '#fff', marginTop: 3 }}>{totalItems}</div>
+              </div>
+              <div style={{ width: 1, alignSelf: 'stretch', background: T.line }} />
+              <div>
+                <div style={{ fontSize: 10, color: T.inkSoft, letterSpacing: '.18em' }}>TOTAL</div>
+                <div style={{
+                  fontFamily: T.display, fontSize: 22, color: T.amber, marginTop: 3, whiteSpace: 'nowrap',
+                }}>{taka(order?.total || 0)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-  // Category bar
-  catBar: {
-    display: 'flex', gap: 8, padding: '12px 16px',
-    overflowX: 'auto', scrollbarWidth: 'none',
-    background: C.surface, borderBottom: `1px solid ${C.border}`,
-    flexShrink: 0,
-  },
-  catChip: {
-    flexShrink: 0, padding: '6px 16px', borderRadius: 999,
-    border: `1px solid ${C.border}`, background: 'transparent',
-    fontSize: 12, fontWeight: 600, color: C.muted,
-    cursor: 'pointer', whiteSpace: 'nowrap',
-    fontFamily: 'DM Sans, sans-serif',
-    transition: 'all .15s',
-  },
-  catChipActive: {
-    background: C.wine, color: C.goldLt, borderColor: C.wine,
-  },
+        {info?.restaurantName && (
+          <div style={{ padding: '14px 28px 0', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: T.inkSoft, letterSpacing: '.1em', textTransform: 'uppercase' }}>
+              {info.restaurantName}{info.outletName ? ` · ${info.outletName}` : ''}
+            </div>
+          </div>
+        )}
 
-  // Menu card
-  card: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '10px 14px',
-    borderBottom: `1px solid ${C.border}`,
-    background: C.bg,
-    cursor: 'pointer',
-  },
-  cardImgWrap: {
-    position: 'relative', width: 54, height: 54,
-    borderRadius: 8, overflow: 'hidden', flexShrink: 0,
-    border: `1px solid ${C.border}`,
-  },
-  cardImg: {
-    width: '100%', height: '100%', objectFit: 'cover',
-    display: 'block',
-  },
-  playBadge: {
-    position: 'absolute', top: 6, right: 6,
-    width: 24, height: 24, borderRadius: '50%',
-    background: 'rgba(13,6,8,.75)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  cardBody: { flex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 },
-  cardName: {
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 15, fontWeight: 600, color: C.cream,
-    lineHeight: 1.25, marginBottom: 2,
-  },
-  cardPrice: {
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 14, fontWeight: 700, color: C.gold,
-  },
+        <div style={{ padding: '16px 28px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: T.inkSoft, lineHeight: 1.55 }}>
+            Your order is being prepared.<br/>
+            Please wait. · অপেক্ষা করুন।
+          </div>
+        </div>
 
-  // Qty controls
-  addBtn: {
-    width: 32, height: 32, borderRadius: 8,
-    background: C.gold, border: 'none',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', flexShrink: 0,
-    WebkitTapHighlightColor: 'transparent',
-  },
-  qtyRow: { display: 'flex', alignItems: 'center', gap: 6 },
-  qtyBtn: {
-    width: 26, height: 26, borderRadius: 7,
-    background: C.surface2, border: `1px solid ${C.border}`,
-    fontSize: 15, fontWeight: 600, color: C.cream,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'DM Sans, sans-serif',
-    WebkitTapHighlightColor: 'transparent',
-  },
-  qtyNum: { fontWeight: 700, fontSize: 13, color: C.cream, minWidth: 18, textAlign: 'center' },
+        <div style={{ flex: 1 }} />
 
-  // Cart FAB (bottom-right pill)
-  cartBar: {
-    position: 'fixed', bottom: 24, right: 20,
-    background: `linear-gradient(135deg, ${C.wineRich}, #8B0A12)`,
-    borderRadius: 999, padding: '10px 16px 10px 10px',
-    display: 'flex', alignItems: 'center', gap: 8,
-    cursor: 'pointer', zIndex: 20,
-    border: `1px solid rgba(201,168,108,.25)`,
-    boxShadow: '0 6px 28px rgba(0,0,0,.6)',
-    WebkitTapHighlightColor: 'transparent',
-  },
-  cartBadge: {
-    background: C.gold, color: C.bg,
-    fontWeight: 800, fontSize: 12,
-    width: 28, height: 28, borderRadius: '50%',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  cartPrice: {
-    fontFamily: 'Cormorant Garamond, serif',
-    color: C.gold, fontWeight: 700, fontSize: 16,
-  },
+        {/* Download receipt */}
+        <div style={{ padding: '8px 18px 16px' }}>
+          <button
+            style={{
+              width: '100%', padding: '14px 16px', borderRadius: 14,
+              background: 'rgba(255,243,224,.06)', color: T.ink, border: `1px solid ${T.line}`,
+              fontFamily: T.display, fontSize: 15, textTransform: 'uppercase', cursor: 'pointer',
+              letterSpacing: '.04em',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+            onClick={() => generateReceipt(order, info, cartItems)}
+          >
+            <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ fontSize: 18 }}>↓</span>
+              <span>Download Receipt · রিসিট</span>
+            </span>
+            <span style={{ fontSize: 11, color: T.inkSoft, letterSpacing: '.16em' }}>PDF</span>
+          </button>
+        </div>
+      </div>
 
-  // Lightbox
-  lbOverlay: {
-    position: 'fixed', inset: 0, zIndex: 50,
-    background: 'rgba(8,2,5,.9)',
-    display: 'flex', alignItems: 'flex-end',
-    backdropFilter: 'blur(4px)',
-  },
-  lbSheet: {
-    width: '100%', maxHeight: '92vh',
-    background: C.surface,
-    borderRadius: '20px 20px 0 0',
-    overflow: 'hidden',
-    display: 'flex', flexDirection: 'column',
-    border: `1px solid ${C.border}`,
-    borderBottom: 'none',
-  },
-  lbClose: {
-    position: 'absolute', top: 16, right: 16, zIndex: 5,
-    width: 36, height: 36, borderRadius: '50%',
-    background: 'rgba(13,6,8,.7)',
-    border: `1px solid ${C.border}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer',
-  },
-  lbStage: {
-    position: 'relative',
-    width: '100%', aspectRatio: '16/9',
-    background: C.bg,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden', flexShrink: 0,
-  },
-  lbImage: { width: '100%', height: '100%', objectFit: 'contain' },
-  lbVideo: { width: '100%', height: '100%', objectFit: 'contain', background: '#000' },
-  lbNoMedia: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' },
-  lbArrow: {
-    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    width: 36, height: 36, borderRadius: '50%',
-    background: 'rgba(13,6,8,.7)', border: `1px solid ${C.border}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', zIndex: 3,
-  },
-  lbDots: { display: 'flex', justifyContent: 'center', gap: 6, padding: '10px 0 4px' },
-  lbDot: {
-    width: 6, height: 6, borderRadius: '50%',
-    background: C.border, border: 'none', cursor: 'pointer', padding: 0,
-  },
-  lbDotActive: { background: C.gold, width: 18, borderRadius: 3 },
-  lbDetail: {
-    padding: '16px 20px 28px',
-    borderTop: `1px solid ${C.border}`,
-    overflowY: 'auto',
-  },
-  lbItemName: {
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 24, fontWeight: 600, color: C.cream, marginBottom: 6,
-  },
-  lbItemDesc: { fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 10 },
-  lbItemPrice: {
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 22, fontWeight: 700, color: C.gold,
-  },
-  lbFooter: {
-    padding: '12px 20px 28px',
-    borderTop: `1px solid ${C.border}`,
-    background: C.surface,
-    flexShrink: 0,
-  },
-
-  // Cart screen
-  cartHeader: {
-    background: C.surface,
-    padding: '16px 20px',
-    borderBottom: `1px solid ${C.border}`,
-    display: 'flex', alignItems: 'center', gap: 14,
-    position: 'sticky', top: 0, zIndex: 10,
-    flexShrink: 0,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    background: C.surface2, border: `1px solid ${C.border}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', flexShrink: 0,
-  },
-  cartItem: {
-    display: 'flex', alignItems: 'center',
-    padding: '14px 20px', borderBottom: `1px solid ${C.border}`,
-    gap: 12,
-  },
-  cartItemName: {
-    fontFamily: 'Cormorant Garamond, serif',
-    fontSize: 16, fontWeight: 600, color: C.cream,
-  },
-  noteInput: {
-    width: '100%', padding: '12px 14px',
-    borderRadius: 10,
-    border: `1px solid ${C.border}`,
-    background: C.surface2,
-    color: C.cream,
-    fontSize: 13, fontFamily: 'DM Sans, sans-serif',
-    resize: 'none', outline: 'none',
-    '::placeholder': { color: C.muted },
-  },
-  cartFooter: {
-    position: 'fixed', bottom: 0, left: 0, right: 0,
-    background: C.surface,
-    borderTop: `1px solid ${C.border}`,
-    padding: '16px 20px 28px',
-  },
-  dividerLine: { height: 1, background: C.border, marginBottom: 14 },
-  totalRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14,
-  },
-
-  // Buttons
-  btnGold: {
-    width: '100%', padding: '15px 0',
-    background: `linear-gradient(135deg, ${C.gold}, #B08040)`,
-    border: 'none', borderRadius: 12,
-    fontFamily: 'DM Sans, sans-serif',
-    fontWeight: 700, fontSize: 15, color: C.bg,
-    cursor: 'pointer',
-    letterSpacing: .3,
-  },
-
-  // Success
-  successCard: {
-    background: C.surface,
-    borderRadius: 20,
-    padding: '36px 28px',
-    textAlign: 'center',
-    maxWidth: 340, width: '100%',
-    border: `1px solid ${C.border}`,
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-  },
-  checkRing: {
-    width: 72, height: 72, borderRadius: '50%',
-    border: `2px solid ${C.gold}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(201,168,108,.08)',
-  },
+      {/* Footer CTA */}
+      <div style={{
+        flexShrink: 0, padding: '12px 18px 30px',
+        borderTop: `1px solid ${T.line}`, background: T.bg,
+      }}>
+        <button
+          style={{
+            width: '100%', padding: '15px 16px', borderRadius: 14,
+            background: T.ember, color: '#1a0c08', border: 'none',
+            fontFamily: T.display, fontSize: 18, textTransform: 'uppercase',
+            cursor: 'pointer', letterSpacing: '.04em', fontWeight: 700,
+            boxShadow: '0 14px 30px rgba(255,106,61,.35)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          onClick={onBack}
+        >
+          <span>Order Again</span>
+          <span style={{ fontSize: 20 }}>→</span>
+        </button>
+      </div>
+    </div>
+  )
 }

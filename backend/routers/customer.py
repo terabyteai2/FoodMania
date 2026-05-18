@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,26 @@ def _ok(data):
     return {"ok": True, "data": data}
 
 
-def _item_to_dict(item: MenuItem) -> dict:
+def _rewrite_upload_url(request: Request, url: str | None) -> str | None:
+    """Normalize stored media URLs so they always resolve from the caller's host.
+
+    Files uploaded historically have full URLs baked in (e.g. http://localhost:8000/...
+    or http://192.168.x.x:8000/...). When a phone fetches this API over the LAN
+    IP, ``localhost`` URLs are unreachable. We strip everything before ``/uploads/``
+    and re-prefix with the current request's base URL — so the customer site,
+    admin app, or any tunnel sees URLs that point back at the host it called.
+    """
+    if not url:
+        return url
+    marker = "/uploads/"
+    idx = url.find(marker)
+    if idx < 0:
+        return url  # not an upload URL — leave as-is
+    base = str(request.base_url).rstrip("/")
+    return f"{base}{url[idx:]}"
+
+
+def _item_to_dict(item: MenuItem, request: Request) -> dict:
     return {
         "id": item.id,
         "name": item.name,
@@ -30,14 +49,18 @@ def _item_to_dict(item: MenuItem) -> dict:
         "price": float(item.price),
         "category": item.category or "General",
         "isAvailable": item.is_available,
-        "imageUrl": item.image_url,
-        "videoUrl": item.video_url,
+        "imageUrl": _rewrite_upload_url(request, item.image_url),
+        "videoUrl": _rewrite_upload_url(request, item.video_url),
     }
 
 
-async def _get_outlet(outlet_id: str, db: AsyncSession) -> Outlet:
+async def _get_outlet(outlet_ref: str, db: AsyncSession) -> Outlet:
     outlet = (
-        await db.execute(select(Outlet).where(Outlet.id == outlet_id))
+        await db.execute(
+            select(Outlet).where(
+                (Outlet.id == outlet_ref) | (Outlet.server_id == outlet_ref)
+            )
+        )
     ).scalar_one_or_none()
     if outlet is None:
         raise HTTPException(status_code=404, detail="Outlet not found")
@@ -49,22 +72,25 @@ async def _get_outlet(outlet_id: str, db: AsyncSession) -> Outlet:
 @router.get("/{outlet_id}/menu")
 async def get_public_menu(
     outlet_id: str,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Return available menu items for the customer-facing menu page."""
-    await _get_outlet(outlet_id, db)
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    outlet = await _get_outlet(outlet_id, db)
     items = (
         await db.execute(
             select(MenuItem)
             .where(
-                MenuItem.outlet_id == outlet_id,
+                MenuItem.outlet_id == outlet.id,
                 MenuItem.is_available == True,
                 MenuItem.deleted_at == None,
             )
             .order_by(MenuItem.category, MenuItem.name)
         )
     ).scalars().all()
-    return _ok([_item_to_dict(i) for i in items])
+    return _ok([_item_to_dict(i, request) for i in items])
 
 
 # ── POST order ────────────────────────────────────────────────────────────────
@@ -92,7 +118,7 @@ async def place_customer_order(
     if not body.items:
         raise HTTPException(status_code=422, detail="Order must contain at least one item")
 
-    await _get_outlet(outlet_id, db)
+    outlet = await _get_outlet(outlet_id, db)
 
     total = sum(item.price * item.qty for item in body.items)
     now = datetime.now(timezone.utc)
@@ -111,7 +137,7 @@ async def place_customer_order(
 
     order = Order(
         id=order_id,
-        outlet_id=outlet_id,
+        outlet_id=outlet.id,
         source="customer_web",
         status="pending",
         total_amount=round(total, 2),
@@ -126,14 +152,14 @@ async def place_customer_order(
 
     # Assign a 1-based serial number scoped to this outlet
     count_res = await db.execute(
-        select(func.count()).select_from(Order).where(Order.outlet_id == outlet_id)
+        select(func.count()).select_from(Order).where(Order.outlet_id == outlet.id)
     )
     order.serial_number = count_res.scalar()
     await db.commit()
 
     # Broadcast to the admin POS via WebSocket
     await manager.broadcast(
-        outlet_id,
+        outlet.id,
         {
             "type": "order_created",
             "data": {
@@ -166,23 +192,29 @@ async def place_customer_order(
 @router.get("/{outlet_id}/info")
 async def get_outlet_info(
     outlet_id: str,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Return restaurant/outlet name for display on the customer menu page."""
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     outlet = (
         await db.execute(
             select(Outlet)
-            .where(Outlet.id == outlet_id)
+            .where((Outlet.id == outlet_id) | (Outlet.server_id == outlet_id))
             .options(joinedload(Outlet.restaurant))
         )
     ).scalar_one_or_none()
     if outlet is None:
         raise HTTPException(status_code=404, detail="Outlet not found")
+    gallery = [
+        _rewrite_upload_url(request, u) for u in (outlet.gallery_images or [])
+    ]
     return _ok({
         "outletId": outlet.id,
         "restaurantName": outlet.restaurant.name if outlet.restaurant else "",
         "outletName": outlet.name,
-        "bannerUrl": outlet.banner_url,
-        "videoUrl": outlet.video_url,
-        "galleryImages": outlet.gallery_images or [],
+        "bannerUrl": _rewrite_upload_url(request, outlet.banner_url),
+        "videoUrl": _rewrite_upload_url(request, outlet.video_url),
+        "galleryImages": gallery,
     })

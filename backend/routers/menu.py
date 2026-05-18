@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 import pydantic
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,35 @@ def _item_to_dict(item: MenuItem) -> dict:
     }
 
 
+def _public_url(request: Request, path: str) -> str:
+    return f"{str(request.base_url).rstrip('/')}{path}"
+
+
+def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
+    if current_outlet != outlet_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Outlet token mismatch.",
+        )
+
+
+def _save_data_url_image(image_url: str | None, request: Request) -> str | None:
+    if not image_url or not image_url.startswith("data:image/"):
+        return image_url
+    try:
+        header, encoded = image_url.split(",", 1)
+        image_bytes = base64.b64decode(encoded)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image data URL.")
+
+    ext = "png" if "png" in header else "jpg"
+    filename = f"{uuid.uuid4()}.{ext}"
+    os.makedirs(settings.IMAGES_DIR, exist_ok=True)
+    with open(os.path.join(settings.IMAGES_DIR, filename), "wb") as f:
+        f.write(image_bytes)
+    return _public_url(request, f"/uploads/menu_images/{filename}")
+
+
 @router.get("/outlets/{outlet_id}/menu")
 async def pull_menu(
     outlet_id: str,
@@ -41,6 +70,7 @@ async def pull_menu(
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     query = select(MenuItem).where(MenuItem.outlet_id == outlet_id)
     if since:
         dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
@@ -53,12 +83,28 @@ async def pull_menu(
 async def push_menu_item(
     outlet_id: str,
     body: MenuItemPayload,
+    request: Request,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
+    image_url = _save_data_url_image(body.imageUrl, request)
     existing = (await db.execute(select(MenuItem).where(MenuItem.id == body.id))).scalar_one_or_none()
     if existing:
+        existing.outlet_id = outlet_id
+        existing.name = body.name
+        existing.description = body.description
+        existing.price = body.price
+        existing.category = body.category
+        existing.is_available = body.isAvailable
+        existing.image_url = image_url
+        existing.version = max(existing.version, body.version)
+        existing.updated_at = datetime.now(timezone.utc)
+        existing.deleted_at = None
+        await db.commit()
+        await db.refresh(existing)
+        await manager.broadcast(outlet_id, {"type": "menu_updated", "data": _item_to_dict(existing)})
         return ok(_item_to_dict(existing))
 
     item = MenuItem(
@@ -69,7 +115,7 @@ async def push_menu_item(
         price=body.price,
         category=body.category,
         is_available=body.isAvailable,
-        image_url=body.imageUrl,
+        image_url=image_url,
         version=body.version,
         updated_at=datetime.now(timezone.utc),
     )
@@ -86,10 +132,13 @@ async def update_menu_item(
     outlet_id: str,
     item_id: str,
     body: MenuItemPayload,
+    request: Request,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
+    image_url = _save_data_url_image(body.imageUrl, request)
     item = (await db.execute(select(MenuItem).where(MenuItem.id == item_id))).scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found.")
@@ -99,7 +148,7 @@ async def update_menu_item(
     item.price = body.price
     item.category = body.category
     item.is_available = body.isAvailable
-    item.image_url = body.imageUrl
+    item.image_url = image_url
     item.version = body.version
     item.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -117,6 +166,7 @@ async def delete_menu_item(
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     item = (await db.execute(select(MenuItem).where(MenuItem.id == item_id))).scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found.")
@@ -133,8 +183,10 @@ async def delete_menu_item(
 async def upload_menu_image(
     outlet_id: str,
     body: ImageUploadRequest,
+    request: Request,
     current_outlet: str = Depends(get_current_outlet_id),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     # Parse data URL:  data:image/jpeg;base64,<data>
     try:
         header, encoded = body.dataUrl.split(",", 1)
@@ -153,23 +205,40 @@ async def upload_menu_image(
     with open(filepath, "wb") as f:
         f.write(image_bytes)
 
-    public_url = f"{settings.BASE_URL}/uploads/menu_images/{filename}"
+    public_url = _public_url(request, f"/uploads/menu_images/{filename}")
     return ok({"publicUrl": public_url})
 
 
-# ── Outlet hero image endpoints ────────────────────────────────────────────────
+# ── Hero media endpoints (welcome-screen video + menu-page slider images) ─────
+#
+# Files are stored under:
+#   uploads/hero_media/{outlet_id}/images/{uuid}.{ext}   ← menu-page slider
+#   uploads/hero_media/{outlet_id}/video/{uuid}.{ext}    ← welcome-screen video
+#
+# Returned public URLs are served by the static /uploads mount in main.py.
+
 
 class OutletMediaPatch(pydantic.BaseModel):
     videoUrl: str | None = None
+
+
+def _hero_images_dir(outlet_id: str) -> str:
+    return os.path.join(settings.HERO_MEDIA_DIR, outlet_id, "images")
+
+
+def _hero_video_dir(outlet_id: str) -> str:
+    return os.path.join(settings.HERO_MEDIA_DIR, outlet_id, "video")
 
 
 @router.post("/outlets/{outlet_id}/images")
 async def upload_outlet_image(
     outlet_id: str,
     body: ImageUploadRequest,
+    request: Request,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one_or_none()
     if outlet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
@@ -186,11 +255,12 @@ async def upload_outlet_image(
     image_bytes = base64.b64decode(encoded)
     ext = "png" if "png" in header else "jpg"
     filename = f"{uuid.uuid4()}.{ext}"
-    os.makedirs(settings.OUTLET_IMAGES_DIR, exist_ok=True)
-    with open(os.path.join(settings.OUTLET_IMAGES_DIR, filename), "wb") as f:
+    target_dir = _hero_images_dir(outlet_id)
+    os.makedirs(target_dir, exist_ok=True)
+    with open(os.path.join(target_dir, filename), "wb") as f:
         f.write(image_bytes)
 
-    public_url = f"{settings.BASE_URL}/uploads/outlet_images/{filename}"
+    public_url = _public_url(request, f"/uploads/hero_media/{outlet_id}/images/{filename}")
     gallery.append(public_url)
     outlet.gallery_images = gallery
     await db.commit()
@@ -204,6 +274,7 @@ async def delete_outlet_image(
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one_or_none()
     if outlet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
@@ -212,19 +283,35 @@ async def delete_outlet_image(
     if index < 0 or index >= len(gallery):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image index out of range.")
 
-    gallery.pop(index)
+    removed_url = gallery.pop(index)
     outlet.gallery_images = gallery
     await db.commit()
+
+    # Best-effort cleanup of the on-disk file. Only delete files inside our
+    # own uploads tree to avoid path traversal via mis-shaped URLs.
+    marker = "/uploads/"
+    if isinstance(removed_url, str) and marker in removed_url:
+        rel = removed_url.split(marker, 1)[1]
+        abs_path = os.path.realpath(os.path.join("uploads", rel))
+        uploads_root = os.path.realpath("uploads")
+        if abs_path.startswith(uploads_root + os.sep) and os.path.isfile(abs_path):
+            try:
+                os.remove(abs_path)
+            except OSError:
+                pass
+
     return ok({"galleryImages": gallery})
 
 
 @router.post("/outlets/{outlet_id}/video")
 async def upload_outlet_video(
     outlet_id: str,
+    request: Request,
     file: UploadFile = File(...),
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     content = await file.read()
     if len(content) > settings.VIDEO_MAX_BYTES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
@@ -239,11 +326,23 @@ async def upload_outlet_video(
     if ext not in ("mp4", "mov", "webm", "m4v"):
         ext = "mp4"
     filename = f"{uuid.uuid4()}.{ext}"
-    os.makedirs(settings.OUTLET_VIDEOS_DIR, exist_ok=True)
-    with open(os.path.join(settings.OUTLET_VIDEOS_DIR, filename), "wb") as f:
+    target_dir = _hero_video_dir(outlet_id)
+    os.makedirs(target_dir, exist_ok=True)
+    target_path = os.path.join(target_dir, filename)
+    with open(target_path, "wb") as f:
         f.write(content)
 
-    public_url = f"{settings.BASE_URL}/uploads/outlet_videos/{filename}"
+    # Only one welcome video per outlet — purge any previously stored clips
+    # in this outlet's hero video folder so storage doesn't grow unboundedly.
+    for old in os.listdir(target_dir):
+        old_path = os.path.join(target_dir, old)
+        if old_path != target_path and os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+
+    public_url = _public_url(request, f"/uploads/hero_media/{outlet_id}/video/{filename}")
     outlet.video_url = public_url
     await db.commit()
     return ok({"videoUrl": public_url})
@@ -256,10 +355,26 @@ async def update_outlet_media(
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one_or_none()
     if outlet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
 
+    previous_url = outlet.video_url
     outlet.video_url = body.videoUrl
     await db.commit()
+
+    # If the video was cleared (or replaced via URL), remove the old on-disk file.
+    if previous_url and previous_url != body.videoUrl:
+        marker = "/uploads/"
+        if marker in previous_url:
+            rel = previous_url.split(marker, 1)[1]
+            abs_path = os.path.realpath(os.path.join("uploads", rel))
+            uploads_root = os.path.realpath("uploads")
+            if abs_path.startswith(uploads_root + os.sep) and os.path.isfile(abs_path):
+                try:
+                    os.remove(abs_path)
+                except OSError:
+                    pass
+
     return ok({"videoUrl": outlet.video_url})

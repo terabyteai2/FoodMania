@@ -120,7 +120,7 @@ class _HeroPanel extends StatelessWidget {
                 boxShadow: PosShadows.glow,
               ),
               child: Icon(
-                Icons.admin_panel_settings_rounded,
+                Icons.whatshot_rounded,
                 color: PosColors.slate,
                 size: 30,
               ),
@@ -134,7 +134,7 @@ class _HeroPanel extends StatelessWidget {
                 border: Border.all(color: PosColors.line),
               ),
               child: Text(
-                '✦  CLOUD ADMIN',
+                '✦  FOODMANIA POS',
                 style: TextStyle(
                   color: PosColors.primary,
                   fontWeight: FontWeight.w900,
@@ -145,14 +145,18 @@ class _HeroPanel extends StatelessWidget {
             ),
             SizedBox(height: 14),
             Text(
-              'Run your restaurant\nfrom the cloud.',
+              'Your restaurant,\nfully in control.',
               style: Theme.of(
                 context,
-              ).textTheme.displaySmall?.copyWith(fontSize: 32, height: 1.08),
+              ).textTheme.displaySmall?.copyWith(
+                fontSize: 32,
+                height: 1.08,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             SizedBox(height: 12),
             Text(
-              'Manage menu, orders, and status updates through a secure cloud API with realtime sync across customer websites.',
+              'Take orders, manage your menu, and track every sale — all synced to the cloud in real time so your team is always on the same page.',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: PosColors.muted,
                 fontSize: 14.5,
@@ -161,7 +165,7 @@ class _HeroPanel extends StatelessWidget {
             ),
             SizedBox(height: 22),
             PrimaryButton(
-              label: 'Configure Cloud Admin',
+              label: 'Get Started',
               icon: Icons.arrow_forward_rounded,
               onPressed: () => onContinue(),
             ),
@@ -181,24 +185,24 @@ class _CapabilityCards extends StatelessWidget {
   Widget build(BuildContext context) {
     final cards = [
       _Capability(
-        icon: Icons.cloud_done_rounded,
-        title: 'Cloud APIs',
+        icon: Icons.receipt_long_rounded,
+        title: 'Smart Orders',
         message:
-            'Supabase Edge Function endpoints for customer websites and admin sync.',
+            'Take orders from any table. Every order is tracked, printed, and synced — nothing slips through.',
         color: PosColors.primary,
       ),
       _Capability(
         icon: Icons.restaurant_menu_rounded,
         title: 'Live Menu',
         message:
-            'Availability changes sync to customer websites through cloud.',
+            'Update item availability in seconds. Changes appear instantly on your customer menu page.',
         color: PosColors.accent,
       ),
       _Capability(
-        icon: Icons.receipt_long_rounded,
-        title: 'Order Workflow',
+        icon: Icons.cloud_sync_rounded,
+        title: 'Cloud Sync',
         message:
-            'Customer orders are accepted automatically, then served or cancelled from one dashboard.',
+            'All data syncs automatically. Work offline and it catches up when connected.',
         color: PosColors.info,
       ),
     ];

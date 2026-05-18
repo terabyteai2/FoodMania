@@ -1,45 +1,38 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# ============================================
+# Flutter .gitignore — Admin POS App
+# Only excludes large/regenerable build artifacts.
+# Everything else (keys, configs, IDE) WILL be pushed.
+# ============================================
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# ---------- Flutter / Dart build caches (HUGE, regenerable) ----------
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
-.pub-cache/
-.pub/
 /build/
 /coverage/
+**/build/
 
-# Symbolication related
+# ---------- iOS / macOS build outputs ----------
+**/ios/Flutter/.last_build_id
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/macos/Pods/
+
+# ---------- Generated files ----------
+**/doc/api/
+generated_plugin_registrant.dart
+
+# ---------- Symbolication / Obfuscation ----------
 app.*.symbols
-
-# Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# ---------- Large binary outputs (>50MB, blocked by GitHub) ----------
+*.apk
+*.aab
+*.ipa
+*.so
+
+# ---------- Misc ----------
+*.log
+.DS_Store

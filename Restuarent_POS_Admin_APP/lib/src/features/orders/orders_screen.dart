@@ -1,6 +1,10 @@
+import 'dart:convert';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
@@ -24,6 +28,7 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
+  int? _lastPendingCount;
 
   @override
   void initState() {
@@ -45,60 +50,65 @@ class _OrdersScreenState extends State<OrdersScreen>
     final pendingOrders = allOrders
         .where((o) => o.status.adminStatus == OrderStatus.pending)
         .toList(growable: false);
-    final activeOrders = allOrders
-        .where((o) => o.status.isOpen)
-        .toList(growable: false);
-    activeOrders.sort(_sortOrders);
-    final doneOrders = allOrders
+    pendingOrders.sort(_sortOrders);
+    final acceptedOrders = allOrders
         .where(
           (o) =>
+              o.status.adminStatus == OrderStatus.accepted ||
               o.status.adminStatus == OrderStatus.served ||
-              o.status.adminStatus == OrderStatus.cancelled,
+              o.status == OrderStatus.preparing ||
+              o.status == OrderStatus.ready,
         )
         .toList(growable: false);
-    doneOrders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    acceptedOrders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     final canCreate = app.menuItems.any((i) => i.isAvailable);
+    _syncTabWithPendingOrders(pendingOrders.length);
 
     return Scaffold(
       backgroundColor: PosColors.background,
+      floatingActionButton: canCreate
+          ? SizedBox(
+              height: 58,
+              child: FloatingActionButton.extended(
+                onPressed: () => _openNewOrderForm(context),
+                backgroundColor: PosColors.primary,
+                foregroundColor: PosColors.primaryDark,
+                tooltip: 'New order',
+                icon: const Icon(Icons.add_rounded, size: 24),
+                label: Text(
+                  'New Order',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                ),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
             _TopBar(
               pendingCount: pendingOrders.length,
-              activeCount: activeOrders.length,
-              canCreate: canCreate,
-              onAdd: () => _openNewOrderForm(context),
+              acceptedCount: acceptedOrders.length,
             ),
             _TabStrip(
               controller: _tabs,
-              activeCount: activeOrders.length,
-              doneCount: doneOrders.length,
+              pendingCount: pendingOrders.length,
+              acceptedCount: acceptedOrders.length,
             ),
-            if (pendingOrders.isNotEmpty)
-              _PendingNotice(
-                order: pendingOrders.first,
-                onAccept: () => _changeStatus(
-                  context,
-                  pendingOrders.first,
-                  OrderStatus.accepted,
-                ),
-              ),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
                   _OrderList(
-                    orders: activeOrders,
-                    emptyLabel: 'No active orders',
-                    emptyIcon: Icons.hourglass_empty_rounded,
+                    orders: pendingOrders,
+                    emptyLabel: 'No pending orders',
+                    emptyIcon: Icons.inbox_outlined,
                     onPrint: (o) => _printDirect(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                   ),
                   _OrderList(
-                    orders: doneOrders,
-                    emptyLabel: 'No done orders',
+                    orders: acceptedOrders,
+                    emptyLabel: 'No accepted orders',
                     emptyIcon: Icons.check_circle_outline_rounded,
                     onPrint: (o) => _printDirect(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
@@ -118,6 +128,27 @@ class _OrdersScreenState extends State<OrdersScreen>
     return b.createdAt.compareTo(a.createdAt);
   }
 
+  void _syncTabWithPendingOrders(int pendingCount) {
+    final previousPendingCount = _lastPendingCount;
+    _lastPendingCount = pendingCount;
+
+    final shouldShowAccepted = pendingCount == 0 && _tabs.index != 1;
+    final hasNewPendingOrder =
+        pendingCount > 0 &&
+        pendingCount > (previousPendingCount ?? pendingCount) &&
+        _tabs.index != 0;
+
+    if (!shouldShowAccepted && !hasNewPendingOrder) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetIndex = shouldShowAccepted ? 1 : 0;
+      if (_tabs.index != targetIndex) {
+        _tabs.animateTo(targetIndex);
+      }
+    });
+  }
+
   Future<void> _openNewOrderForm(BuildContext context) async {
     final app = AppScope.of(context);
     final menuItems = app.menuItems
@@ -128,10 +159,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     final result = await Navigator.of(context).push<_OrderResult>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _NewOrderPage(
-          menuItems: menuItems,
-          tableCount: tableCount,
-        ),
+        builder: (_) =>
+            _NewOrderPage(menuItems: menuItems, tableCount: tableCount),
       ),
     );
     if (result == null || !context.mounted) return;
@@ -144,7 +173,9 @@ class _OrdersScreenState extends State<OrdersScreen>
 
     if (!context.mounted) return;
 
-    final printed = app.printerState.connected
+    final printed =
+        app.printerState.hasSelectedPrinter &&
+            !app.printerService.hasPrintedOrder(order.id)
         ? await app.printOrderTicket(order)
         : false;
 
@@ -190,12 +221,24 @@ class _OrdersScreenState extends State<OrdersScreen>
     OrderModel order, {
     required bool printed,
   }) {
+    final app = AppScope.of(context);
+    final baseUrl = app.cloudConfig.baseUrl.trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    final outletId = app.serverConfig.outletId.trim();
+    final menuUrl = baseUrl.isNotEmpty && outletId.isNotEmpty
+        ? '$baseUrl/menu/$outletId'
+        : null;
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (_) => _OrderCreatedSheet(
         order: order,
         autoPrinted: printed,
+        menuUrl: menuUrl,
         onPrint: () => _printDirect(context, order),
       ),
     );
@@ -207,17 +250,10 @@ class _OrdersScreenState extends State<OrdersScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.pendingCount,
-    required this.activeCount,
-    required this.canCreate,
-    required this.onAdd,
-  });
+  const _TopBar({required this.pendingCount, required this.acceptedCount});
 
   final int pendingCount;
-  final int activeCount;
-  final bool canCreate;
-  final VoidCallback onAdd;
+  final int acceptedCount;
 
   @override
   Widget build(BuildContext context) {
@@ -225,19 +261,12 @@ class _TopBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(12, 14, 12, 7),
       child: CompactHeader(
         title: 'Orders',
-        subtitle:
-            'অর্ডার · $activeCount open${pendingCount > 0 ? ' · $pendingCount pending' : ''}',
+        subtitle: 'অর্ডার · $pendingCount pending · $acceptedCount accepted',
         actions: [
           CompactIconButton(
             icon: Icons.tune_rounded,
             tooltip: 'Filter orders',
             onPressed: () {},
-          ),
-          CompactIconButton(
-            icon: Icons.add_rounded,
-            tooltip: 'New order',
-            filled: true,
-            onPressed: canCreate ? onAdd : null,
           ),
         ],
       ),
@@ -252,13 +281,13 @@ class _TopBar extends StatelessWidget {
 class _TabStrip extends StatelessWidget {
   const _TabStrip({
     required this.controller,
-    required this.activeCount,
-    required this.doneCount,
+    required this.pendingCount,
+    required this.acceptedCount,
   });
 
   final TabController controller;
-  final int activeCount;
-  final int doneCount;
+  final int pendingCount;
+  final int acceptedCount;
 
   @override
   Widget build(BuildContext context) {
@@ -292,10 +321,10 @@ class _TabStrip extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(width: 56, child: Center(child: Text('Active'))),
-                  if (activeCount > 0) ...[
+                  SizedBox(width: 64, child: Center(child: Text('Pending'))),
+                  if (pendingCount > 0) ...[
                     SizedBox(width: 6),
-                    _TabBadge(count: activeCount, active: true),
+                    _TabBadge(count: pendingCount, active: true),
                   ],
                 ],
               ),
@@ -304,10 +333,10 @@ class _TabStrip extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Done'),
-                  if (doneCount > 0) ...[
+                  Text('Accepted'),
+                  if (acceptedCount > 0) ...[
                     SizedBox(width: 6),
-                    _TabBadge(count: doneCount, active: false),
+                    _TabBadge(count: acceptedCount, active: false),
                   ],
                 ],
               ),
@@ -343,96 +372,6 @@ class _TabBadge extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _PendingNotice extends StatelessWidget {
-  const _PendingNotice({required this.order, required this.onAccept});
-
-  final OrderModel order;
-  final VoidCallback onAccept;
-
-  @override
-  Widget build(BuildContext context) {
-    final table = (order.tableNo ?? '').trim();
-    final subtitle = table.isEmpty
-        ? '${_formatTime(order.createdAt)} · ${_ago(order.createdAt)} ago'
-        : 'Table $table · ${_formatTime(order.createdAt)} · ${_ago(order.createdAt)} ago';
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: CompactSurface(
-        color: PosColors.accentSoft,
-        borderColor: PosColors.primary.withValues(alpha: 0.45),
-        padding: EdgeInsets.fromLTRB(10, 9, 8, 9),
-        radius: 9,
-        child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: PosColors.primary,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(
-                Icons.notifications_active_outlined,
-                color: PosColors.primaryDark,
-                size: 16,
-              ),
-            ),
-            SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '1 new order pending',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: PosColors.slate,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: PosColors.muted,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 8),
-            _AdvanceButton(
-              label: 'Accept',
-              color: PosColors.primary,
-              onTap: onAccept,
-              compact: true,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatTime(DateTime dt) {
-    return DateFormat('h:mm a').format(dt.toLocal());
-  }
-
-  String _ago(DateTime dt) {
-    final minutes = DateTime.now().difference(dt.toLocal()).inMinutes;
-    if (minutes < 1) return 'now';
-    if (minutes < 60) return '$minutes min';
-    final hours = (minutes / 60).floor();
-    return '$hours hr';
   }
 }
 
@@ -499,7 +438,6 @@ class _OrderCard extends StatelessWidget {
     final time = _formatTime(order.createdAt.toLocal());
     final adminStatus = order.status.adminStatus;
     final isPending = adminStatus == OrderStatus.pending;
-    final isAccepted = adminStatus == OrderStatus.accepted;
     final accentColor = switch (adminStatus) {
       OrderStatus.pending => PosColors.warning,
       OrderStatus.accepted => PosColors.success,
@@ -508,16 +446,8 @@ class _OrderCard extends StatelessWidget {
       OrderStatus.preparing => PosColors.success,
       OrderStatus.ready => PosColors.success,
     };
-    final nextStatus = isPending
-        ? OrderStatus.accepted
-        : isAccepted
-        ? OrderStatus.served
-        : null;
-    final nextLabel = isPending
-        ? 'Accept'
-        : isAccepted
-        ? 'Serve'
-        : null;
+    final nextStatus = isPending ? OrderStatus.accepted : null;
+    final statusLabel = isPending ? 'PENDING' : 'ACCEPTED';
 
     return Material(
       color: Colors.transparent,
@@ -595,7 +525,7 @@ class _OrderCard extends StatelessWidget {
                               ),
                             ),
                             child: Text(
-                              adminStatus.label.toUpperCase(),
+                              statusLabel,
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 8,
@@ -710,23 +640,24 @@ class _OrderCard extends StatelessWidget {
                               ),
                             ),
                           Spacer(),
-                          if (nextStatus != null)
+                          IconButton(
+                            tooltip: 'Print ticket',
+                            onPressed: onPrint,
+                            icon: Icon(
+                              Icons.print_outlined,
+                              color: PosColors.muted,
+                              size: 18,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          if (nextStatus != null) ...[
+                            SizedBox(width: 4),
                             _AdvanceButton(
-                              label: nextLabel!,
+                              label: 'Accept',
                               color: PosColors.primary,
                               onTap: () => onStatus(nextStatus),
-                            )
-                          else
-                            IconButton(
-                              tooltip: 'Print ticket',
-                              onPressed: onPrint,
-                              icon: Icon(
-                                Icons.print_outlined,
-                                color: PosColors.muted,
-                                size: 18,
-                              ),
-                              visualDensity: VisualDensity.compact,
                             ),
+                          ],
                         ],
                       ),
                     ],
@@ -761,31 +692,29 @@ class _AdvanceButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
-    this.compact = false,
   });
 
   final String label;
   final Color color;
   final VoidCallback onTap;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: compact ? 30 : 38,
-        padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 18),
+        height: 38,
+        padding: EdgeInsets.symmetric(horizontal: 18),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(compact ? 9 : 11),
+          borderRadius: BorderRadius.circular(11),
         ),
         child: Center(
           child: Text(
             label,
             style: TextStyle(
               fontWeight: FontWeight.w900,
-              fontSize: compact ? 10 : 11,
+              fontSize: 11,
               color: color.computeLuminance() > 0.4
                   ? PosColors.slate
                   : Colors.white,
@@ -806,11 +735,13 @@ class _OrderCreatedSheet extends StatelessWidget {
     required this.order,
     required this.autoPrinted,
     required this.onPrint,
+    this.menuUrl,
   });
 
   final OrderModel order;
   final bool autoPrinted;
   final VoidCallback onPrint;
+  final String? menuUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -821,126 +752,156 @@ class _OrderCreatedSheet extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            margin: EdgeInsets.symmetric(vertical: 10),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: PosColors.line,
-              borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Yellow handle bar — brand accent
+            Container(
+              margin: EdgeInsets.symmetric(vertical: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: PosColors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          SizedBox(height: 6),
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: PosColors.success.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+            SizedBox(height: 6),
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: PosColors.success.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_rounded,
+                color: PosColors.success,
+                size: 32,
+              ),
             ),
-            child: Icon(
-              Icons.check_rounded,
-              color: PosColors.success,
-              size: 32,
+            SizedBox(height: 10),
+            Text(
+              'Order Created!',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
             ),
-          ),
-          SizedBox(height: 10),
-          Text(
-            'Order Created!',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-          ),
-          SizedBox(height: 6),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
-              borderRadius: BorderRadius.circular(PosRadii.pill),
-              border: Border.all(color: PosColors.line),
+            SizedBox(height: 6),
+            // Yellow sequence number pill
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              decoration: BoxDecoration(
+                color: PosColors.primary,
+                borderRadius: BorderRadius.circular(PosRadii.pill),
+                border: Border.all(color: PosColors.primary),
+              ),
+              child: Text(
+                order.displaySequence,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 32,
+                  color: PosColors.primaryDark,
+                  letterSpacing: -1,
+                ),
+              ),
             ),
-            child: Text(
-              order.displaySequence,
+            SizedBox(height: 8),
+            if ((order.tableNo ?? '').isNotEmpty)
+              Text(
+                'Table ${order.tableNo}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: PosColors.muted,
+                ),
+              ),
+            Text(
+              currency.format(order.total),
               style: TextStyle(
                 fontWeight: FontWeight.w900,
-                fontSize: 32,
+                fontSize: 16,
                 color: PosColors.slate,
-                letterSpacing: -1,
               ),
             ),
-          ),
-          SizedBox(height: 8),
-          if ((order.tableNo ?? '').isNotEmpty)
+            SizedBox(height: 18),
+            // QR code — encodes the customer menu URL when available,
+            // otherwise falls back to the order's unique ID
+            QrImageView(
+              data: menuUrl ?? order.id,
+              version: QrVersions.auto,
+              size: 140,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Color(0xFF1A1A1A),
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            SizedBox(height: 4),
             Text(
-              'Table ${order.tableNo}',
+              menuUrl != null ? 'Scan to view our menu' : order.orderNo,
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
+                fontSize: 10,
                 color: PosColors.muted,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          Text(
-            currency.format(order.total),
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
-              color: PosColors.slate,
-            ),
-          ),
-          SizedBox(height: 20),
-          if (autoPrinted)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.print_rounded, size: 16, color: PosColors.success),
-                SizedBox(width: 6),
-                Text(
-                  'Ticket sent to printer',
-                  style: TextStyle(
-                    color: PosColors.success,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+            SizedBox(height: 20),
+            if (autoPrinted)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.print_rounded, size: 16, color: PosColors.success),
+                  SizedBox(width: 6),
+                  Text(
+                    'Ticket sent to printer',
+                    style: TextStyle(
+                      color: PosColors.success,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onPrint();
+                  },
+                  icon: Icon(Icons.print_rounded),
+                  label: Text(
+                    'Print Ticket',
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
-              ],
-            )
-          else
+              ),
+            SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  onPrint();
-                },
-                icon: Icon(Icons.print_rounded),
-                label: Text(
-                  'Print Ticket',
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context),
+                style: FilledButton.styleFrom(
+                  backgroundColor: PosColors.slate,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(PosRadii.md),
+                  ),
+                ),
+                child: Text(
+                  'Done',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
             ),
-          SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context),
-              style: FilledButton.styleFrom(
-                backgroundColor: PosColors.slate,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(PosRadii.md),
-                ),
-              ),
-              child: Text(
-                'Done',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -951,11 +912,7 @@ class _OrderCreatedSheet extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _OrderResult {
-  _OrderResult({
-    required this.items,
-    this.tableNo,
-    this.note,
-  });
+  _OrderResult({required this.items, this.tableNo, this.note});
   final List<OrderRequestItem> items;
   final String? tableNo;
   final String? note;
@@ -1106,8 +1063,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                         setState(() => _selectedCategory = c),
                     onTap: _tap,
                     onDecrement: _decrement,
-                    onToggleNote: () =>
-                        setState(() => _showNote = !_showNote),
+                    onToggleNote: () => setState(() => _showNote = !_showNote),
                     onSubmit: _cart.isNotEmpty ? _submit : null,
                   ),
                 ],
@@ -1496,25 +1452,63 @@ class _MenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final inCart = qty > 0;
+    final hasImage = (item.imageUrl ?? '').isNotEmpty;
 
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: Duration(milliseconds: 150),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: inCart ? PosColors.slate : PosColors.surface,
+          color: hasImage
+              ? Colors.black
+              : (inCart ? PosColors.slate : PosColors.surface),
           borderRadius: BorderRadius.circular(PosRadii.md),
-          border: Border.all(color: inCart ? PosColors.slate : PosColors.line),
+          border: Border.all(
+            color: inCart
+                ? PosColors.primary
+                : (hasImage ? Colors.transparent : PosColors.line),
+            width: inCart ? 2 : 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: inCart ? 0.1 : 0.04),
-              blurRadius: inCart ? 10 : 6,
+              color: Colors.black.withValues(alpha: inCart ? 0.15 : 0.05),
+              blurRadius: inCart ? 12 : 6,
               offset: Offset(0, inCart ? 4 : 2),
             ),
           ],
         ),
         child: Stack(
+          fit: StackFit.expand,
           children: [
+            // ── Background image ──────────────────────────────────────────
+            if (hasImage) _ItemImage(url: item.imageUrl!),
+
+            // ── Gradient overlay for readability ──────────────────────────
+            if (hasImage)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.72),
+                    ],
+                    stops: const [0.3, 1.0],
+                  ),
+                ),
+              ),
+
+            // ── Yellow tint when in cart (image mode) ─────────────────────
+            if (hasImage && inCart)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: PosColors.primary.withValues(alpha: 0.22),
+                ),
+              ),
+
+            // ── Text content ──────────────────────────────────────────────
             Padding(
               padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
               child: Column(
@@ -1528,7 +1522,9 @@ class _MenuTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
-                      color: inCart ? Colors.white : PosColors.slate,
+                      color: (hasImage || inCart)
+                          ? Colors.white
+                          : PosColors.slate,
                       height: 1.2,
                     ),
                   ),
@@ -1537,14 +1533,16 @@ class _MenuTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 13,
-                      color: inCart
-                          ? Colors.white.withValues(alpha: 0.8)
+                      color: (hasImage || inCart)
+                          ? Colors.white.withValues(alpha: 0.85)
                           : PosColors.muted,
                     ),
                   ),
                 ],
               ),
             ),
+
+            // ── Quantity stepper (top-right) ──────────────────────────────
             if (inCart)
               Positioned(
                 top: 6,
@@ -1558,7 +1556,7 @@ class _MenuTile extends StatelessWidget {
                         width: 20,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: Colors.black.withValues(alpha: 0.35),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Icon(
@@ -1573,7 +1571,7 @@ class _MenuTile extends StatelessWidget {
                       constraints: BoxConstraints(minWidth: 20),
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
+                        color: PosColors.primary,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -1582,7 +1580,7 @@ class _MenuTile extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 12,
-                          color: Colors.white,
+                          color: PosColors.primaryDark,
                         ),
                       ),
                     ),
@@ -1594,6 +1592,39 @@ class _MenuTile extends StatelessWidget {
       ),
     );
   }
+}
+
+// Renders a menu item image from either a network URL or a base64 data URL.
+// Network images are automatically cached to local storage via CachedNetworkImage.
+class _ItemImage extends StatelessWidget {
+  const _ItemImage({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    if (url.startsWith('data:image/')) {
+      try {
+        final bytes = base64Decode(url.split(',').last);
+        return Image.memory(bytes, fit: BoxFit.cover);
+      } catch (_) {
+        return _placeholder();
+      }
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      fadeInDuration: const Duration(milliseconds: 200),
+      placeholder: (context, url) => _placeholder(),
+      errorWidget: (context, url, err) => _placeholder(),
+    );
+  }
+
+  Widget _placeholder() => Container(
+    color: const Color(0xFF2A2622),
+    child: const Center(
+      child: Icon(Icons.restaurant_rounded, color: Color(0xFF4A4642), size: 22),
+    ),
+  );
 }
 
 class _CartFooter extends StatelessWidget {

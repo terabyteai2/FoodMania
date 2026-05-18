@@ -78,8 +78,14 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
             theme: AppTheme.light(uiScale: uiScale),
             themeMode: ThemeMode.light,
             builder: (context, child) {
-              return _WindowScale(
-                scale: uiScale,
+              final mediaQuery = MediaQuery.of(context);
+              return MediaQuery(
+                data: mediaQuery.copyWith(
+                  textScaler: mediaQuery.textScaler.clamp(
+                    minScaleFactor: 1.0,
+                    maxScaleFactor: 1.18,
+                  ),
+                ),
                 child: child ?? SizedBox.shrink(),
               );
             },
@@ -105,7 +111,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
           setState(() {
             _showSplash = false;
             _showIntro = !_controller.hasSeenIntro;
-            _initialShellIndex = _showIntro ? 4 : 0;
+            _initialShellIndex = 0;
           });
         },
       );
@@ -127,7 +133,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
           if (!mounted) return;
           setState(() {
             _showIntro = false;
-            _initialShellIndex = 4;
+            _initialShellIndex = 0;
           });
         },
       );
@@ -145,44 +151,15 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   }
 }
 
-class _WindowScale extends StatelessWidget {
-  const _WindowScale({required this.scale, required this.child});
+enum _AppTab { orders, menu, home, stock, settings }
 
-  final double scale;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final safeScale = scale.clamp(0.78, 1.08).toDouble();
-    if ((safeScale - 1).abs() < 0.001) return child;
-
-    final size = mediaQuery.size;
-    final layoutSize = Size(size.width / safeScale, size.height / safeScale);
-
-    return ClipRect(
-      child: OverflowBox(
-        alignment: Alignment.topCenter,
-        minWidth: layoutSize.width,
-        maxWidth: layoutSize.width,
-        minHeight: layoutSize.height,
-        maxHeight: layoutSize.height,
-        child: Transform.scale(
-          scale: safeScale,
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            width: layoutSize.width,
-            height: layoutSize.height,
-            child: MediaQuery(
-              data: mediaQuery.copyWith(size: layoutSize),
-              child: child,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+const _mainTabOrder = <_AppTab>[
+  _AppTab.orders,
+  _AppTab.menu,
+  _AppTab.home,
+  _AppTab.stock,
+  _AppTab.settings,
+];
 
 class MainShell extends StatefulWidget {
   const MainShell({required this.initialIndex, super.key});
@@ -194,40 +171,74 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  late int _selectedIndex;
+  late _AppTab _selected;
 
   @override
   void initState() {
     super.initState();
-    _selectedIndex = widget.initialIndex;
+    final vi = widget.initialIndex.clamp(0, _AppTab.values.length - 1);
+    _selected = _mainTabOrder[vi];
   }
 
   @override
   void didUpdateWidget(covariant MainShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialIndex != widget.initialIndex) {
-      _selectedIndex = widget.initialIndex;
+      final vi = widget.initialIndex.clamp(0, _AppTab.values.length - 1);
+      _selected = _mainTabOrder[vi];
     }
+  }
+
+  _Destination _destinationFor(_AppTab tab, AppStrings text) {
+    return switch (tab) {
+      _AppTab.orders => _Destination(
+        text.orders,
+        Icons.receipt_long_outlined,
+        Icons.receipt_long,
+      ),
+      _AppTab.menu => _Destination(
+        text.menu,
+        Icons.restaurant_menu_outlined,
+        Icons.restaurant_menu,
+      ),
+      _AppTab.home => _Destination(
+        'Home',
+        Icons.home_outlined,
+        Icons.home_rounded,
+      ),
+      _AppTab.stock => _Destination(
+        'Stock',
+        Icons.grid_on_outlined,
+        Icons.grid_on_rounded,
+      ),
+      _AppTab.settings => _Destination(
+        text.settings,
+        Icons.settings_outlined,
+        Icons.settings_rounded,
+      ),
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
-    final destinations = _destinations(text);
-    final pages = [
-      DashboardScreen(onNavigate: _setIndex),
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final tabOrder = _mainTabOrder;
+    final visualIndex = tabOrder
+        .indexOf(_selected)
+        .clamp(0, tabOrder.length - 1);
+    final destinations = tabOrder
+        .map((t) => _destinationFor(t, text))
+        .toList(growable: false);
+
+    // Fixed page order matching _AppTab.index ordinals.
+    final allPages = [
       OrdersScreen(),
       MenuManagementScreen(),
+      DashboardScreen(onNavigate: _setIndex),
       InventoryScreen(),
       SettingsScreen(),
     ];
-    final safeIndex = _selectedIndex.clamp(0, pages.length - 1);
-    if (safeIndex != _selectedIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _selectedIndex = safeIndex);
-      });
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -235,10 +246,10 @@ class _MainShellState extends State<MainShell> {
         if (!useRail) {
           return Scaffold(
             backgroundColor: PosColors.background,
-            body: IndexedStack(index: safeIndex, children: pages),
+            body: IndexedStack(index: _selected.index, children: allPages),
             bottomNavigationBar: _FloatingBottomNav(
               destinations: destinations,
-              selectedIndex: safeIndex,
+              selectedIndex: visualIndex,
               onChanged: _setIndex,
             ),
           );
@@ -261,7 +272,7 @@ class _MainShellState extends State<MainShell> {
                   ],
                 ),
                 child: NavigationRail(
-                  selectedIndex: safeIndex,
+                  selectedIndex: visualIndex,
                   onDestinationSelected: _setIndex,
                   extended: extended,
                   minExtendedWidth: 232,
@@ -286,7 +297,7 @@ class _MainShellState extends State<MainShell> {
                 ),
               ),
               Expanded(
-                child: IndexedStack(index: safeIndex, children: pages),
+                child: IndexedStack(index: _selected.index, children: allPages),
               ),
             ],
           ),
@@ -295,27 +306,10 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  void _setIndex(int index) {
-    final maxIndex = _destinations(AppScope.of(context).strings).length - 1;
-    setState(() => _selectedIndex = index.clamp(0, maxIndex));
-  }
-
-  List<_Destination> _destinations(AppStrings text) {
-    return [
-      _Destination('Home', Icons.home_outlined, Icons.home_rounded),
-      _Destination(
-        text.orders,
-        Icons.receipt_long_outlined,
-        Icons.receipt_long,
-      ),
-      _Destination(
-        text.menu,
-        Icons.restaurant_menu_outlined,
-        Icons.restaurant_menu,
-      ),
-      _Destination('Stock', Icons.grid_on_outlined, Icons.grid_on_rounded),
-      _Destination('More', Icons.more_horiz_rounded, Icons.more_horiz_rounded),
-    ];
+  void _setIndex(int vi) {
+    if (vi >= 0 && vi < _mainTabOrder.length) {
+      setState(() => _selected = _mainTabOrder[vi]);
+    }
   }
 }
 
@@ -349,11 +343,7 @@ class _RailLogo extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(
-        Icons.point_of_sale_rounded,
-        color: PosColors.slate,
-        size: 24,
-      ),
+      child: Icon(Icons.whatshot_rounded, color: PosColors.slate, size: 24),
     );
     if (!extended) return mark;
     return Row(
