@@ -65,12 +65,14 @@ class CloudRealtimeService {
     void Function(String message)? onLog,
   }) async {
     if (_disposed) return;
-    final uri = '$wsUrl/ws/$outletId?token=${Uri.encodeQueryComponent(deviceToken)}';
+    final uri =
+        '$wsUrl/ws/$outletId?token=${Uri.encodeQueryComponent(deviceToken)}';
     try {
       final parsedUri = Uri.parse(uri);
       final ngrokExtra = CloudDefaults.ngrokBrowserBypassHeaders(parsedUri);
+      // dart:io WebSocket.connect requires a String URL, not Uri.
       _socket = await WebSocket.connect(
-        parsedUri,
+        uri,
         headers: ngrokExtra.isEmpty ? null : ngrokExtra,
       ).timeout(const Duration(seconds: 10));
       _subscribed = true;

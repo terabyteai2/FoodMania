@@ -69,6 +69,14 @@ class StaffUpdateRequest(BaseModel):
     displayName: str | None = None
 
 
+class StaffDevBypassLoginRequest(BaseModel):
+    """Local/dev staff login without Google; server must set STAFF_DEV_BYPASS_SECRET."""
+
+    email: str
+    serverId: str
+    bypassSecret: str
+
+
 # ── Devices ───────────────────────────────────────────────────────────────────
 
 class DeviceRegisterRequest(BaseModel):

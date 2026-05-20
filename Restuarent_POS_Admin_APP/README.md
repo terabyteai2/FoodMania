@@ -52,7 +52,7 @@ flutter build apk --release
 
 The Flutter POS ships with compile‑defaults targeting **`backend/.env`**: **`POS_CLOUD_API_URL`** (HTTPS ngrok base, optional override).
 
-Defaults mirror **`NGROK_STATIC_DOMAIN`** (`POS_NGROK_DOMAIN`; fallback hostname **`kiwi-equator-banknote.ngrok-free.app`**):
+Defaults mirror **`NGROK_STATIC_DOMAIN`** (`POS_NGROK_DOMAIN`; fallback hostname **`kiwi-equator-banknote.ngrok-free.dev`**):
 
 ```
 embedded HTTPS api URL → POS_CLOUD_API_URL if non‑empty else → https://${POS_NGROK_DOMAIN}
@@ -65,6 +65,12 @@ flutter run \
   --dart-define=POS_NGROK_DOMAIN=my-tunnel.ngrok-free.app \
   --dart-define=POS_CLOUD_API_URL=https://my-tunnel.ngrok-free.app
 ```
+
+**Sign‑in checklist when using ngrok:**
+
+1. Run the API with a tunnel: **`cd ../backend && bash start_ngrok.sh`** and wait until the log shows **`Public URL (ngrok): https://…`** (if it failed, fix `NGROK_AUTHTOKEN` / `NGROK_STATIC_DOMAIN` in `backend/.env`).
+2. **`POS_NGROK_DOMAIN` / `POS_CLOUD_API_URL` must match your reserved hostname** in `.env` (`NGROK_STATIC_DOMAIN`). The fallback `kiwi-equator-banknote.ngrok-free.dev` only works if that is *your* reserved domain.
+3. **Staff**: enter the same **`https://…`** base (no trailing slash) under **Restaurant server URL**.
 
 For internal testing without the bKash gate:
 

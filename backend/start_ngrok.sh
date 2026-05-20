@@ -1,12 +1,14 @@
 #!/bin/bash
-# Start everything on ngrok:
-#   1. Build the React customer menu
-#   2. Launch Python backend (which starts the ngrok tunnel)
+# Start backend + ngrok static domain tunnel (pyngrok).
 #
-# Public URL: https://kiwi-equator-banknote.ngrok-free.dev
-# Customer menu: https://kiwi-equator-banknote.ngrok-free.dev/menu/YOUR_OUTLET_ID
+# Prerequisites in backend/.env:
+#   NGROK_AUTHTOKEN=...           (https://dashboard.ngrok.com/get-started/your-authtoken)
+#   NGROK_STATIC_DOMAIN=hostname  (bare host, e.g. my-site.ngrok-free.app — reserve at Cloud Edge → Domains)
 #
-# Run with: bash start_ngrok.sh
+# Public URL prints at startup — use the SAME host in Flutter e.g.
+#   flutter run --dart-define=POS_NGROK_DOMAIN=my-site.ngrok-free.app
+#
+# Run: bash start_ngrok.sh
 
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -21,29 +23,33 @@ if [ -x ".venv/bin/python" ]; then
   PYTHON_BIN=".venv/bin/python"
 fi
 
-source <(grep -E "^NGROK_AUTHTOKEN|^NGROK_STATIC_DOMAIN" .env)
+source <(grep -E "^NGROK_AUTHTOKEN=|^NGROK_STATIC_DOMAIN=" .env || true)
 if [ -z "$NGROK_AUTHTOKEN" ]; then
-  echo "ERROR: NGROK_AUTHTOKEN is not set in .env"
+  echo "ERROR: NGROK_AUTHTOKEN is empty in .env"
+  exit 1
+fi
+if [ -z "$NGROK_STATIC_DOMAIN" ]; then
+  echo "ERROR: NGROK_STATIC_DOMAIN is empty in .env (use your reserved ngrok hostname, no https://)."
   exit 1
 fi
 
+export PORT="${PORT:-8000}"
+
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║          Rastarant · Full Stack on ngrok             ║"
+echo "║          Rastarant · Backend + ngrok tunnel          ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-echo "Domain: https://$NGROK_STATIC_DOMAIN"
+echo "Reserved domain host: ${NGROK_STATIC_DOMAIN}"
+echo "Local bind:           http://127.0.0.1:${PORT}  (tunnel forwards HTTPS → here)"
 echo ""
-
-# Step 1 — build the React customer menu
 echo "[1/2] Building customer menu React app..."
 bash build_frontend.sh
 echo ""
 
-# Step 2 — start Python (opens ngrok tunnel internally)
-echo "[2/2] Starting Python API server with ngrok..."
-echo "      API docs:       https://$NGROK_STATIC_DOMAIN/docs"
-echo "      Customer menu:  https://$NGROK_STATIC_DOMAIN/menu/YOUR_OUTLET_ID"
+echo "[2/2] Starting API + tunnel (reload is OFF when ngrok is active)..."
+echo "      Flutter: dart-define POS_NGROK_DOMAIN or POS_CLOUD_API_URL must match this hostname."
+echo "      Docs after boot: https://${NGROK_STATIC_DOMAIN}/docs"
 echo ""
 
 "$PYTHON_BIN" main.py

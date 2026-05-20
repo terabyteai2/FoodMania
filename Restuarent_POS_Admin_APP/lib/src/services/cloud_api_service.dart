@@ -21,6 +21,45 @@ class CloudApiException implements Exception {
   String toString() => message;
 }
 
+/// Parses JSON from the API; turns ngrok/HTML/plain-text failures into readable [CloudApiException]s.
+Object? _decodeCloudJsonBody(String body, Uri uri) {
+  final t = body.trim();
+  if (t.isEmpty) {
+    return <String, Object?>{};
+  }
+  final lower = t.toLowerCase();
+  // ngrok edge returns plain text when tunnel is down or hostname has no session
+  if (lower.contains('is offline') ||
+      lower.contains('endpoint is offline') ||
+      lower.contains('err_ngrok') ||
+      lower.contains('tunnel') && lower.contains('gone')) {
+    throw CloudApiException(
+      'Ngrok tunnel is not reachable at ${uri.scheme}://${uri.host}${uri.path}: '
+      '${t.length > 240 ? "${t.substring(0, 240)}…" : t}\n\n'
+      'Fix: run `cd backend && bash start_ngrok.sh` on your PC. '
+      'In the app, server URL must match your reserved domain exactly '
+      'including **.ngrok-free.dev** vs **.ngrok-free.app** — rebuild after changing Flutter defaults.',
+    );
+  }
+  if (t.startsWith('<') ||
+      lower.contains('<!doctype') ||
+      lower.contains('<html')) {
+    throw CloudApiException(
+      'Received HTML instead of JSON from $uri. '
+      'If you use ngrok, open the same URL in Chrome; add `ngrok-skip-browser-warning` is already sent — '
+      'usually the tunnel is down or the hostname is wrong (.dev vs .app).',
+    );
+  }
+  try {
+    return jsonDecode(t);
+  } on FormatException catch (e) {
+    final preview = t.length > 180 ? '${t.substring(0, 180)}…' : t;
+    throw CloudApiException(
+      'Server response was not JSON (${e.message}). From $uri — body: $preview',
+    );
+  }
+}
+
 class CloudRealtimeConfig {
   CloudRealtimeConfig({
     required this.enabled,
@@ -301,6 +340,27 @@ class CloudApiService {
         if (restaurantId?.trim().isNotEmpty == true)
           'restaurantId': restaurantId!.trim(),
         if (outletId?.trim().isNotEmpty == true) 'outletId': outletId!.trim(),
+      },
+    );
+    return AdminLoginResult.fromJson(response);
+  }
+
+  Future<AdminLoginResult> staffDevBypassLogin({
+    required String email,
+    required String serverId,
+    required String bypassSecret,
+  }) async {
+    final uri = _uri('/admin/staff/dev-bypass-login');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'POST',
+      uri,
+      body: {
+        'email': email.trim(),
+        'serverId': serverId.trim(),
+        'bypassSecret': bypassSecret,
       },
     );
     return AdminLoginResult.fromJson(response);
@@ -726,9 +786,7 @@ class CloudApiService {
         'Use the same Cloud API URL as your manager.',
       );
     }
-    final decoded = response.body.trim().isEmpty
-        ? <String, Object?>{}
-        : jsonDecode(response.body);
+    final decoded = _decodeCloudJsonBody(response.body, uri);
     final payload = decoded is Map
         ? Map<String, Object?>.from(decoded)
         : <String, Object?>{'data': decoded};

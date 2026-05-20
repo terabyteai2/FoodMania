@@ -5,10 +5,10 @@ class CloudDefaults {
   static String placeholderBaseUrl = 'https://your-domain.ngrok-free.app';
 
   /// Hostname only — must match backend `.env` `NGROK_STATIC_DOMAIN`.
-  /// Build override: `--dart-define=POS_NGROK_DOMAIN=my-tunnel.ngrok-free.app`
+  /// Build override: `--dart-define=POS_NGROK_DOMAIN=my-tunnel.ngrok-free.dev`
   static const String ngrokStaticDomain = String.fromEnvironment(
     'POS_NGROK_DOMAIN',
-    defaultValue: 'kiwi-equator-banknote.ngrok-free.app',
+    defaultValue: 'kiwi-equator-banknote.ngrok-free.dev',
   );
 
   /// Full public API base (HTTPS, no trailing slash). Empty `POS_CLOUD_API_URL` → ngrok default.
@@ -62,9 +62,37 @@ class CloudDefaults {
     return forceCloudSyncEnabled || hasConfiguredBaseUrl;
   }
 
+  /// Strips copy/paste noise (e.g. `"Exception: https://..."`), first line only,
+  /// and trailing slashes — use for user-typed REST base URLs (staff server URL).
+  static String sanitizeManualBaseUrl(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty) return s;
+    final lines = s.split(RegExp(r'[\r\n]+'));
+    for (final line in lines) {
+      final t = line.trim();
+      if (t.isNotEmpty) {
+        s = t;
+        break;
+      }
+    }
+    for (var i = 0; i < 8; i++) {
+      final m = RegExp(r'^(Exception|CloudApis?Exception|Error)\s*:\s*',
+              caseSensitive: false)
+          .firstMatch(s);
+      if (m == null) break;
+      s = s.substring(m.end).trim();
+      if (s.isEmpty) break;
+    }
+    while (s.endsWith('/')) {
+      s = s.substring(0, s.length - 1).trim();
+    }
+    return s.trim();
+  }
+
   static String resolveBaseUrl(String? override) {
-    final trimmed = override?.trim();
-    if (trimmed == null || trimmed.isEmpty || trimmed == placeholderBaseUrl) {
+    final trimmed =
+        sanitizeManualBaseUrl(override ?? '').trim();
+    if (trimmed.isEmpty || trimmed == placeholderBaseUrl) {
       return embeddedBaseUrl;
     }
     return trimmed;

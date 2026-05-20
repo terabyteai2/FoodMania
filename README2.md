@@ -550,7 +550,7 @@ lib/
 
 | Define | ডিফল্ট | ব্যবহার |
 |--------|--------|---------|
-| `POS_NGROK_DOMAIN` | `kiwi-equator-banknote.ngrok-free.app` | হোস্টনেম (বা স্কিম সহ যদি দেওয়া হয়) |
+| `POS_NGROK_DOMAIN` | `kiwi-equator-banknote.ngrok-free.dev` | হোস্টনেম (বা স্কিম সহ যদি দেওয়া হয়) |
 | `POS_CLOUD_API_URL` | `''` | পূর্ণ HTTPS বেজ |
 | `POS_CLOUD_SYNC_ENABLED` | `false` | `bool.fromEnvironment` — ফোর্স অন সিন্ক গেট |
 | `POS_REQUIRE_BKASH_GATE` | `true` | বিকাশ গেট |

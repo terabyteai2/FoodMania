@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     PLATFORM_ADMIN_EMAIL: str = ""
     PLATFORM_ADMIN_PASSWORD: str = ""
 
+    # Non-empty enables POST /admin/staff/dev-bypass-login (no Google) for local testing only.
+    STAFF_DEV_BYPASS_SECRET: str = ""
+
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"
 UDDOKTAPAY_LIVE_DEFAULT = "https://pay.uddoktapay.com"
@@ -56,11 +59,28 @@ def _normalize_db_url(url: str) -> str:
     # Render / Heroku-style URLs come as postgres:// or postgresql:// — async
     # SQLAlchemy needs the asyncpg driver. Add it if missing.
     if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+        url = "postgresql://" + url[len("postgres://") :]
     if url.startswith("postgresql://") and "+asyncpg" not in url:
-        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
     return url
+
+
+def _normalize_ngrok_domain(value: str) -> str:
+    """Bare hostname only, e.g. mysite.ngrok-free.app (matches pyngrok `domain=`)."""
+    raw = value.strip()
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.startswith("https://"):
+        raw = raw[8:]
+    elif lower.startswith("http://"):
+        raw = raw[7:]
+    host = raw.split("/")[0].split("?")[0].strip()
+    if host.endswith("/"):
+        host = host.rstrip("/")
+    return host
 
 
 settings = Settings()
 settings.DATABASE_URL = _normalize_db_url(settings.DATABASE_URL)
+settings.NGROK_STATIC_DOMAIN = _normalize_ngrok_domain(settings.NGROK_STATIC_DOMAIN)

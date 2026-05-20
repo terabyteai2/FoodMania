@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../app_controller.dart';
 import '../../app_scope.dart';
 import '../../core/constants/cloud_defaults.dart';
+import '../../core/constants/dev_auth_defaults.dart';
 import '../../core/constants/payment_defaults.dart';
 import '../../models/account_role.dart';
 import '../payments/subscription_checkout_flow.dart';
@@ -33,6 +34,9 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _staffCloudApiUrlCtrl = TextEditingController();
+  final _staffBypassEmailCtrl = TextEditingController();
+  final _staffBypassServerIdCtrl = TextEditingController();
+  final _staffBypassPinCtrl = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   _AuthMode _mode = _AuthMode.choose;
   _AuthIntent _authIntent = _AuthIntent.password;
@@ -52,6 +56,9 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _staffCloudApiUrlCtrl.dispose();
+    _staffBypassEmailCtrl.dispose();
+    _staffBypassServerIdCtrl.dispose();
+    _staffBypassPinCtrl.dispose();
     super.dispose();
   }
 
@@ -393,7 +400,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
         children: [
           const SizedBox(height: 12),
           _BackButton(onPressed: app.busy ? null : () => _go(_AuthMode.choose)),
-          const Spacer(),
+          const SizedBox(height: 28),
           const Center(
             child: _BrandMark(icon: Icons.sentiment_satisfied_alt_rounded),
           ),
@@ -428,8 +435,55 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
             'Same URL your manager uses in Settings → Connection / Cloud sync. No trailing slash.',
             style: _kSmallBodyStyle,
           ),
+          if (DevAuthDefaults.showStaffBypassUi) ...[
+            const SizedBox(height: 22),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+            const Text(
+              'Dev · sign in without Google',
+              style: _kSmallStyle,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Use only on trusted networks. Set STAFF_DEV_BYPASS_SECRET in backend/.env '
+              '(same PIN you type below). Server ID comes from Manager → Settings / sync info.',
+              style: _kSmallBodyStyle,
+            ),
+            const SizedBox(height: 12),
+            _LabeledField(
+              label: 'Staff email',
+              controller: _staffBypassEmailCtrl,
+              hintText: 'staff@yourrestaurant.com',
+              icon: Icons.mail_outline_rounded,
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 10),
+            _LabeledField(
+              label: 'Outlet Server ID',
+              controller: _staffBypassServerIdCtrl,
+              hintText: 'UUID from manager device',
+              icon: Icons.dns_outlined,
+            ),
+            const SizedBox(height: 10),
+            _LabeledField(
+              label: 'Bypass PIN',
+              controller: _staffBypassPinCtrl,
+              hintText: 'matches STAFF_DEV_BYPASS_SECRET',
+              icon: Icons.key_outlined,
+              obscureText: true,
+            ),
+            const SizedBox(height: 12),
+            _WhiteButton(
+              label: 'Dev sign-in (no Google)',
+              iconText: '',
+              busy: app.busy,
+              onPressed: app.busy
+                  ? null
+                  : () => _staffDevBypassLogin(app),
+            ),
+          ],
           if (_error != null) _InlineError(message: _error!),
-          const Spacer(),
+          const SizedBox(height: 32),
           _YellowButton(
             label: 'Continue with Google',
             iconText: 'G',
@@ -552,7 +606,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
       return;
     }
     if (role == AccountRole.staff) {
-      final url = _staffCloudApiUrlCtrl.text.trim();
+      final url = CloudDefaults.sanitizeManualBaseUrl(_staffCloudApiUrlCtrl.text);
       final uri = Uri.tryParse(url);
       final okUrl = uri != null &&
           uri.hasScheme &&
@@ -570,13 +624,50 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
       role: role,
       restaurantName: _restaurantCtrl.text,
       outletName: _outletCtrl.text,
-      cloudApiUrlOverride: role == AccountRole.staff ? _staffCloudApiUrlCtrl.text : null,
+      cloudApiUrlOverride:
+          role == AccountRole.staff
+              ? CloudDefaults.sanitizeManualBaseUrl(_staffCloudApiUrlCtrl.text)
+              : null,
     );
     _finishOrShowError(
       app,
       ok,
       goToHeroMedia: role.isManager && _mode == _AuthMode.manager,
     );
+  }
+
+  Future<void> _staffDevBypassLogin(PosAppController app) async {
+    final url =
+        CloudDefaults.sanitizeManualBaseUrl(_staffCloudApiUrlCtrl.text);
+    final uri = Uri.tryParse(url);
+    final okUrl = uri != null &&
+        uri.hasScheme &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+    if (!okUrl) {
+      setState(
+        () => _error =
+            'Enter the restaurant server URL (https://… or http://…). Ask your manager for the link.',
+      );
+      return;
+    }
+    final email = _staffBypassEmailCtrl.text.trim();
+    final serverId = _staffBypassServerIdCtrl.text.trim();
+    final pin = _staffBypassPinCtrl.text;
+    if (email.isEmpty || serverId.isEmpty || pin.isEmpty) {
+      setState(
+        () => _error =
+            'Dev bypass: fill staff email, outlet Server ID, and Bypass PIN.',
+      );
+      return;
+    }
+    final ok = await app.staffDevBypassLogin(
+      email: email,
+      serverId: serverId,
+      bypassSecret: pin,
+      cloudApiUrlOverride: url,
+    );
+    _finishOrShowError(app, ok);
   }
 
   void _finishOrShowError(
@@ -810,6 +901,7 @@ class _ScreenBody extends StatelessWidget {
             child: padded,
           );
         }
+        // Vertical scroll: max height is unbounded — Spacer/Flexible inside [child] crashes layout.
         return SingleChildScrollView(
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),

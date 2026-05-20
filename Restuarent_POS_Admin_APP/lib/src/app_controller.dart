@@ -755,6 +755,51 @@ class PosAppController extends ChangeNotifier {
     });
   }
 
+  /// Staff sign-in without Google — only works when backend sets STAFF_DEV_BYPASS_SECRET.
+  /// Enabled in Flutter via debug builds or --dart-define=POS_STAFF_DEV_BYPASS=true.
+  Future<bool> staffDevBypassLogin({
+    required String email,
+    required String serverId,
+    required String bypassSecret,
+    String? cloudApiUrlOverride,
+  }) async {
+    return _runBusy(() async {
+      final resolvedBase = _resolvedCloudBaseUrl(cloudApiUrlOverride);
+      final loginCloudConfig = cloudConfig.copyWith(
+        baseUrl: resolvedBase,
+        enabled: true,
+      );
+      if (!loginCloudConfig.hasValidBaseUrl) {
+        throw Exception(
+          'Enter a valid server URL (https://… or http://…). Ask your manager for the same link they use in Settings → Cloud sync.',
+        );
+      }
+      cloudConfig = loginCloudConfig;
+      await _persistSettings();
+      cloudApiService.configure(
+        cloudConfig: loginCloudConfig,
+        serverConfig: serverConfig,
+      );
+      final result = await cloudApiService.staffDevBypassLogin(
+        email: email,
+        serverId: serverId,
+        bypassSecret: bypassSecret,
+      );
+      _applyAdminLoginResult(result, password: '');
+      hasSeenIntro = true;
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool(_seenIntroKey, true);
+      await _persistSettings();
+      await _persistAccountAuth();
+      await _switchTenantIfNeeded();
+      syncService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      unawaited(syncService.syncNow());
+    });
+  }
+
   /// Called by the hero-media step when the manager finishes uploads (or
   /// taps "I'll do this later"). Clears the flag so the parent shell can
   /// finally mount MainShell.
@@ -1537,6 +1582,15 @@ class PosAppController extends ChangeNotifier {
     super.dispose();
   }
 
+  static String _userVisibleError(Object error) {
+    var m = error.toString().trim();
+    const prefix = 'Exception: ';
+    while (m.startsWith(prefix)) {
+      m = m.substring(prefix.length).trim();
+    }
+    return m;
+  }
+
   Future<bool> _runBusy(Future<void> Function() action) async {
     busy = true;
     lastError = null;
@@ -1545,7 +1599,7 @@ class PosAppController extends ChangeNotifier {
       await action();
       return true;
     } catch (error) {
-      lastError = error.toString();
+      lastError = _userVisibleError(error);
       return false;
     } finally {
       busy = false;

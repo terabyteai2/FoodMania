@@ -15,6 +15,7 @@ from schemas import (
     AdminCreateRequest,
     AdminLoginRequest,
     GoogleAdminAuthRequest,
+    StaffDevBypassLoginRequest,
     StaffInviteRequest,
     StaffUpdateRequest,
     ok,
@@ -151,6 +152,63 @@ async def admin_login(
             outlet=outlet,
             account=account,
             server_id=body.serverId,
+            request=request,
+        )
+    )
+
+
+@router.post("/admin/staff/dev-bypass-login")
+async def staff_dev_bypass_login(
+    request: Request,
+    body: StaffDevBypassLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Dev-only staff login without Google. Disabled unless STAFF_DEV_BYPASS_SECRET is set."""
+    configured = settings.STAFF_DEV_BYPASS_SECRET.strip()
+    if not configured:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if body.bypassSecret.strip() != configured:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid bypass credential.",
+        )
+    sid = body.serverId.strip()
+    if not sid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="serverId is required.",
+        )
+    outlet = (
+        await db.execute(select(Outlet).where(Outlet.server_id == sid))
+    ).scalar_one_or_none()
+    if outlet is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server ID not registered.")
+    email = _clean_email(body.email)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="email is required.",
+        )
+    account = (
+        await db.execute(
+            select(AdminAccount).where(
+                (AdminAccount.outlet_id == outlet.id)
+                & (AdminAccount.role == STAFF)
+                & (AdminAccount.email == email)
+            )
+        )
+    ).scalar_one_or_none()
+    if account is None or not account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff email not found for this outlet.",
+        )
+    return ok(
+        await _auth_payload(
+            db=db,
+            outlet=outlet,
+            account=account,
+            server_id=outlet.server_id,
             request=request,
         )
     )

@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from config import settings
 from schemas import ok
 
 router = APIRouter()
@@ -14,4 +15,5 @@ async def health():
             "publishableKey": "",
             "channelPrefix": "pos:outlet:",
         },
+        "staffDevBypassEnabled": bool(settings.STAFF_DEV_BYPASS_SECRET.strip()),
     })
