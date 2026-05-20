@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # ── Config (edit these two if your VPS changes) ────────────────────────────────
-VPS_HOST="${VPS_HOST:-103.191.240.34}"
+VPS_HOST="${VPS_HOST:-160.187.130.80}"
 VPS_USER="${VPS_USER:-root}"
 VPS_PORT="${VPS_PORT:-22}"
 REMOTE_DIR="/var/www/rastarant"
@@ -112,6 +112,11 @@ ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
      DB_PASS='${DB_PASS}' \
      SECRET_KEY='${SECRET_KEY}' \
      GOOGLE_CLIENT_IDS='${GOOGLE_CLIENT_IDS_VALUE}' \
+     UDDOKTAPAY_BASE_URL='https://foodmania.paymently.io' \
+     UDDOKTAPAY_API_KEY='yFmLwRJMNYnxTUyEHLkAcHirekchkCGBmeBMxTJ9' \
+     UDDOKTAPAY_SANDBOX='false' \
+     PLATFORM_ADMIN_EMAIL='admin@food.com' \
+     PLATFORM_ADMIN_PASSWORD='1234' \
      bash -s" <<'REMOTE_EOF'
 set -euo pipefail
 
@@ -229,9 +234,18 @@ IMAGES_DIR=${REMOTE_DIR}/backend/uploads/menu_images
 BASE_URL=${BASE_URL}
 GOOGLE_CLIENT_IDS=${GOOGLE_CLIENT_IDS}
 
-# ngrok is not used in VPS deploy — leave empty.
+UDDOKTAPAY_BASE_URL=${UDDOKTAPAY_BASE_URL}
+UDDOKTAPAY_API_KEY=${UDDOKTAPAY_API_KEY}
+UDDOKTAPAY_SANDBOX=${UDDOKTAPAY_SANDBOX}
+
+PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL}
+PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD}
+
+# ngrok disabled on VPS
 NGROK_AUTHTOKEN=
 NGROK_STATIC_DOMAIN=
+# Dev bypass disabled on production
+STAFF_DEV_BYPASS_SECRET=
 ENV
 chmod 600 "${REMOTE_DIR}/backend/.env"
 
