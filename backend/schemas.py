@@ -43,7 +43,30 @@ class AdminCreateRequest(BaseModel):
     outletId: str
     email: str
     username: str
-    password: str
+    password: str | None = None
+    role: str = "manager"
+    googleSub: str | None = None
+    displayName: str | None = None
+
+
+class GoogleAdminAuthRequest(BaseModel):
+    idToken: str
+    role: str = "staff"
+    serverId: str | None = None
+    restaurantName: str | None = None
+    outletName: str | None = None
+    restaurantId: str | None = None
+    outletId: str | None = None
+
+
+class StaffInviteRequest(BaseModel):
+    email: str
+    displayName: str | None = None
+
+
+class StaffUpdateRequest(BaseModel):
+    isActive: bool | None = None
+    displayName: str | None = None
 
 
 # ── Devices ───────────────────────────────────────────────────────────────────
@@ -84,6 +107,8 @@ class OrderPayload(BaseModel):
     totalAmount: float = 0
     items: list[Any] = []
     notes: str | None = None
+    createdByAccountId: str | None = None
+    createdByRole: str | None = None
     createdAt: str | None = None
     updatedAt: str | None = None
 
@@ -100,3 +125,42 @@ class BkashCreateRequest(BaseModel):
     amount: float
     currency: str = "BDT"
     purpose: str = "admin_activation"
+
+
+class UddoktaPayCreateRequest(BaseModel):
+    serverId: str
+    amount: float
+    currency: str = "BDT"
+    purpose: str = "admin_activation"
+    plan: str = "monthly"
+    fullName: str = "Restaurant Manager"
+    email: str = "manager@example.com"
+
+
+class UddoktaPayVerifyRequest(BaseModel):
+    invoiceId: str | None = None
+
+
+# ── Platform admin ────────────────────────────────────────────────────────────
+
+class PlatformLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class PlatformOutletPatchRequest(BaseModel):
+    name: str | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class PlatformAccountPatchRequest(BaseModel):
+    isActive: bool | None = None
+    role: str | None = None
+    displayName: str | None = None
+
+
+class PlatformSubscriptionRequest(BaseModel):
+    plan: str = "monthly"
+    status: str = "active"
+    extendDays: int | None = None

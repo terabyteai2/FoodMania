@@ -24,8 +24,15 @@ class PaymentDefaults {
   static const double monthlyPlanAmount = 800;
   static const double annualPlanAmount = 9600;
 
+  /// When true, skips real gateway and uses the built-in demo dialog.
   static bool useDemoBkashGateway = bool.fromEnvironment(
     'POS_BKASH_DEMO_MODE',
+    defaultValue: false,
+  );
+
+  /// Use UddoktaPay checkout (sandbox by default on backend).
+  static bool useUddoktaPay = bool.fromEnvironment(
+    'POS_USE_UDDOKTAPAY',
     defaultValue: true,
   );
 }

@@ -7,6 +7,7 @@ class BkashPaymentSession {
     required this.currency,
     this.transactionId,
     this.merchantInvoiceNumber,
+    this.invoiceId,
     this.lastError,
   });
 
@@ -17,9 +18,13 @@ class BkashPaymentSession {
   final String currency;
   final String? transactionId;
   final String? merchantInvoiceNumber;
+  final String? invoiceId;
   final String? lastError;
 
-  bool get paid => status == 'paid' || transactionId?.trim().isNotEmpty == true;
+  bool get paid =>
+      status == 'paid' ||
+      status == 'verified' ||
+      transactionId?.trim().isNotEmpty == true;
 
   static BkashPaymentSession fromJson(Map<String, Object?> json) {
     final data = json['data'] is Map
@@ -35,6 +40,7 @@ class BkashPaymentSession {
           : _string(data['currency']),
       transactionId: _nullable(data['transactionId']),
       merchantInvoiceNumber: _nullable(data['merchantInvoiceNumber']),
+      invoiceId: _nullable(data['invoiceId']),
       lastError: _nullable(data['lastError']),
     );
   }

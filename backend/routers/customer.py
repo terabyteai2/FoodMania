@@ -171,6 +171,8 @@ async def place_customer_order(
                 "totalAmount": float(order.total_amount),
                 "items": order.items,
                 "notes": order.notes,
+                "createdByAccountId": None,
+                "createdByRole": "customer",
                 "createdAt": order.created_at.isoformat(),
                 "updatedAt": order.updated_at.isoformat(),
             },

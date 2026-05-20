@@ -1,7 +1,7 @@
 # ============================================
 # Backend .gitignore
 # Only excludes regenerable caches and runtime junk.
-# .env WILL be pushed.
+# Use .env locally; never commit (see root .gitignore).
 # ============================================
 
 # Python caches

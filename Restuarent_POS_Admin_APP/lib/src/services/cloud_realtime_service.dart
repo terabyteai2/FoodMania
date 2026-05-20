@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../core/constants/cloud_defaults.dart';
 import '../models/server_config.dart';
 import 'cloud_api_service.dart';
 
 class CloudRealtimeService {
   WebSocket? _socket;
   String? _channelName;
+  String? _activeDeviceToken;
   bool _subscribed = false;
   bool _disposed = false;
   Timer? _reconnectTimer;
@@ -30,11 +32,20 @@ class CloudRealtimeService {
     if (baseUrl == null) return;
 
     final nextChannel = serverConfig.outletId;
-    if (_subscribed && _channelName == nextChannel) return;
+    final nextToken = config.deviceToken;
+    // Re-use the existing socket only if BOTH the outlet and the device token
+    // are unchanged. On re-login the outlet may be the same but a fresh JWT
+    // is minted — keeping the old WebSocket would silently drop orders.
+    if (_subscribed &&
+        _channelName == nextChannel &&
+        _activeDeviceToken == nextToken) {
+      return;
+    }
 
     await disconnect();
     _disposed = false;
     _channelName = nextChannel;
+    _activeDeviceToken = nextToken;
     _retryCount = 0;
 
     await _connectLoop(
@@ -56,8 +67,12 @@ class CloudRealtimeService {
     if (_disposed) return;
     final uri = '$wsUrl/ws/$outletId?token=${Uri.encodeQueryComponent(deviceToken)}';
     try {
-      _socket = await WebSocket.connect(uri)
-          .timeout(const Duration(seconds: 10));
+      final parsedUri = Uri.parse(uri);
+      final ngrokExtra = CloudDefaults.ngrokBrowserBypassHeaders(parsedUri);
+      _socket = await WebSocket.connect(
+        parsedUri,
+        headers: ngrokExtra.isEmpty ? null : ngrokExtra,
+      ).timeout(const Duration(seconds: 10));
       _subscribed = true;
       _retryCount = 0;
       onLog?.call('Cloud realtime connected: $outletId');
@@ -144,6 +159,7 @@ class CloudRealtimeService {
     final socket = _socket;
     _socket = null;
     _channelName = null;
+    _activeDeviceToken = null;
     _subscribed = false;
     await socket?.close();
   }

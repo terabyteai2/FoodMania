@@ -50,13 +50,20 @@ Build release APK:
 flutter build apk --release
 ```
 
-The Supabase cloud API URL is built into the app by default. To override it for
-staging or another project, pass `POS_CLOUD_API_URL`:
+The Flutter POS ships with compile‑defaults targeting **`backend/.env`**: **`POS_CLOUD_API_URL`** (HTTPS ngrok base, optional override).
+
+Defaults mirror **`NGROK_STATIC_DOMAIN`** (`POS_NGROK_DOMAIN`; fallback hostname **`kiwi-equator-banknote.ngrok-free.app`**):
+
+```
+embedded HTTPS api URL → POS_CLOUD_API_URL if non‑empty else → https://${POS_NGROK_DOMAIN}
+```
+
+All REST calls (and WebSockets to ngrok hosts) send **`ngrok-skip-browser-warning`** so the ngrok HTML interstitial does not appear (which otherwise breaks JSON parsing).
 
 ```sh
-flutter build apk --release \
-  --dart-define=POS_CLOUD_API_URL=https://vnhxfvtpkgykatvbrczn.supabase.co/functions/v1/pos-api \
-  --dart-define=POS_CLOUD_SYNC_ENABLED=true
+flutter run \
+  --dart-define=POS_NGROK_DOMAIN=my-tunnel.ngrok-free.app \
+  --dart-define=POS_CLOUD_API_URL=https://my-tunnel.ngrok-free.app
 ```
 
 For internal testing without the bKash gate:
@@ -70,6 +77,15 @@ To change the sandbox activation amount at build time:
 ```sh
 flutter build apk --release \
   --dart-define=POS_BKASH_SANDBOX_AMOUNT=10
+```
+
+Google manager/staff sign-in needs a Web OAuth client ID so Android can return
+an ID token for the backend to verify. The app has the current project client ID
+built in, but you can override it for another Google Cloud project:
+
+```sh
+flutter build apk --release \
+  --dart-define=POS_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 ```
 
 The app reads Supabase Realtime config from `GET /health`, so no manual Device

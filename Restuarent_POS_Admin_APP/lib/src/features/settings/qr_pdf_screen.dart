@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_scope.dart';
+import '../../core/constants/cloud_defaults.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/primary_button.dart';
 
@@ -34,7 +35,8 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
       } else if (baseUrl.isNotEmpty) {
         _urlCtrl.text = '$baseUrl/menu/$outletId';
       } else {
-        _urlCtrl.text = 'https://kiwi-equator-banknote.ngrok-free.app/menu/$outletId';
+        _urlCtrl.text =
+            '${CloudDefaults.defaultPublicApiBase}/menu/$outletId';
       }
     }
   }

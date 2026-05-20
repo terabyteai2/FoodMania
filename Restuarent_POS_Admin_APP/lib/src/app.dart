@@ -5,6 +5,7 @@ import 'app_controller.dart';
 import 'app_scope.dart';
 import 'core/localization/app_strings.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/notification_center.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/inventory/inventory_screen.dart';
 import 'features/menu/menu_management_screen.dart';
@@ -49,6 +50,14 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _controller.onResumed();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      // `inactive` is transient (system dialogs / app switcher transitions)
+      // so we don't flip the foreground flag for it — otherwise a brief
+      // system overlay would cause every new notification to also fire an OS
+      // alert while the user is still effectively in the app.
+      _controller.onPaused();
     }
   }
 
@@ -116,9 +125,9 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
         },
       );
     }
-    if (_controller.requiresBkashPayment) {
-      return BkashPaymentGateScreen(
-        onVerified: () {
+    if (_showIntro) {
+      return ModeIntroScreen(
+        onFinished: () {
           setState(() {
             _showIntro = false;
             _initialShellIndex = 0;
@@ -126,11 +135,19 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
         },
       );
     }
-    if (_showIntro) {
+    if (!_controller.isLoggedIn || _controller.pendingHeroMediaSetup) {
       return ModeIntroScreen(
-        onContinue: () async {
-          await _controller.completeIntro();
-          if (!mounted) return;
+        onFinished: () {
+          setState(() {
+            _showIntro = false;
+            _initialShellIndex = 0;
+          });
+        },
+      );
+    }
+    if (_controller.requiresBkashPayment) {
+      return BkashPaymentGateScreen(
+        onVerified: () {
           setState(() {
             _showIntro = false;
             _initialShellIndex = 0;
@@ -172,6 +189,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   late _AppTab _selected;
+  String? _lastShownNotificationId;
 
   @override
   void initState() {
@@ -223,6 +241,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
+    _maybeShowNotification(app);
     final tabOrder = _mainTabOrder;
     final visualIndex = tabOrder
         .indexOf(_selected)
@@ -232,21 +251,27 @@ class _MainShellState extends State<MainShell> {
         .toList(growable: false);
 
     // Fixed page order matching _AppTab.index ordinals.
+    final ordersIndex = _AppTab.orders.index;
+    void goToOrders() => _setIndex(ordersIndex);
     final allPages = [
       OrdersScreen(),
-      MenuManagementScreen(),
+      MenuManagementScreen(onNavigateToOrders: goToOrders),
       DashboardScreen(onNavigate: _setIndex),
-      InventoryScreen(),
-      SettingsScreen(),
+      InventoryScreen(onNavigateToOrders: goToOrders),
+      SettingsScreen(onNavigateToOrders: goToOrders),
     ];
 
+    // Each page renders the notification bell as one of its own header
+    // actions (via HeaderNotificationBell) — no global floating overlay,
+    // so it never sits on top of the menu page's "+ New" button etc.
+    final body = IndexedStack(index: _selected.index, children: allPages);
     return LayoutBuilder(
       builder: (context, constraints) {
         final useRail = constraints.maxWidth >= 760;
         if (!useRail) {
           return Scaffold(
             backgroundColor: PosColors.background,
-            body: IndexedStack(index: _selected.index, children: allPages),
+            body: body,
             bottomNavigationBar: _FloatingBottomNav(
               destinations: destinations,
               selectedIndex: visualIndex,
@@ -296,9 +321,7 @@ class _MainShellState extends State<MainShell> {
                       .toList(growable: false),
                 ),
               ),
-              Expanded(
-                child: IndexedStack(index: _selected.index, children: allPages),
-              ),
+              Expanded(child: body),
             ],
           ),
         );
@@ -310,6 +333,28 @@ class _MainShellState extends State<MainShell> {
     if (vi >= 0 && vi < _mainTabOrder.length) {
       setState(() => _selected = _mainTabOrder[vi]);
     }
+  }
+
+  void _maybeShowNotification(PosAppController app) {
+    if (app.notifications.isEmpty) return;
+    final latest = app.notifications.first;
+    if (latest.isRead || latest.id == _lastShownNotificationId) return;
+    _lastShownNotificationId = latest.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showTopNotificationToast(
+        context,
+        title: latest.title,
+        body: latest.body,
+        onOpen: () {
+          app.markNotificationRead(latest.id);
+          if (latest.actionTarget == 'pending_orders' ||
+              latest.actionTarget == 'orders') {
+            _setIndex(0);
+          }
+        },
+      );
+    });
   }
 }
 

@@ -19,6 +19,8 @@ class OrderModel {
     this.customerName,
     this.tableNo,
     this.note,
+    this.createdByAccountId,
+    this.createdByRole,
   });
 
   final String id;
@@ -26,6 +28,8 @@ class OrderModel {
   final String? customerName;
   final String? tableNo;
   final String? note;
+  final String? createdByAccountId;
+  final String? createdByRole;
   final OrderSource source;
   final OrderStatus status;
   final double total;
@@ -44,6 +48,8 @@ class OrderModel {
     String? customerName,
     String? tableNo,
     String? note,
+    String? createdByAccountId,
+    String? createdByRole,
     OrderSource? source,
     OrderStatus? status,
     double? total,
@@ -60,6 +66,8 @@ class OrderModel {
       customerName: customerName ?? this.customerName,
       tableNo: tableNo ?? this.tableNo,
       note: note ?? this.note,
+      createdByAccountId: createdByAccountId ?? this.createdByAccountId,
+      createdByRole: createdByRole ?? this.createdByRole,
       source: source ?? this.source,
       status: status ?? this.status,
       total: total ?? this.total,
@@ -79,6 +87,8 @@ class OrderModel {
       'customerName': customerName,
       'tableNo': tableNo,
       'note': note,
+      'createdByAccountId': createdByAccountId,
+      'createdByRole': createdByRole,
       'source': source.value,
       'status': status.value,
       'total': total,
@@ -97,6 +107,8 @@ class OrderModel {
       'customerName': customerName,
       'tableNo': tableNo,
       'note': note,
+      'createdByAccountId': createdByAccountId,
+      'createdByRole': createdByRole,
       'source': source.value,
       'sourceLabel': source.label,
       'status': status.value,
@@ -121,6 +133,8 @@ class OrderModel {
       customerName: map['customerName'] as String?,
       tableNo: map['tableNo'] as String?,
       note: map['note'] as String?,
+      createdByAccountId: map['createdByAccountId'] as String?,
+      createdByRole: map['createdByRole'] as String?,
       source: OrderSource.parse(map['source'] as String?),
       status:
           OrderStatus.tryParse(map['status'] as String?) ?? OrderStatus.pending,

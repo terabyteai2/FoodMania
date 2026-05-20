@@ -8,12 +8,15 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../models/inventory_item.dart';
 import '../../models/stock_adjustment.dart';
 
 class InventoryScreen extends StatefulWidget {
-  const InventoryScreen({super.key});
+  const InventoryScreen({this.onNavigateToOrders, super.key});
+
+  final VoidCallback? onNavigateToOrders;
 
   @override
   State<InventoryScreen> createState() => _InventoryScreenState();
@@ -56,6 +59,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
       showDatePill: false,
       centerHeader: true,
       actions: [
+        HeaderNotificationBell(
+          onNavigateToOrders: widget.onNavigateToOrders ?? () {},
+        ),
         PrimaryButton(
           label: text.addInventoryItem,
           icon: Icons.add,

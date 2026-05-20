@@ -13,6 +13,14 @@ from schemas import OrderPayload, OrderStatusUpdate, ok
 router = APIRouter()
 
 
+def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
+    if current_outlet != outlet_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token does not match this outlet.",
+        )
+
+
 def _order_to_dict(order: Order) -> dict:
     return {
         "id": order.id,
@@ -23,6 +31,8 @@ def _order_to_dict(order: Order) -> dict:
         "totalAmount": float(order.total_amount),
         "items": order.items,
         "notes": order.notes,
+        "createdByAccountId": order.created_by_account_id,
+        "createdByRole": order.created_by_role,
         "createdAt": order.created_at.isoformat(),
         "updatedAt": order.updated_at.isoformat(),
     }
@@ -35,6 +45,7 @@ async def pull_orders(
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     query = select(Order).where(Order.outlet_id == outlet_id).order_by(Order.created_at.desc())
     if since:
         dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
@@ -51,6 +62,7 @@ async def push_order(
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    _ensure_outlet(current_outlet, outlet_id)
     existing = (await db.execute(select(Order).where(Order.id == body.id))).scalar_one_or_none()
     if existing:
         return ok(_order_to_dict(existing))
@@ -65,6 +77,8 @@ async def push_order(
         total_amount=body.totalAmount,
         items=body.items,
         notes=body.notes,
+        created_by_account_id=body.createdByAccountId,
+        created_by_role=body.createdByRole,
         created_at=now,
         updated_at=now,
     )
@@ -85,7 +99,12 @@ async def update_order_status(
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    order = (await db.execute(select(Order).where(Order.id == order_id))).scalar_one_or_none()
+    _ensure_outlet(current_outlet, outlet_id)
+    order = (
+        await db.execute(
+            select(Order).where((Order.id == order_id) & (Order.outlet_id == outlet_id))
+        )
+    ).scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
 

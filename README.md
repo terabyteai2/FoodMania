@@ -7,6 +7,8 @@ Multi-tenant Restaurant POS system — Flutter admin app + FastAPI backend + cus
 - `backend/` — FastAPI server
 - `customer_menu/` — Customer-facing React menu
 
+**Full-stack operator guide (architecture, ENV, payments, deploy, troubleshooting):** see [`README2.md`](./README2.md) (Bangla + technical English).
+
 ---
 
 ## Setting up on a new PC (after `git clone`)

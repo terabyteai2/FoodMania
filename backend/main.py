@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import create_tables
-from routers import admin, customer, devices, health, menu, orders, payments, tenants, ws
+from routers import admin, customer, devices, health, menu, orders, payments, platform, tenants, ws
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
 
@@ -77,6 +77,7 @@ app.include_router(devices.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(payments.router)
+app.include_router(platform.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
 

@@ -22,11 +22,14 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.terabyteAI.Res.Admin"
+    namespace = "com.terabyteai.foodmania.posadmin"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Core library desugaring lets us use newer java.time APIs on older
+        // Android versions — required by flutter_local_notifications.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -36,7 +39,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.terabyteAI.Res.Admin"
+        applicationId = "com.terabyteai.foodmania.posadmin"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -61,4 +64,8 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

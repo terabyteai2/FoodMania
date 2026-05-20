@@ -21,6 +21,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
   WebViewController? _webViewController;
   _Plan? _selectedPlan;
   BkashPaymentSession? _session;
+  String? _returnInvoiceId;
   bool _creatingSession = false;
   bool _isCompletingPayment = false;
   String? _error;
@@ -60,7 +61,9 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
                   ),
                   SizedBox(height: 30),
                   Text(
-                    text.payWithBkash,
+                    PaymentDefaults.useUddoktaPay
+                        ? 'Pay with UddoktaPay'
+                        : text.payWithBkash,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontSize: 20,
@@ -68,6 +71,18 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
                       color: PosColors.slate,
                     ),
                   ),
+                  if (PaymentDefaults.useUddoktaPay) ...[
+                    SizedBox(height: 6),
+                    Text(
+                      'Sandbox checkout · bKash, Nagad & more',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: PosColors.muted,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                   SizedBox(height: 20),
                   _PlanButton(
                     title: text.monthly,
@@ -110,10 +125,24 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     });
     try {
       final app = AppScope.of(context);
-      final session = await app.createBkashSandboxPayment(amount: plan.amount);
+      final session = await app.createSubscriptionCheckout(
+        amount: plan.amount,
+        plan: plan.name,
+      );
       if (!mounted) return;
+      if (session.checkoutUrl.trim().isEmpty) {
+        setState(() {
+          _error =
+              'No checkout URL returned. Check UDDOKTAPAY_API_KEY on the server.';
+        });
+        return;
+      }
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setUserAgent(
+          'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        )
         ..setNavigationDelegate(
           NavigationDelegate(
             onNavigationRequest: _handleNavigationRequest,
@@ -175,7 +204,15 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
 
   bool _isSuccessfulCallback(String url) {
     final uri = Uri.tryParse(url);
-    final status = uri?.queryParameters['status']?.toLowerCase();
+    if (uri == null) return false;
+    final status = uri.queryParameters['status']?.toLowerCase();
+    final invoiceId = uri.queryParameters['invoice_id']?.trim();
+    if (invoiceId != null && invoiceId.isNotEmpty) {
+      _returnInvoiceId = invoiceId;
+    }
+    if (uri.path.contains('/payments/uddokta/return')) {
+      return true;
+    }
     return status == 'success';
   }
 
@@ -191,8 +228,11 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
         amount: plan.amount,
       );
     } else {
-      await Future<void>.delayed(Duration(milliseconds: 900));
-      final verified = await app.verifyBkashSandboxPayment(paymentId);
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      final verified = await app.verifySubscriptionPayment(
+        paymentId,
+        invoiceId: _returnInvoiceId ?? _session?.invoiceId,
+      );
       if (!verified) {
         if (!mounted) return;
         setState(() {

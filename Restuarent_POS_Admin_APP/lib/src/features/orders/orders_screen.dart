@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/pos_compact_ui.dart';
 import '../../models/menu_item.dart';
 import '../../models/order_item.dart';
@@ -263,6 +264,9 @@ class _TopBar extends StatelessWidget {
         title: 'Orders',
         subtitle: 'অর্ডার · $pendingCount pending · $acceptedCount accepted',
         actions: [
+          // Tapping the bell on this screen is a no-op for navigation,
+          // since we're already on the Orders tab.
+          HeaderNotificationBell(onNavigateToOrders: () {}),
           CompactIconButton(
             icon: Icons.tune_rounded,
             tooltip: 'Filter orders',
@@ -314,31 +318,39 @@ class _TabStrip extends StatelessWidget {
             fontWeight: FontWeight.w800,
             fontSize: 11.5,
           ),
-          labelPadding: EdgeInsets.only(right: 14),
+          labelPadding: EdgeInsets.only(right: 8),
           padding: EdgeInsets.zero,
           tabs: [
             Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(width: 64, child: Center(child: Text('Pending'))),
-                  if (pendingCount > 0) ...[
-                    SizedBox(width: 6),
-                    _TabBadge(count: pendingCount, active: true),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Pending'),
+                    if (pendingCount > 0) ...[
+                      SizedBox(width: 6),
+                      _TabBadge(count: pendingCount, active: true),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             Tab(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Accepted'),
-                  if (acceptedCount > 0) ...[
-                    SizedBox(width: 6),
-                    _TabBadge(count: acceptedCount, active: false),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Accepted'),
+                    if (acceptedCount > 0) ...[
+                      SizedBox(width: 6),
+                      _TabBadge(count: acceptedCount, active: false),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],

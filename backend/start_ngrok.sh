@@ -16,6 +16,11 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+PYTHON_BIN="python3"
+if [ -x ".venv/bin/python" ]; then
+  PYTHON_BIN=".venv/bin/python"
+fi
+
 source <(grep -E "^NGROK_AUTHTOKEN|^NGROK_STATIC_DOMAIN" .env)
 if [ -z "$NGROK_AUTHTOKEN" ]; then
   echo "ERROR: NGROK_AUTHTOKEN is not set in .env"
@@ -41,4 +46,4 @@ echo "      API docs:       https://$NGROK_STATIC_DOMAIN/docs"
 echo "      Customer menu:  https://$NGROK_STATIC_DOMAIN/menu/YOUR_OUTLET_ID"
 echo ""
 
-python3 main.py
+"$PYTHON_BIN" main.py
