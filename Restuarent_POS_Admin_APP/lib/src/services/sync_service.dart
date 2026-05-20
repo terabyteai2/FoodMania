@@ -117,6 +117,12 @@ class SyncService {
   SyncRuntimeState get state => _state;
   Stream<SyncRuntimeState> get stateStream => _stateController.stream;
 
+  /// Forces the next cloud pull to fetch the full menu/order snapshot
+  /// (no `since` cursor). Call after switching to a different outlet.
+  void resetCloudPullState() {
+    _lastCloudPullAt = null;
+  }
+
   Future<void> initialize({
     required CloudConfig cloudConfig,
     required ServerConfig serverConfig,

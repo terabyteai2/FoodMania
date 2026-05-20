@@ -5,12 +5,16 @@ import 'package:intl/intl.dart';
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/menu_image_view.dart';
+import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/pos_compact_ui.dart';
 import '../../models/menu_item.dart';
 import '../../services/menu_image_service.dart';
 
 class MenuManagementScreen extends StatefulWidget {
-  const MenuManagementScreen({super.key});
+  const MenuManagementScreen({this.onNavigateToOrders, super.key});
+
+  /// Called when a pending-order notification is opened from the bell here.
+  final VoidCallback? onNavigateToOrders;
 
   @override
   State<MenuManagementScreen> createState() => _MenuManagementScreenState();
@@ -65,6 +69,10 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                       title: 'Menu',
                       subtitle: '${app.menuItems.length} items · $paused out',
                       actions: [
+                        HeaderNotificationBell(
+                          onNavigateToOrders:
+                              widget.onNavigateToOrders ?? () {},
+                        ),
                         _NewMenuButton(onTap: () => _openMenuForm(context)),
                       ],
                     ),

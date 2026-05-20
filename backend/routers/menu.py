@@ -1,5 +1,4 @@
 import base64
-import os
 import uuid
 from datetime import datetime, timezone
 
@@ -8,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Up
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import storage
 from auth import get_current_outlet_id
 from config import settings
 from database import get_db
@@ -34,10 +34,6 @@ def _item_to_dict(item: MenuItem) -> dict:
     }
 
 
-def _public_url(request: Request, path: str) -> str:
-    return f"{str(request.base_url).rstrip('/')}{path}"
-
-
 def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
     if current_outlet != outlet_id:
         raise HTTPException(
@@ -57,10 +53,7 @@ def _save_data_url_image(image_url: str | None, request: Request) -> str | None:
 
     ext = "png" if "png" in header else "jpg"
     filename = f"{uuid.uuid4()}.{ext}"
-    os.makedirs(settings.IMAGES_DIR, exist_ok=True)
-    with open(os.path.join(settings.IMAGES_DIR, filename), "wb") as f:
-        f.write(image_bytes)
-    return _public_url(request, f"/uploads/menu_images/{filename}")
+    return storage.save(f"menu_images/{filename}", image_bytes, request)
 
 
 @router.get("/outlets/{outlet_id}/menu")
@@ -199,35 +192,27 @@ async def upload_menu_image(
         ext = "png"
 
     filename = f"{uuid.uuid4()}.{ext}"
-    os.makedirs(settings.IMAGES_DIR, exist_ok=True)
-    filepath = os.path.join(settings.IMAGES_DIR, filename)
-
-    with open(filepath, "wb") as f:
-        f.write(image_bytes)
-
-    public_url = _public_url(request, f"/uploads/menu_images/{filename}")
+    public_url = storage.save(f"menu_images/{filename}", image_bytes, request)
     return ok({"publicUrl": public_url})
 
 
 # ── Hero media endpoints (welcome-screen video + menu-page slider images) ─────
 #
 # Files are stored under:
-#   uploads/hero_media/{outlet_id}/images/{uuid}.{ext}   ← menu-page slider
-#   uploads/hero_media/{outlet_id}/video/{uuid}.{ext}    ← welcome-screen video
-#
-# Returned public URLs are served by the static /uploads mount in main.py.
+#   hero_media/{outlet_id}/images/{uuid}.{ext}   ← menu-page slider
+#   hero_media/{outlet_id}/video/{uuid}.{ext}    ← welcome-screen video
 
 
 class OutletMediaPatch(pydantic.BaseModel):
     videoUrl: str | None = None
 
 
-def _hero_images_dir(outlet_id: str) -> str:
-    return os.path.join(settings.HERO_MEDIA_DIR, outlet_id, "images")
+def _hero_images_prefix(outlet_id: str) -> str:
+    return f"hero_media/{outlet_id}/images"
 
 
-def _hero_video_dir(outlet_id: str) -> str:
-    return os.path.join(settings.HERO_MEDIA_DIR, outlet_id, "video")
+def _hero_video_prefix(outlet_id: str) -> str:
+    return f"hero_media/{outlet_id}/video"
 
 
 @router.post("/outlets/{outlet_id}/images")
@@ -255,12 +240,7 @@ async def upload_outlet_image(
     image_bytes = base64.b64decode(encoded)
     ext = "png" if "png" in header else "jpg"
     filename = f"{uuid.uuid4()}.{ext}"
-    target_dir = _hero_images_dir(outlet_id)
-    os.makedirs(target_dir, exist_ok=True)
-    with open(os.path.join(target_dir, filename), "wb") as f:
-        f.write(image_bytes)
-
-    public_url = _public_url(request, f"/uploads/hero_media/{outlet_id}/images/{filename}")
+    public_url = storage.save(f"{_hero_images_prefix(outlet_id)}/{filename}", image_bytes, request)
     gallery.append(public_url)
     outlet.gallery_images = gallery
     await db.commit()
@@ -287,18 +267,7 @@ async def delete_outlet_image(
     outlet.gallery_images = gallery
     await db.commit()
 
-    # Best-effort cleanup of the on-disk file. Only delete files inside our
-    # own uploads tree to avoid path traversal via mis-shaped URLs.
-    marker = "/uploads/"
-    if isinstance(removed_url, str) and marker in removed_url:
-        rel = removed_url.split(marker, 1)[1]
-        abs_path = os.path.realpath(os.path.join("uploads", rel))
-        uploads_root = os.path.realpath("uploads")
-        if abs_path.startswith(uploads_root + os.sep) and os.path.isfile(abs_path):
-            try:
-                os.remove(abs_path)
-            except OSError:
-                pass
+    storage.delete_by_url(removed_url)
 
     return ok({"galleryImages": gallery})
 
@@ -326,23 +295,16 @@ async def upload_outlet_video(
     if ext not in ("mp4", "mov", "webm", "m4v"):
         ext = "mp4"
     filename = f"{uuid.uuid4()}.{ext}"
-    target_dir = _hero_video_dir(outlet_id)
-    os.makedirs(target_dir, exist_ok=True)
-    target_path = os.path.join(target_dir, filename)
-    with open(target_path, "wb") as f:
-        f.write(content)
+    prefix = _hero_video_prefix(outlet_id)
+    new_key = f"{prefix}/{filename}"
+    public_url = storage.save(new_key, content, request)
 
     # Only one welcome video per outlet — purge any previously stored clips
-    # in this outlet's hero video folder so storage doesn't grow unboundedly.
-    for old in os.listdir(target_dir):
-        old_path = os.path.join(target_dir, old)
-        if old_path != target_path and os.path.isfile(old_path):
-            try:
-                os.remove(old_path)
-            except OSError:
-                pass
+    # so storage doesn't grow unboundedly.
+    for old_key in storage.list_keys(prefix):
+        if old_key != new_key:
+            storage.delete_key(old_key)
 
-    public_url = _public_url(request, f"/uploads/hero_media/{outlet_id}/video/{filename}")
     outlet.video_url = public_url
     await db.commit()
     return ok({"videoUrl": public_url})
@@ -364,17 +326,7 @@ async def update_outlet_media(
     outlet.video_url = body.videoUrl
     await db.commit()
 
-    # If the video was cleared (or replaced via URL), remove the old on-disk file.
     if previous_url and previous_url != body.videoUrl:
-        marker = "/uploads/"
-        if marker in previous_url:
-            rel = previous_url.split(marker, 1)[1]
-            abs_path = os.path.realpath(os.path.join("uploads", rel))
-            uploads_root = os.path.realpath("uploads")
-            if abs_path.startswith(uploads_root + os.sep) and os.path.isfile(abs_path):
-                try:
-                    os.remove(abs_path)
-                except OSError:
-                    pass
+        storage.delete_by_url(previous_url)
 
     return ok({"videoUrl": outlet.video_url})

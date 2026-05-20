@@ -1,4 +1,5 @@
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,29 +11,48 @@ from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import create_tables
-from routers import admin, customer, devices, health, menu, orders, payments, tenants, ws
+from routers import admin, customer, devices, health, menu, orders, payments, platform, tenants, ws
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
 
 
 def _start_ngrok() -> str | None:
-    if not settings.NGROK_AUTHTOKEN or not settings.NGROK_STATIC_DOMAIN:
+    token = settings.NGROK_AUTHTOKEN.strip()
+    domain = settings.NGROK_STATIC_DOMAIN.strip()
+    if not token or not domain:
         return None
-    try:
-        from pyngrok import conf, ngrok
-        conf.get_default().auth_token = settings.NGROK_AUTHTOKEN
-        tunnel = ngrok.connect(
-            addr=8000,
-            proto="http",
-            domain=settings.NGROK_STATIC_DOMAIN,
-        )
-        public_url: str = tunnel.public_url
-        if public_url.startswith("http://"):
-            public_url = "https://" + public_url[len("http://"):]
-        return public_url
-    except Exception as e:
-        print(f"[ngrok] Failed to start tunnel: {e}")
-        return None
+
+    port = settings.PORT
+    last_err: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            from pyngrok import conf, ngrok
+
+            conf.get_default().auth_token = token
+            tunnel = ngrok.connect(
+                addr=port,
+                proto="http",
+                domain=domain,
+            )
+            public_url: str = tunnel.public_url
+            if public_url.startswith("http://"):
+                public_url = "https://" + public_url[len("http://") :]
+            return public_url
+        except Exception as e:
+            last_err = e
+            print(f"[ngrok] Tunnel attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                time.sleep(1.2 * attempt)
+
+    print(
+        "\n[ngrok] All tunnel attempts failed. Check:\n"
+        "  • NGROK_AUTHTOKEN is valid (https://dashboard.ngrok.com/get-started/your-authtoken)\n"
+        f"  • NGROK_STATIC_DOMAIN matches your reserved domain exactly: {domain!r}\n"
+        f"  • Port {port} is not used by another process (this app binds there)\n"
+        "  • Free plan: run `ngrok http 8000` from CLI once if pyngrok agent is stuck\n"
+        f"  • Last error: {last_err}\n"
+    )
+    return None
 
 
 @asynccontextmanager
@@ -50,6 +70,13 @@ async def lifespan(app: FastAPI):
         print(f"  📋 API docs:            {public_url}/docs")
         print(f"  🍽️  Customer menu:       {public_url}/menu/YOUR_OUTLET_ID\n")
     else:
+        if settings.NGROK_AUTHTOKEN.strip() and settings.NGROK_STATIC_DOMAIN.strip():
+            print(
+                "\n  ⚠️  NGROK_* is configured but tunnel startup failed — "
+                "phones using HTTPS ngrok will be offline until you fix it "
+                "(see messages above). For same-Wi‑Fi testing use "
+                "`./start.sh` and `flutter run --dart-define=POS_CLOUD_API_URL=http://YOUR_LAN_IP:8000`.\n"
+            )
         print(f"\n  Local URL:  {settings.BASE_URL}")
         print(f"  API docs:   {settings.BASE_URL}/docs\n")
 
@@ -77,6 +104,7 @@ app.include_router(devices.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(payments.router)
+app.include_router(platform.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
 
@@ -118,4 +146,17 @@ async def serve_root():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = settings.PORT
+    use_ngrok = bool(
+        settings.NGROK_AUTHTOKEN.strip() and settings.NGROK_STATIC_DOMAIN.strip()
+    )
+    # --reload spawns a child process; a second lifespan can try to open the same
+    # reserved ngrok domain and fail, or leave a broken tunnel. Disable reload
+    # whenever ngrok credentials are present.
+    reload = os.environ.get("RENDER") is None and not use_ngrok
+    if use_ngrok and os.environ.get("RENDER") is None:
+        print(
+            "[ngrok] Uvicorn reload is OFF (stable tunnel). "
+            "Restart the process after code changes.\n"
+        )
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)

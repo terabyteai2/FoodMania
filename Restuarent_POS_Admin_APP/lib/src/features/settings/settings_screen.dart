@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -13,6 +14,7 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/pos_compact_ui.dart';
 import '../../core/widgets/sync_event_tile.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,7 +27,9 @@ import '../reports/reports_screen.dart';
 import 'qr_pdf_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({this.onNavigateToOrders, super.key});
+
+  final VoidCallback? onNavigateToOrders;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -104,15 +108,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _SettingsGroupData(
         label: 'Store · দোকান',
         items: [
-          _SettingActionData(
-            title: text.restaurantSection,
-            subtitle: text.restaurantSubtitle,
-            icon: Icons.storefront_outlined,
-            trailing: app.serverConfig.restaurantName.trim().isEmpty
-                ? 'Setup'
-                : app.serverConfig.restaurantName,
-            onTap: _openRestaurantInfo,
-          ),
+          if (app.isManager)
+            _SettingActionData(
+              title: text.restaurantSection,
+              subtitle: text.restaurantSubtitle,
+              icon: Icons.storefront_outlined,
+              trailing: app.serverConfig.restaurantName.trim().isEmpty
+                  ? 'Setup'
+                  : app.serverConfig.restaurantName,
+              onTap: _openRestaurantInfo,
+            ),
           _SettingActionData(
             title: 'Server & Menu URLs',
             subtitle: 'Tunnel URL, outlet ID, and customer menu link',
@@ -122,12 +127,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : 'Configured',
             onTap: _openConnectionUrls,
           ),
-          _SettingActionData(
-            title: 'Hero Media',
-            subtitle: 'Photos & video on the customer menu page',
-            icon: Icons.photo_library_outlined,
-            onTap: _openHeroMedia,
-          ),
+          if (app.isManager)
+            _SettingActionData(
+              title: 'Hero Media',
+              subtitle: 'Photos & video on the customer menu page',
+              icon: Icons.photo_library_outlined,
+              onTap: _openHeroMedia,
+            ),
           _SettingActionData(
             title: 'Currency',
             subtitle: 'মুদ্রা',
@@ -186,6 +192,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: app.cloudConfig.enabled ? 'On' : 'Off',
             onTap: _openCloudSync,
           ),
+          _SettingActionData(
+            title: 'Notifications',
+            subtitle: app.notificationSoundEnabled
+                ? 'Sound on${app.notificationSoundPath.isEmpty ? '' : ' · custom'}'
+                : 'Sound off',
+            icon: Icons.notifications_active_outlined,
+            onTap: _openNotificationSettings,
+          ),
         ],
       ),
       _SettingsGroupData(
@@ -215,6 +229,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.business_outlined,
             onTap: _openYourRestaurantInfo,
           ),
+          if (app.isManager)
+            _SettingActionData(
+              title: 'Staff accounts',
+              subtitle: 'Add Google emails for staff access.',
+              icon: Icons.groups_2_outlined,
+              onTap: _openStaffAccounts,
+            ),
           _SettingActionData(
             title: text.appCache,
             subtitle: text.clearCacheSubtitle,
@@ -263,6 +284,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     CompactHeader(
                       title: text.settings,
                       subtitle: 'সেটিংস · v2.2.1',
+                      actions: [
+                        HeaderNotificationBell(
+                          onNavigateToOrders:
+                              widget.onNavigateToOrders ?? () {},
+                        ),
+                      ],
                     ),
                     SizedBox(height: 14),
                     CompactSearchField(
@@ -476,7 +503,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     TextFormField(
                       controller: _cloudUrlController,
                       decoration: InputDecoration(
-                        hintText: 'https://your-domain.ngrok-free.app',
+                        hintText: CloudDefaults.defaultPublicApiBase,
                         prefixIcon: Icon(Icons.link),
                         floatingLabelBehavior: FloatingLabelBehavior.never,
                       ),
@@ -556,6 +583,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onDisconnect: _disconnectPrinter,
             onTestPrint: _testPrinter,
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotificationSettings() async {
+    final app = AppScope.of(context);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _SettingsSectionPage(
+          title: 'Notifications',
+          child: _NotificationSettingsCard(
+            soundEnabled: app.notificationSoundEnabled,
+            soundPath: app.notificationSoundPath,
+            onSoundEnabledChanged: app.setNotificationSoundEnabled,
+            onPickSound: () async {
+              // Capture the ScaffoldMessenger before any await so we don't
+              // use `context` across async gaps (lint requirement; the State's
+              // mounted check below still guards the actual show()).
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                // FileType.audio uses Android's native audio picker which is
+                // more reliable on Android 13+ than FileType.custom — the
+                // latter sometimes shows an empty browser when the launcher
+                // doesn't expose audio MIME types.
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.audio,
+                );
+                final path = result?.files.single.path;
+                if (path != null && path.trim().isNotEmpty) {
+                  await app.setNotificationSoundPath(path);
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Notification sound updated.'),
+                      ),
+                    );
+                  }
+                }
+                if (mounted) setState(() {});
+              } catch (error) {
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Could not pick sound: $error'),
+                    ),
+                  );
+                }
+              }
+            },
+            onPreview: app.playNotificationSound,
+            onReset: () async {
+              await app.resetNotificationSound();
+              if (mounted) setState(() {});
+            },
+            onTestNotification: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              await app.sendTestNotification();
+              if (mounted) {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Test notification sent. Check your status bar.',
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStaffAccounts() async {
+    final app = AppScope.of(context);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _SettingsSectionPage(
+          title: 'Staff accounts',
+          child: _StaffAccountsCard(app: app),
         ),
       ),
     );
@@ -2835,6 +2943,212 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationSettingsCard extends StatelessWidget {
+  const _NotificationSettingsCard({
+    required this.soundEnabled,
+    required this.soundPath,
+    required this.onSoundEnabledChanged,
+    required this.onPickSound,
+    required this.onPreview,
+    required this.onReset,
+    required this.onTestNotification,
+  });
+
+  final bool soundEnabled;
+  final String soundPath;
+  final ValueChanged<bool> onSoundEnabledChanged;
+  final Future<void> Function() onPickSound;
+  final Future<void> Function() onPreview;
+  final Future<void> Function() onReset;
+  final Future<void> Function() onTestNotification;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              value: soundEnabled,
+              onChanged: onSoundEnabledChanged,
+              title: Text('Notification sound'),
+              subtitle: Text(
+                'Play a sound for pending orders and print issues.',
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.music_note_rounded),
+              title: Text('Custom sound'),
+              subtitle: Text(
+                soundPath.isEmpty
+                    ? 'Default system alert'
+                    : 'Custom sound selected',
+              ),
+              trailing: OutlinedButton(
+                onPressed: onPickSound,
+                child: Text('Choose'),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPreview,
+                    icon: Icon(Icons.play_arrow_rounded),
+                    label: Text('Preview'),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onReset,
+                    icon: Icon(Icons.refresh_rounded),
+                    label: Text('Reset'),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onTestNotification,
+              icon: Icon(Icons.notifications_active_outlined),
+              label: Text('Send test notification'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StaffAccountsCard extends StatefulWidget {
+  const _StaffAccountsCard({required this.app});
+
+  final PosAppController app;
+
+  @override
+  State<_StaffAccountsCard> createState() => _StaffAccountsCardState();
+}
+
+class _StaffAccountsCardState extends State<_StaffAccountsCard> {
+  final _emailController = TextEditingController();
+  final _nameController = TextEditingController();
+  late Future<List<Map<String, Object?>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.app.loadStaffAccounts();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Staff Google email',
+                prefixIcon: Icon(Icons.mail_outline_rounded),
+              ),
+            ),
+            SizedBox(height: 10),
+            TextField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                labelText: 'Name (optional)',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+            ),
+            SizedBox(height: 12),
+            PrimaryButton(
+              label: 'Add staff email',
+              icon: Icons.person_add_alt_1_rounded,
+              busy: widget.app.busy,
+              onPressed: widget.app.busy ? null : _add,
+            ),
+            SizedBox(height: 18),
+            FutureBuilder<List<Map<String, Object?>>>(
+              future: _future,
+              builder: (context, snapshot) {
+                final staff = snapshot.data ?? const <Map<String, Object?>>[];
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                if (staff.isEmpty) {
+                  return Padding(
+                    padding: EdgeInsets.symmetric(vertical: 18),
+                    child: Center(child: Text('No staff added yet.')),
+                  );
+                }
+                return Column(
+                  children: staff
+                      .map((account) {
+                        return ListTile(
+                          leading: Icon(Icons.badge_rounded),
+                          title: Text(
+                            account['displayName']?.toString().isNotEmpty ==
+                                    true
+                                ? account['displayName'].toString()
+                                : account['email']?.toString() ?? '',
+                          ),
+                          subtitle: Text(account['email']?.toString() ?? ''),
+                          trailing: Text(
+                            account['isActive'] == false
+                                ? 'Disabled'
+                                : 'Active',
+                          ),
+                        );
+                      })
+                      .toList(growable: false),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _add() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return;
+    final ok = await widget.app.addStaffEmail(
+      email,
+      displayName: _nameController.text,
+    );
+    if (!mounted) return;
+    if (ok) {
+      _emailController.clear();
+      _nameController.clear();
+      setState(() => _future = widget.app.loadStaffAccounts());
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Staff email added.'
+              : widget.app.lastError ?? 'Could not add staff.',
         ),
       ),
     );

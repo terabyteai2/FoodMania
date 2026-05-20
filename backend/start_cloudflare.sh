@@ -10,6 +10,11 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+PYTHON_BIN="python3"
+if [ -x ".venv/bin/python" ]; then
+  PYTHON_BIN=".venv/bin/python"
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║    Rastarant · Full Stack on Cloudflare Tunnel       ║"
@@ -71,4 +76,4 @@ echo ""
 
 # Pass BASE_URL as env var override; suppress ngrok so it doesn't conflict
 NGROK_AUTHTOKEN="" NGROK_STATIC_DOMAIN="" BASE_URL="$CF_URL" \
-  python3 -m uvicorn main:app --host 0.0.0.0 --port 8001
+  "$PYTHON_BIN" -m uvicorn main:app --host 0.0.0.0 --port 8001

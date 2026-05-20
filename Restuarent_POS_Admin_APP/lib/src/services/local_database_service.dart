@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
@@ -13,6 +15,7 @@ import '../models/order_item.dart';
 import '../models/order_model.dart';
 import '../models/order_source.dart';
 import '../models/order_status.dart';
+import '../models/pos_notification.dart';
 import '../models/stock_adjustment.dart';
 import '../models/sync_event.dart';
 import '../models/sync_status.dart';
@@ -32,21 +35,80 @@ class LocalDatabaseService {
       StreamController<void>.broadcast();
 
   Database? _database;
+  // Identifies which tenant the currently-open database belongs to. Empty
+  // means "no tenant scope yet" (fresh install / pre-login).
+  String _activeTenantKey = '';
 
   Stream<void> get changes => _changeController.stream;
 
-  Future<void> initialize() async {
-    if (_database != null) return;
+  String get activeTenantKey => _activeTenantKey;
+
+  Future<void> initialize({String tenantKey = ''}) async {
+    if (_database != null && _activeTenantKey == tenantKey) return;
+    if (_database != null) {
+      // Different tenant requested — close the current DB before opening the
+      // tenant-specific one so SQLite doesn't keep stale handles around.
+      await _database!.close();
+      _database = null;
+    }
+    _activeTenantKey = tenantKey;
     final documentsDirectory = await getApplicationDocumentsDirectory();
-    final databasePath = path.join(documentsDirectory.path, 'local_pos.db');
+    final fileName = tenantKey.isEmpty
+        ? 'local_pos.db'
+        : 'local_pos_${_sanitizeKey(tenantKey)}.db';
+    final databasePath = path.join(documentsDirectory.path, fileName);
+
+    // Upgrade path: pre-multi-tenant builds wrote everything to local_pos.db.
+    // Claim that file ONCE for the first tenant that logs in on this device.
+    // Never copy it into a second restaurant's DB — that was causing another
+    // outlet's menu/orders to appear in the admin app.
+    if (tenantKey.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      const legacyClaimedKey = 'local_pos_legacy_db_claimed';
+      final legacyAlreadyClaimed = prefs.getBool(legacyClaimedKey) ?? false;
+      final tenantFile = File(databasePath);
+      final legacyFile = File(
+        path.join(documentsDirectory.path, 'local_pos.db'),
+      );
+      if (!legacyAlreadyClaimed &&
+          !await tenantFile.exists() &&
+          await legacyFile.exists()) {
+        try {
+          await legacyFile.rename(databasePath);
+        } catch (_) {
+          try {
+            await legacyFile.copy(databasePath);
+          } catch (_) {}
+        }
+        await prefs.setBool(legacyClaimedKey, true);
+      }
+    }
+
     _database = await openDatabase(
       databasePath,
-      version: 4,
+      version: 5,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
       onOpen: _ensureSchema,
     );
+  }
+
+  /// Switch to a different tenant's database. Closes the currently-open
+  /// connection and opens the file for the new tenant. Use this after a login
+  /// or account switch so menu items, orders, etc. from a different tenant
+  /// don't bleed into the current session.
+  Future<void> switchTenant(String tenantKey) async {
+    if (_database != null && _activeTenantKey == tenantKey) return;
+    await initialize(tenantKey: tenantKey);
+    _emitChange();
+  }
+
+  String _sanitizeKey(String key) {
+    final trimmed = key.trim();
+    // Keep only filename-safe characters; outletId is a UUID so this is
+    // usually a no-op but defends against arbitrary inputs.
+    return trimmed.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
   }
 
   Future<List<MenuItem>> getMenuItems({
@@ -259,6 +321,8 @@ class LocalDatabaseService {
     String? tableNo,
     String? note,
     OrderSource source = OrderSource.cloud,
+    String? createdByAccountId,
+    String? createdByRole,
     bool createSyncEvent = true,
     OrderStatus initialStatus = OrderStatus.pending,
   }) async {
@@ -328,6 +392,8 @@ class LocalDatabaseService {
         customerName: _cleanNullable(customerName),
         tableNo: _cleanNullable(tableNo),
         note: _cleanNullable(note),
+        createdByAccountId: _cleanNullable(createdByAccountId),
+        createdByRole: _cleanNullable(createdByRole),
         source: source,
         status: initialStatus,
         total: total,
@@ -635,6 +701,45 @@ class LocalDatabaseService {
     _emitChange();
   }
 
+  Future<List<PosNotification>> getNotifications({int limit = 100}) async {
+    final db = await _db;
+    final rows = await db.query(
+      'notifications',
+      orderBy: 'createdAt DESC',
+      limit: limit,
+    );
+    return rows.map(PosNotification.fromMap).toList(growable: false);
+  }
+
+  Future<void> upsertNotification(PosNotification notification) async {
+    final db = await _db;
+    await db.insert(
+      'notifications',
+      notification.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    _emitChange();
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    final db = await _db;
+    await db.update(
+      'notifications',
+      {'readAt': DateTime.now().toIso8601String()},
+      where: 'id = ? AND readAt IS NULL',
+      whereArgs: [id],
+    );
+    _emitChange();
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final db = await _db;
+    await db.update('notifications', {
+      'readAt': DateTime.now().toIso8601String(),
+    }, where: 'readAt IS NULL');
+    _emitChange();
+  }
+
   Future<void> close() async {
     await _database?.close();
     _database = null;
@@ -676,6 +781,8 @@ class LocalDatabaseService {
         customerName TEXT,
         tableNo TEXT,
         note TEXT,
+        createdByAccountId TEXT,
+        createdByRole TEXT,
         status TEXT NOT NULL,
         total REAL NOT NULL,
         syncStatus TEXT NOT NULL DEFAULT 'synced',
@@ -701,6 +808,7 @@ class LocalDatabaseService {
 
     await _createSyncTable(db);
     await _createInventoryTables(db);
+    await _createNotificationTable(db);
     await _createIndexes(db);
   }
 
@@ -763,6 +871,22 @@ class LocalDatabaseService {
       await _createInventoryTables(db);
       await _createIndexes(db);
     }
+    if (oldVersion < 5) {
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'createdByAccountId',
+        'createdByAccountId TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        'orders',
+        'createdByRole',
+        'createdByRole TEXT',
+      );
+      await _createNotificationTable(db);
+      await _createIndexes(db);
+    }
   }
 
   Future<void> _ensureSchema(Database db) async {
@@ -798,9 +922,22 @@ class LocalDatabaseService {
       'version INTEGER NOT NULL DEFAULT 1',
     );
     await _addColumnIfMissing(db, 'orders', 'sequenceNo', 'sequenceNo INTEGER');
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'createdByAccountId',
+      'createdByAccountId TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'createdByRole',
+      'createdByRole TEXT',
+    );
     await _backfillOrderSequences(db);
     await _createSyncTable(db);
     await _createInventoryTables(db);
+    await _createNotificationTable(db);
     await _createIndexes(db);
   }
 
@@ -850,6 +987,21 @@ class LocalDatabaseService {
     ''');
   }
 
+  Future<void> _createNotificationTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        orderId TEXT,
+        actionTarget TEXT,
+        createdAt TEXT NOT NULL,
+        readAt TEXT
+      )
+    ''');
+  }
+
   Future<void> _createIndexes(Database db) async {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS index_menu_items_category ON menu_items(category)',
@@ -871,6 +1023,12 @@ class LocalDatabaseService {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS index_stock_adjustments_item ON stock_adjustments(inventoryItemId, createdAt)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS index_notifications_created ON notifications(createdAt DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS index_notifications_read ON notifications(readAt)',
     );
   }
 
@@ -1054,10 +1212,7 @@ class LocalDatabaseService {
       }
       final current = InventoryItem.fromMap(rows.first);
       final newQty = (current.quantity + delta).clamp(0.0, double.infinity);
-      updated = current.copyWith(
-        quantity: newQty,
-        updatedAt: DateTime.now(),
-      );
+      updated = current.copyWith(quantity: newQty, updatedAt: DateTime.now());
       await txn.update(
         'inventory_items',
         updated.toMap(),

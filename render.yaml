@@ -1,0 +1,53 @@
+# ============================================
+# Render Blueprint — Rastarant backend + Postgres
+# https://render.com/docs/blueprint-spec
+#
+# To deploy:
+#   1. Push this file to your GitHub repo (already on FoodMania)
+#   2. On Render dashboard → New → Blueprint → connect repo
+#   3. Fill in R2_* and SECRET_KEY env vars (marked sync: false below)
+# ============================================
+
+databases:
+  - name: rastarant-db
+    plan: free            # 1 GB, expires after 90 days; upgrade to "basic-256mb" ($7/mo) for production
+    databaseName: rastarant
+    user: rastarant
+
+services:
+  - type: web
+    name: rastarant-api
+    runtime: python
+    plan: free            # 512 MB RAM, sleeps after 15 min idle; upgrade for always-on
+    region: singapore     # closest to Bangladesh; change if needed (oregon/frankfurt/ohio)
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rastarant-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true       # Render generates a random value once
+      - key: BASE_URL
+        sync: false               # Set this after first deploy to https://<service>.onrender.com
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # ── Cloudflare R2 (fill these in via dashboard) ──
+      - key: R2_ENDPOINT
+        sync: false               # https://<accountid>.r2.cloudflarestorage.com
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false               # e.g. rastarant-uploads
+      - key: R2_PUBLIC_BASE_URL
+        sync: false               # https://pub-<hash>.r2.dev or custom domain
+      # ── Disable ngrok in cloud ──
+      - key: NGROK_AUTHTOKEN
+        value: ""
+      - key: NGROK_STATIC_DOMAIN
+        value: ""

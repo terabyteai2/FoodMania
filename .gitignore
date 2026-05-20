@@ -9,6 +9,10 @@
 Thumbs.db
 *.swp
 
+# ---------- Deploy secrets ----------
+deploy/.deploy-secrets
+deploy/.deploy-secrets.*
+
 # ---------- Python caches (regenerable) ----------
 __pycache__/
 *.pyc
@@ -17,6 +21,10 @@ __pycache__/
 
 # ---------- Node deps (HUGE, regenerable via npm/yarn install) ----------
 node_modules/
+
+# ---------- Secrets & runtime (never push) ----------
+backend/.env
+backend/uploads/
 
 # ---------- Logs ----------
 *.log
