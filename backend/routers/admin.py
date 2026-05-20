@@ -3,6 +3,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
+import requests as http_requests
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,20 @@ router = APIRouter()
 
 MANAGER = "manager"
 STAFF = "staff"
+GOOGLE_VERIFY_TIMEOUT_SECONDS = 5.0
+_google_verify_transport = google_requests.Request(session=http_requests.Session())
+
+
+class _GoogleVerifyRequestWithTimeout:
+    """Inject a short timeout so Google verify does not hang client requests."""
+
+    def __call__(self, *args, **kwargs):
+        # google-auth passes its own default timeout (120s); force ours.
+        kwargs["timeout"] = GOOGLE_VERIFY_TIMEOUT_SECONDS
+        return _google_verify_transport(*args, **kwargs)
+
+
+_google_verify_request = _GoogleVerifyRequestWithTimeout()
 
 
 def _clean_email(value: str) -> str:
@@ -100,11 +115,27 @@ def _verify_google_id_token(raw_token: str) -> dict:
     last_error: Exception | None = None
     for client_id in client_ids:
         try:
-            claims = id_token.verify_oauth2_token(raw_token, google_requests.Request(), client_id)
+            claims = id_token.verify_oauth2_token(raw_token, _google_verify_request, client_id)
             email = claims.get("email", "")
             if not email or claims.get("email_verified") is False:
                 raise ValueError("Google email is not verified.")
             return claims
+        except http_requests.exceptions.Timeout:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "google_verify_timeout:Timed out while contacting Google auth "
+                    "verification service. Please try again."
+                ),
+            )
+        except http_requests.exceptions.RequestException as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "google_verify_unreachable:Google auth verification service is "
+                    f"currently unreachable. {error}"
+                ),
+            )
         except Exception as error:  # pragma: no cover - depends on Google certs
             last_error = error
     raise HTTPException(
@@ -225,6 +256,7 @@ async def google_start_or_login(
     google_sub = claims["sub"]
     display_name = claims.get("name") or email.split("@")[0]
     requested_role = _normalize_role(body.role)
+    requested_server_id = (body.serverId or "").strip()
 
     account = (
         await db.execute(
@@ -235,6 +267,30 @@ async def google_start_or_login(
     ).scalar_one_or_none()
 
     if account is not None:
+        resolved_outlet: Outlet | None = None
+        if requested_role != MANAGER:
+            if not requested_server_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "serverId is required for staff sign-in. "
+                        "Use the same server ID/link configured by your manager."
+                    ),
+                )
+            resolved_outlet = (
+                await db.execute(select(Outlet).where(Outlet.server_id == requested_server_id))
+            ).scalar_one_or_none()
+            if resolved_outlet is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Server ID not registered. Ask your manager for the correct server link.",
+                )
+            # Keep staff and manager apps on the same outlet. If this Google
+            # staff account was previously attached elsewhere, rebind it to
+            # the manager's serverId outlet to restore shared order sync.
+            if account.role != MANAGER and account.outlet_id != resolved_outlet.id:
+                account.outlet_id = resolved_outlet.id
+                account.role = STAFF
         if not account.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff account is disabled.")
         if not account.google_sub:
@@ -243,7 +299,9 @@ async def google_start_or_login(
         account.auth_provider = "google"
         await db.commit()
         await db.refresh(account)
-        outlet = (await db.execute(select(Outlet).where(Outlet.id == account.outlet_id))).scalar_one()
+        outlet = resolved_outlet or (
+            await db.execute(select(Outlet).where(Outlet.id == account.outlet_id))
+        ).scalar_one()
         return ok(
             await _auth_payload(
                 db=db,
@@ -255,9 +313,46 @@ async def google_start_or_login(
         )
 
     if requested_role != MANAGER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ask the restaurant manager to add your Google email first.",
+        # Staff one-tap onboarding requires manager's serverId so both apps
+        # attach to the same outlet and share the same order stream.
+        if not requested_server_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "serverId is required for staff sign-up. "
+                    "Use the same server ID/link configured by your manager."
+                ),
+            )
+        target_outlet = (
+            await db.execute(select(Outlet).where(Outlet.server_id == requested_server_id))
+        ).scalar_one_or_none()
+        if target_outlet is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Server ID not registered. Ask your manager for the correct server link.",
+            )
+        account = AdminAccount(
+            outlet_id=target_outlet.id,
+            email=email,
+            username=email,
+            password_hash=None,
+            role=STAFF,
+            google_sub=google_sub,
+            display_name=display_name,
+            auth_provider="google",
+            is_active=True,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+        return ok(
+            await _auth_payload(
+                db=db,
+                outlet=target_outlet,
+                account=account,
+                server_id=target_outlet.server_id,
+                request=request,
+            )
         )
 
     restaurant_name = (body.restaurantName or "").strip()
