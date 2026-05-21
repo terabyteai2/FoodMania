@@ -48,6 +48,22 @@ What happens:
 
 If the external `/health` check fails the script will tell you the most likely cause (usually the VPS firewall — see *Troubleshooting* below).
 
+## Database backups
+
+On the VPS, install a daily cron (03:15 UTC) after the first deploy:
+
+```bash
+bash /var/www/rastarant/deploy/scripts/install-backup-cron.sh
+```
+
+Manual backup:
+
+```bash
+bash /var/www/rastarant/deploy/scripts/backup-postgres.sh
+```
+
+Backups are gzip SQL dumps under `/var/backups/rastarant/` (14-day retention by default). Logs: `/var/log/rastarant-backup.log`.
+
 ## Re-deploy after code changes
 
 ```bash
@@ -55,6 +71,16 @@ bash deploy/redeploy.sh
 ```
 
 This only rsyncs the new code, runs `pip install -r requirements.txt`, and restarts the systemd service. It does **not** touch the `.env`, the DB, nginx, or the systemd unit. Safe to run as often as you like.
+
+## Backend env sync
+
+Keep backend secrets in local `backend/.env` and the VPS env file, never in Git. After rotating the Scan Menu provider keys, set `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, and any `MENU_SCAN_*_MODEL` overrides locally, then merge the VPS-safe values and restart the service with:
+
+```bash
+bash deploy/push-backend-env.sh
+```
+
+The sync script leaves VPS-owned `DATABASE_URL` and `SECRET_KEY` untouched.
 
 ## Where things live on the VPS
 

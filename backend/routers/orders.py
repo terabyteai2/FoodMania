@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -38,6 +38,32 @@ def _order_to_dict(order: Order) -> dict:
     }
 
 
+def _normalize_order_status(status: str | None) -> str:
+    normalized = (status or "").strip().lower()
+    return normalized or "pending"
+
+
+def _parse_since(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid since timestamp.",
+        ) from exc
+
+    # Older Flutter builds send local ISO strings without timezone.
+    # Treat those as UTC to keep comparisons deterministic.
+    dt = parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+    # Guard against future cursors (clock skew / missing timezone) that would
+    # otherwise stall incremental sync for hours.
+    now = datetime.now(timezone.utc)
+    if dt > now + timedelta(seconds=30):
+        return now - timedelta(seconds=5)
+    return dt
+
+
 @router.get("/outlets/{outlet_id}/orders")
 async def pull_orders(
     outlet_id: str,
@@ -48,7 +74,7 @@ async def pull_orders(
     _ensure_outlet(current_outlet, outlet_id)
     query = select(Order).where(Order.outlet_id == outlet_id).order_by(Order.created_at.desc())
     if since:
-        dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        dt = _parse_since(since)
         query = query.where(Order.updated_at > dt)
     orders = (await db.execute(query)).scalars().all()
     return ok([_order_to_dict(o) for o in orders])
@@ -63,6 +89,12 @@ async def push_order(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     _ensure_outlet(current_outlet, outlet_id)
+    created_by_role = (body.createdByRole or "").strip().lower() or None
+    status_value = _normalize_order_status(body.status)
+    # Staff-created manual orders should enter the manager's actionable flow
+    # directly so manager-side auto-print can run without extra status taps.
+    if created_by_role == "staff" and status_value == "pending":
+        status_value = "accepted"
     existing = (await db.execute(select(Order).where(Order.id == body.id))).scalar_one_or_none()
     if existing:
         return ok(_order_to_dict(existing))
@@ -73,12 +105,12 @@ async def push_order(
         outlet_id=outlet_id,
         serial_number=body.serialNumber,
         source=body.source,
-        status=body.status,
+        status=status_value,
         total_amount=body.totalAmount,
         items=body.items,
         notes=body.notes,
         created_by_account_id=body.createdByAccountId,
-        created_by_role=body.createdByRole,
+        created_by_role=created_by_role,
         created_at=now,
         updated_at=now,
     )

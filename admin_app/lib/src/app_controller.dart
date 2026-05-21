@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:path_provider/path_provider.dart';
@@ -18,6 +18,7 @@ import 'models/account_role.dart';
 import 'models/bkash_payment_session.dart';
 import 'models/dashboard_metrics.dart';
 import 'models/inventory_item.dart';
+import 'models/inventory_unit.dart';
 import 'models/menu_item.dart';
 import 'models/order_item.dart';
 import 'models/order_model.dart';
@@ -35,6 +36,34 @@ import 'services/local_database_service.dart';
 import 'services/printer_service.dart';
 import 'services/sync_service.dart';
 import 'services/system_notification_service.dart';
+
+class StaffInvitePending {
+  const StaffInvitePending({
+    required this.inviteId,
+    required this.restaurantName,
+    required this.outletName,
+    required this.signupToken,
+    required this.phone,
+  });
+
+  final String inviteId;
+  final String restaurantName;
+  final String outletName;
+  final String signupToken;
+  final String phone;
+}
+
+class MenuScanImportResult {
+  const MenuScanImportResult({
+    required this.createdCount,
+    required this.skippedDuplicateCount,
+    required this.scanResult,
+  });
+
+  final int createdCount;
+  final int skippedDuplicateCount;
+  final MenuScanResult scanResult;
+}
 
 enum AppThemePreference {
   black('black'),
@@ -87,6 +116,30 @@ class PosAppController extends ChangeNotifier {
   final List<StreamSubscription<Object?>> _subscriptions = [];
   final Set<String> _knownOrderIds = <String>{};
   final Set<String> _autoPrintInFlight = <String>{};
+
+  /// Coalesces concurrent print requests for the same order (auto + manual).
+  final Map<String, Future<bool>> _orderPrintFutures = <String, Future<bool>>{};
+
+  /// Orders we already fired a pending alert for (prevents sync/DB replay loops).
+  final Set<String> _alertedPendingOrderIds = <String>{};
+
+  /// Orders we already fired an accepted/served alert for.
+  final Set<String> _alertedAcceptedOrderIds = <String>{};
+
+  /// Orders we already surfaced a print success/fail alert for.
+  final Set<String> _alertedPrintOrderIds = <String>{};
+
+  /// Auto-print stopped after a failure so DB churn does not re-print forever.
+  final Set<String> _autoPrintGiveUpOrderIds = <String>{};
+
+  /// Set when Bluetooth/printer is unavailable — blocks auto-print for all orders.
+  String? _autoPrintInfrastructureBlocked;
+
+  /// One in-app alert per infrastructure error message (e.g. Bluetooth off).
+  final Set<String> _alertedPrintFailureReasons = <String>{};
+  Timer? _databaseChangeDebounce;
+  bool _handlingDatabaseChange = false;
+  bool _databaseChangePending = false;
   final AudioPlayer _notificationPlayer = AudioPlayer();
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['openid', 'email', 'profile'],
@@ -113,12 +166,23 @@ class PosAppController extends ChangeNotifier {
   // logged-in + has a tenant — otherwise MainShell would mount immediately
   // after signup and the hero-media step would never get a chance to render.
   bool pendingHeroMediaSetup = false;
+  String? phoneSignupToken;
+  String? verifiedPhoneDisplay;
+  StaffInvitePending? pendingStaffInvite;
+
+  /// New manager sign-up must pay before using the app (survives app restarts).
+  bool needsOnboardingPayment = false;
+  String selectedSubscriptionPlan = '';
   String? lastBkashPaymentId;
   String? lastBkashTransactionId;
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
   double uiScale = 1.06;
   String? lastError;
+  bool demoManagerLoginEnabled = false;
+  String phoneOtpMode = 'unconfigured';
+  bool showDevOtpHint = false;
+  String devOtpCodeHint = '000000';
   bool isLoggedIn = false;
   AccountRole accountRole = AccountRole.manager;
   String accountId = '';
@@ -168,12 +232,21 @@ class PosAppController extends ChangeNotifier {
     return PaymentDefaults.requireBkashGate && !bkashPaymentVerified;
   }
 
+  /// Manager must pick a plan and receive activation before using the app.
+  bool get mustCompleteOnboardingPayment =>
+      isManager && needsOnboardingPayment && subscriptionState != 'paid';
+
   String get uiScaleLabel {
     final text = strings;
     if (uiScale <= 0.88) return text.compact;
     if (uiScale >= 0.98) return text.large;
     return text.comfortable;
   }
+
+  // Alias so widgets can compare without importing controller constants.
+  static const double kCompactScale = 0.84;
+  static const double kComfortableScale = 0.92;
+  static const double kLargeScale = 1.02;
 
   // App is ready to use as soon as the restaurant has a name.
   // Cloud sync is optional and configured separately.
@@ -200,6 +273,7 @@ class PosAppController extends ChangeNotifier {
     final hasInternet = await connectivityService.hasInternetAccess();
     if (hasInternet) {
       unawaited(syncService.syncNow());
+      unawaited(syncSubscriptionAccessFromCloud());
     }
   }
 
@@ -216,6 +290,9 @@ class PosAppController extends ChangeNotifier {
           !PaymentDefaults.requireBkashGate;
       subscriptionState =
           preferences.getString(_subscriptionStateKey) ?? 'none';
+      needsOnboardingPayment =
+          preferences.getBool(_needsOnboardingPaymentKey) ?? false;
+      selectedSubscriptionPlan = preferences.getString(_selectedPlanKey) ?? '';
       final trialEndsMillis = preferences.getInt(_trialEndsAtKey);
       trialEndsAt = trialEndsMillis == null
           ? null
@@ -253,11 +330,14 @@ class PosAppController extends ChangeNotifier {
       // as expired and replaced with the compile-time default (now the VPS).
       final storedCloudUrl = preferences.getString(_cloudApiUrlKey);
       final effectiveCloudUrl =
-          (storedCloudUrl != null && storedCloudUrl.toLowerCase().contains('ngrok'))
-              ? null
-              : storedCloudUrl;
+          (storedCloudUrl != null &&
+              storedCloudUrl.toLowerCase().contains('ngrok'))
+          ? null
+          : storedCloudUrl;
       if (storedCloudUrl != effectiveCloudUrl) {
-        debugPrint('[QB-AUTH] migrating stale stored ngrok URL $storedCloudUrl -> default ${CloudDefaults.embeddedBaseUrl}');
+        debugPrint(
+          '[QB-AUTH] migrating stale stored ngrok URL $storedCloudUrl -> default ${CloudDefaults.embeddedBaseUrl}',
+        );
         await preferences.remove(_cloudApiUrlKey);
       }
       cloudConfig = CloudConfig(
@@ -283,6 +363,7 @@ class PosAppController extends ChangeNotifier {
       await printerService.initialize();
       printerState = printerService.state;
       await systemNotifications.initialize();
+      unawaited(systemNotifications.requestNotificationAccess());
       // Existing installs may have stored either an app-private file path or
       // a file:// URI to external storage. Neither plays through the system
       // notification process. Upgrade to a content:// URI by registering with
@@ -314,13 +395,17 @@ class PosAppController extends ChangeNotifier {
       );
       _subscriptions.add(
         database.changes.listen((_) {
-          unawaited(_handleDatabaseChanged());
+          _scheduleDatabaseChanged();
           unawaited(syncService.refreshSummary());
         }),
       );
       _subscriptions.add(
         printerService.stateStream.listen((state) {
           printerState = state;
+          if (state.connected &&
+              !_isInfrastructurePrintError(state.lastError)) {
+            _autoPrintInfrastructureBlocked = null;
+          }
           notifyListeners();
         }),
       );
@@ -347,8 +432,12 @@ class PosAppController extends ChangeNotifier {
       _knownOrderIds
         ..clear()
         ..addAll(orders.map((order) => order.id));
+      _seedOrderAlertState();
       if (isCloudReady && cloudConfig.canSync) {
         unawaited(syncService.syncNow());
+      }
+      if (isLoggedIn && cloudConfig.hasDeviceToken) {
+        unawaited(syncSubscriptionAccessFromCloud());
       }
       initialized = true;
       lastError = null;
@@ -420,11 +509,28 @@ class PosAppController extends ChangeNotifier {
   /// next screen to collect the real restaurant/outlet names. Backend may hold
   /// a temporary placeholder, which will be replaced when setup is submitted.
   Future<void> requireRestaurantNamingAfterGoogleSignup() async {
-    serverConfig = serverConfig.copyWith(
-      restaurantName: '',
-      outletName: '',
-    );
+    await markOnboardingPaymentRequired();
+    serverConfig = serverConfig.copyWith(restaurantName: '', outletName: '');
     await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Ensures a new manager completes plan selection / activation after setup.
+  Future<void> markOnboardingPaymentRequired() async {
+    needsOnboardingPayment = true;
+    subscriptionState = 'none';
+    bkashPaymentVerified = false;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_needsOnboardingPaymentKey, true);
+    await preferences.setString(_subscriptionStateKey, 'none');
+    await preferences.setBool(_bkashPaymentVerifiedKey, false);
+    notifyListeners();
+  }
+
+  Future<void> clearOnboardingPaymentRequired() async {
+    needsOnboardingPayment = false;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_needsOnboardingPaymentKey, false);
     notifyListeners();
   }
 
@@ -444,6 +550,7 @@ class PosAppController extends ChangeNotifier {
     subscriptionState = 'paid';
     pendingOnboardingLanding = true;
     await preferences.setString(_subscriptionStateKey, subscriptionState);
+    await clearOnboardingPaymentRequired();
     notifyListeners();
   }
 
@@ -453,17 +560,55 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Saves the manager's plan choice; app unlocks when platform admin activates access.
+  Future<void> confirmSubscriptionPlan({required String plan}) async {
+    final clean = plan.trim().toLowerCase();
+    if (clean != 'monthly' && clean != 'annual') {
+      throw Exception('Invalid subscription plan.');
+    }
+    selectedSubscriptionPlan = clean;
+    await markOnboardingPaymentRequired();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_selectedPlanKey, clean);
+    if (cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl) {
+      try {
+        cloudApiService.configure(
+          cloudConfig: cloudConfig,
+          serverConfig: serverConfig,
+        );
+        await cloudApiService.registerOnboardingPlan(plan: clean);
+      } catch (error) {
+        debugPrint('[QB-ONBOARD] plan register failed: $error');
+      }
+    }
+    notifyListeners();
+  }
+
   Future<void> saveLocalSetup({
     required String restaurantName,
     required String outletName,
+    required int tableCount,
   }) async {
     final cleanRestaurantName = restaurantName.trim();
     final cleanOutletName = outletName.trim().isEmpty
         ? 'Main Outlet'
         : outletName.trim();
+    final cleanTableCount = tableCount.clamp(1, 200);
+    if (phoneSignupToken != null && phoneSignupToken!.isNotEmpty) {
+      final ok = await completeManagerPhoneSignup(
+        restaurantName: cleanRestaurantName,
+        outletName: cleanOutletName,
+        tableCount: cleanTableCount,
+      );
+      if (!ok) {
+        throw Exception(lastError ?? 'Could not create restaurant.');
+      }
+      return;
+    }
     serverConfig = serverConfig.copyWith(
       restaurantName: cleanRestaurantName,
       outletName: cleanOutletName,
+      tableCount: cleanTableCount,
     );
     isLoggedIn = true;
     hasSeenIntro = true;
@@ -517,9 +662,9 @@ class PosAppController extends ChangeNotifier {
         email: resolvedEmail,
       );
     }
-    return cloudApiService.createBkashSandboxPayment(
-      serverId: serverConfig.serverId,
-      amount: amount,
+    throw Exception(
+      'Online payment is not available yet. Choose your plan and wait for activation, '
+      'or ask support to enable your account from the admin panel.',
     );
   }
 
@@ -598,17 +743,73 @@ class PosAppController extends ChangeNotifier {
     orders = await database.getOrders();
     syncEvents = await database.getSyncEvents(statuses: null, limit: 100);
     inventoryItems = await database.getInventoryItems();
+    inventoryTodaySpend = await database.getInventoryPurchaseTotalForDate(
+      DateTime.now(),
+    );
     notifications = await database.getNotifications();
     notifyListeners();
   }
 
+  Future<void> refreshInventory() async {
+    inventoryItems = await database.getInventoryItems();
+    inventoryTodaySpend = await database.getInventoryPurchaseTotalForDate(
+      DateTime.now(),
+    );
+    notifyListeners();
+  }
+
+  void _scheduleDatabaseChanged() {
+    _databaseChangeDebounce?.cancel();
+    _databaseChangeDebounce = Timer(
+      const Duration(milliseconds: 400),
+      () => unawaited(_handleDatabaseChanged()),
+    );
+  }
+
+  /// Mark existing orders as already alerted so a fresh install/sync does not
+  /// replay notifications for historical rows.
+  void _seedOrderAlertState() {
+    _alertedPendingOrderIds.clear();
+    _alertedAcceptedOrderIds.clear();
+    for (final order in orders) {
+      final status = order.status.adminStatus;
+      if (status == OrderStatus.pending) {
+        _alertedPendingOrderIds.add(order.id);
+      }
+      if (status == OrderStatus.accepted || status == OrderStatus.served) {
+        _alertedAcceptedOrderIds.add(order.id);
+      }
+      if (printerService.hasPrintedOrder(order.id)) {
+        _alertedPrintOrderIds.add(order.id);
+      }
+    }
+  }
+
   Future<void> _handleDatabaseChanged() async {
-    final previousOrderIds = Set<String>.from(_knownOrderIds);
-    await reloadData();
-    _knownOrderIds
-      ..clear()
-      ..addAll(orders.map((order) => order.id));
-    await _autoPrintNewOrders(previousOrderIds);
+    if (_handlingDatabaseChange) {
+      _databaseChangePending = true;
+      return;
+    }
+    _handlingDatabaseChange = true;
+    try {
+      do {
+        _databaseChangePending = false;
+        final previousOrderIds = Set<String>.from(_knownOrderIds);
+        final previousStatusById = <String, OrderStatus>{
+          for (final order in orders) order.id: order.status.adminStatus,
+        };
+        await reloadData();
+        _knownOrderIds
+          ..clear()
+          ..addAll(orders.map((order) => order.id));
+        await _processOrderAlerts(
+          previousOrderIds: previousOrderIds,
+          previousStatusById: previousStatusById,
+        );
+      } while (_databaseChangePending);
+    } finally {
+      _handlingDatabaseChange = false;
+    }
   }
 
   Future<bool> saveSettings({
@@ -721,17 +922,249 @@ class PosAppController extends ChangeNotifier {
     );
   }
 
+  String _normalizeBdPhoneInput(String raw) {
+    var digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('880')) {
+      digits = digits.substring(3);
+    } else if (digits.startsWith('0')) {
+      digits = digits.substring(1);
+    }
+    if (digits.length != 10 || !digits.startsWith('1')) {
+      throw Exception('Enter a valid Bangladesh mobile number (01XXXXXXXXX).');
+    }
+    return '+880$digits';
+  }
+
+  Future<void> _ensurePhoneAuthCloudConfigured() async {
+    final resolvedBase = CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl);
+    final loginCloudConfig = cloudConfig.copyWith(
+      baseUrl: resolvedBase,
+      enabled: true,
+    );
+    if (!loginCloudConfig.hasValidBaseUrl) {
+      throw Exception('Cloud API URL is not configured.');
+    }
+    cloudConfig = loginCloudConfig;
+    await _persistSettings();
+    cloudApiService.configure(
+      cloudConfig: loginCloudConfig,
+      serverConfig: serverConfig,
+    );
+  }
+
+  Future<void> refreshCloudCapabilities() async {
+    if (!cloudConfig.canConnect) {
+      demoManagerLoginEnabled = false;
+      phoneOtpMode = 'unconfigured';
+      showDevOtpHint = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      await _ensurePhoneAuthCloudConfigured();
+      final health = await cloudApiService.testHealth();
+      final data = health['data'] is Map
+          ? Map<String, Object?>.from(health['data'] as Map)
+          : health;
+      demoManagerLoginEnabled = data['demoManagerLoginEnabled'] == true;
+      phoneOtpMode = data['phoneOtpMode']?.toString() ?? 'unconfigured';
+      showDevOtpHint =
+          phoneOtpMode == 'dev_bypass' || phoneOtpMode == 'dev_fallback';
+    } catch (_) {
+      demoManagerLoginEnabled = false;
+      phoneOtpMode = 'unconfigured';
+      showDevOtpHint = false;
+    }
+    notifyListeners();
+  }
+
+  Future<bool> loginAsDemoManager() async {
+    return _runBusy(() async {
+      await _ensurePhoneAuthCloudConfigured();
+      final result = await cloudApiService.demoManagerLogin();
+      await _finishPhoneAuthenticatedLogin(result);
+      await clearOnboardingPaymentRequired();
+    });
+  }
+
+  Future<bool> sendPhoneOtp(String phoneInput, {String? appSignature}) async {
+    return _runBusy(() async {
+      final phone = _normalizeBdPhoneInput(phoneInput);
+      await _ensurePhoneAuthCloudConfigured();
+      final result = await cloudApiService.sendPhoneOtp(
+        phone: phone,
+        appSignature: appSignature,
+      );
+      verifiedPhoneDisplay = phone;
+      phoneOtpMode = result.phoneOtpMode;
+      showDevOtpHint =
+          !result.smsSent &&
+          (result.phoneOtpMode == 'dev_fallback' ||
+              result.phoneOtpMode == 'dev_bypass');
+      if (result.devOtpCode != null && result.devOtpCode!.isNotEmpty) {
+        devOtpCodeHint = result.devOtpCode!;
+      }
+      notifyListeners();
+    });
+  }
+
+  Future<String?> verifyPhoneOtp({
+    required String phoneInput,
+    required String code,
+  }) async {
+    String? nextStep;
+    final ok = await _runBusy(() async {
+      final phone = _normalizeBdPhoneInput(phoneInput);
+      await _ensurePhoneAuthCloudConfigured();
+      final result = await cloudApiService.verifyPhoneOtp(
+        phone: phone,
+        code: code,
+      );
+      verifiedPhoneDisplay = result.phone ?? phone;
+      pendingStaffInvite = null;
+      phoneSignupToken = null;
+
+      if (result.status == 'authenticated' && result.login != null) {
+        await _finishPhoneAuthenticatedLogin(result.login!);
+        nextStep = 'authenticated';
+        return;
+      }
+      if (result.status == 'needs_restaurant_setup') {
+        phoneSignupToken = result.signupToken;
+        if (phoneSignupToken == null || phoneSignupToken!.isEmpty) {
+          throw Exception('Signup session expired. Request a new code.');
+        }
+        await _prepareNewRestaurantIdentity();
+        serverConfig = serverConfig.copyWith(
+          restaurantName: '',
+          outletName: '',
+        );
+        await completeIntro();
+        nextStep = 'needs_restaurant_setup';
+        return;
+      }
+      if (result.status == 'pending_staff_invite') {
+        final token = result.signupToken;
+        final inviteId = result.inviteId;
+        if (token == null ||
+            token.isEmpty ||
+            inviteId == null ||
+            inviteId.isEmpty) {
+          throw Exception('Invite session expired. Request a new code.');
+        }
+        pendingStaffInvite = StaffInvitePending(
+          inviteId: inviteId,
+          restaurantName: result.restaurantName ?? 'Restaurant',
+          outletName: result.outletName ?? 'Outlet',
+          signupToken: token,
+          phone: verifiedPhoneDisplay ?? phone,
+        );
+        await completeIntro();
+        nextStep = 'pending_staff_invite';
+        return;
+      }
+      throw Exception('Unexpected verification response.');
+    });
+    if (!ok) {
+      throw Exception(lastError ?? 'Verification failed.');
+    }
+    return nextStep;
+  }
+
+  Future<void> _finishPhoneAuthenticatedLogin(AdminLoginResult result) async {
+    final wasFreshTenant = serverConfig.outletId != result.outletId;
+    _applyAdminLoginResult(result, password: '');
+    await _applyServerAppAccess(result.hasAppAccess);
+    hasSeenIntro = true;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_seenIntroKey, true);
+    await _persistSettings();
+    await _persistAccountAuth();
+    await _switchTenantIfNeeded();
+    syncService.configure(cloudConfig: cloudConfig, serverConfig: serverConfig);
+    unawaited(syncService.syncNow());
+    unawaited(syncSubscriptionAccessFromCloud());
+    if (result.role.isManager && wasFreshTenant) {
+      pendingHeroMediaSetup = true;
+      await markOnboardingPaymentRequired();
+    } else if (result.role.isManager) {
+      await clearOnboardingPaymentRequired();
+    }
+    notifyListeners();
+  }
+
+  Future<bool> completeManagerPhoneSignup({
+    required String restaurantName,
+    required int tableCount,
+    String? outletName,
+  }) async {
+    return _runBusy(() async {
+      final token = phoneSignupToken;
+      if (token == null || token.isEmpty) {
+        throw Exception(
+          'Signup session expired. Sign in again with your phone.',
+        );
+      }
+      await _ensurePhoneAuthCloudConfigured();
+      final result = await cloudApiService.completeManagerPhoneSignup(
+        signupToken: token,
+        restaurantName: restaurantName,
+        tableCount: tableCount,
+        outletName: outletName,
+        serverId: serverConfig.serverId,
+        outletId: serverConfig.outletId,
+      );
+      phoneSignupToken = null;
+      await _finishPhoneAuthenticatedLogin(result);
+      await markOnboardingPaymentRequired();
+    });
+  }
+
+  Future<bool> respondToStaffInvite({required bool accept}) async {
+    return _runBusy(() async {
+      final pending = pendingStaffInvite;
+      if (pending == null) {
+        throw Exception('No pending staff invite.');
+      }
+      await _ensurePhoneAuthCloudConfigured();
+      final result = await cloudApiService.respondToStaffInvite(
+        signupToken: pending.signupToken,
+        inviteId: pending.inviteId,
+        accept: accept,
+      );
+      pendingStaffInvite = null;
+      if (!accept) {
+        isLoggedIn = false;
+        notifyListeners();
+        return;
+      }
+      if (result.status != 'authenticated' || result.login == null) {
+        throw Exception('Could not complete staff activation.');
+      }
+      await _finishPhoneAuthenticatedLogin(result.login!);
+      await clearOnboardingPaymentRequired();
+    });
+  }
+
+  void clearPendingStaffInvite() {
+    pendingStaffInvite = null;
+    notifyListeners();
+  }
+
   Future<bool> googleLoginOrSignup({
     required AccountRole role,
     String? restaurantName,
     String? outletName,
+
     /// When set (e.g. staff flow), used as Cloud API base before hitting /admin/google.
     String? cloudApiUrlOverride,
   }) async {
     return _runBusy(() async {
       GoogleSignInAccount? googleUser;
       GoogleAuthPreflightResult? googlePreflight;
-      debugPrint('[QB-AUTH] googleLoginOrSignup start role=$role url=$cloudApiUrlOverride');
+      debugPrint(
+        '[QB-AUTH] googleLoginOrSignup start role=$role url=$cloudApiUrlOverride',
+      );
       googlePreflight = await connectivityService.runGoogleAuthPreflight();
       debugPrint('[QB-AUTH] google preflight: ${googlePreflight.debugSummary}');
       if (!googlePreflight.ok) {
@@ -752,9 +1185,13 @@ class PosAppController extends ChangeNotifier {
       try {
         debugPrint('[QB-AUTH] invoking GoogleSignIn.signIn()');
         googleUser = await _googleSignIn.signIn();
-        debugPrint('[QB-AUTH] signIn() returned: ${googleUser?.email ?? 'null'}');
+        debugPrint(
+          '[QB-AUTH] signIn() returned: ${googleUser?.email ?? 'null'}',
+        );
       } on PlatformException catch (error) {
-        debugPrint('[QB-AUTH] PlatformException code=${error.code} message=${error.message} details=${error.details}');
+        debugPrint(
+          '[QB-AUTH] PlatformException code=${error.code} message=${error.message} details=${error.details}',
+        );
         // GMS codes: 7=NETWORK_ERROR, 10=DEVELOPER_ERROR (SHA-1/client config),
         // 12500=SIGN_IN_FAILED, 12501=SIGN_IN_CANCELLED, 12502=SIGN_IN_CURRENTLY_IN_PROGRESS.
         final code = error.code;
@@ -770,10 +1207,12 @@ class PosAppController extends ChangeNotifier {
         } else if (msg.contains('ApiException: 10')) {
           friendly =
               'Google rejected this build. Register an Android OAuth client in Google Cloud with package com.terabyteai.foodmania.posadmin and this build\'s SHA-1, then rebuild.';
-        } else if (msg.contains('ApiException: 12501') || code == 'sign_in_canceled') {
+        } else if (msg.contains('ApiException: 12501') ||
+            code == 'sign_in_canceled') {
           friendly = 'Sign-in cancelled.';
         } else {
-          friendly = 'Google sign-in failed. Details: $code${msg.isEmpty ? '' : ' — $msg'}';
+          friendly =
+              'Google sign-in failed. Details: $code${msg.isEmpty ? '' : ' — $msg'}';
         }
         throw Exception(friendly);
       } catch (error) {
@@ -781,19 +1220,25 @@ class PosAppController extends ChangeNotifier {
         rethrow;
       }
       if (googleUser == null) {
-        debugPrint('[QB-AUTH] googleUser is null (user cancelled OR no Android OAuth client registered)');
+        debugPrint(
+          '[QB-AUTH] googleUser is null (user cancelled OR no Android OAuth client registered)',
+        );
         throw Exception('Google sign-in was cancelled.');
       }
       debugPrint('[QB-AUTH] requesting authentication tokens…');
       final auth = await googleUser.authentication;
       final idToken = auth.idToken;
-      debugPrint('[QB-AUTH] idToken length=${idToken?.length ?? 0} accessTokenPresent=${auth.accessToken != null}');
+      debugPrint(
+        '[QB-AUTH] idToken length=${idToken?.length ?? 0} accessTokenPresent=${auth.accessToken != null}',
+      );
       if (idToken == null || idToken.isEmpty) {
         throw Exception(
           'Google did not return an ID token. Check POS_GOOGLE_WEB_CLIENT_ID and make sure it is a Web OAuth client ID.',
         );
       }
-      debugPrint('[QB-AUTH] posting idToken to backend at ${cloudApiUrlOverride ?? cloudConfig.baseUrl}');
+      debugPrint(
+        '[QB-AUTH] posting idToken to backend at ${cloudApiUrlOverride ?? cloudConfig.baseUrl}',
+      );
       // Manager signup with a restaurant name is a create-tenant flow — do not
       // reuse this device's serverId or the backend will bind to an old outlet.
       if (role.isManager && (restaurantName?.trim().isNotEmpty ?? false)) {
@@ -825,6 +1270,7 @@ class PosAppController extends ChangeNotifier {
           idToken: idToken,
           role: role,
           serverId: serverConfig.serverId,
+          tableCount: serverConfig.tableCount,
           restaurantName: restaurantName,
           outletName: outletName,
           restaurantId: serverConfig.restaurantId,
@@ -843,6 +1289,7 @@ class PosAppController extends ChangeNotifier {
           idToken: idToken,
           role: role,
           serverId: serverConfig.serverId,
+          tableCount: serverConfig.tableCount,
           restaurantName: 'My Restaurant',
           outletName: 'Main Outlet',
           restaurantId: serverConfig.restaurantId,
@@ -853,6 +1300,7 @@ class PosAppController extends ChangeNotifier {
       final wasFreshTenant =
           role.isManager && serverConfig.outletId != result.outletId;
       _applyAdminLoginResult(result, password: '');
+      await _applyServerAppAccess(result.hasAppAccess);
       hasSeenIntro = true;
       final preferences = await SharedPreferences.getInstance();
       await preferences.setBool(_seenIntroKey, true);
@@ -864,10 +1312,14 @@ class PosAppController extends ChangeNotifier {
         serverConfig: serverConfig,
       );
       unawaited(syncService.syncNow());
+      unawaited(syncSubscriptionAccessFromCloud());
       // Only ask for hero media when this Google sign-in created a brand-new
       // tenant — returning managers should land straight on the dashboard.
       if (wasFreshTenant) {
         pendingHeroMediaSetup = true;
+        await markOnboardingPaymentRequired();
+      } else {
+        await clearOnboardingPaymentRequired();
       }
       if (mustCollectRestaurantNameAfterAuth) {
         await requireRestaurantNamingAfterGoogleSignup();
@@ -906,6 +1358,7 @@ class PosAppController extends ChangeNotifier {
         bypassSecret: bypassSecret,
       );
       _applyAdminLoginResult(result, password: '');
+      await _applyServerAppAccess(result.hasAppAccess);
       hasSeenIntro = true;
       final preferences = await SharedPreferences.getInstance();
       await preferences.setBool(_seenIntroKey, true);
@@ -917,6 +1370,7 @@ class PosAppController extends ChangeNotifier {
         serverConfig: serverConfig,
       );
       unawaited(syncService.syncNow());
+      unawaited(syncSubscriptionAccessFromCloud());
     });
   }
 
@@ -976,11 +1430,13 @@ class PosAppController extends ChangeNotifier {
     );
     cloudConfig = loginCloudConfig;
     _applyAdminLoginResult(result, password: password);
+    await _applyServerAppAccess(result.hasAppAccess);
     await _persistSettings();
     await _persistAccountAuth();
     await _switchTenantIfNeeded();
     syncService.configure(cloudConfig: cloudConfig, serverConfig: serverConfig);
     unawaited(syncService.syncNow());
+    unawaited(syncSubscriptionAccessFromCloud());
   }
 
   /// Open the local SQLite file that belongs to the current tenant. Two
@@ -1058,6 +1514,74 @@ class PosAppController extends ChangeNotifier {
     return CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl);
   }
 
+  Future<void> syncSubscriptionAccessFromCloud({bool quiet = true}) async {
+    if (!isLoggedIn ||
+        !cloudConfig.hasDeviceToken ||
+        !cloudConfig.hasValidBaseUrl ||
+        serverConfig.outletId.trim().isEmpty) {
+      return;
+    }
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final access = await cloudApiService.fetchAppAccess();
+      await _applyServerAppAccess(access.hasAppAccess);
+    } catch (error) {
+      if (!quiet) rethrow;
+      debugPrint('[QB-ACCESS] sync failed: $error');
+    }
+  }
+
+  Future<void> _applyServerAppAccess(bool hasAccess) async {
+    if (!hasAccess) return;
+    subscriptionState = 'paid';
+    needsOnboardingPayment = false;
+    pendingOnboardingLanding = true;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_subscriptionStateKey, 'paid');
+    await preferences.setBool(_needsOnboardingPaymentKey, false);
+    notifyListeners();
+  }
+
+  /// Manual check from the plan screen — surfaces API errors to the user.
+  Future<String?> refreshSubscriptionAccessFromCloud() async {
+    if (!cloudConfig.hasDeviceToken) {
+      return 'Not signed in yet. Wait a moment and try again.';
+    }
+    if (!cloudConfig.hasValidBaseUrl) {
+      return 'Cloud server URL is not set. Check Settings → Cloud sync.';
+    }
+    if (serverConfig.outletId.trim().isEmpty) {
+      return 'Restaurant setup is incomplete. Sign out and sign in again.';
+    }
+    try {
+      await syncSubscriptionAccessFromCloud(quiet: false);
+      if (subscriptionState == 'paid') {
+        return null;
+      }
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final access = await cloudApiService.fetchAppAccess();
+      final status = access.subscriptionStatus?.trim();
+      if (status == null || status.isEmpty) {
+        return 'Waiting for activation. In platform admin, open Activations and tap '
+            'Activate for this restaurant (outlet ${serverConfig.outletId.substring(0, 8)}…).';
+      }
+      return 'Server subscription status: $status. Ask support to set it to active '
+          'for outlet ${serverConfig.outletId.substring(0, 8)}…';
+    } catch (error) {
+      final message = error.toString().replaceFirst('Exception: ', '');
+      if (message.toLowerCase().contains('invalid token')) {
+        return 'Session expired. Sign out, sign in with Google again, then tap Check activation status.';
+      }
+      return message;
+    }
+  }
+
   void _applyAdminLoginResult(
     AdminLoginResult result, {
     required String password,
@@ -1072,6 +1596,7 @@ class PosAppController extends ChangeNotifier {
       outletId: result.outletId,
       restaurantName: result.restaurantName,
       outletName: result.outletName,
+      tableCount: result.tableCount,
     );
     cloudConfig = cloudConfig.copyWith(
       baseUrl: resolvedBase,
@@ -1110,6 +1635,9 @@ class PosAppController extends ChangeNotifier {
   Future<void> logOut() async {
     isLoggedIn = false;
     lastError = null;
+    phoneSignupToken = null;
+    verifiedPhoneDisplay = null;
+    pendingStaffInvite = null;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(_accountLoggedInKey, false);
     // Clear tenant-scoped prefs so the next login cannot briefly show the
@@ -1126,6 +1654,8 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_deviceTokenKey);
     await preferences.remove(_restaurantNameKey);
     await preferences.remove(_outletNameKey);
+    await preferences.remove(_selectedPlanKey);
+    selectedSubscriptionPlan = '';
     // Drop the cached Google session so the next sign-in shows the account
     // chooser instead of silently re-using the previous account.
     try {
@@ -1147,9 +1677,28 @@ class PosAppController extends ChangeNotifier {
     return cloudApiService.listStaffAccounts();
   }
 
-  Future<bool> addStaffEmail(String email, {String? displayName}) async {
+  Future<bool> addStaffPhone(String phone, {String? displayName}) async {
     if (!isManager) {
       lastError = 'Only managers can add staff.';
+      notifyListeners();
+      return false;
+    }
+    return _runBusy(() async {
+      final normalized = _normalizeBdPhoneInput(phone);
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      await cloudApiService.addStaffAccount(
+        phone: normalized,
+        displayName: displayName,
+      );
+    });
+  }
+
+  Future<bool> removeStaffAccount(String staffId) async {
+    if (!isManager) {
+      lastError = 'Only managers can remove staff.';
       notifyListeners();
       return false;
     }
@@ -1158,9 +1707,9 @@ class PosAppController extends ChangeNotifier {
         cloudConfig: cloudConfig,
         serverConfig: serverConfig,
       );
-      await cloudApiService.addStaffAccount(
-        email: email,
-        displayName: displayName,
+      await cloudApiService.updateStaffAccount(
+        staffId: staffId,
+        isActive: false,
       );
     });
   }
@@ -1195,6 +1744,55 @@ class PosAppController extends ChangeNotifier {
     await _syncWithFreshTenantToken();
   }
 
+  Future<MenuScanImportResult> scanAndImportMenu(
+    List<MenuScanPageUpload> pages,
+  ) async {
+    if (!isManager) {
+      throw Exception('Only managers can scan menus.');
+    }
+    if (!cloudConfig.canSync) {
+      throw Exception('Menu scan needs an online cloud connection.');
+    }
+    cloudApiService.configure(
+      cloudConfig: cloudConfig,
+      serverConfig: serverConfig,
+    );
+    final scanResult = await cloudApiService.scanMenuPages(pages);
+    final seenKeys = menuItems
+        .map((item) => _menuScanDuplicateKey(item.name, item.category))
+        .toSet();
+    var created = 0;
+    var skipped = 0;
+
+    for (final candidate in scanResult.items) {
+      final key = _menuScanDuplicateKey(candidate.name, candidate.category);
+      if (!seenKeys.add(key)) {
+        skipped += 1;
+        continue;
+      }
+      await saveMenuItem(
+        name: candidate.name,
+        description: candidate.description,
+        category: candidate.category,
+        price: candidate.price,
+        isAvailable: candidate.isAvailable,
+      );
+      created += 1;
+    }
+    await reloadData();
+    return MenuScanImportResult(
+      createdCount: created,
+      skippedDuplicateCount: skipped,
+      scanResult: scanResult,
+    );
+  }
+
+  String _menuScanDuplicateKey(String name, String category) {
+    String normalize(String value) =>
+        value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    return '${normalize(name)}|${normalize(category.isEmpty ? 'General' : category)}';
+  }
+
   Future<String> uploadMenuImageDataUrl(String dataUrl) async {
     if (!cloudConfig.canSync) return dataUrl;
     return cloudApiService.uploadMenuImageDataUrl(dataUrl);
@@ -1208,10 +1806,7 @@ class PosAppController extends ChangeNotifier {
     return cloudApiService.uploadOutletImage(dataUrl);
   }
 
-  Future<String> uploadOutletHeroVideo(
-    List<int> bytes,
-    String filename,
-  ) async {
+  Future<String> uploadOutletHeroVideo(List<int> bytes, String filename) async {
     cloudApiService.configure(
       cloudConfig: cloudConfig,
       serverConfig: serverConfig,
@@ -1231,25 +1826,108 @@ class PosAppController extends ChangeNotifier {
 
   // ── Inventory ─────────────────────────────────────────────────────────────
 
+  double inventoryTodaySpend = 0;
+
+  Future<void> _pushInventoryItemToCloud(InventoryItem item) async {
+    if (!cloudConfig.canSync) return;
+    try {
+      await cloudApiService.pushInventoryItem(item);
+    } catch (_) {}
+  }
+
+  Future<void> _pushLatestInventoryAdjustment(String inventoryItemId) async {
+    if (!cloudConfig.canSync) return;
+    try {
+      final rows = await database.getStockAdjustments(
+        inventoryItemId,
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      await cloudApiService.pushInventoryAdjustment(rows.first);
+    } catch (_) {}
+  }
+
   Future<void> saveInventoryItem(InventoryItem item) async {
-    await database.upsertInventoryItem(item);
+    final normalized = item.copyWith(
+      unit: InventoryUnits.normalize(item.unit),
+      updatedAt: DateTime.now(),
+    );
+    await database.upsertInventoryItem(normalized);
+    await refreshInventory();
+    await _pushInventoryItemToCloud(normalized);
   }
 
   Future<void> deleteInventoryItem(String id) async {
     await database.deleteInventoryItem(id);
+    await refreshInventory();
+    if (cloudConfig.canSync) {
+      try {
+        await cloudApiService.deleteInventoryItemCloud(id);
+      } catch (_) {}
+    }
   }
 
-  Future<InventoryItem> adjustStock({
+  Future<InventoryItem> recordInventoryPurchase({
     required String inventoryItemId,
-    required double delta,
-    required AdjustmentType type,
+    required double quantity,
+    required double totalCostBdt,
     String note = '',
   }) async {
-    return database.adjustStock(
+    if (quantity <= 0) {
+      throw Exception('Enter a quantity greater than zero.');
+    }
+    final updated = await database.adjustStock(
       inventoryItemId: inventoryItemId,
-      delta: delta,
-      type: type.value,
+      delta: quantity,
+      type: AdjustmentType.restock.value,
       note: note,
+      totalCostBdt: totalCostBdt,
+    );
+    await refreshInventory();
+    await _pushLatestInventoryAdjustment(inventoryItemId);
+    await _pushInventoryItemToCloud(updated);
+    return updated;
+  }
+
+  Future<InventoryItem> recordInventoryUsage({
+    required String inventoryItemId,
+    required double quantity,
+    String note = '',
+  }) async {
+    if (quantity <= 0) {
+      throw Exception('Enter a quantity greater than zero.');
+    }
+    final updated = await database.adjustStock(
+      inventoryItemId: inventoryItemId,
+      delta: -quantity,
+      type: AdjustmentType.usage.value,
+      note: note,
+    );
+    await refreshInventory();
+    await _pushLatestInventoryAdjustment(inventoryItemId);
+    await _pushInventoryItemToCloud(updated);
+    return updated;
+  }
+
+  Future<InventoryItem> setInventoryEndOfDayCount({
+    required String inventoryItemId,
+    required double quantity,
+  }) async {
+    final updated = await database.setDailyStockCount(
+      inventoryItemId: inventoryItemId,
+      quantity: quantity,
+    );
+    await refreshInventory();
+    await _pushLatestInventoryAdjustment(inventoryItemId);
+    await _pushInventoryItemToCloud(updated);
+    return updated;
+  }
+
+  Future<double?> yesterdayClosingQuantity(String inventoryItemId) async {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    return database.getDailyStockQuantity(
+      inventoryItemId: inventoryItemId,
+      day: yesterday,
     );
   }
 
@@ -1273,15 +1951,9 @@ class PosAppController extends ChangeNotifier {
       source: OrderSource.manual,
       createdByAccountId: accountId.isEmpty ? null : accountId,
       createdByRole: accountRole.value,
-      initialStatus: OrderStatus.served,
-    );
-    await addNotification(
-      type: PosNotificationType.pendingOrder,
-      title: 'Order created',
-      body: '${order.displaySequence} was created successfully.',
-      orderId: order.id,
-      actionTarget: 'orders',
-      playSound: true,
+      // All manually-created orders (both manager and staff) go straight to
+      // accepted so they are ready to serve immediately.
+      initialStatus: OrderStatus.accepted,
     );
     unawaited(syncService.syncNow());
     return order;
@@ -1289,12 +1961,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> updateOrderStatus(String id, OrderStatus status) async {
     await database.updateOrderStatus(id, status);
-    if (status == OrderStatus.accepted || status == OrderStatus.served) {
-      final order = await database.getOrderById(id);
-      if (order != null) {
-        await _printAcceptedOrderIfNeeded(order);
-      }
-    }
+    // Auto-print runs from [_processOrderAlerts] on database change — no second call here.
     unawaited(syncService.syncNow());
   }
 
@@ -1367,6 +2034,17 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
     final preferences = await SharedPreferences.getInstance();
     await preferences.setInt(_tableCountKey, clamped);
+    if (cloudConfig.canSync) {
+      try {
+        cloudApiService.configure(
+          cloudConfig: cloudConfig,
+          serverConfig: serverConfig,
+        );
+        await cloudApiService.registerDevice();
+      } catch (error) {
+        debugPrint('[QB-TABLES] could not sync table count: $error');
+      }
+    }
   }
 
   Future<void> updateLanguage(AppLanguage value) async {
@@ -1399,16 +2077,23 @@ class PosAppController extends ChangeNotifier {
       order,
       restaurantName: restaurantName,
       outletName: outletName,
+      language: language,
     );
   }
 
   Future<List<BluetoothPrinterDevice>> refreshPairedPrinters() async {
+    if (!isManager) {
+      pairedPrinters = const <BluetoothPrinterDevice>[];
+      notifyListeners();
+      return pairedPrinters;
+    }
     pairedPrinters = await printerService.refreshPairedPrinters();
     notifyListeners();
     return pairedPrinters;
   }
 
   Future<bool> connectPrinter(BluetoothPrinterDevice printer) async {
+    if (!isManager) return false;
     final ok = await printerService.connect(printer);
     printerState = printerService.state;
     if (ok) {
@@ -1420,6 +2105,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> disconnectPrinter() async {
+    if (!isManager) return false;
     final ok = await printerService.disconnect();
     printerState = printerService.state;
     notifyListeners();
@@ -1427,12 +2113,14 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> setAutoPrintOrders(bool value) async {
+    if (!isManager) return;
     await printerService.setAutoPrintEnabled(value);
     printerState = printerService.state;
     notifyListeners();
   }
 
   Future<bool> testPrinter() {
+    if (!isManager) return Future<bool>.value(false);
     return printerService.testPrint(
       restaurantName: restaurantName,
       outletName: outletName,
@@ -1440,28 +2128,54 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printOrderTicket(OrderModel order) {
-    return printerService
+    if (!isManager) return Future<bool>.value(false);
+    if (printerService.hasPrintedOrder(order.id)) {
+      return Future<bool>.value(true);
+    }
+    final existing = _orderPrintFutures[order.id];
+    if (existing != null) return existing;
+
+    final future = printerService
         .printOrderTicket(
           order,
           restaurantName: restaurantName,
           outletName: outletName,
+          language: language,
         )
         .then((ok) async {
-          await addNotification(
-            type: ok
-                ? PosNotificationType.printSuccess
-                : PosNotificationType.printFailed,
-            title: ok ? 'Ticket printed' : 'Print failed',
-            body: ok
-                ? '${order.displaySequence} was sent to the printer.'
-                : (printerState.lastError ??
-                      '${order.displaySequence} could not print.'),
-            orderId: order.id,
-            actionTarget: 'orders',
-            playSound: !ok,
-          );
+          if (!ok) {
+            final err = printerState.lastError;
+            final fromAuto = _autoPrintInFlight.contains(order.id);
+            if (fromAuto && _isInfrastructurePrintError(err)) {
+              _autoPrintInfrastructureBlocked ??= err;
+              await _notifyPrintInfrastructureOnce(err!);
+              _markAcceptedOrdersPrintAlerted();
+              return ok;
+            }
+          }
+          if (!_alertedPrintOrderIds.contains(order.id)) {
+            _alertedPrintOrderIds.add(order.id);
+            await addNotification(
+              type: ok
+                  ? PosNotificationType.printSuccess
+                  : PosNotificationType.printFailed,
+              title: ok ? 'Ticket printed' : strings.printFailed,
+              body: ok
+                  ? '${order.displaySequence} was sent to the printer.'
+                  : (printerState.lastError ??
+                        '${order.displaySequence} could not print.'),
+              orderId: order.id,
+              actionTarget: 'orders',
+              playSound: !ok,
+            );
+          }
+          if (!ok && _autoPrintInFlight.contains(order.id)) {
+            _autoPrintGiveUpOrderIds.add(order.id);
+          }
           return ok;
         });
+    _orderPrintFutures[order.id] = future;
+    return future.whenComplete(() => _orderPrintFutures.remove(order.id));
   }
 
   Future<void> addNotification({
@@ -1472,6 +2186,20 @@ class PosAppController extends ChangeNotifier {
     String? actionTarget,
     bool playSound = true,
   }) async {
+    if (type == PosNotificationType.printFailed) {
+      final cutoff = DateTime.now().subtract(const Duration(minutes: 2));
+      final duplicate = notifications.any(
+        (n) =>
+            n.type == type &&
+            n.title == title &&
+            n.body == body &&
+            n.createdAt.isAfter(cutoff),
+      );
+      if (duplicate) {
+        notifyListeners();
+        return;
+      }
+    }
     final notification = PosNotification(
       id: _uuid.v4(),
       type: type,
@@ -1483,25 +2211,28 @@ class PosAppController extends ChangeNotifier {
     );
     await database.upsertNotification(notification);
     notifications = await database.getNotifications();
-    if (isAppForeground) {
-      // Foreground: in-app toast (see MainShell) + the same in-app audio that
-      // we've always played.
-      if (playSound) unawaited(playNotificationSound());
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final inForeground =
+        lifecycle == AppLifecycleState.resumed && isAppForeground;
+    final soundOn = playSound && notificationSoundEnabled;
+
+    if (inForeground) {
+      // Foreground: in-app toast (see MainShell) + asset sound.
+      if (soundOn) unawaited(playNotificationSound(type: type));
     } else {
-      // Background: fire an OS-level notification. Its channel was created
-      // with the user's chosen sound (see SystemNotificationService.configureSound),
-      // so the system plays the custom sound itself. We deliberately skip the
-      // in-app audio path here to avoid double-playing on platforms where
-      // audioplayers might still emit audio in background.
-      // Android notification IDs must fit in 32-bit int — derive from the
-      // UUID hash so re-issuing the same notification stays idempotent.
-      final notificationId = notification.id.hashCode & 0x7fffffff;
+      // Background / screen off: OS notification + channel sound.
+      // Stable id per order+type replaces the previous alert instead of stacking.
+      final notificationId = orderId != null
+          ? Object.hash(orderId, type.name).abs() & 0x7fffffff
+          : notification.id.hashCode & 0x7fffffff;
       unawaited(
         systemNotifications.show(
           id: notificationId,
           title: title,
           body: body,
           payload: actionTarget,
+          type: type,
+          playSound: soundOn,
         ),
       );
     }
@@ -1597,69 +2328,163 @@ class PosAppController extends ChangeNotifier {
   /// Fire a real OS notification so the user can verify that channel sound,
   /// permission, and heads-up behavior all work without waiting for an order.
   Future<void> sendTestNotification() async {
+    await systemNotifications.requestNotificationAccess();
     await systemNotifications.show(
       id: 999001,
       title: 'Test notification',
       body: 'If you can hear this, alerts are wired up correctly.',
       payload: 'test',
+      type: PosNotificationType.pendingOrder,
     );
     if (notificationSoundEnabled) {
       unawaited(playNotificationSound());
     }
   }
 
-  Future<void> playNotificationSound() async {
+  /// Play the hardcoded in-app notification sound for [type].
+  /// - [PosNotificationType.pendingOrder] → urgent double-beep
+  /// - [PosNotificationType.acceptedOrder] → soft confirmation ding
+  /// - Other types → system alert fallback
+  Future<void> playNotificationSound({
+    PosNotificationType type = PosNotificationType.pendingOrder,
+  }) async {
     if (!notificationSoundEnabled) return;
-    final path = notificationSoundPath.trim();
-    final fallbackUri = systemNotifications.effectiveDefaultSoundUri;
+    final assetPath = _assetSoundForType(type);
     try {
-      // content:// URIs (MediaStore-registered sounds) and file:// URIs go
-      // through UrlSource so audioplayers can hand them to Android's
-      // MediaPlayer, which natively understands both. Bare paths still use
-      // DeviceFileSource so iOS / desktop keep working.
-      if (path.isEmpty) {
-        // No custom sound — play the system default notification tone via
-        // its well-known content URI. Much more audible than the tiny click
-        // SystemSound.alert produces on most devices.
-        await _notificationPlayer.play(UrlSource(fallbackUri));
+      await _notificationPlayer.stop();
+      if (assetPath != null) {
+        await _notificationPlayer.play(AssetSource(assetPath));
         return;
       }
-      if (path.startsWith('content://') || path.startsWith('file://')) {
-        await _notificationPlayer.play(UrlSource(path));
-      } else {
-        await _notificationPlayer.play(DeviceFileSource(path));
-      }
+      // Fallback for types without a dedicated asset (print events, etc.)
+      final playedBySystem = await systemNotifications
+          .playDefaultNotificationSound();
+      if (playedBySystem) return;
+      await SystemSound.play(SystemSoundType.alert);
     } catch (_) {
-      // Last-ditch fallback: try the system default URI once more, then the
-      // built-in click. We don't want the user to hear silence on every
-      // notification because of a single bad URI.
       try {
-        await _notificationPlayer.play(UrlSource(fallbackUri));
+        final playedBySystem = await systemNotifications
+            .playDefaultNotificationSound();
+        if (playedBySystem) return;
+        await SystemSound.play(SystemSoundType.alert);
       } catch (_) {
         await SystemSound.play(SystemSoundType.alert);
       }
     }
   }
 
-  Future<void> _autoPrintNewOrders(Set<String> previousOrderIds) async {
-    final newOrders =
-        orders
-            .where((order) => !previousOrderIds.contains(order.id))
-            .toList(growable: false)
-          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    if (newOrders.isEmpty) return;
+  /// Returns the asset path (relative to assets/) for the given type,
+  /// or null if no dedicated asset exists for that type.
+  String? _assetSoundForType(PosNotificationType type) {
+    switch (type) {
+      case PosNotificationType.pendingOrder:
+        return 'sounds/pending_order.wav';
+      case PosNotificationType.acceptedOrder:
+        return 'sounds/accepted_order.wav';
+      default:
+        return null;
+    }
+  }
 
-    for (final order in newOrders) {
-      if (order.status.adminStatus == OrderStatus.pending) {
-        await addNotification(
-          type: PosNotificationType.pendingOrder,
-          title: 'New pending order',
-          body:
-              '${order.displaySequence} · ${order.items.length} items · ৳${order.total.toStringAsFixed(0)}',
-          orderId: order.id,
-          actionTarget: 'pending_orders',
-        );
+  static bool _isInfrastructurePrintError(String? message) {
+    if (message == null || message.trim().isEmpty) return false;
+    const known = <String>{
+      'Turn on Bluetooth first.',
+      'Printer is not connected.',
+      'Select a Bluetooth printer first.',
+      'Bluetooth permission is required.',
+      'Bluetooth is not ready.',
+    };
+    return known.contains(message.trim());
+  }
+
+  Future<void> _ensureAutoPrintPreflight() async {
+    if (!isManager ||
+        !printerState.autoPrintEnabled ||
+        !printerState.hasSelectedPrinter ||
+        _autoPrintInfrastructureBlocked != null) {
+      return;
+    }
+    final block = await printerService.preflightBlockReason();
+    if (block == null) return;
+    _autoPrintInfrastructureBlocked = block;
+    await _notifyPrintInfrastructureOnce(block);
+    _markAcceptedOrdersPrintAlerted();
+  }
+
+  Future<void> _notifyPrintInfrastructureOnce(String reason) async {
+    if (_alertedPrintFailureReasons.contains(reason)) return;
+    _alertedPrintFailureReasons.add(reason);
+    await addNotification(
+      type: PosNotificationType.printFailed,
+      title: strings.printFailed,
+      body: reason,
+      actionTarget: 'orders',
+      playSound: true,
+    );
+  }
+
+  void _markAcceptedOrdersPrintAlerted() {
+    for (final order in orders) {
+      final status = order.status.adminStatus;
+      if (status == OrderStatus.accepted || status == OrderStatus.served) {
+        _alertedPrintOrderIds.add(order.id);
       }
+    }
+  }
+
+  Future<void> _processOrderAlerts({
+    required Set<String> previousOrderIds,
+    required Map<String, OrderStatus> previousStatusById,
+  }) async {
+    await _ensureAutoPrintPreflight();
+
+    final sorted = List<OrderModel>.from(orders)
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    for (final order in sorted) {
+      final id = order.id;
+      final status = order.status.adminStatus;
+      final wasKnown = previousOrderIds.contains(id);
+      final previousStatus = previousStatusById[id];
+
+      if (status == OrderStatus.pending) {
+        final becamePending =
+            !wasKnown ||
+            (previousStatus != null && previousStatus != OrderStatus.pending);
+        if (becamePending && !_alertedPendingOrderIds.contains(id)) {
+          _alertedPendingOrderIds.add(id);
+          await addNotification(
+            type: PosNotificationType.pendingOrder,
+            title: 'New pending order',
+            body:
+                '${order.displaySequence} · ${order.items.length} items · ৳${order.total.toStringAsFixed(0)}',
+            orderId: id,
+            actionTarget: 'pending_orders',
+          );
+        }
+      }
+
+      if (status == OrderStatus.accepted || status == OrderStatus.served) {
+        final becameAccepted =
+            !wasKnown ||
+            previousStatus == OrderStatus.pending ||
+            (previousStatus != null &&
+                previousStatus != OrderStatus.accepted &&
+                previousStatus != OrderStatus.served);
+        if (becameAccepted && !_alertedAcceptedOrderIds.contains(id)) {
+          _alertedAcceptedOrderIds.add(id);
+          await addNotification(
+            type: PosNotificationType.acceptedOrder,
+            title: 'Order accepted',
+            body:
+                '${order.displaySequence} · ${order.items.length} items · ৳${order.total.toStringAsFixed(0)}',
+            orderId: id,
+            actionTarget: 'orders',
+          );
+        }
+      }
+
       await _printAcceptedOrderIfNeeded(order);
     }
   }
@@ -1668,6 +2493,7 @@ class PosAppController extends ChangeNotifier {
     // Only the manager device auto-prints. Staff devices forward to manager
     // via cloud sync; the manager app then receives the order and prints.
     if (!isManager) return;
+    if (_autoPrintInfrastructureBlocked != null) return;
     final status = order.status.adminStatus;
     final isAccepted =
         status == OrderStatus.accepted || status == OrderStatus.served;
@@ -1675,6 +2501,7 @@ class PosAppController extends ChangeNotifier {
         !printerState.autoPrintEnabled ||
         !printerState.hasSelectedPrinter ||
         printerService.hasPrintedOrder(order.id) ||
+        _autoPrintGiveUpOrderIds.contains(order.id) ||
         _autoPrintInFlight.contains(order.id)) {
       return;
     }
@@ -1699,6 +2526,7 @@ class PosAppController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _databaseChangeDebounce?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -1785,6 +2613,7 @@ class PosAppController extends ChangeNotifier {
       serverId: serverConfig.serverId,
       restaurantName: restaurantName.trim(),
       outletName: outletName.trim(),
+      tableCount: serverConfig.tableCount,
       restaurantId: serverConfig.restaurantId,
       outletId: serverConfig.outletId,
     );
@@ -1794,13 +2623,15 @@ class PosAppController extends ChangeNotifier {
       outletId: tenant.outletId,
       restaurantName: tenant.restaurantName,
       outletName: tenant.outletName,
+      tableCount: tenant.tableCount,
     );
     // /tenants/bootstrap returns a token that only carries outlet_id. If the
     // user is already logged in, their existing token also carries account_id
     // (required by manager-only endpoints like /admin/staff). Keep the
     // account-bound token so those calls don't 401.
     final hasAccountToken =
-        accountId.trim().isNotEmpty && cloudConfig.deviceToken.trim().isNotEmpty;
+        accountId.trim().isNotEmpty &&
+        cloudConfig.deviceToken.trim().isNotEmpty;
     final mergedBase = _mergePublicApiBaseUrl(
       tenant.publicApiBaseUrl,
       bootstrapCloudConfig.baseUrl,
@@ -1879,7 +2710,9 @@ class PosAppController extends ChangeNotifier {
   bool _isAccountNotFoundError(Object error) {
     final message = error.toString().toLowerCase();
     return message.contains('account_not_found:') ||
-        message.contains('no restaurant account is linked to this google email');
+        message.contains(
+          'no restaurant account is linked to this google email',
+        );
   }
 
   static final String _seenIntroKey = 'local_pos_seen_intro';
@@ -1914,7 +2747,10 @@ class PosAppController extends ChangeNotifier {
       'local_pos_notification_sound_path';
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
+  static final String _needsOnboardingPaymentKey =
+      'local_pos_needs_onboarding_payment';
+  static final String _selectedPlanKey = 'local_pos_selected_subscription_plan';
   static final String _trialEndsAtKey = 'local_pos_trial_ends_at';
-  static double minUiScale = 0.96;
+  static double minUiScale = 0.78;
   static double maxUiScale = 1.18;
 }

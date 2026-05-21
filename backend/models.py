@@ -33,6 +33,7 @@ class Outlet(Base):
     restaurant_id: Mapped[str] = mapped_column(ForeignKey("restaurants.id"), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     server_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    table_count: Mapped[int] = mapped_column(Integer, default=10)
     status: Mapped[str] = mapped_column(String, default="active")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     banner_url: Mapped[str | None] = mapped_column(Text)
@@ -45,6 +46,7 @@ class Outlet(Base):
     devices: Mapped[list["Device"]] = relationship(back_populates="outlet")
     menu_items: Mapped[list["MenuItem"]] = relationship(back_populates="outlet")
     orders: Mapped[list["Order"]] = relationship(back_populates="outlet")
+    inventory_items: Mapped[list["InventoryItem"]] = relationship(back_populates="outlet")
     subscription: Mapped["OutletSubscription | None"] = relationship(
         back_populates="outlet", uselist=False
     )
@@ -60,6 +62,9 @@ class AdminAccount(Base):
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(String, default="manager")
     google_sub: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invite_status: Mapped[str | None] = mapped_column(String, nullable=True)
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth_provider: Mapped[str] = mapped_column(String, default="password")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -173,3 +178,64 @@ class UddoktaPaySession(Base):
     customer_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     customer_email: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, default="")
+    unit: Mapped[str] = mapped_column(String, default="pcs")
+    quantity: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
+    min_threshold: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
+    cost_per_unit: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    outlet: Mapped[Outlet] = relationship(back_populates="inventory_items")
+    adjustments: Mapped[list["StockAdjustment"]] = relationship(back_populates="item")
+    daily_counts: Mapped[list["DailyStockCount"]] = relationship(back_populates="item")
+
+
+class StockAdjustment(Base):
+    __tablename__ = "stock_adjustments"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    inventory_item_id: Mapped[str] = mapped_column(
+        ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False
+    )
+    delta: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    note: Mapped[str] = mapped_column(Text, default="")
+    total_cost_bdt: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    item: Mapped[InventoryItem] = relationship(back_populates="adjustments")
+
+
+class DailyStockCount(Base):
+    __tablename__ = "daily_stock_counts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    inventory_item_id: Mapped[str] = mapped_column(
+        ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False
+    )
+    count_date: Mapped[str] = mapped_column(String, nullable=False)
+    quantity: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    item: Mapped[InventoryItem] = relationship(back_populates="daily_counts")
+
+
+class SystemConfig(Base):
+    __tablename__ = "system_configs"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

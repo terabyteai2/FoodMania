@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:-103.191.240.34}"
+VPS_HOST="${VPS_HOST:-160.187.130.80}"
 VPS_USER="${VPS_USER:-root}"
 VPS_PORT="${VPS_PORT:-22}"
 REMOTE_DIR="/var/www/rastarant"
@@ -24,6 +24,11 @@ die()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 
 ssh -o BatchMode=yes -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "true" 2>/dev/null \
   || die "Keyless SSH not configured. Run bash deploy/bootstrap_vps.sh first."
+
+if [[ -f "${REPO_ROOT}/backend/.env" ]]; then
+  say "Syncing backend .env to VPS"
+  bash "${SCRIPT_DIR}/push-backend-env.sh" || true
+fi
 
 say "Syncing code to ${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}"
 rsync -az --delete \
@@ -46,19 +51,27 @@ rsync -az --delete \
   --exclude='*.keystore' \
   "${REPO_ROOT}/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 
-say "Reinstalling Python deps (in case requirements.txt changed) + restarting service"
+say "Updating nginx API routes (phone/demo OTP) + restarting backend"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" bash -s <<REMOTE
 set -euo pipefail
+if [[ -f ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf ]]; then
+  install -m 644 ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf /etc/nginx/conf.d/rastarant.conf
+  nginx -t
+  systemctl reload nginx
+  echo "  ✓ nginx reloaded"
+fi
 cd ${REMOTE_DIR}/backend
 ./.venv/bin/pip install -r requirements.txt --quiet
 systemctl restart ${SERVICE_NAME}
-sleep 2
+sleep 8
 curl -fsS http://127.0.0.1:8000/health >/dev/null && echo "  ✓ /health OK"
 REMOTE
 
-say "External check"
-if curl -fsS --max-time 10 "http://${VPS_HOST}/health" >/dev/null; then
-  ok "Deployed — http://${VPS_HOST} is live with the new code."
-else
-  die "External /health failed. Run: ssh ${VPS_USER}@${VPS_HOST} 'journalctl -u ${SERVICE_NAME} --no-pager | tail -50'"
-fi
+API_BASE="${API_BASE:-https://160-187-130-80.sslip.io}"
+say "Smoke test (${API_BASE})"
+curl -fsS --max-time 15 "${API_BASE}/health" >/dev/null \
+  || die "Health check failed at ${API_BASE}/health"
+curl -fsS --max-time 20 -X POST "${API_BASE}/admin/phone/send-otp" \
+  -H 'Content-Type: application/json' -d '{"phone":"01700000000"}' | grep -q '"smsSent"' \
+  || die "Send OTP failed at ${API_BASE}/admin/phone/send-otp"
+ok "Deployed — ${API_BASE} (demo login + send-otp OK)"

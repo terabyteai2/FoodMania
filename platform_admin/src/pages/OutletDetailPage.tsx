@@ -5,7 +5,7 @@ import {
   apiFetch,
   Order,
   Outlet,
-  Payment,
+  OutletActivity,
   Subscription,
 } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
@@ -19,7 +19,15 @@ type CustomerInfo = {
   galleryImageCount: number;
 };
 
-const TABS = ["overview", "accounts", "subscription", "payments", "orders"] as const;
+type NewAccountForm = {
+  email: string;
+  username: string;
+  password: string;
+  displayName: string;
+  role: string;
+};
+
+const TABS = ["overview", "accounts", "subscription", "orders", "activity"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function OutletDetailPage() {
@@ -27,12 +35,25 @@ export default function OutletDetailPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [outlet, setOutlet] = useState<Outlet | null>(null);
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [activity, setActivity] = useState<OutletActivity | null>(null);
   const [error, setError] = useState("");
   const [notes, setNotes] = useState("");
-  const [status, setStatus] = useState("active");
+  const [outletName, setOutletName] = useState("");
+  const [outletStatus, setOutletStatus] = useState("active");
+
+  // Create account form state
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [accountForm, setAccountForm] = useState<NewAccountForm>({
+    email: "",
+    username: "",
+    password: "",
+    displayName: "",
+    role: "manager",
+  });
+  const [accountFormError, setAccountFormError] = useState("");
+  const [accountSubmitting, setAccountSubmitting] = useState(false);
 
   const loadOutlet = useCallback(() => {
     if (!outletId) return;
@@ -40,7 +61,8 @@ export default function OutletDetailPage() {
       .then((o) => {
         setOutlet(o);
         setNotes(o.notes || "");
-        setStatus(o.status);
+        setOutletStatus(o.status);
+        setOutletName(o.name);
       })
       .catch((e) => setError(e.message));
   }, [outletId]);
@@ -56,11 +78,6 @@ export default function OutletDetailPage() {
         .then(setAccounts)
         .catch((e) => setError(e.message));
     }
-    if (tab === "payments") {
-      apiFetch<Payment[]>("/platform/payments?limit=100")
-        .then((all) => setPayments(all.filter((p) => p.outletId === outletId || p.serverId === outlet?.serverId)))
-        .catch((e) => setError(e.message));
-    }
     if (tab === "orders") {
       apiFetch<Order[]>(`/platform/outlets/${outletId}/orders`)
         .then(setOrders)
@@ -71,6 +88,11 @@ export default function OutletDetailPage() {
         .then(setCustomerInfo)
         .catch(() => setCustomerInfo(null));
     }
+    if (tab === "activity") {
+      apiFetch<OutletActivity>(`/platform/outlets/${outletId}/activity`)
+        .then(setActivity)
+        .catch((e) => setError(e.message));
+    }
   }, [tab, outletId, outlet?.serverId]);
 
   async function saveOutlet() {
@@ -78,7 +100,7 @@ export default function OutletDetailPage() {
     try {
       const updated = await apiFetch<Outlet>(`/platform/outlets/${outletId}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: outlet?.name, status, notes }),
+        body: JSON.stringify({ name: outletName, status: outletStatus, notes }),
       });
       setOutlet(updated);
     } catch (e) {
@@ -93,10 +115,39 @@ export default function OutletDetailPage() {
         body: JSON.stringify({ isActive: !account.isActive }),
       });
       setAccounts((prev) =>
-        prev.map((a) => (a.id === account.id ? { ...a, isActive: !a.isActive } : a)),
+        prev.map((a) => (a.id === account.id ? { ...a, isActive: !a.isActive } : a))
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
+    }
+  }
+
+  async function createAccount() {
+    if (!outletId) return;
+    if (!accountForm.email || !accountForm.username || !accountForm.password) {
+      setAccountFormError("Email, username and password are required");
+      return;
+    }
+    setAccountSubmitting(true);
+    setAccountFormError("");
+    try {
+      const created = await apiFetch<AdminAccount>(`/platform/outlets/${outletId}/accounts`, {
+        method: "POST",
+        body: JSON.stringify({
+          email: accountForm.email,
+          username: accountForm.username,
+          password: accountForm.password,
+          displayName: accountForm.displayName || null,
+          role: accountForm.role,
+        }),
+      });
+      setAccounts((prev) => [...prev, created]);
+      setAccountForm({ email: "", username: "", password: "", displayName: "", role: "manager" });
+      setShowAccountForm(false);
+    } catch (e) {
+      setAccountFormError(e instanceof Error ? e.message : "Create failed");
+    } finally {
+      setAccountSubmitting(false);
     }
   }
 
@@ -119,10 +170,14 @@ export default function OutletDetailPage() {
 
   const sub = outlet.subscription;
 
+  function fmt(n: number) {
+    return n.toLocaleString("en-BD", { maximumFractionDigits: 0 });
+  }
+
   return (
     <>
       <div className="page-header">
-        <h1>{outlet.name}</h1>
+        <h1 style={{ wordBreak: "break-word", minWidth: 0 }}>{outlet.name}</h1>
         <Link to="/restaurants" className="muted">
           ← Back
         </Link>
@@ -161,27 +216,55 @@ export default function OutletDetailPage() {
             <div className="detail-row">
               <span className="label">Customer menu</span>
               <a href={outlet.customerMenuUrl} target="_blank" rel="noreferrer">
-                Open menu
+                Open menu ↗
               </a>
             </div>
             {customerInfo && (
-              <div className="detail-row">
-                <span className="label">Menu items</span>
-                <span>{customerInfo.menuItemCount}</span>
-              </div>
+              <>
+                <div className="detail-row">
+                  <span className="label">Menu items</span>
+                  <span>{customerInfo.menuItemCount}</span>
+                </div>
+                {customerInfo.galleryImageCount > 0 && (
+                  <div className="detail-row">
+                    <span className="label">Gallery images</span>
+                    <span>{customerInfo.galleryImageCount}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          <div className="form-group">
-            <label>Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="active">active</option>
-              <option value="suspended">suspended</option>
-            </select>
+          <div className="two-col-grid" style={{ marginTop: 16 }}>
+            <div className="form-group">
+              <label>Outlet name</label>
+              <input
+                type="text"
+                value={outletName}
+                onChange={(e) => setOutletName(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Status</label>
+              <select
+                value={outletStatus}
+                onChange={(e) => setOutletStatus(e.target.value)}
+                style={{ width: "100%" }}
+              >
+                <option value="active">active</option>
+                <option value="suspended">suspended</option>
+              </select>
+            </div>
           </div>
           <div className="form-group">
             <label>Internal notes</label>
-            <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: "100%" }} />
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              style={{ width: "100%" }}
+            />
           </div>
           <button type="button" className="btn" onClick={saveOutlet}>
             Save changes
@@ -191,43 +274,159 @@ export default function OutletDetailPage() {
 
       {tab === "accounts" && (
         <div className="tab-panel card">
-          <table>
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Active</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.email}</td>
-                  <td>{a.role}</td>
-                  <td>{a.isActive ? "Yes" : "No"}</td>
-                  <td>
-                    <button type="button" className="btn-secondary btn" onClick={() => toggleAccount(a)}>
-                      {a.isActive ? "Disable" : "Enable"}
-                    </button>
-                  </td>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 8, flexWrap: "wrap" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Admin accounts</h3>
+            <button
+              type="button"
+              className="btn"
+              style={{ fontSize: 13 }}
+              onClick={() => setShowAccountForm((v) => !v)}
+            >
+              {showAccountForm ? "Cancel" : "+ Create account"}
+            </button>
+          </div>
+
+          {showAccountForm && (
+            <div style={{ background: "var(--surface2)", borderRadius: 8, padding: 16, marginBottom: 16 }}>
+              <h4 style={{ margin: "0 0 12px", fontSize: 14 }}>New account</h4>
+              {accountFormError && <p className="error-msg">{accountFormError}</p>}
+              <div className="two-col-grid">
+                <div className="form-group">
+                  <label>Email *</label>
+                  <input
+                    type="email"
+                    value={accountForm.email}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, email: e.target.value }))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Username *</label>
+                  <input
+                    type="text"
+                    value={accountForm.username}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, username: e.target.value }))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Password *</label>
+                  <input
+                    type="password"
+                    value={accountForm.password}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, password: e.target.value }))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Display name</label>
+                  <input
+                    type="text"
+                    value={accountForm.displayName}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, displayName: e.target.value }))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Role</label>
+                  <select
+                    value={accountForm.role}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, role: e.target.value }))}
+                    style={{ width: "100%" }}
+                  >
+                    <option value="manager">manager</option>
+                    <option value="staff">staff</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn"
+                onClick={createAccount}
+                disabled={accountSubmitting}
+                style={{ marginTop: 8 }}
+              >
+                {accountSubmitting ? "Creating…" : "Create account"}
+              </button>
+            </div>
+          )}
+
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Phone</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Auth</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {accounts.map((a) => (
+                  <tr key={a.id}>
+                    <td>{a.phone || "—"}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>{a.email}</td>
+                    <td>
+                      <span className="badge badge-pending">{a.role}</span>
+                    </td>
+                    <td>
+                      {a.inviteStatus === "pending" ? (
+                        <span className="badge badge-pending">pending invite</span>
+                      ) : a.inviteStatus === "declined" ? (
+                        <span className="badge badge-suspended">declined</span>
+                      ) : (
+                        <StatusBadge status={a.isActive ? "active" : "suspended"} />
+                      )}
+                    </td>
+                    <td className="muted" style={{ fontSize: 12 }}>{a.authProvider}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn-secondary btn"
+                        style={{ fontSize: 12, padding: "4px 10px" }}
+                        onClick={() => toggleAccount(a)}
+                      >
+                        {a.isActive ? "Disable" : "Enable"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {accounts.length === 0 && <p className="muted">No accounts yet.</p>}
         </div>
       )}
 
       {tab === "subscription" && (
         <div className="tab-panel card">
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            Grant access here after the manager picks a plan in the app. No payment gateway is required.
+          </p>
           {sub ? (
             <>
-              <p>
-                Plan: <strong>{sub.plan}</strong> · <StatusBadge status={sub.status} />
-              </p>
-              <p className="muted">
-                Expires: {sub.expiresAt ? new Date(sub.expiresAt).toLocaleString() : "—"}
-              </p>
+              <div className="detail-grid" style={{ marginBottom: 16 }}>
+                <div className="detail-row">
+                  <span className="label">Plan</span>
+                  <strong>{sub.plan}</strong>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Status</span>
+                  <StatusBadge status={sub.status} />
+                </div>
+                <div className="detail-row">
+                  <span className="label">Started</span>
+                  <span>{new Date(sub.startsAt).toLocaleDateString()}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="label">Expires</span>
+                  <span className={sub.expiresAt && new Date(sub.expiresAt) < new Date() ? "danger-text" : ""}>
+                    {sub.expiresAt ? new Date(sub.expiresAt).toLocaleString() : "—"}
+                  </span>
+                </div>
+              </div>
             </>
           ) : (
             <p className="muted">No subscription record yet.</p>
@@ -236,21 +435,40 @@ export default function OutletDetailPage() {
             <button
               type="button"
               className="btn"
-              onClick={() => subscriptionAction({ plan: "monthly", status: "active", extendDays: 30 })}
+              onClick={() =>
+                subscriptionAction({ plan: "monthly", status: "active", extendDays: 30 })
+              }
             >
               Extend 30 days
             </button>
             <button
               type="button"
-              className="btn-secondary btn"
-              onClick={() => subscriptionAction({ plan: "monthly", status: "trial" })}
+              className="btn"
+              onClick={() =>
+                subscriptionAction({ plan: "annual", status: "active", extendDays: 365 })
+              }
             >
-              Mark trial
+              Extend 1 year
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() =>
+                subscriptionAction({
+                  plan: sub?.plan || "monthly",
+                  status: "active",
+                  extendDays: (sub?.plan || "monthly") === "annual" ? 365 : 30,
+                })
+              }
+            >
+              Activate app access
             </button>
             <button
               type="button"
               className="btn-danger btn"
-              onClick={() => subscriptionAction({ plan: sub?.plan || "monthly", status: "cancelled" })}
+              onClick={() =>
+                subscriptionAction({ plan: sub?.plan || "monthly", status: "cancelled" })
+              }
             >
               Cancel
             </button>
@@ -258,61 +476,86 @@ export default function OutletDetailPage() {
         </div>
       )}
 
-      {tab === "payments" && (
+      {tab === "orders" && (
         <div className="tab-panel card">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Gateway</th>
-                <th>Amount</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((p) => (
-                <tr key={p.paymentId}>
-                  <td>{new Date(p.createdAt).toLocaleString()}</td>
-                  <td>{p.gateway}</td>
-                  <td>
-                    {p.amount} {p.currency}
-                  </td>
-                  <td>
-                    <StatusBadge status={p.status} />
-                  </td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Total</th>
+                  <th>Created</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {payments.length === 0 && <p className="muted">No payments for this outlet.</p>}
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td>{o.serialNumber}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>{o.source}</td>
+                    <td>
+                      <StatusBadge status={o.status} />
+                    </td>
+                    <td>৳{o.totalAmount}</td>
+                    <td className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                      {new Date(o.createdAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {orders.length === 0 && <p className="muted">No orders.</p>}
         </div>
       )}
 
-      {tab === "orders" && (
-        <div className="tab-panel card">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Status</th>
-                <th>Total</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td>{o.serialNumber}</td>
-                  <td>
-                    <StatusBadge status={o.status} />
-                  </td>
-                  <td>{o.totalAmount}</td>
-                  <td>{new Date(o.createdAt).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {orders.length === 0 && <p className="muted">No orders.</p>}
+      {tab === "activity" && (
+        <div className="tab-panel">
+          {!activity ? (
+            <p className="muted">Loading activity…</p>
+          ) : (
+            <div className="two-col-grid" style={{ gap: 20 }}>
+              <div className="card">
+                <h3 style={{ margin: "0 0 16px", fontSize: 15 }}>Orders</h3>
+                <div className="detail-grid">
+                  <div className="detail-row">
+                    <span className="label">Total orders</span>
+                    <strong>{activity.totalOrders}</strong>
+                  </div>
+                  <div className="detail-row">
+                    <span className="label">Last 30 days</span>
+                    <strong>{activity.ordersLast30Days}</strong>
+                  </div>
+                  <div className="detail-row">
+                    <span className="label">Last order</span>
+                    <span>
+                      {activity.lastOrderAt
+                        ? new Date(activity.lastOrderAt).toLocaleString()
+                        : "Never"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="card">
+                <h3 style={{ margin: "0 0 16px", fontSize: 15 }}>Setup</h3>
+                <div className="detail-grid">
+                  <div className="detail-row">
+                    <span className="label">Admin accounts</span>
+                    <strong>{activity.accountCount}</strong>
+                  </div>
+                  <div className="detail-row">
+                    <span className="label">Devices registered</span>
+                    <strong>{activity.deviceCount}</strong>
+                  </div>
+                  <div className="detail-row">
+                    <span className="label">Total revenue</span>
+                    <strong style={{ color: "var(--success)" }}>৳{fmt(activity.totalRevenue)}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

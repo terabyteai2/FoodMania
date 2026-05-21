@@ -25,6 +25,7 @@ export default function SubscriptionsPage() {
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="active">active</option>
+          <option value="pending">pending</option>
           <option value="trial">trial</option>
           <option value="expired">expired</option>
           <option value="cancelled">cancelled</option>
@@ -34,34 +35,36 @@ export default function SubscriptionsPage() {
       {error && <p className="error-msg">{error}</p>}
 
       <div className="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Outlet</th>
-              <th>Restaurant</th>
-              <th>Plan</th>
-              <th>Status</th>
-              <th>Expires</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {subs.map((s) => (
-              <tr key={s.id}>
-                <td>{s.outletName || s.outletId}</td>
-                <td>{s.restaurantName || "—"}</td>
-                <td>{s.plan}</td>
-                <td>
-                  <StatusBadge status={s.status} />
-                </td>
-                <td>{s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : "—"}</td>
-                <td>
-                  <Link to={`/outlets/${s.outletId}`}>Manage</Link>
-                </td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Outlet</th>
+                <th>Restaurant</th>
+                <th>Plan</th>
+                <th>Status</th>
+                <th>Expires</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {subs.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.outletName || s.outletId}</td>
+                  <td>{s.restaurantName || "—"}</td>
+                  <td>{s.plan}</td>
+                  <td>
+                    <StatusBadge status={s.status} />
+                  </td>
+                  <td>{s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : "—"}</td>
+                  <td>
+                    <Link to={`/outlets/${s.outletId}`}>Manage</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {subs.length === 0 && !error && <p className="muted">No subscriptions.</p>}
       </div>
     </>

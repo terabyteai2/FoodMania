@@ -1,0 +1,44 @@
+# ============================================
+# Flutter .gitignore — Admin POS App
+# Only excludes large/regenerable build artifacts.
+# Local signing material and build artifacts stay off the branch.
+# ============================================
+
+# ---------- Flutter / Dart build caches (HUGE, regenerable) ----------
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/build/
+/coverage/
+**/build/
+
+# ---------- iOS / macOS build outputs ----------
+**/ios/Flutter/.last_build_id
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/macos/Pods/
+
+# ---------- Generated files ----------
+**/doc/api/
+generated_plugin_registrant.dart
+
+# ---------- Symbolication / Obfuscation ----------
+app.*.symbols
+app.*.map.json
+
+# ---------- Large binary outputs (>50MB, blocked by GitHub) ----------
+*.apk
+*.aab
+*.ipa
+*.so
+
+# ---------- Local signing / machine config ----------
+android/key.properties
+android/local.properties
+**/upload-keystore.jks
+*.jks
+
+# ---------- Misc ----------
+*.log
+.DS_Store

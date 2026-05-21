@@ -24,6 +24,7 @@ async def create_tables() -> None:
         await _ensure_auth_columns(conn)
         await _ensure_platform_columns(conn)
     await seed_platform_admin()
+    await seed_system_config()
 
 
 async def _ensure_auth_columns(conn) -> None:
@@ -47,6 +48,18 @@ async def _ensure_auth_columns(conn) -> None:
         await conn.execute(
             text("CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_accounts_google_sub ON admin_accounts(google_sub)")
         )
+        for statement in [
+            "ALTER TABLE admin_accounts ADD COLUMN phone VARCHAR",
+            "ALTER TABLE admin_accounts ADD COLUMN phone_verified_at TIMESTAMP",
+            "ALTER TABLE admin_accounts ADD COLUMN invite_status VARCHAR",
+        ]:
+            try:
+                await conn.execute(text(statement))
+            except Exception:
+                pass
+        await conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_accounts_phone ON admin_accounts(phone)")
+        )
         return
 
     statements = [
@@ -58,6 +71,10 @@ async def _ensure_auth_columns(conn) -> None:
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_by_account_id VARCHAR",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_by_role VARCHAR",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_accounts_google_sub ON admin_accounts(google_sub)",
+        "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS phone VARCHAR",
+        "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ",
+        "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS invite_status VARCHAR",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_accounts_phone ON admin_accounts(phone)",
         "ALTER TABLE admin_accounts ALTER COLUMN password_hash DROP NOT NULL",
     ]
     for statement in statements:
@@ -71,6 +88,7 @@ async def _ensure_platform_columns(conn) -> None:
         statements = [
             "ALTER TABLE outlets ADD COLUMN status VARCHAR DEFAULT 'active'",
             "ALTER TABLE outlets ADD COLUMN notes TEXT",
+            "ALTER TABLE outlets ADD COLUMN table_count INTEGER DEFAULT 10",
             "ALTER TABLE uddoktapay_sessions ADD COLUMN outlet_id VARCHAR",
         ]
         for statement in statements:
@@ -83,10 +101,31 @@ async def _ensure_platform_columns(conn) -> None:
     statements = [
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'active'",
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS notes TEXT",
+        "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS table_count INTEGER DEFAULT 10",
         "ALTER TABLE uddoktapay_sessions ADD COLUMN IF NOT EXISTS outlet_id VARCHAR",
     ]
     for statement in statements:
         await conn.execute(text(statement))
+
+
+async def seed_system_config() -> None:
+    """Seed default system configuration values if not already present."""
+    from models import SystemConfig
+    from sqlalchemy import select
+
+    defaults = {
+        "bkash_enabled": "false",
+        "maintenance_mode": "false",
+        "support_email": "",
+    }
+    async with AsyncSessionLocal() as db:
+        for key, value in defaults.items():
+            existing = (
+                await db.execute(select(SystemConfig).where(SystemConfig.key == key))
+            ).scalar_one_or_none()
+            if existing is None:
+                db.add(SystemConfig(key=key, value=value))
+        await db.commit()
 
 
 async def seed_platform_admin() -> None:

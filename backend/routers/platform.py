@@ -3,13 +3,14 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import desc, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from auth import (
     create_platform_token,
     get_current_platform_admin_id,
+    hash_password,
     verify_password,
 )
 from config import settings
@@ -17,25 +18,38 @@ from database import get_db
 from models import (
     AdminAccount,
     BkashSession,
+    Device,
     MenuItem,
     Order,
     Outlet,
     OutletSubscription,
     PlatformAdmin,
     Restaurant,
+    SystemConfig,
     UddoktaPaySession,
 )
 from routers.orders import _order_to_dict
 from schemas import (
+    OutletAccountCreateRequest,
+    OutletCreateRequest,
     PlatformAccountPatchRequest,
+    PlatformAdminCreateRequest,
+    PlatformAdminPatchRequest,
     PlatformLoginRequest,
     PlatformOutletPatchRequest,
+    PlatformPaymentStatusPatchRequest,
     PlatformSubscriptionRequest,
+    SystemConfigPatchRequest,
     ok,
 )
 from subscription_service import (
+    activate_subscription_from_payment,
     _now,
     get_or_create_subscription,
+    grant_outlet_access,
+    outlet_has_app_access,
+    outlet_needs_activation,
+    resolve_outlet_by_server_id,
     subscription_period_days,
     subscription_to_dict,
 )
@@ -50,6 +64,17 @@ def _admin_dict(admin: PlatformAdmin) -> dict:
         "email": admin.email,
         "displayName": admin.display_name,
         "role": admin.role,
+    }
+
+
+def _platform_admin_full_dict(admin: PlatformAdmin) -> dict:
+    return {
+        "id": admin.id,
+        "email": admin.email,
+        "displayName": admin.display_name,
+        "role": admin.role,
+        "isActive": admin.is_active,
+        "createdAt": admin.created_at.isoformat(),
     }
 
 
@@ -69,15 +94,19 @@ def _outlet_dict(outlet: Outlet, *, restaurant_name: str | None = None) -> dict:
 
 
 def _account_dict(account: AdminAccount) -> dict:
+    from phone_utils import display_phone
+
     return {
         "id": account.id,
         "outletId": account.outlet_id,
         "email": account.email,
         "username": account.username,
+        "phone": display_phone(account.phone),
         "role": account.role,
         "displayName": account.display_name,
         "authProvider": account.auth_provider,
         "isActive": account.is_active,
+        "inviteStatus": account.invite_status,
         "createdAt": account.created_at.isoformat(),
     }
 
@@ -166,6 +195,107 @@ async def _outlet_names_by_server_id(db: AsyncSession) -> dict[str, tuple[str | 
     return {row[0]: (row[1], row[2]) for row in rows}
 
 
+async def _manager_email_for_outlet(db: AsyncSession, outlet_id: str) -> str | None:
+    return (
+        await db.execute(
+            select(AdminAccount.email)
+            .where(AdminAccount.outlet_id == outlet_id, AdminAccount.role == "manager")
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _manager_phone_for_outlet(db: AsyncSession, outlet_id: str) -> str | None:
+    from phone_utils import display_phone
+
+    phone = (
+        await db.execute(
+            select(AdminAccount.phone)
+            .where(AdminAccount.outlet_id == outlet_id, AdminAccount.role == "manager")
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return display_phone(phone)
+
+
+def _activation_dict(
+    *,
+    outlet: Outlet,
+    restaurant_name: str,
+    sub: OutletSubscription | None,
+    manager_email: str | None,
+    manager_phone: str | None = None,
+) -> dict:
+    return {
+        "outletId": outlet.id,
+        "outletName": outlet.name,
+        "restaurantName": restaurant_name,
+        "serverId": outlet.server_id,
+        "managerEmail": manager_email,
+        "managerPhone": manager_phone,
+        "plan": sub.plan if sub else "monthly",
+        "status": sub.status if sub else "none",
+        "hasAppAccess": outlet_has_app_access(sub),
+        "createdAt": outlet.created_at.isoformat(),
+        "requestedAt": (sub.updated_at if sub else outlet.created_at).isoformat(),
+    }
+
+
+async def _list_pending_activations(db: AsyncSession, *, limit: int = 50) -> list[dict]:
+    rows = (
+        await db.execute(
+            select(Outlet, Restaurant.name, OutletSubscription)
+            .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
+            .outerjoin(OutletSubscription, OutletSubscription.outlet_id == Outlet.id)
+            .order_by(desc(Outlet.created_at))
+        )
+    ).all()
+    results: list[dict] = []
+    for outlet, rname, sub in rows:
+        if not outlet_needs_activation(sub):
+            continue
+        manager_email = await _manager_email_for_outlet(db, outlet.id)
+        manager_phone = await _manager_phone_for_outlet(db, outlet.id)
+        results.append(
+            _activation_dict(
+                outlet=outlet,
+                restaurant_name=rname,
+                sub=sub,
+                manager_email=manager_email,
+                manager_phone=manager_phone,
+            )
+        )
+        if len(results) >= limit:
+            break
+    return results
+
+
+async def _count_pending_activations(db: AsyncSession) -> int:
+    rows = (
+        await db.execute(
+            select(Outlet, OutletSubscription)
+            .outerjoin(OutletSubscription, OutletSubscription.outlet_id == Outlet.id)
+        )
+    ).all()
+    return sum(1 for _outlet, sub in rows if outlet_needs_activation(sub))
+
+
+async def _get_system_config(db: AsyncSession) -> dict[str, str]:
+    rows = (await db.execute(select(SystemConfig))).scalars().all()
+    return {r.key: r.value for r in rows}
+
+
+async def _set_system_config(db: AsyncSession, key: str, value: str) -> None:
+    existing = (
+        await db.execute(select(SystemConfig).where(SystemConfig.key == key))
+    ).scalar_one_or_none()
+    if existing:
+        existing.value = value
+        existing.updated_at = _now()
+    else:
+        db.add(SystemConfig(key=key, value=value))
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 @router.post("/auth/login")
@@ -184,7 +314,7 @@ async def platform_login(body: PlatformLoginRequest, db: AsyncSession = Depends(
 
 @router.get("/auth/me")
 async def platform_me(admin: PlatformAdmin = Depends(_require_platform_admin)):
-    return ok(_admin_dict(admin))
+    return ok(_platform_admin_full_dict(admin))
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -207,16 +337,37 @@ async def platform_stats(
             )
         )
     ).scalar() or 0
-    pending_payments = (
-        await db.execute(
-            select(func.count()).select_from(UddoktaPaySession).where(
-                UddoktaPaySession.status == "pending"
-            )
-        )
-    ).scalar() or 0
+    pending_activations = await _count_pending_activations(db)
     orders_7d = (
         await db.execute(
             select(func.count()).select_from(Order).where(Order.created_at >= week_ago)
+        )
+    ).scalar() or 0
+
+    # MRR: sum of paid sessions in last 30 days
+    thirty_days_ago = now - timedelta(days=30)
+    mrr_result = (
+        await db.execute(
+            select(func.sum(UddoktaPaySession.amount))
+            .where(
+                UddoktaPaySession.created_at >= thirty_days_ago,
+                UddoktaPaySession.status.in_(["paid", "verified"]),
+            )
+        )
+    ).scalar()
+    mrr = float(mrr_result or 0)
+
+    # Expiring subs in next 7 days
+    seven_days_ahead = now + timedelta(days=7)
+    expiring_soon = (
+        await db.execute(
+            select(func.count())
+            .select_from(OutletSubscription)
+            .where(
+                OutletSubscription.status == "active",
+                OutletSubscription.expires_at <= seven_days_ahead,
+                OutletSubscription.expires_at >= now,
+            )
         )
     ).scalar() or 0
 
@@ -229,32 +380,159 @@ async def platform_stats(
         )
     ).all()
 
-    recent_payments = (
-        await db.execute(
-            select(UddoktaPaySession).order_by(UddoktaPaySession.created_at.desc()).limit(10)
-        )
-    ).scalars().all()
-    names_by_server = await _outlet_names_by_server_id(db)
+    pending_activation_rows = await _list_pending_activations(db, limit=10)
 
     return ok(
         {
             "restaurants": restaurants_count,
             "outlets": outlets_count,
             "activeSubscriptions": active_subs,
-            "pendingPayments": pending_payments,
+            "pendingActivations": pending_activations,
+            "pendingPayments": pending_activations,
             "ordersLast7Days": orders_7d,
+            "mrr": mrr,
+            "expiringSoon": expiring_soon,
             "recentOutlets": [
                 {**_outlet_dict(o, restaurant_name=rname), "restaurantName": rname}
                 for o, rname in recent_outlets
             ],
-            "recentPayments": [
-                _uddokta_payment_dict(
-                    p,
-                    outlet_name=names_by_server.get(p.server_id, (None, None))[0],
-                    restaurant_name=names_by_server.get(p.server_id, (None, None))[1],
-                )
-                for p in recent_payments
-            ],
+            "pendingActivationsList": pending_activation_rows,
+            "recentPayments": [],
+        }
+    )
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+@router.get("/analytics")
+async def platform_analytics(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    now = _now()
+    six_months_ago = now - timedelta(days=183)
+    thirty_days_ago = now - timedelta(days=30)
+
+    # MRR and ARR
+    mrr_result = (
+        await db.execute(
+            select(func.sum(UddoktaPaySession.amount))
+            .where(
+                UddoktaPaySession.created_at >= thirty_days_ago,
+                UddoktaPaySession.status.in_(["paid", "verified"]),
+            )
+        )
+    ).scalar()
+    mrr = float(mrr_result or 0)
+    arr = mrr * 12
+
+    # Revenue by month (last 6 months), paid sessions only
+    revenue_rows = (
+        await db.execute(
+            select(
+                extract("year", UddoktaPaySession.created_at).label("yr"),
+                extract("month", UddoktaPaySession.created_at).label("mo"),
+                func.sum(UddoktaPaySession.amount).label("revenue"),
+                func.count(UddoktaPaySession.id).label("count"),
+            )
+            .where(
+                UddoktaPaySession.created_at >= six_months_ago,
+                UddoktaPaySession.status.in_(["paid", "verified"]),
+            )
+            .group_by("yr", "mo")
+            .order_by("yr", "mo")
+        )
+    ).all()
+
+    revenue_by_month = [
+        {
+            "month": f"{int(row.yr)}-{int(row.mo):02d}",
+            "revenue": float(row.revenue or 0),
+            "count": int(row.count or 0),
+        }
+        for row in revenue_rows
+    ]
+
+    # New outlets by month (last 6 months)
+    outlet_rows = (
+        await db.execute(
+            select(
+                extract("year", Outlet.created_at).label("yr"),
+                extract("month", Outlet.created_at).label("mo"),
+                func.count(Outlet.id).label("count"),
+            )
+            .where(Outlet.created_at >= six_months_ago)
+            .group_by("yr", "mo")
+            .order_by("yr", "mo")
+        )
+    ).all()
+
+    outlets_by_month = [
+        {
+            "month": f"{int(row.yr)}-{int(row.mo):02d}",
+            "count": int(row.count or 0),
+        }
+        for row in outlet_rows
+    ]
+
+    # Subscription status breakdown
+    sub_rows = (
+        await db.execute(
+            select(OutletSubscription.status, func.count(OutletSubscription.id))
+            .group_by(OutletSubscription.status)
+        )
+    ).all()
+    subscription_breakdown = {row[0]: int(row[1]) for row in sub_rows}
+
+    # Top outlets by total revenue (all time)
+    top_rows = (
+        await db.execute(
+            select(
+                UddoktaPaySession.outlet_id,
+                Outlet.name.label("outlet_name"),
+                Restaurant.name.label("restaurant_name"),
+                func.sum(UddoktaPaySession.amount).label("total_revenue"),
+                func.count(UddoktaPaySession.id).label("payment_count"),
+            )
+            .join(Outlet, UddoktaPaySession.outlet_id == Outlet.id)
+            .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
+            .where(UddoktaPaySession.status.in_(["paid", "verified"]))
+            .group_by(UddoktaPaySession.outlet_id, Outlet.name, Restaurant.name)
+            .order_by(desc("total_revenue"))
+            .limit(10)
+        )
+    ).all()
+
+    top_outlets = [
+        {
+            "outletId": row.outlet_id,
+            "outletName": row.outlet_name,
+            "restaurantName": row.restaurant_name,
+            "totalRevenue": float(row.total_revenue or 0),
+            "paymentCount": int(row.payment_count or 0),
+        }
+        for row in top_rows
+    ]
+
+    # Total revenue all time
+    total_revenue_result = (
+        await db.execute(
+            select(func.sum(UddoktaPaySession.amount))
+            .where(UddoktaPaySession.status.in_(["paid", "verified"]))
+        )
+    ).scalar()
+    total_revenue = float(total_revenue_result or 0)
+
+    return ok(
+        {
+            "mrr": mrr,
+            "arr": arr,
+            "totalRevenue": total_revenue,
+            "revenueByMonth": revenue_by_month,
+            "outletsByMonth": outlets_by_month,
+            "subscriptionBreakdown": subscription_breakdown,
+            "topOutlets": top_outlets,
         }
     )
 
@@ -351,6 +629,53 @@ async def list_outlets(
     return ok([_outlet_dict(o, restaurant_name=rname) for o, rname in rows])
 
 
+@router.post("/outlets")
+async def create_outlet(
+    body: OutletCreateRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    existing = (
+        await db.execute(select(Outlet).where(Outlet.server_id == body.serverId))
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Server ID already exists")
+
+    if body.restaurantId:
+        restaurant = (
+            await db.execute(select(Restaurant).where(Restaurant.id == body.restaurantId))
+        ).scalar_one_or_none()
+        if restaurant is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
+        if body.restaurantName.strip():
+            restaurant.name = body.restaurantName.strip()
+    else:
+        restaurant = Restaurant(name=body.restaurantName.strip())
+        db.add(restaurant)
+        await db.flush()
+
+    outlet = Outlet(
+        restaurant_id=restaurant.id,
+        name=body.outletName.strip(),
+        server_id=body.serverId.strip(),
+        status="active",
+    )
+    db.add(outlet)
+    await db.flush()
+
+    sub = OutletSubscription(
+        outlet_id=outlet.id,
+        plan="monthly",
+        status="pending",
+        starts_at=_now(),
+    )
+    db.add(sub)
+    await db.commit()
+    await db.refresh(outlet)
+    return ok(_outlet_dict(outlet, restaurant_name=restaurant.name))
+
+
 @router.get("/outlets/{outlet_id}")
 async def get_outlet(
     outlet_id: str,
@@ -395,6 +720,77 @@ async def patch_outlet(
     return ok(_outlet_dict(outlet, restaurant_name=outlet.restaurant.name))
 
 
+# ── Outlet activity ───────────────────────────────────────────────────────────
+
+@router.get("/outlets/{outlet_id}/activity")
+async def outlet_activity(
+    outlet_id: str,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    await _get_outlet_or_404(outlet_id, db)
+    now = _now()
+    thirty_days_ago = now - timedelta(days=30)
+
+    total_orders = (
+        await db.execute(
+            select(func.count()).select_from(Order).where(Order.outlet_id == outlet_id)
+        )
+    ).scalar() or 0
+
+    orders_30d = (
+        await db.execute(
+            select(func.count())
+            .select_from(Order)
+            .where(Order.outlet_id == outlet_id, Order.created_at >= thirty_days_ago)
+        )
+    ).scalar() or 0
+
+    last_order = (
+        await db.execute(
+            select(Order)
+            .where(Order.outlet_id == outlet_id)
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    account_count = (
+        await db.execute(
+            select(func.count()).select_from(AdminAccount).where(AdminAccount.outlet_id == outlet_id)
+        )
+    ).scalar() or 0
+
+    device_count = (
+        await db.execute(
+            select(func.count()).select_from(Device).where(Device.outlet_id == outlet_id)
+        )
+    ).scalar() or 0
+
+    total_revenue = (
+        await db.execute(
+            select(func.sum(UddoktaPaySession.amount))
+            .where(
+                UddoktaPaySession.outlet_id == outlet_id,
+                UddoktaPaySession.status.in_(["paid", "verified"]),
+            )
+        )
+    ).scalar()
+
+    return ok(
+        {
+            "outletId": outlet_id,
+            "totalOrders": total_orders,
+            "ordersLast30Days": orders_30d,
+            "lastOrderAt": last_order.created_at.isoformat() if last_order else None,
+            "accountCount": account_count,
+            "deviceCount": device_count,
+            "totalRevenue": float(total_revenue or 0),
+        }
+    )
+
+
 # ── Accounts ──────────────────────────────────────────────────────────────────
 
 @router.get("/outlets/{outlet_id}/accounts")
@@ -413,6 +809,45 @@ async def list_outlet_accounts(
         )
     ).scalars().all()
     return ok([_account_dict(a) for a in accounts])
+
+
+@router.post("/outlets/{outlet_id}/accounts")
+async def create_outlet_account(
+    outlet_id: str,
+    body: OutletAccountCreateRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    await _get_outlet_or_404(outlet_id, db)
+
+    email_taken = (
+        await db.execute(select(AdminAccount).where(AdminAccount.email == body.email.strip().lower()))
+    ).scalar_one_or_none()
+    if email_taken:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
+
+    username_taken = (
+        await db.execute(select(AdminAccount).where(AdminAccount.username == body.username.strip()))
+    ).scalar_one_or_none()
+    if username_taken:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already in use")
+
+    role = body.role if body.role in {"manager", "staff"} else "manager"
+    account = AdminAccount(
+        outlet_id=outlet_id,
+        email=body.email.strip().lower(),
+        username=body.username.strip(),
+        password_hash=hash_password(body.password),
+        role=role,
+        display_name=body.displayName,
+        auth_provider="password",
+        is_active=True,
+    )
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return ok(_account_dict(account))
 
 
 @router.patch("/accounts/{account_id}")
@@ -443,7 +878,85 @@ async def patch_account(
     return ok(_account_dict(account))
 
 
+# ── Platform admins ───────────────────────────────────────────────────────────
+
+@router.get("/admins")
+async def list_platform_admins(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    admins = (
+        await db.execute(select(PlatformAdmin).order_by(PlatformAdmin.created_at))
+    ).scalars().all()
+    return ok([_platform_admin_full_dict(a) for a in admins])
+
+
+@router.post("/admins")
+async def create_platform_admin(
+    body: PlatformAdminCreateRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    email = body.email.strip().lower()
+    existing = (
+        await db.execute(select(PlatformAdmin).where(PlatformAdmin.email == email))
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
+
+    new_admin = PlatformAdmin(
+        email=email,
+        password_hash=hash_password(body.password),
+        display_name=body.displayName,
+        role="admin",
+        is_active=True,
+    )
+    db.add(new_admin)
+    await db.commit()
+    await db.refresh(new_admin)
+    return ok(_platform_admin_full_dict(new_admin))
+
+
+@router.patch("/admins/{admin_id}")
+async def patch_platform_admin(
+    admin_id: str,
+    body: PlatformAdminPatchRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    target = (
+        await db.execute(select(PlatformAdmin).where(PlatformAdmin.id == admin_id))
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found")
+
+    if body.isActive is not None:
+        target.is_active = body.isActive
+    if body.displayName is not None:
+        target.display_name = body.displayName
+    if body.password:
+        target.password_hash = hash_password(body.password)
+
+    await db.commit()
+    await db.refresh(target)
+    return ok(_platform_admin_full_dict(target))
+
+
 # ── Subscriptions ─────────────────────────────────────────────────────────────
+
+@router.get("/activations")
+async def list_pending_activations(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(100, ge=1, le=200),
+):
+    """Outlets waiting for platform admin to grant app access (no payment gateway required)."""
+    _ = admin
+    return ok(await _list_pending_activations(db, limit=limit))
+
 
 @router.get("/subscriptions")
 async def list_subscriptions(
@@ -485,20 +998,46 @@ async def manage_subscription(
     sub = await get_or_create_subscription(db, outlet_id)
     now = _now()
 
-    if body.status not in {"trial", "active", "expired", "cancelled"}:
+    if body.status not in {"pending", "trial", "active", "expired", "cancelled"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status")
 
     sub.plan = body.plan if body.plan in {"monthly", "annual"} else sub.plan
     sub.status = body.status
 
-    if body.extendDays is not None and body.extendDays > 0:
+    # Custom expiresAt takes priority over extendDays
+    custom_expires_at: datetime | None = None
+    if body.expiresAt:
+        try:
+            parsed = datetime.fromisoformat(body.expiresAt.replace("Z", "+00:00"))
+            custom_expires_at = parsed.astimezone(timezone.utc).replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid expiresAt date")
+
+    if body.status == "active":
+        if custom_expires_at is not None:
+            sub.status = "active"
+            sub.starts_at = now
+            sub.expires_at = custom_expires_at
+            sub.updated_at = now
+            await db.flush()
+        else:
+            days = body.extendDays if body.extendDays and body.extendDays > 0 else None
+            sub = await grant_outlet_access(
+                db,
+                outlet_id,
+                plan=sub.plan,
+                extend_days=days,
+            )
+    elif body.extendDays is not None and body.extendDays > 0:
         base = sub.expires_at if sub.expires_at and sub.expires_at > now else now
         sub.expires_at = base + timedelta(days=body.extendDays)
-        sub.status = "active"
+        sub.updated_at = now
     elif body.status == "active" and sub.expires_at is None:
         sub.expires_at = now + timedelta(days=subscription_period_days(sub.plan))
+        sub.updated_at = now
+    else:
+        sub.updated_at = now
 
-    sub.updated_at = now
     await db.commit()
     await db.refresh(sub)
     return ok(subscription_to_dict(sub, outlet_name=outlet.name))
@@ -539,6 +1078,68 @@ async def list_payments(
 
     results.sort(key=lambda x: x["createdAt"], reverse=True)
     return ok(results[:limit])
+
+
+_PAYMENT_STATUSES = frozenset({"pending", "paid", "verified", "failed", "cancelled"})
+
+
+@router.patch("/payments/{gateway}/{payment_id}")
+async def patch_payment_status(
+    gateway: str,
+    payment_id: str,
+    body: PlatformPaymentStatusPatchRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update payment status (e.g. mark paid) so the outlet can use the admin app."""
+    _ = admin
+    status_value = body.status.strip().lower()
+    if status_value not in _PAYMENT_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Use one of: {', '.join(sorted(_PAYMENT_STATUSES))}",
+        )
+
+    gateway_key = gateway.strip().lower()
+    if gateway_key == "uddokta":
+        session = (
+            await db.execute(
+                select(UddoktaPaySession).where(UddoktaPaySession.id == payment_id)
+            )
+        ).scalar_one_or_none()
+        if session is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found.")
+        session.status = status_value
+        if status_value in {"paid", "verified"} and body.activateSubscription:
+            await activate_subscription_from_payment(db, session)
+        await db.commit()
+        await db.refresh(session)
+        names = await _outlet_names_by_server_id(db)
+        oname, rname = names.get(session.server_id, (None, None))
+        return ok(_uddokta_payment_dict(session, outlet_name=oname, restaurant_name=rname))
+
+    if gateway_key == "bkash":
+        session = (
+            await db.execute(select(BkashSession).where(BkashSession.id == payment_id))
+        ).scalar_one_or_none()
+        if session is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found.")
+        session.status = "verified" if status_value in {"paid", "verified"} else status_value
+        if status_value in {"paid", "verified"} and body.activateSubscription:
+            outlet = await resolve_outlet_by_server_id(db, session.server_id)
+            if outlet is not None:
+                sub = await get_or_create_subscription(db, outlet.id)
+                now = _now()
+                sub.status = "active"
+                sub.expires_at = now + timedelta(days=subscription_period_days("monthly"))
+                sub.updated_at = now
+        await db.commit()
+        await db.refresh(session)
+        names = await _outlet_names_by_server_id(db)
+        oname, rname = names.get(session.server_id, (None, None))
+        return ok(_bkash_payment_dict(session, outlet_name=oname, restaurant_name=rname))
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown gateway.")
 
 
 # ── Orders (read-only) ────────────────────────────────────────────────────────
@@ -596,15 +1197,196 @@ async def outlet_customer_info(
     )
 
 
+# ── Alerts ────────────────────────────────────────────────────────────────────
+
+@router.get("/alerts")
+async def platform_alerts(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    now = _now()
+    seven_days_ahead = now + timedelta(days=7)
+    twenty_four_hours_ago = now - timedelta(hours=24)
+
+    alerts: list[dict] = []
+
+    # Subscriptions expiring in <= 7 days
+    expiring = (
+        await db.execute(
+            select(OutletSubscription, Outlet.name, Restaurant.name)
+            .join(Outlet, OutletSubscription.outlet_id == Outlet.id)
+            .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
+            .where(
+                OutletSubscription.status == "active",
+                OutletSubscription.expires_at <= seven_days_ahead,
+                OutletSubscription.expires_at >= now,
+            )
+            .order_by(OutletSubscription.expires_at)
+            .limit(20)
+        )
+    ).all()
+    for sub, oname, rname in expiring:
+        days_left = max(0, (sub.expires_at - now).days) if sub.expires_at else 0
+        alerts.append(
+            {
+                "type": "expiring_subscription",
+                "severity": "warning" if days_left > 2 else "critical",
+                "title": f"Subscription expiring soon — {oname}",
+                "message": f"{rname} · {oname} subscription expires in {days_left} day(s)",
+                "outletId": sub.outlet_id,
+                "meta": {"expiresAt": sub.expires_at.isoformat() if sub.expires_at else None},
+            }
+        )
+
+    pending_count = await _count_pending_activations(db)
+    if pending_count > 0:
+        alerts.append(
+            {
+                "type": "pending_activations",
+                "severity": "warning",
+                "title": f"{pending_count} restaurant(s) awaiting activation",
+                "message": "Open Activations to grant app access after plan selection",
+                "outletId": None,
+                "meta": {"count": pending_count},
+            }
+        )
+
+    # Suspended outlets
+    suspended = (
+        await db.execute(
+            select(Outlet, Restaurant.name)
+            .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
+            .where(Outlet.status == "suspended")
+            .limit(10)
+        )
+    ).all()
+    for outlet, rname in suspended:
+        alerts.append(
+            {
+                "type": "suspended_outlet",
+                "severity": "info",
+                "title": f"Outlet suspended — {outlet.name}",
+                "message": f"{rname} · {outlet.name} is currently suspended",
+                "outletId": outlet.id,
+                "meta": {},
+            }
+        )
+
+    # New outlet registrations in last 24h
+    new_outlets = (
+        await db.execute(
+            select(Outlet, Restaurant.name)
+            .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
+            .where(Outlet.created_at >= twenty_four_hours_ago)
+            .order_by(Outlet.created_at.desc())
+            .limit(10)
+        )
+    ).all()
+    for outlet, rname in new_outlets:
+        alerts.append(
+            {
+                "type": "new_registration",
+                "severity": "success",
+                "title": f"New outlet registered — {outlet.name}",
+                "message": f"{rname} · {outlet.name} joined in the last 24 hours",
+                "outletId": outlet.id,
+                "meta": {"createdAt": outlet.created_at.isoformat()},
+            }
+        )
+
+    return ok(alerts)
+
+
+# ── System health ─────────────────────────────────────────────────────────────
+
+@router.get("/health")
+async def platform_health(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    now = _now()
+    twenty_four_hours_ago = now - timedelta(hours=24)
+
+    db_ok = True
+    try:
+        await db.execute(select(func.count()).select_from(Restaurant))
+    except Exception:
+        db_ok = False
+
+    restaurants_count = (await db.execute(select(func.count()).select_from(Restaurant))).scalar() or 0
+    outlets_count = (await db.execute(select(func.count()).select_from(Outlet))).scalar() or 0
+    orders_24h = (
+        await db.execute(
+            select(func.count()).select_from(Order).where(Order.created_at >= twenty_four_hours_ago)
+        )
+    ).scalar() or 0
+
+    from storage import use_r2
+    storage_mode = "r2" if use_r2() else "local"
+
+    return ok(
+        {
+            "api": "ok",
+            "database": "ok" if db_ok else "error",
+            "storageMode": storage_mode,
+            "baseUrl": settings.BASE_URL,
+            "uddoktaPayConfigured": uddokta_configured(),
+            "restaurants": restaurants_count,
+            "outlets": outlets_count,
+            "ordersLast24h": orders_24h,
+            "checkedAt": now.isoformat(),
+        }
+    )
+
+
 # ── System config ─────────────────────────────────────────────────────────────
 
 @router.get("/system/config")
-async def system_config(admin: PlatformAdmin = Depends(_require_platform_admin)):
+async def system_config(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
     _ = admin
+    cfg = await _get_system_config(db)
     return ok(
         {
-            "baseUrl": settings.BASE_URL,
+            "baseUrl": cfg.get("base_url") or settings.BASE_URL,
             "uddoktaPayEnabled": uddokta_configured(),
             "uddoktaPaySandbox": settings.UDDOKTAPAY_SANDBOX,
+            "bkashEnabled": cfg.get("bkash_enabled", "false") == "true",
+            "maintenanceMode": cfg.get("maintenance_mode", "false") == "true",
+            "supportEmail": cfg.get("support_email", ""),
+        }
+    )
+
+
+@router.patch("/system/config")
+async def update_system_config(
+    body: SystemConfigPatchRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    if body.baseUrl is not None:
+        await _set_system_config(db, "base_url", body.baseUrl.strip())
+    if body.bkashEnabled is not None:
+        await _set_system_config(db, "bkash_enabled", "true" if body.bkashEnabled else "false")
+    if body.maintenanceMode is not None:
+        await _set_system_config(db, "maintenance_mode", "true" if body.maintenanceMode else "false")
+    if body.supportEmail is not None:
+        await _set_system_config(db, "support_email", body.supportEmail.strip())
+    await db.commit()
+
+    cfg = await _get_system_config(db)
+    return ok(
+        {
+            "baseUrl": cfg.get("base_url") or settings.BASE_URL,
+            "uddoktaPayEnabled": uddokta_configured(),
+            "uddoktaPaySandbox": settings.UDDOKTAPAY_SANDBOX,
+            "bkashEnabled": cfg.get("bkash_enabled", "false") == "true",
+            "maintenanceMode": cfg.get("maintenance_mode", "false") == "true",
+            "supportEmail": cfg.get("support_email", ""),
         }
     )

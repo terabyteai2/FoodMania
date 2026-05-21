@@ -1,6 +1,6 @@
 import base64
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pydantic
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
@@ -8,12 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import storage
-from auth import get_current_outlet_id
+from auth import get_current_device_payload, get_current_outlet_id
 from config import settings
 from database import get_db
-from models import MenuItem, Outlet
+from models import AdminAccount, MenuItem, Outlet
 from routers.ws import manager
 from schemas import ImageUploadRequest, MenuItemPayload, ok
+from services.menu_scan import MenuScanError, extract_menu_page_texts, parse_menu_text
 
 router = APIRouter()
 
@@ -42,6 +43,42 @@ def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
         )
 
 
+def _parse_since(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid since timestamp.",
+        ) from exc
+
+    dt = parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if dt > now + timedelta(seconds=30):
+        return now - timedelta(seconds=5)
+    return dt
+
+
+async def _require_manager_scan_access(
+    outlet_id: str,
+    payload: dict,
+    db: AsyncSession,
+) -> None:
+    token_outlet_id = str(payload.get("sub") or "")
+    account_id = str(payload.get("account_id") or "")
+    if token_outlet_id != outlet_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Outlet token mismatch.")
+    if not account_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Manager account token required.")
+    account = (
+        await db.execute(select(AdminAccount).where(AdminAccount.id == account_id))
+    ).scalar_one_or_none()
+    if account is None or not account.is_active or account.outlet_id != outlet_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Manager account is not active.")
+    if account.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
+
+
 def _save_data_url_image(image_url: str | None, request: Request) -> str | None:
     if not image_url or not image_url.startswith("data:image/"):
         return image_url
@@ -66,7 +103,7 @@ async def pull_menu(
     _ensure_outlet(current_outlet, outlet_id)
     query = select(MenuItem).where(MenuItem.outlet_id == outlet_id)
     if since:
-        dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        dt = _parse_since(since)
         query = query.where(MenuItem.updated_at > dt)
     items = (await db.execute(query)).scalars().all()
     return ok([_item_to_dict(i) for i in items])
@@ -194,6 +231,52 @@ async def upload_menu_image(
     filename = f"{uuid.uuid4()}.{ext}"
     public_url = storage.save(f"menu_images/{filename}", image_bytes, request)
     return ok({"publicUrl": public_url})
+
+
+@router.post("/outlets/{outlet_id}/menu/scan")
+async def scan_menu_pages(
+    outlet_id: str,
+    files: list[UploadFile] = File(...),
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_manager_scan_access(outlet_id, payload, db)
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one menu image.")
+
+    pages: list[tuple[bytes, str]] = []
+    for file in files:
+        content_type = (file.content_type or "").lower()
+        if not content_type.startswith("image/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{file.filename or 'Uploaded file'} is not an image.",
+            )
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{file.filename or 'Uploaded file'} is empty.",
+            )
+        pages.append((image_bytes, content_type))
+
+    try:
+        page_texts = await extract_menu_page_texts(pages)
+        parsed = await parse_menu_text(page_texts)
+    except MenuScanError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
+
+    return ok(
+        {
+            "items": [item.model_dump() for item in parsed.items],
+            "provider": parsed.provider,
+            "pageCount": len(pages),
+            "warnings": parsed.warnings,
+        }
+    )
 
 
 # ── Hero media endpoints (welcome-screen video + menu-page slider images) ─────

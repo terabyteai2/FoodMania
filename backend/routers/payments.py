@@ -1,6 +1,4 @@
 import uuid
-from html import escape
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -12,6 +10,7 @@ from models import BkashSession, UddoktaPaySession
 from subscription_service import activate_subscription_from_payment, resolve_outlet_by_server_id
 from schemas import BkashCreateRequest, UddoktaPayCreateRequest, UddoktaPayVerifyRequest, ok
 from payment_urls import is_local_or_private_url, payment_callback_base, uddokta_redirect_warning
+from payment_result_pages import render_payment_result_page, resolve_return_variant
 from uddoktapay_client import (
     UddoktaPayError,
     create_checkout,
@@ -258,44 +257,69 @@ async def uddokta_return(
     request: Request,
     payment_id: str | None = Query(None),
     invoice_id: str | None = Query(None),
+    status: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Browser redirect after checkout. WebView detects status=success in this URL."""
+    """Browser redirect after checkout. WebView detects status=success on this URL."""
     pid = payment_id or request.query_params.get("payment_id")
     inv = invoice_id or request.query_params.get("invoice_id")
-    if pid and inv:
+    status_value = status or request.query_params.get("status")
+    variant = resolve_return_variant(status_value)
+
+    if variant == "success" and pid and inv:
         session = (
             await db.execute(select(UddoktaPaySession).where(UddoktaPaySession.id == pid))
         ).scalar_one_or_none()
         if session is not None and session.invoice_id != inv:
             session.invoice_id = inv
             await db.commit()
+        if session is not None and session.status == "pending":
+            session.status = "paid"
+            session.invoice_id = inv
+            await activate_subscription_from_payment(db, session)
+            await db.commit()
 
-    safe_pid = escape(pid or "")
-    safe_inv = escape(inv or "")
-    html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Payment success</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:48px;">
-<h2>Payment successful</h2>
-<p>You can close this window and return to the app.</p>
-<p style="color:#666;font-size:12px;">status=success payment_id={safe_pid} invoice_id={safe_inv}</p>
-</body></html>"""
+    html = render_payment_result_page(
+        variant,
+        payment_id=pid,
+        invoice_id=inv,
+    )
     return HTMLResponse(
         content=html,
         headers={"Cache-Control": "no-store"},
     )
 
 
+@router.get("/payments/uddokta/fail", response_class=HTMLResponse)
+async def uddokta_fail(
+    request: Request,
+    payment_id: str | None = Query(None),
+    invoice_id: str | None = Query(None),
+):
+    pid = payment_id or request.query_params.get("payment_id")
+    inv = invoice_id or request.query_params.get("invoice_id")
+    html = render_payment_result_page(
+        "fail",
+        payment_id=pid,
+        invoice_id=inv,
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
 @router.get("/payments/uddokta/cancel", response_class=HTMLResponse)
-async def uddokta_cancel(payment_id: str | None = Query(None)):
-    safe_pid = escape(payment_id or "")
-    html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Payment canceled</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:48px;">
-<h2>Payment canceled</h2>
-<p>status=canceled payment_id={safe_pid}</p>
-</body></html>"""
-    return HTMLResponse(content=html)
+async def uddokta_cancel(
+    request: Request,
+    payment_id: str | None = Query(None),
+    invoice_id: str | None = Query(None),
+):
+    pid = payment_id or request.query_params.get("payment_id")
+    inv = invoice_id or request.query_params.get("invoice_id")
+    html = render_payment_result_page(
+        "cancel",
+        payment_id=pid,
+        invoice_id=inv,
+    )
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/payments/uddokta/webhook")

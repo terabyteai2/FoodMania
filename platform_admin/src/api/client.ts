@@ -39,27 +39,51 @@ export async function apiFetch<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const body = (await res.json()) as ApiResponse<T> & { detail?: string };
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (networkErr) {
+    throw new ApiError(
+      `Cannot reach server at ${API_BASE || "/"} — check your connection`,
+      0,
+    );
+  }
+
+  // Parse response body safely — server may return empty body or HTML error pages
+  let body: (ApiResponse<T> & { detail?: string }) | null = null;
+  try {
+    const text = await res.text();
+    if (text.trim()) {
+      body = JSON.parse(text) as ApiResponse<T> & { detail?: string };
+    }
+  } catch {
+    throw new ApiError(`Server returned non-JSON response (HTTP ${res.status})`, res.status);
+  }
 
   if (!res.ok) {
     const msg =
-      body.error ||
-      (typeof body.detail === "string" ? body.detail : undefined) ||
-      res.statusText;
+      (body?.error) ||
+      (body && typeof body.detail === "string" ? body.detail : undefined) ||
+      `HTTP ${res.status}: ${res.statusText}`;
     throw new ApiError(msg, res.status);
   }
-  if (body.error) {
+
+  if (body?.error) {
     throw new ApiError(body.error, res.status);
   }
-  return body.data as T;
+
+  return (body?.data ?? undefined) as T;
 }
+
+// ── Core types ────────────────────────────────────────────────────────────────
 
 export type PlatformAdmin = {
   id: string;
   email: string;
   displayName: string | null;
   role: string;
+  isActive?: boolean;
+  createdAt?: string;
 };
 
 export type Outlet = {
@@ -93,11 +117,27 @@ export type AdminAccount = {
   outletId: string;
   email: string;
   username: string;
+  phone: string | null;
   role: string;
   displayName: string | null;
   authProvider: string;
   isActive: boolean;
+  inviteStatus: string | null;
   createdAt: string;
+};
+
+export type Activation = {
+  outletId: string;
+  outletName: string;
+  restaurantName: string;
+  serverId: string;
+  managerEmail: string | null;
+  managerPhone: string | null;
+  plan: string;
+  status: string;
+  hasAppAccess: boolean;
+  createdAt: string;
+  requestedAt: string;
 };
 
 export type Payment = {
@@ -134,10 +174,14 @@ export type Stats = {
   restaurants: number;
   outlets: number;
   activeSubscriptions: number;
-  pendingPayments: number;
+  pendingActivations: number;
+  pendingPayments?: number;
   ordersLast7Days: number;
+  mrr: number;
+  expiringSoon: number;
   recentOutlets: Outlet[];
-  recentPayments: Payment[];
+  pendingActivationsList?: Activation[];
+  recentPayments?: Payment[];
 };
 
 export type Restaurant = {
@@ -145,4 +189,70 @@ export type Restaurant = {
   name: string;
   createdAt: string;
   outlets: Outlet[];
+};
+
+// ── Analytics types ───────────────────────────────────────────────────────────
+
+export type Analytics = {
+  mrr: number;
+  arr: number;
+  totalRevenue: number;
+  revenueByMonth: { month: string; revenue: number; count: number }[];
+  outletsByMonth: { month: string; count: number }[];
+  subscriptionBreakdown: Record<string, number>;
+  topOutlets: {
+    outletId: string;
+    outletName: string;
+    restaurantName: string;
+    totalRevenue: number;
+    paymentCount: number;
+  }[];
+};
+
+// ── Alert types ───────────────────────────────────────────────────────────────
+
+export type Alert = {
+  type: string;
+  severity: "info" | "warning" | "critical" | "success";
+  title: string;
+  message: string;
+  outletId: string | null;
+  meta: Record<string, unknown>;
+};
+
+// ── System config types ───────────────────────────────────────────────────────
+
+export type SystemConfig = {
+  baseUrl: string;
+  uddoktaPayEnabled: boolean;
+  uddoktaPaySandbox: boolean;
+  bkashEnabled: boolean;
+  maintenanceMode: boolean;
+  supportEmail: string;
+};
+
+// ── Health types ──────────────────────────────────────────────────────────────
+
+export type PlatformHealth = {
+  api: string;
+  database: string;
+  storageMode: string;
+  baseUrl: string;
+  uddoktaPayConfigured: boolean;
+  restaurants: number;
+  outlets: number;
+  ordersLast24h: number;
+  checkedAt: string;
+};
+
+// ── Outlet activity types ─────────────────────────────────────────────────────
+
+export type OutletActivity = {
+  outletId: string;
+  totalOrders: number;
+  ordersLast30Days: number;
+  lastOrderAt: string | null;
+  accountCount: number;
+  deviceCount: number;
+  totalRevenue: number;
 };

@@ -7,8 +7,14 @@ export default defineConfig({
     host: true,
     port: 5174,
     proxy: {
+      // Only used when VITE_API_BASE_URL is NOT set (relative URL mode).
+      // When VITE_API_BASE_URL=http://160.187.130.80, these are bypassed.
       "/platform": {
-        target: "http://127.0.0.1:8000",
+        target: "http://160.187.130.80",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: "http://160.187.130.80",
         changeOrigin: true,
       },
     },

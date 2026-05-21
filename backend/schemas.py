@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def ok(data: Any) -> dict:
@@ -20,6 +20,7 @@ class BootstrapRequest(BaseModel):
     outletName: str
     restaurantId: str | None = None
     outletId: str | None = None
+    tableCount: int | None = Field(default=None, ge=1, le=200)
 
 
 class BootstrapResponse(BaseModel):
@@ -29,6 +30,7 @@ class BootstrapResponse(BaseModel):
     restaurantName: str
     outletName: str
     deviceToken: str
+    tableCount: int = Field(default=10, ge=1, le=200)
 
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
@@ -57,10 +59,38 @@ class GoogleAdminAuthRequest(BaseModel):
     outletName: str | None = None
     restaurantId: str | None = None
     outletId: str | None = None
+    tableCount: int | None = Field(default=None, ge=1, le=200)
+
+
+class PhoneSendOtpRequest(BaseModel):
+    phone: str
+    """Android SMS Retriever 11-char hash from SmsAutoFill().getAppSignature — enables auto-read OTP."""
+    appSignature: str | None = None
+
+
+class PhoneVerifyOtpRequest(BaseModel):
+    phone: str
+    code: str
+
+
+class PhoneCompleteManagerSignupRequest(BaseModel):
+    signupToken: str
+    restaurantName: str
+    outletName: str | None = "Main Outlet"
+    serverId: str | None = None
+    outletId: str | None = None
+    tableCount: int | None = Field(default=None, ge=1, le=200)
+
+
+class StaffInviteRespondRequest(BaseModel):
+    signupToken: str
+    inviteId: str
+    accept: bool
 
 
 class StaffInviteRequest(BaseModel):
-    email: str
+    phone: str | None = None
+    email: str | None = None
     displayName: str | None = None
 
 
@@ -85,6 +115,7 @@ class DeviceRegisterRequest(BaseModel):
     outletId: str
     restaurantName: str
     outletName: str
+    tableCount: int | None = Field(default=None, ge=1, le=200)
 
 
 # ── Menu ──────────────────────────────────────────────────────────────────────
@@ -103,6 +134,47 @@ class MenuItemPayload(BaseModel):
 class ImageUploadRequest(BaseModel):
     dataUrl: str
     fileName: str = "menu_image.jpg"
+
+
+class MenuScanCandidate(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    category: str = Field(default="General", min_length=1)
+    price: float = Field(gt=0)
+    isAvailable: bool = True
+
+
+# ── Inventory ─────────────────────────────────────────────────────────────────
+
+class InventoryItemPayload(BaseModel):
+    id: str
+    name: str
+    category: str | None = ""
+    unit: str | None = "pcs"
+    quantity: float = 0
+    minThreshold: float = 0
+    costPerUnit: float = 0
+    notes: str | None = ""
+    createdAt: str | None = None
+    updatedAt: str | None = None
+
+
+class StockAdjustmentPayload(BaseModel):
+    id: str | None = None
+    inventoryItemId: str
+    delta: float
+    type: str = "correction"
+    note: str | None = ""
+    totalCostBdt: float = 0
+    createdAt: str | None = None
+
+
+class DailyStockCountPayload(BaseModel):
+    id: str | None = None
+    inventoryItemId: str
+    countDate: str
+    quantity: float
+    createdAt: str | None = None
 
 
 # ── Orders ────────────────────────────────────────────────────────────────────
@@ -168,7 +240,51 @@ class PlatformAccountPatchRequest(BaseModel):
     displayName: str | None = None
 
 
+class OnboardingPlanRequest(BaseModel):
+    plan: str = "monthly"
+
+
 class PlatformSubscriptionRequest(BaseModel):
     plan: str = "monthly"
     status: str = "active"
     extendDays: int | None = None
+    expiresAt: str | None = None  # ISO date string — takes priority over extendDays
+
+
+class PlatformPaymentStatusPatchRequest(BaseModel):
+    status: str
+    activateSubscription: bool = True
+
+
+class PlatformAdminCreateRequest(BaseModel):
+    email: str
+    password: str
+    displayName: str | None = None
+
+
+class PlatformAdminPatchRequest(BaseModel):
+    isActive: bool | None = None
+    displayName: str | None = None
+    password: str | None = None
+
+
+class SystemConfigPatchRequest(BaseModel):
+    baseUrl: str | None = None
+    bkashEnabled: bool | None = None
+    maintenanceMode: bool | None = None
+    supportEmail: str | None = None
+
+
+class OutletCreateRequest(BaseModel):
+    restaurantId: str | None = None
+    restaurantName: str
+    outletName: str
+    serverId: str
+
+
+class OutletAccountCreateRequest(BaseModel):
+    email: str
+    username: str
+    password: str
+    displayName: str | None = None
+    role: str = "manager"

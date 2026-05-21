@@ -54,6 +54,7 @@ async def bootstrap_tenant(
             restaurant_id=restaurant.id,
             name=body.outletName,
             server_id=body.serverId,
+            table_count=body.tableCount or 10,
         )
         db.add(outlet)
         await db.commit()
@@ -68,6 +69,9 @@ async def bootstrap_tenant(
         if body.outletName.strip() and outlet.name != body.outletName:
             outlet.name = body.outletName
             changed = True
+        if body.tableCount is not None and outlet.table_count != body.tableCount:
+            outlet.table_count = body.tableCount
+            changed = True
         if changed:
             await db.commit()
             await db.refresh(outlet)
@@ -80,6 +84,7 @@ async def bootstrap_tenant(
         "outletId": outlet.id,
         "restaurantName": restaurant.name,
         "outletName": outlet.name,
+        "tableCount": outlet.table_count or 10,
         "deviceToken": token,
         "publicApiBaseUrl": client_visible_api_base(request),
     })

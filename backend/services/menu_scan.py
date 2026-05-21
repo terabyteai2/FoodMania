@@ -1,0 +1,313 @@
+import asyncio
+import json
+import os
+import tempfile
+import threading
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+from pydantic import ValidationError
+
+from config import settings
+from schemas import MenuScanCandidate
+
+
+LLM_TIMEOUT_SECONDS = 90.0
+_ocr_engine: Any | None = None
+_ocr_lock = threading.Lock()
+
+
+class MenuScanError(RuntimeError):
+    pass
+
+
+@dataclass
+class MenuScanParseResult:
+    items: list[MenuScanCandidate]
+    provider: str
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class _Provider:
+    name: str
+    api_key: str
+    model: str
+    url: str
+    supports_schema: bool
+
+
+def _providers() -> list[_Provider]:
+    return [
+        _Provider(
+            name="xai",
+            api_key=settings.XAI_API_KEY.strip(),
+            model=settings.MENU_SCAN_XAI_MODEL.strip(),
+            url="https://api.x.ai/v1/chat/completions",
+            supports_schema=True,
+        ),
+        _Provider(
+            name="deepseek",
+            api_key=settings.DEEPSEEK_API_KEY.strip(),
+            model=settings.MENU_SCAN_DEEPSEEK_MODEL.strip(),
+            url="https://api.deepseek.com/chat/completions",
+            supports_schema=False,
+        ),
+        _Provider(
+            name="openai",
+            api_key=settings.OPENAI_API_KEY.strip(),
+            model=settings.MENU_SCAN_OPENAI_MODEL.strip(),
+            url="https://api.openai.com/v1/chat/completions",
+            supports_schema=True,
+        ),
+    ]
+
+
+def _menu_scan_schema() -> dict[str, Any]:
+    item = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "category": {"type": "string"},
+            "price": {"type": "number"},
+            "isAvailable": {"type": "boolean"},
+        },
+        "required": ["name", "description", "category", "price", "isAvailable"],
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"items": {"type": "array", "items": item}},
+        "required": ["items"],
+    }
+
+
+def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
+    pages = "\n\n".join(
+        f"--- MENU PAGE {index + 1} ---\n{text.strip()}"
+        for index, text in enumerate(page_texts)
+        if text.strip()
+    )
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Return JSON only. Extract restaurant menu items from OCR text "
+                "into the provided schema. Ignore addresses, phone numbers, "
+                "hours, tax lines, headings that are not categories, and "
+                "decorative text. Each item must have a positive numeric price. "
+                "Use category General when no category is clear. Use "
+                "isAvailable true. If the OCR text has no item description, "
+                "write a short appetizing description for that item."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Parse these OCR menu pages into JSON with an items array. "
+                "Do not invent items that are not visible in OCR text.\n\n"
+                f"{pages}"
+            ),
+        },
+    ]
+
+
+def _request_payload(provider: _Provider, page_texts: list[str]) -> dict[str, Any]:
+    response_format: dict[str, Any]
+    if provider.supports_schema:
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "menu_scan_import",
+                "strict": True,
+                "schema": _menu_scan_schema(),
+            },
+        }
+    else:
+        response_format = {"type": "json_object"}
+    return {
+        "model": provider.model,
+        "temperature": 0,
+        "messages": _prompt(page_texts),
+        "response_format": response_format,
+    }
+
+
+def _message_content(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and isinstance(part.get("text"), str)
+        )
+    return ""
+
+
+def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
+    if not raw_content.strip():
+        raise MenuScanError("The LLM returned an empty response.")
+    try:
+        decoded = json.loads(raw_content)
+    except json.JSONDecodeError as error:
+        raise MenuScanError("The LLM response was not valid JSON.") from error
+    raw_items = decoded.get("items") if isinstance(decoded, dict) else None
+    if not isinstance(raw_items, list):
+        raise MenuScanError("The LLM JSON did not include an items array.")
+
+    items: list[MenuScanCandidate] = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        normalized = {
+            "name": str(raw.get("name") or "").strip(),
+            "description": str(raw.get("description") or "").strip(),
+            "category": str(raw.get("category") or "General").strip() or "General",
+            "price": raw.get("price"),
+            "isAvailable": raw.get("isAvailable", True),
+        }
+        try:
+            items.append(MenuScanCandidate.model_validate(normalized))
+        except ValidationError:
+            continue
+    if not items:
+        raise MenuScanError("The LLM returned no valid priced menu items.")
+    return items
+
+
+async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
+    clean_pages = [text.strip() for text in page_texts if text.strip()]
+    if not clean_pages:
+        raise MenuScanError("OCR did not find readable menu text.")
+
+    warnings: list[str] = []
+    configured = [provider for provider in _providers() if provider.api_key and provider.model]
+    if not configured:
+        raise MenuScanError("Menu scan AI is not configured on the backend.")
+
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
+        for provider in configured:
+            try:
+                response = await client.post(
+                    provider.url,
+                    headers={
+                        "Authorization": f"Bearer {provider.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=_request_payload(provider, clean_pages),
+                )
+                response.raise_for_status()
+                decoded = response.json()
+                items = _validated_items(_message_content(decoded))
+                return MenuScanParseResult(
+                    items=items,
+                    provider=provider.name,
+                    warnings=warnings,
+                )
+            except (httpx.HTTPError, ValueError, MenuScanError) as error:
+                warnings.append(f"{provider.name}: {error}")
+
+    raise MenuScanError("All configured menu scan AI providers failed.")
+
+
+def _get_ocr_engine() -> Any:
+    global _ocr_engine
+    with _ocr_lock:
+        if _ocr_engine is not None:
+            return _ocr_engine
+        try:
+            from paddleocr import PaddleOCR
+        except ImportError as error:
+            raise MenuScanError("PaddleOCR is not installed on the backend.") from error
+        _ocr_engine = PaddleOCR(
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+        )
+        return _ocr_engine
+
+
+def _run_ocr(path: str) -> Any:
+    engine = _get_ocr_engine()
+    if hasattr(engine, "predict"):
+        try:
+            return engine.predict(input=path)
+        except TypeError:
+            return engine.predict(path)
+    return engine.ocr(path, cls=False)
+
+
+def _collect_text(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if hasattr(value, "json"):
+        try:
+            return _collect_text(value.json)
+        except Exception:
+            pass
+    if isinstance(value, dict):
+        for key in ("rec_texts", "texts"):
+            raw = value.get(key)
+            if isinstance(raw, list):
+                return [str(item).strip() for item in raw if str(item).strip()]
+        for key in ("rec_text", "text"):
+            raw = value.get(key)
+            if isinstance(raw, str) and raw.strip():
+                return [raw.strip()]
+        collected: list[str] = []
+        for nested in value.values():
+            collected.extend(_collect_text(nested))
+        return collected
+    if isinstance(value, (list, tuple)):
+        if (
+            len(value) >= 2
+            and isinstance(value[1], (list, tuple))
+            and value[1]
+            and isinstance(value[1][0], str)
+        ):
+            return [value[1][0].strip()] if value[1][0].strip() else []
+        collected: list[str] = []
+        for nested in value:
+            collected.extend(_collect_text(nested))
+        return collected
+    return []
+
+
+def _suffix_for_content_type(content_type: str) -> str:
+    if "png" in content_type:
+        return ".png"
+    if "webp" in content_type:
+        return ".webp"
+    return ".jpg"
+
+
+def _extract_page_text(image_bytes: bytes, content_type: str) -> str:
+    handle = tempfile.NamedTemporaryFile(delete=False, suffix=_suffix_for_content_type(content_type))
+    try:
+        with handle:
+            handle.write(image_bytes)
+        texts = _collect_text(_run_ocr(handle.name))
+        return "\n".join(texts).strip()
+    finally:
+        try:
+            os.unlink(handle.name)
+        except FileNotFoundError:
+            pass
+
+
+async def extract_menu_page_texts(pages: list[tuple[bytes, str]]) -> list[str]:
+    return await asyncio.gather(
+        *[
+            asyncio.to_thread(_extract_page_text, image_bytes, content_type)
+            for image_bytes, content_type in pages
+        ]
+    )

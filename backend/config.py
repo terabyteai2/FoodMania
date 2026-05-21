@@ -42,6 +42,40 @@ class Settings(BaseSettings):
     # Non-empty enables POST /admin/staff/dev-bypass-login (no Google) for local testing only.
     STAFF_DEV_BYPASS_SECRET: str = ""
 
+    # OneCodeSoft SMS (Bangladesh) — phone OTP for manager/staff onboarding
+    ONECODESOFT_API_KEY: str = ""
+    ONECODESOFT_SENDER_ID: str = ""
+    ONECODESOFT_API_URL: str = "https://sms.onecodesoft.com/api/send-sms"
+
+    # Legacy Twilio (unused when OneCodeSoft is configured)
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_VERIFY_SERVICE_SID: str = ""
+
+    # development | production — dev allows OTP 000000 when Twilio is unset
+    APP_ENV: str = "development"
+
+    # When true, verify-otp accepts DEV_OTP_BYPASS_CODE even if Twilio is configured.
+    DEV_OTP_BYPASS_ENABLED: str = ""
+    DEV_OTP_BYPASS_CODE: str = "000000"
+
+    # One-tap demo manager login (no Twilio). Empty = auto (on in development only).
+    DEMO_MANAGER_LOGIN_ENABLED: str = ""
+    DEMO_MANAGER_SERVER_ID: str = "DEMO-MANAGER"
+
+    # Optional Sentry error reporting
+    SENTRY_DSN: str = ""
+    SENTRY_ENVIRONMENT: str = ""
+    GIT_COMMIT_SHA: str = ""
+
+    # Scan Menu: OCR text is parsed by xAI first, then DeepSeek, then OpenAI.
+    XAI_API_KEY: str = ""
+    DEEPSEEK_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    MENU_SCAN_XAI_MODEL: str = "grok-4.3"
+    MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
+    MENU_SCAN_OPENAI_MODEL: str = "gpt-4.1-mini"
+
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"
 UDDOKTAPAY_LIVE_DEFAULT = "https://pay.uddoktapay.com"

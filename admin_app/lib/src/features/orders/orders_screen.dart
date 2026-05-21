@@ -1,0 +1,2286 @@
+import 'dart:convert';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
+import '../../app_scope.dart';
+import '../../core/localization/app_strings.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/notification_center.dart';
+import '../../core/widgets/pos_compact_ui.dart';
+import '../../models/menu_item.dart';
+import '../../models/order_item.dart';
+import '../../models/order_model.dart';
+import '../../models/order_source.dart';
+import '../../models/order_status.dart';
+import 'order_list_filters.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────────────────────
+
+class OrdersScreen extends StatefulWidget {
+  const OrdersScreen({super.key});
+
+  @override
+  State<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends State<OrdersScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  int? _lastPendingCount;
+  OrderListFilters _filters = OrderListFilters.none;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final allOrders = app
+        .ordersFor()
+        .where((o) => _filters.matches(o))
+        .toList(growable: false);
+
+    final pendingOrders = allOrders
+        .where((o) => o.status.adminStatus == OrderStatus.pending)
+        .toList(growable: false);
+    pendingOrders.sort(_sortOrders);
+    final acceptedOrders = allOrders
+        .where(
+          (o) =>
+              o.status.adminStatus == OrderStatus.accepted ||
+              o.status.adminStatus == OrderStatus.served ||
+              o.status == OrderStatus.preparing ||
+              o.status == OrderStatus.ready,
+        )
+        .toList(growable: false);
+    acceptedOrders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    final text = app.strings;
+    final canCreate = app.menuItems.any((i) => i.isAvailable);
+    _syncTabWithPendingOrders(pendingOrders.length);
+
+    return Scaffold(
+      backgroundColor: PosColors.background,
+      floatingActionButton: canCreate
+          ? SizedBox(
+              height: 58,
+              child: FloatingActionButton.extended(
+                onPressed: () => _openNewOrderForm(context),
+                backgroundColor: PosColors.primary,
+                foregroundColor: PosColors.primaryDark,
+                tooltip: text.newOrder,
+                icon: const Icon(Icons.add_rounded, size: 24),
+                label: Text(
+                  text.newOrder,
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                ),
+              ),
+            )
+          : null,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _TopBar(
+              pendingCount: pendingOrders.length,
+              acceptedCount: acceptedOrders.length,
+              totalFiltered: allOrders.length,
+              filtersActive: _filters.isActive,
+              onFilterPressed: () => _openOrderFilters(context),
+            ),
+            _TabStrip(
+              controller: _tabs,
+              pendingCount: pendingOrders.length,
+              acceptedCount: acceptedOrders.length,
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabs,
+                children: [
+                  _OrderList(
+                    orders: pendingOrders,
+                    emptyLabel: text.noPendingOrders,
+                    emptyIcon: Icons.inbox_outlined,
+                    onPrint: (o) => _printDirect(context, o),
+                    onStatus: (o, s) => _changeStatus(context, o, s),
+                  ),
+                  _OrderList(
+                    orders: acceptedOrders,
+                    emptyLabel: text.noAcceptedOrders,
+                    emptyIcon: Icons.check_circle_outline_rounded,
+                    onPrint: (o) => _printDirect(context, o),
+                    onStatus: (o, s) => _changeStatus(context, o, s),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _sortOrders(OrderModel a, OrderModel b) {
+    final priority = a.status.priority.compareTo(b.status.priority);
+    if (priority != 0) return priority;
+    return b.createdAt.compareTo(a.createdAt);
+  }
+
+  void _syncTabWithPendingOrders(int pendingCount) {
+    final previousPendingCount = _lastPendingCount;
+    _lastPendingCount = pendingCount;
+
+    final shouldShowAccepted = pendingCount == 0 && _tabs.index != 1;
+    final hasNewPendingOrder =
+        pendingCount > 0 &&
+        pendingCount > (previousPendingCount ?? pendingCount) &&
+        _tabs.index != 0;
+
+    if (!shouldShowAccepted && !hasNewPendingOrder) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetIndex = shouldShowAccepted ? 1 : 0;
+      if (_tabs.index != targetIndex) {
+        _tabs.animateTo(targetIndex);
+      }
+    });
+  }
+
+  Future<void> _openOrderFilters(BuildContext context) async {
+    final app = AppScope.of(context);
+    final result = await showModalBottomSheet<OrderListFilters>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _OrdersFilterSheet(
+        initial: _filters,
+        strings: app.strings,
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => _filters = result);
+    }
+  }
+
+  Future<void> _openNewOrderForm(BuildContext context) async {
+    final app = AppScope.of(context);
+    final menuItems = app.menuItems
+        .where((i) => i.isAvailable)
+        .toList(growable: false);
+    final tableCount = app.serverConfig.tableCount;
+
+    // Surface a snapshot of which tables already have an active (pending or
+    // accepted) order so the picker can warn the manager before they kick off
+    // a new ticket for a seat that's still eating.
+    final occupiedTables = <String>{
+      for (final order in app.ordersFor())
+        if (order.status.isOpen)
+          if ((order.tableNo ?? '').trim().isNotEmpty)
+            order.tableNo!.trim(),
+    };
+
+    final result = await Navigator.of(context).push<_OrderResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _NewOrderPage(
+          menuItems: menuItems,
+          tableCount: tableCount,
+          occupiedTables: occupiedTables,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+
+    final order = await app.createManualOrder(
+      requestedItems: result.items,
+      tableNo: result.tableNo,
+      note: result.note,
+    );
+
+    if (!context.mounted) return;
+
+    // Manual orders are created as accepted; auto-print runs on DB change.
+    // Only print here when auto-print is off (otherwise two paths would fire).
+    final autoPrintOn =
+        app.printerState.autoPrintEnabled && app.printerState.hasSelectedPrinter;
+    final printed =
+        app.isManager &&
+            !app.printerState.autoPrintEnabled &&
+            app.printerState.hasSelectedPrinter &&
+            !app.printerService.hasPrintedOrder(order.id)
+        ? await app.printOrderTicket(order)
+        : app.isManager && autoPrintOn;
+
+    if (!context.mounted) return;
+
+    // Fast-paced cafes can flip on "Auto-accept & auto-print" in Settings to
+    // skip the confirmation modal entirely — we show a brief snackbar
+    // instead. Anything that needs manager attention (no printer attached,
+    // print failed, auto-print disabled) still gets the full modal.
+    if (app.isManager && autoPrintOn && printed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${app.strings.ticketSentToPrinter} · ${order.displaySequence}',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    _showOrderCreated(context, order, printed: printed);
+  }
+
+  Future<void> _printDirect(BuildContext context, OrderModel order) async {
+    final app = AppScope.of(context);
+    if (!app.isManager) return;
+    final text = app.strings;
+    if (!app.printerState.connected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(text.printerNotConnectedHint),
+          action: SnackBarAction(label: 'OK', onPressed: () {}),
+        ),
+      );
+      return;
+    }
+    final ok = await app.printOrderTicket(order);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? text.ticketPrinted(order.displaySequence)
+              : (app.printerState.lastError ?? text.printFailed),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changeStatus(
+    BuildContext context,
+    OrderModel order,
+    OrderStatus status,
+  ) async {
+    final app = AppScope.of(context);
+    if (!app.isManager) return;
+    await app.updateOrderStatus(order.id, status);
+  }
+
+  void _showOrderCreated(
+    BuildContext context,
+    OrderModel order, {
+    required bool printed,
+  }) {
+    final app = AppScope.of(context);
+    final baseUrl = app.cloudConfig.baseUrl.trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    final outletId = app.serverConfig.outletId.trim();
+    final menuUrl = baseUrl.isNotEmpty && outletId.isNotEmpty
+        ? '$baseUrl/menu/$outletId'
+        : null;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _OrderCreatedSheet(
+        order: order,
+        autoPrinted: printed,
+        canPrint: app.isManager,
+        menuUrl: menuUrl,
+        onPrint: () => _printDirect(context, order),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  const _TopBar({
+    required this.pendingCount,
+    required this.acceptedCount,
+    required this.totalFiltered,
+    required this.filtersActive,
+    required this.onFilterPressed,
+  });
+
+  final int pendingCount;
+  final int acceptedCount;
+  final int totalFiltered;
+  final bool filtersActive;
+  final VoidCallback onFilterPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final subtitle = filtersActive
+        ? text.ordersFilteredSubtitle(pendingCount, acceptedCount, totalFiltered)
+        : text.pendingSubtitle(pendingCount, acceptedCount);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 14, 12, 7),
+      child: CompactHeader(
+        title: text.ordersTitle,
+        subtitle: subtitle,
+        actions: [
+          // Tapping the bell on this screen is a no-op for navigation,
+          // since we're already on the Orders tab.
+          HeaderLanguageButton(),
+          HeaderNotificationBell(onNavigateToOrders: () {}),
+          CompactIconButton(
+            icon: Icons.tune_rounded,
+            tooltip: text.filterOrders,
+            filled: filtersActive,
+            onPressed: onFilterPressed,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order filters sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrdersFilterSheet extends StatefulWidget {
+  const _OrdersFilterSheet({
+    required this.initial,
+    required this.strings,
+  });
+
+  final OrderListFilters initial;
+  final AppStrings strings;
+
+  @override
+  State<_OrdersFilterSheet> createState() => _OrdersFilterSheetState();
+}
+
+class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
+  late OrderDateRange _dateRange;
+  OrderSource? _source;
+
+  @override
+  void initState() {
+    super.initState();
+    _dateRange = widget.initial.dateRange;
+    _source = widget.initial.source;
+  }
+
+  String _dateLabel(OrderDateRange range) {
+    final t = widget.strings;
+    switch (range) {
+      case OrderDateRange.all:
+        return t.allTime;
+      case OrderDateRange.today:
+        return t.today;
+      case OrderDateRange.yesterday:
+        return t.yesterday;
+      case OrderDateRange.last7Days:
+        return t.last7Days;
+      case OrderDateRange.last30Days:
+        return t.last30Days;
+      case OrderDateRange.last3Months:
+        return t.last3Months;
+      case OrderDateRange.last6Months:
+        return t.last6Months;
+      case OrderDateRange.last12Months:
+        return t.last12Months;
+    }
+  }
+
+  OrderListFilters get _draft =>
+      OrderListFilters(dateRange: _dateRange, source: _source);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.strings;
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 16 + bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: PosColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              t.filterOrders,
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            ),
+            SizedBox(height: 16),
+            Text(
+              t.filterByDate,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: PosColors.muted,
+              ),
+            ),
+            SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: OrderDateRange.values.map((range) {
+                final selected = _dateRange == range;
+                return FilterChip(
+                  label: Text(_dateLabel(range)),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _dateRange = range),
+                  selectedColor: PosColors.primary.withValues(alpha: 0.35),
+                  checkmarkColor: PosColors.primaryDark,
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: selected ? PosColors.primaryDark : PosColors.slate,
+                  ),
+                  side: BorderSide(
+                    color: selected ? PosColors.primary : PosColors.lineStrong,
+                  ),
+                );
+              }).toList(),
+            ),
+            SizedBox(height: 18),
+            Text(
+              t.filterBySource,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: PosColors.muted,
+              ),
+            ),
+            SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilterChip(
+                  label: Text(t.allChannels),
+                  selected: _source == null,
+                  onSelected: (_) => setState(() => _source = null),
+                  selectedColor: PosColors.primary.withValues(alpha: 0.35),
+                  checkmarkColor: PosColors.primaryDark,
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: _source == null
+                        ? PosColors.primaryDark
+                        : PosColors.slate,
+                  ),
+                  side: BorderSide(
+                    color: _source == null
+                        ? PosColors.primary
+                        : PosColors.lineStrong,
+                  ),
+                ),
+                ...OrderSource.values.map((source) {
+                  final selected = _source == source;
+                  return FilterChip(
+                    label: Text(t.orderSourceLabel(source)),
+                    selected: selected,
+                    onSelected: (_) =>
+                        setState(() => _source = selected ? null : source),
+                    selectedColor: PosColors.primary.withValues(alpha: 0.35),
+                    checkmarkColor: PosColors.primaryDark,
+                    labelStyle: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color:
+                          selected ? PosColors.primaryDark : PosColors.slate,
+                    ),
+                    side: BorderSide(
+                      color: selected
+                          ? PosColors.primary
+                          : PosColors.lineStrong,
+                    ),
+                  );
+                }),
+              ],
+            ),
+            SizedBox(height: 22),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _dateRange = OrderDateRange.all;
+                        _source = null;
+                      });
+                    },
+                    child: Text(t.resetFilters),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PosColors.primary,
+                      foregroundColor: PosColors.primaryDark,
+                    ),
+                    onPressed: () => Navigator.pop(context, _draft),
+                    child: Text(t.applyFilters),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pill tab strip
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TabStrip extends StatelessWidget {
+  const _TabStrip({
+    required this.controller,
+    required this.pendingCount,
+    required this.acceptedCount,
+  });
+
+  final TabController controller;
+  final int pendingCount;
+  final int acceptedCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 2, 12, 10),
+      child: Container(
+        height: 43,
+        alignment: Alignment.centerLeft,
+        child: TabBar(
+          controller: controller,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerColor: Colors.transparent,
+          indicator: BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.pill),
+            border: Border.all(color: PosColors.lineStrong),
+          ),
+          labelColor: PosColors.slate,
+          unselectedLabelColor: PosColors.muted,
+          labelStyle: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5),
+          unselectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 11.5,
+          ),
+          labelPadding: EdgeInsets.only(right: 8),
+          padding: EdgeInsets.zero,
+          tabs: [
+            Tab(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(AppScope.of(context).strings.pendingTab),
+                    if (pendingCount > 0) ...[
+                      SizedBox(width: 6),
+                      _TabBadge(count: pendingCount, active: true),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Tab(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(AppScope.of(context).strings.acceptedTab),
+                    if (acceptedCount > 0) ...[
+                      SizedBox(width: 6),
+                      _TabBadge(count: acceptedCount, active: false),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabBadge extends StatelessWidget {
+  const _TabBadge({required this.count, required this.active});
+  final int count;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: active
+            ? PosColors.primary
+            : PosColors.surfaceWarm.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(PosRadii.pill),
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w900,
+          color: active ? PosColors.primaryDark : PosColors.muted,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order list
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrderList extends StatelessWidget {
+  const _OrderList({
+    required this.orders,
+    required this.emptyLabel,
+    required this.emptyIcon,
+    required this.onPrint,
+    required this.onStatus,
+  });
+
+  final List<OrderModel> orders;
+  final String emptyLabel;
+  final IconData emptyIcon;
+  final void Function(OrderModel) onPrint;
+  final void Function(OrderModel, OrderStatus) onStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    if (orders.isEmpty) {
+      return EmptyCompactState(
+        icon: emptyIcon,
+        title: emptyLabel,
+        message: AppScope.of(context).strings.newTickets,
+      );
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(12, 0, 12, 18),
+      itemCount: orders.length,
+      separatorBuilder: (_, _) => SizedBox(height: 10),
+      itemBuilder: (_, i) => _OrderCard(
+        order: orders[i],
+        onPrint: () => onPrint(orders[i]),
+        onStatus: (s) => onStatus(orders[i], s),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order card with left accent bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrderCard extends StatelessWidget {
+  const _OrderCard({
+    required this.order,
+    required this.onPrint,
+    required this.onStatus,
+  });
+
+  final OrderModel order;
+  final VoidCallback onPrint;
+  final ValueChanged<OrderStatus> onStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final canPrint = app.isManager;
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    final time = _formatTime(order.createdAt.toLocal());
+    final adminStatus = order.status.adminStatus;
+    final isPending = adminStatus == OrderStatus.pending;
+    final accentColor = switch (adminStatus) {
+      OrderStatus.pending => PosColors.warning,
+      OrderStatus.accepted => PosColors.success,
+      OrderStatus.served => PosColors.success,
+      OrderStatus.cancelled => PosColors.danger,
+      OrderStatus.preparing => PosColors.success,
+      OrderStatus.ready => PosColors.success,
+    };
+    final nextStatus = (isPending && app.isManager)
+        ? OrderStatus.accepted
+        : null;
+    final statusLabel = isPending ? 'PENDING' : 'ACCEPTED';
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onLongPress: canPrint ? onPrint : null,
+        child: Container(
+          decoration: BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: PosColors.lineStrong),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 4,
+                height: 184,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(10),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(12, 11, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.displaySequence,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                              color: PosColors.slate,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          if ((order.tableNo ?? '').isNotEmpty) ...[
+                            Icon(
+                              Icons.table_restaurant_outlined,
+                              size: 11,
+                              color: PosColors.muted,
+                            ),
+                            SizedBox(width: 3),
+                            Text(
+                              'Table ${order.tableNo}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 9.5,
+                                color: PosColors.muted,
+                              ),
+                            ),
+                          ],
+                          Spacer(),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(
+                                PosRadii.pill,
+                              ),
+                              border: Border.all(
+                                color: accentColor.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 8,
+                                color: accentColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'placed $time · ${_ago(order.createdAt)}',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      ...order.items
+                          .take(4)
+                          .map(
+                            (item) => Padding(
+                              padding: EdgeInsets.symmetric(vertical: 2.2),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    child: Text(
+                                      '×${item.qty}',
+                                      style: TextStyle(
+                                        color: PosColors.muted,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 9.5,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      item.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10.5,
+                                        color: PosColors.slate,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    currency.format(item.lineTotal),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 9.5,
+                                      color: PosColors.muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      if (order.items.length > 4)
+                        Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Text(
+                            '+${order.items.length - 4} more',
+                            style: TextStyle(
+                              color: PosColors.muted,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      SizedBox(height: 13),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'TOTAL',
+                                style: TextStyle(
+                                  color: PosColors.muted,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.7,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                currency.format(order.total),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  color: PosColors.slate,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if ((order.note ?? '').isNotEmpty)
+                            Flexible(
+                              child: Text(
+                                order.note!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: PosColors.muted,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          Spacer(),
+                          if (canPrint)
+                            IconButton(
+                              tooltip: app.strings.printTicket,
+                              onPressed: onPrint,
+                              icon: Icon(
+                                Icons.print_outlined,
+                                color: PosColors.muted,
+                                size: 18,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          if (nextStatus != null) ...[
+                            SizedBox(width: 4),
+                            _AdvanceButton(
+                              label: 'Accept',
+                              color: PosColors.primary,
+                              onTap: () => onStatus(nextStatus),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime dt) {
+    final now = DateTime.now();
+    final isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    return DateFormat(isToday ? 'h:mm a' : 'MMM d  h:mm a').format(dt);
+  }
+
+  String _ago(DateTime dt) {
+    final minutes = DateTime.now().difference(dt.toLocal()).inMinutes;
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return '$minutes min';
+    final hours = (minutes / 60).floor();
+    return '$hours hr';
+  }
+}
+
+class _AdvanceButton extends StatelessWidget {
+  const _AdvanceButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 38,
+        padding: EdgeInsets.symmetric(horizontal: 18),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+              color: color.computeLuminance() > 0.4
+                  ? PosColors.slate
+                  : Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order created sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrderCreatedSheet extends StatelessWidget {
+  const _OrderCreatedSheet({
+    required this.order,
+    required this.autoPrinted,
+    required this.canPrint,
+    required this.onPrint,
+    this.menuUrl,
+  });
+
+  final OrderModel order;
+  final bool autoPrinted;
+  final bool canPrint;
+  final VoidCallback onPrint;
+  final String? menuUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Yellow handle bar — brand accent
+            Container(
+              margin: EdgeInsets.symmetric(vertical: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: PosColors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            SizedBox(height: 6),
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: PosColors.success.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_rounded,
+                color: PosColors.success,
+                size: 32,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Order Created!',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+            ),
+            SizedBox(height: 6),
+            // Yellow sequence number pill
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              decoration: BoxDecoration(
+                color: PosColors.primary,
+                borderRadius: BorderRadius.circular(PosRadii.pill),
+                border: Border.all(color: PosColors.primary),
+              ),
+              child: Text(
+                order.displaySequence,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 32,
+                  color: PosColors.primaryDark,
+                  letterSpacing: -1,
+                ),
+              ),
+            ),
+            SizedBox(height: 8),
+            if ((order.tableNo ?? '').isNotEmpty)
+              Text(
+                'Table ${order.tableNo}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: PosColors.muted,
+                ),
+              ),
+            Text(
+              currency.format(order.total),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: PosColors.slate,
+              ),
+            ),
+            SizedBox(height: 18),
+            // QR code — encodes the customer menu URL when available,
+            // otherwise falls back to the order's unique ID
+            QrImageView(
+              data: menuUrl ?? order.id,
+              version: QrVersions.auto,
+              size: 140,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Color(0xFF1A1A1A),
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              menuUrl != null ? 'Scan to view our menu' : order.orderNo,
+              style: TextStyle(
+                fontSize: 10,
+                color: PosColors.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: 20),
+            if (!canPrint)
+              SizedBox.shrink()
+            else if (autoPrinted)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.print_rounded, size: 16, color: PosColors.success),
+                  SizedBox(width: 6),
+                  Text(
+                    text.ticketSentToPrinter,
+                    style: TextStyle(
+                      color: PosColors.success,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onPrint();
+                  },
+                  icon: Icon(Icons.print_rounded),
+                  label: Text(
+                    text.printTicket,
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context),
+                style: FilledButton.styleFrom(
+                  backgroundColor: PosColors.slate,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(PosRadii.md),
+                  ),
+                ),
+                child: Text(
+                  'Done',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New order page — 2-step wizard
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OrderResult {
+  _OrderResult({required this.items, this.tableNo, this.note});
+  final List<OrderRequestItem> items;
+  final String? tableNo;
+  final String? note;
+}
+
+class _NewOrderPage extends StatefulWidget {
+  const _NewOrderPage({
+    required this.menuItems,
+    required this.tableCount,
+    required this.occupiedTables,
+  });
+  final List<MenuItem> menuItems;
+  final int tableCount;
+  final Set<String> occupiedTables;
+
+  @override
+  State<_NewOrderPage> createState() => _NewOrderPageState();
+}
+
+class _NewOrderPageState extends State<_NewOrderPage> {
+  final _pageCtrl = PageController();
+  int _step = 0;
+
+  // Step 1 — table
+  String? _selectedTable; // null = not yet chosen; '' = take-away
+
+  // Step 2 — menu
+  final Map<String, int> _cart = {};
+  String _selectedCategory = 'All';
+  final _noteCtrl = TextEditingController();
+  bool _showNote = false;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  void _goToStep(int index) {
+    setState(() => _step = index);
+    _pageCtrl.animateToPage(
+      index,
+      duration: Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _selectTable(String? table) {
+    setState(() => _selectedTable = table);
+    Future.delayed(Duration(milliseconds: 160), () => _goToStep(1));
+  }
+
+  List<String> get _categories {
+    final cats = widget.menuItems.map((i) => i.category).toSet().toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return ['All', ...cats];
+  }
+
+  List<MenuItem> get _visibleItems => widget.menuItems
+      .where(
+        (i) => _selectedCategory == 'All' || i.category == _selectedCategory,
+      )
+      .toList(growable: false);
+
+  int get _totalQty => _cart.values.fold(0, (s, q) => s + q);
+
+  double get _total {
+    var sum = 0.0;
+    for (final entry in _cart.entries) {
+      final item = widget.menuItems.firstWhere(
+        (m) => m.id == entry.key,
+        orElse: () => widget.menuItems.first,
+      );
+      sum += item.price * entry.value;
+    }
+    return sum;
+  }
+
+  void _tap(String id) {
+    HapticFeedback.lightImpact();
+    setState(() => _cart[id] = (_cart[id] ?? 0) + 1);
+  }
+
+  void _decrement(String id) {
+    setState(() {
+      final current = _cart[id] ?? 0;
+      if (current <= 1) {
+        _cart.remove(id);
+      } else {
+        _cart[id] = current - 1;
+      }
+    });
+  }
+
+  void _submit() {
+    if (_cart.isEmpty) return;
+    final items = _cart.entries
+        .map((e) => OrderRequestItem(menuItemId: e.key, qty: e.value))
+        .toList(growable: false);
+    final tableNo = (_selectedTable ?? '').isEmpty ? null : _selectedTable;
+    Navigator.pop(
+      context,
+      _OrderResult(
+        items: items,
+        tableNo: tableNo,
+        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+      ),
+    );
+  }
+
+  String get _tableLabel {
+    if (_selectedTable == null) return '';
+    if (_selectedTable!.isEmpty) return 'Take Away';
+    return 'Table $_selectedTable';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: PosColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _WizardHeader(
+              step: _step,
+              tableLabel: _tableLabel,
+              onClose: () => Navigator.pop(context),
+              onBack: _step > 0 ? () => _goToStep(_step - 1) : null,
+            ),
+            _StepIndicator(step: _step),
+            Expanded(
+              child: PageView(
+                controller: _pageCtrl,
+                physics: NeverScrollableScrollPhysics(),
+                children: [
+                  _TablePickerStep(
+                    tableCount: widget.tableCount,
+                    selected: _selectedTable,
+                    occupiedTables: widget.occupiedTables,
+                    onSelect: _selectTable,
+                  ),
+                  _MenuStep(
+                    menuItems: widget.menuItems,
+                    visibleItems: _visibleItems,
+                    categories: _categories,
+                    selectedCategory: _selectedCategory,
+                    cart: _cart,
+                    total: _total,
+                    totalQty: _totalQty,
+                    showNote: _showNote,
+                    noteCtrl: _noteCtrl,
+                    onCategorySelected: (c) =>
+                        setState(() => _selectedCategory = c),
+                    onTap: _tap,
+                    onDecrement: _decrement,
+                    onToggleNote: () => setState(() => _showNote = !_showNote),
+                    onSubmit: _cart.isNotEmpty ? _submit : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WizardHeader extends StatelessWidget {
+  const _WizardHeader({
+    required this.step,
+    required this.tableLabel,
+    required this.onClose,
+    required this.onBack,
+  });
+
+  final int step;
+  final String tableLabel;
+  final VoidCallback onClose;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(4, 8, 12, 0),
+      child: Row(
+        children: [
+          if (onBack != null)
+            IconButton(
+              icon: Icon(Icons.arrow_back_rounded),
+              color: PosColors.slate,
+              tooltip: 'Back',
+              onPressed: onBack,
+            )
+          else
+            IconButton(
+              icon: Icon(Icons.close_rounded),
+              color: PosColors.slate,
+              tooltip: 'Cancel',
+              onPressed: onClose,
+            ),
+          SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  step == 0 ? 'Select Table' : 'Select Items',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: PosColors.slate,
+                  ),
+                ),
+                if (tableLabel.isNotEmpty)
+                  Text(
+                    tableLabel,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      color: PosColors.primary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            'Step ${step + 1} of 2',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              color: PosColors.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepIndicator extends StatelessWidget {
+  const _StepIndicator({required this.step});
+  final int step;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          for (var i = 0; i < 2; i++) ...[
+            Expanded(
+              child: AnimatedContainer(
+                duration: Duration(milliseconds: 280),
+                height: 3,
+                decoration: BoxDecoration(
+                  color: i <= step ? PosColors.primary : PosColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            if (i < 1) SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TablePickerStep extends StatelessWidget {
+  const _TablePickerStep({
+    required this.tableCount,
+    required this.selected,
+    required this.occupiedTables,
+    required this.onSelect,
+  });
+
+  final int tableCount;
+  final String? selected;
+  final Set<String> occupiedTables;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Tiny legend so the manager understands the red tiles at a glance.
+        if (occupiedTables.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Row(
+              children: [
+                _LegendDot(color: PosColors.line, label: 'Available'),
+                SizedBox(width: 14),
+                _LegendDot(color: PosColors.danger, label: 'Occupied'),
+              ],
+            ),
+          ),
+        Expanded(
+          child: GridView.builder(
+            padding: EdgeInsets.fromLTRB(14, 12, 14, 20),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 100,
+              mainAxisExtent: 76,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+            ),
+            itemCount: tableCount + 1, // +1 for Take Away
+            itemBuilder: (_, i) {
+              if (i == 0) {
+                final sel = selected == '';
+                return _TableTile(
+                  label: 'Take Away',
+                  icon: Icons.shopping_bag_outlined,
+                  selected: sel,
+                  occupied: false,
+                  onTap: () => onSelect(''),
+                );
+              }
+              final tableNo = '$i';
+              final sel = selected == tableNo;
+              final occ = occupiedTables.contains(tableNo);
+              return _TableTile(
+                label: 'T$i',
+                icon: Icons.table_restaurant_outlined,
+                selected: sel,
+                occupied: occ,
+                onTap: () => onSelect(tableNo),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 11,
+            color: PosColors.muted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TableTile extends StatelessWidget {
+  const _TableTile({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.occupied,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool occupied;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Background + accent colour priority: selected wins (yellow), otherwise
+    // occupied tables get a clear red wash so an at-a-glance scan of the
+    // floor reveals which seats are still eating. Empty tables stay the
+    // neutral surface.
+    final bg = selected
+        ? PosColors.primary
+        : occupied
+            ? PosColors.danger.withValues(alpha: 0.12)
+            : PosColors.surface;
+    final borderColor = selected
+        ? PosColors.primary
+        : occupied
+            ? PosColors.danger.withValues(alpha: 0.45)
+            : PosColors.line;
+    final iconColor = selected
+        ? PosColors.primaryDark
+        : occupied
+            ? PosColors.danger
+            : PosColors.muted;
+    final textColor = selected
+        ? PosColors.primaryDark
+        : occupied
+            ? PosColors.danger
+            : PosColors.slate;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(PosRadii.md),
+          border: Border.all(
+            color: borderColor,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20, color: iconColor),
+                SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    color: textColor,
+                  ),
+                ),
+              ],
+            ),
+            if (occupied && !selected)
+              Positioned(
+                top: 5,
+                right: 6,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: PosColors.danger,
+                    borderRadius: BorderRadius.circular(PosRadii.pill),
+                  ),
+                  child: Text(
+                    'BUSY',
+                    style: TextStyle(
+                      fontSize: 7.5,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuStep extends StatelessWidget {
+  const _MenuStep({
+    required this.menuItems,
+    required this.visibleItems,
+    required this.categories,
+    required this.selectedCategory,
+    required this.cart,
+    required this.total,
+    required this.totalQty,
+    required this.showNote,
+    required this.noteCtrl,
+    required this.onCategorySelected,
+    required this.onTap,
+    required this.onDecrement,
+    required this.onToggleNote,
+    required this.onSubmit,
+  });
+
+  final List<MenuItem> menuItems;
+  final List<MenuItem> visibleItems;
+  final List<String> categories;
+  final String selectedCategory;
+  final Map<String, int> cart;
+  final double total;
+  final int totalQty;
+  final bool showNote;
+  final TextEditingController noteCtrl;
+  final ValueChanged<String> onCategorySelected;
+  final ValueChanged<String> onTap;
+  final ValueChanged<String> onDecrement;
+  final VoidCallback onToggleNote;
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    return Column(
+      children: [
+        _CategoryChips(
+          categories: categories,
+          selected: selectedCategory,
+          onSelected: onCategorySelected,
+        ),
+        Expanded(
+          child: _MenuGrid(
+            items: visibleItems,
+            cart: cart,
+            onTap: onTap,
+            onDecrement: onDecrement,
+          ),
+        ),
+        _CartFooter(
+          cart: cart,
+          menuItems: menuItems,
+          total: total,
+          totalQty: totalQty,
+          currency: currency,
+          showNote: showNote,
+          noteCtrl: noteCtrl,
+          onToggleNote: onToggleNote,
+          onSubmit: onSubmit,
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryChips extends StatelessWidget {
+  const _CategoryChips({
+    required this.categories,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<String> categories;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.fromLTRB(14, 8, 14, 0),
+        itemCount: categories.length,
+        separatorBuilder: (_, _) => SizedBox(width: 6),
+        itemBuilder: (_, i) {
+          final cat = categories[i];
+          final sel = cat == selected;
+          return GestureDetector(
+            onTap: () => onSelected(cat),
+            child: AnimatedContainer(
+              duration: Duration(milliseconds: 150),
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: sel ? PosColors.slate : PosColors.surface,
+                borderRadius: BorderRadius.circular(PosRadii.pill),
+              ),
+              child: Text(
+                cat,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                  color: sel ? Colors.white : PosColors.muted,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MenuGrid extends StatelessWidget {
+  const _MenuGrid({
+    required this.items,
+    required this.cart,
+    required this.onTap,
+    required this.onDecrement,
+  });
+
+  final List<MenuItem> items;
+  final Map<String, int> cart;
+  final ValueChanged<String> onTap;
+  final ValueChanged<String> onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          AppScope.of(context).strings.noItemsInCategory,
+          style: TextStyle(color: PosColors.muted),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: EdgeInsets.fromLTRB(14, 10, 14, 8),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 160,
+        mainAxisExtent: 90,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+      ),
+      itemCount: items.length,
+      itemBuilder: (_, i) => _MenuTile(
+        item: items[i],
+        qty: cart[items[i].id] ?? 0,
+        onTap: () => onTap(items[i].id),
+        onDecrement: () => onDecrement(items[i].id),
+      ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.item,
+    required this.qty,
+    required this.onTap,
+    required this.onDecrement,
+  });
+
+  final MenuItem item;
+  final int qty;
+  final VoidCallback onTap;
+  final VoidCallback onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    final inCart = qty > 0;
+    final hasImage = (item.imageUrl ?? '').isNotEmpty;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 150),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: hasImage
+              ? Colors.black
+              : (inCart ? PosColors.slate : PosColors.surface),
+          borderRadius: BorderRadius.circular(PosRadii.md),
+          border: Border.all(
+            color: inCart
+                ? PosColors.primary
+                : (hasImage ? Colors.transparent : PosColors.line),
+            width: inCart ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: inCart ? 0.15 : 0.05),
+              blurRadius: inCart ? 12 : 6,
+              offset: Offset(0, inCart ? 4 : 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Background image ──────────────────────────────────────────
+            if (hasImage) _ItemImage(url: item.imageUrl!),
+
+            // ── Gradient overlay for readability ──────────────────────────
+            if (hasImage)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.72),
+                    ],
+                    stops: const [0.3, 1.0],
+                  ),
+                ),
+              ),
+
+            // ── Yellow tint when in cart (image mode) ─────────────────────
+            if (hasImage && inCart)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: PosColors.primary.withValues(alpha: 0.22),
+                ),
+              ),
+
+            // ── Text content ──────────────────────────────────────────────
+            Padding(
+              padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: (hasImage || inCart)
+                          ? Colors.white
+                          : PosColors.slate,
+                      height: 1.2,
+                    ),
+                  ),
+                  Text(
+                    currency.format(item.price),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      color: (hasImage || inCart)
+                          ? Colors.white.withValues(alpha: 0.85)
+                          : PosColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Quantity stepper (top-right) ──────────────────────────────
+            if (inCart)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: onDecrement,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          Icons.remove_rounded,
+                          size: 13,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Container(
+                      constraints: BoxConstraints(minWidth: 20),
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: PosColors.primary,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$qty',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          color: PosColors.primaryDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Renders a menu item image from either a network URL or a base64 data URL.
+// Network images are automatically cached to local storage via CachedNetworkImage.
+class _ItemImage extends StatelessWidget {
+  const _ItemImage({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    if (url.startsWith('data:image/')) {
+      try {
+        final bytes = base64Decode(url.split(',').last);
+        return Image.memory(bytes, fit: BoxFit.cover);
+      } catch (_) {
+        return _placeholder();
+      }
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      fadeInDuration: const Duration(milliseconds: 200),
+      placeholder: (context, url) => _placeholder(),
+      errorWidget: (context, url, err) => _placeholder(),
+    );
+  }
+
+  Widget _placeholder() => Container(
+    color: const Color(0xFF2A2622),
+    child: const Center(
+      child: Icon(Icons.restaurant_rounded, color: Color(0xFF4A4642), size: 22),
+    ),
+  );
+}
+
+class _CartFooter extends StatelessWidget {
+  const _CartFooter({
+    required this.cart,
+    required this.menuItems,
+    required this.total,
+    required this.totalQty,
+    required this.currency,
+    required this.showNote,
+    required this.noteCtrl,
+    required this.onToggleNote,
+    required this.onSubmit,
+  });
+
+  final Map<String, int> cart;
+  final List<MenuItem> menuItems;
+  final double total;
+  final int totalQty;
+  final NumberFormat currency;
+  final bool showNote;
+  final TextEditingController noteCtrl;
+  final VoidCallback onToggleNote;
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasItems = cart.isNotEmpty;
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        border: Border(top: BorderSide(color: PosColors.line)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 16,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          14,
+          10,
+          14,
+          MediaQuery.of(context).padding.bottom + 10,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasItems) ...[
+              for (final entry in cart.entries)
+                Builder(
+                  builder: (context) {
+                    final item = menuItems.firstWhere(
+                      (m) => m.id == entry.key,
+                      orElse: () => menuItems.first,
+                    );
+                    return Padding(
+                      padding: EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: PosColors.slate,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${entry.value}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            currency.format(item.price * entry.value),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              Divider(height: 12, color: PosColors.line),
+            ],
+            if (showNote)
+              Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: TextField(
+                  controller: noteCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: AppScope.of(context).strings.orderNote,
+                    hintStyle: TextStyle(fontSize: 12),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      borderSide: BorderSide(color: PosColors.line),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      borderSide: BorderSide(color: PosColors.line),
+                    ),
+                  ),
+                  autofocus: true,
+                ),
+              ),
+            Row(
+              children: [
+                if (hasItems) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$totalQty item${totalQty == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                      Text(
+                        currency.format(total),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          color: PosColors.slate,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(width: 10),
+                  _IconBtn(
+                    icon: showNote ? Icons.notes_rounded : Icons.notes_outlined,
+                    color: showNote ? PosColors.slate : PosColors.muted,
+                    onTap: onToggleNote,
+                    tooltip: AppScope.of(context).strings.addNote,
+                  ),
+                  SizedBox(width: 8),
+                ] else
+                  Expanded(
+                    child: Text(
+                      AppScope.of(context).strings.tapItemsToAdd,
+                      style: TextStyle(
+                        color: PosColors.muted,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onSubmit,
+                    child: Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: onSubmit != null
+                            ? PosColors.slate
+                            : PosColors.line,
+                        borderRadius: BorderRadius.circular(PosRadii.md + 2),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.print_rounded,
+                            size: 18,
+                            color: onSubmit != null
+                                ? Colors.white
+                                : PosColors.muted,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Create & Print',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                              color: onSubmit != null
+                                  ? Colors.white
+                                  : PosColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IconBtn extends StatelessWidget {
+  const _IconBtn({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox.square(
+          dimension: 36,
+          child: Icon(icon, color: color, size: 20),
+        ),
+      ),
+    );
+  }
+}
