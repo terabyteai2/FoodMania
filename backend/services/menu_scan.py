@@ -227,7 +227,7 @@ def _get_ocr_engine() -> Any:
         try:
             from paddleocr import PaddleOCR
         except ImportError as error:
-            raise MenuScanError("PaddleOCR is not installed on the backend.") from error
+            raise MenuScanError("PaddleOCR is unavailable on the backend.") from error
         _ocr_engine = PaddleOCR(
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
