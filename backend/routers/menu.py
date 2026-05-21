@@ -1,4 +1,5 @@
 import base64
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -17,6 +18,7 @@ from schemas import ImageUploadRequest, MenuItemPayload, ok
 from services.menu_scan import MenuScanError, extract_menu_page_texts, parse_menu_text
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _item_to_dict(item: MenuItem) -> dict:
@@ -260,15 +262,37 @@ async def scan_menu_pages(
             )
         pages.append((image_bytes, content_type))
 
+    logger.info(
+        "menu scan request accepted outlet=%s pages=%s bytes=%s content_types=%s",
+        outlet_id,
+        len(pages),
+        sum(len(image_bytes) for image_bytes, _ in pages),
+        [content_type for _, content_type in pages],
+    )
+
     try:
         page_texts = await extract_menu_page_texts(pages)
+        logger.info(
+            "menu scan ocr complete outlet=%s pages=%s chars=%s",
+            outlet_id,
+            len(page_texts),
+            [len(text) for text in page_texts],
+        )
         parsed = await parse_menu_text(page_texts)
     except MenuScanError as error:
+        logger.warning("menu scan failed outlet=%s error=%s", outlet_id, error)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(error),
         ) from error
 
+    logger.info(
+        "menu scan parsed outlet=%s provider=%s items=%s warnings=%s",
+        outlet_id,
+        parsed.provider,
+        len(parsed.items),
+        len(parsed.warnings),
+    )
     return ok(
         {
             "items": [item.model_dump() for item in parsed.items],

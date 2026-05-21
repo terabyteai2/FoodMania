@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -16,6 +17,7 @@ from schemas import MenuScanCandidate
 LLM_TIMEOUT_SECONDS = 90.0
 _ocr_engine: Any | None = None
 _ocr_lock = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 class MenuScanError(RuntimeError):
@@ -69,10 +71,19 @@ def _menu_scan_schema() -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "name": {"type": "string"},
-            "description": {"type": "string"},
-            "category": {"type": "string"},
-            "price": {"type": "number"},
+            "name": {
+                "type": "string",
+                "description": "Item name in English and Bangla, formatted as English / Bangla.",
+            },
+            "description": {
+                "type": "string",
+                "description": "Short item description in English and Bangla, formatted as English / Bangla.",
+            },
+            "category": {
+                "type": "string",
+                "description": "Menu category in English and Bangla, formatted as English / Bangla.",
+            },
+            "price": {"type": "number", "description": "Positive numeric menu price only."},
             "isAvailable": {"type": "boolean"},
         },
         "required": ["name", "description", "category", "price", "isAvailable"],
@@ -96,19 +107,30 @@ def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
             "role": "system",
             "content": (
                 "Return JSON only. Extract restaurant menu items from OCR text "
-                "into the provided schema. Ignore addresses, phone numbers, "
-                "hours, tax lines, headings that are not categories, and "
-                "decorative text. Each item must have a positive numeric price. "
-                "Use category General when no category is clear. Use "
-                "isAvailable true. If the OCR text has no item description, "
-                "write a short appetizing description for that item."
+                "into the provided schema. OCR may contain Bangla, English, "
+                "restaurant names, logos, slogans, addresses, phone numbers, "
+                "opening hours, social media, Wi-Fi text, VAT, tax, service "
+                "charge, delivery notes, table text, and decorative copy; ignore "
+                "anything that is not a sellable menu item with a price. Do not "
+                "turn the restaurant name or section decorations into items. "
+                "Each item must have a positive numeric price without currency "
+                "symbols. For name, category, and description, include both "
+                "English and Bangla in one string using this exact style: "
+                "English / Bangla. If one language is missing from OCR, translate "
+                "or transliterate the missing side. If a category is missing, "
+                "infer a useful category in both languages; use General / সাধারণ "
+                "only when no better category is clear. If an item description is "
+                "missing, write a short appetizing description in both languages. "
+                "Use isAvailable true."
             ),
         },
         {
             "role": "user",
             "content": (
                 "Parse these OCR menu pages into JSON with an items array. "
-                "Do not invent items that are not visible in OCR text.\n\n"
+                "Do not invent items that are not visible in OCR text. Preserve "
+                "the page order when practical and merge duplicate sightings of "
+                "the same item.\n\n"
                 f"{pages}"
             ),
         },
@@ -171,7 +193,8 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
         normalized = {
             "name": str(raw.get("name") or "").strip(),
             "description": str(raw.get("description") or "").strip(),
-            "category": str(raw.get("category") or "General").strip() or "General",
+            "category": str(raw.get("category") or "General / সাধারণ").strip()
+            or "General / সাধারণ",
             "price": raw.get("price"),
             "isAvailable": raw.get("isAvailable", True),
         }
@@ -197,6 +220,12 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
         for provider in configured:
             try:
+                logger.info(
+                    "menu scan llm request provider=%s model=%s pages=%s",
+                    provider.name,
+                    provider.model,
+                    len(clean_pages),
+                )
                 response = await client.post(
                     provider.url,
                     headers={
@@ -208,12 +237,22 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
                 response.raise_for_status()
                 decoded = response.json()
                 items = _validated_items(_message_content(decoded))
+                logger.info(
+                    "menu scan llm parsed provider=%s items=%s",
+                    provider.name,
+                    len(items),
+                )
                 return MenuScanParseResult(
                     items=items,
                     provider=provider.name,
                     warnings=warnings,
                 )
             except (httpx.HTTPError, ValueError, MenuScanError) as error:
+                logger.warning(
+                    "menu scan llm provider failed provider=%s error=%s",
+                    provider.name,
+                    error,
+                )
                 warnings.append(f"{provider.name}: {error}")
 
     raise MenuScanError("All configured menu scan AI providers failed.")
@@ -227,6 +266,7 @@ def _get_ocr_engine() -> Any:
         try:
             from paddleocr import PaddleOCR
         except ImportError as error:
+            logger.exception("PaddleOCR import failed")
             raise MenuScanError("PaddleOCR is unavailable on the backend.") from error
         _ocr_engine = PaddleOCR(
             use_doc_orientation_classify=False,

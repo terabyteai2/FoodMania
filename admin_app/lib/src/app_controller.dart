@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -1758,6 +1759,11 @@ class PosAppController extends ChangeNotifier {
       serverConfig: serverConfig,
     );
     final scanResult = await cloudApiService.scanMenuPages(pages);
+    if (kDebugMode) {
+      debugPrint(
+        '[MENU_SCAN] import start candidates=${scanResult.items.length}',
+      );
+    }
     final seenKeys = menuItems
         .map((item) => _menuScanDuplicateKey(item.name, item.category))
         .toSet();
@@ -1780,6 +1786,11 @@ class PosAppController extends ChangeNotifier {
       created += 1;
     }
     await reloadData();
+    if (kDebugMode) {
+      debugPrint(
+        '[MENU_SCAN] import complete created=$created skippedDuplicates=$skipped',
+      );
+    }
     return MenuScanImportResult(
       createdCount: created,
       skippedDuplicateCount: skipped,

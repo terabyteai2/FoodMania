@@ -520,11 +520,29 @@ class AppStrings {
       ? 'অন্য সার্চ বা ক্যাটাগরি চেষ্টা করুন।'
       : 'Try another search or category.';
   String get menuNewButton => isBn ? 'নতুন' : 'New';
-  String get menuScan => isBn ? 'মেনু স্ক্যান' : 'Scan Menu';
+  String get menuScan => isBn ? 'ফটো' : 'Photos';
   String get menuScanning => isBn ? 'স্ক্যান হচ্ছে...' : 'Scanning...';
   String get menuScanPickPages => isBn
       ? 'এক বা একাধিক মেনু পেজ বেছে নিন।'
       : 'Choose one or more menu pages.';
+  String get menuScanTakePhotos =>
+      isBn ? 'ক্যামেরা দিয়ে ছবি তুলুন' : 'Take menu photos';
+  String get menuScanTakePhotosSubtitle => isBn
+      ? 'এক বা একাধিক পেজ ক্যামেরায় তুলুন।'
+      : 'Use the camera for one or more menu pages.';
+  String get menuScanChooseGallery =>
+      isBn ? 'গ্যালারি থেকে বেছে নিন' : 'Choose from gallery';
+  String get menuScanChooseGallerySubtitle => isBn
+      ? 'আগে তোলা মেনু ছবিগুলো আপলোড করুন।'
+      : 'Upload menu photos you already captured.';
+  String get menuScanAddAnotherTitle =>
+      isBn ? 'আরেকটি পেজ তুলবেন?' : 'Add another page?';
+  String menuScanAddAnotherMessage(int count) => isBn
+      ? '$count টি পেজ নেওয়া হয়েছে। আরেকটি পেজ যোগ করবেন?'
+      : '$count page${count == 1 ? '' : 's'} captured. Add another page?';
+  String get menuScanUsePhotos =>
+      isBn ? 'এই ছবিগুলো ব্যবহার করুন' : 'Use these photos';
+  String get menuScanAddPage => isBn ? 'পেজ যোগ করুন' : 'Add page';
   String get menuScanFailed =>
       isBn ? 'মেনু স্ক্যান করা যায়নি' : 'Could not scan menu';
   String menuScanImported(int created, int skipped) => isBn

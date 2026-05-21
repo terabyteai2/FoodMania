@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 import '../../app_scope.dart';
@@ -174,10 +175,24 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     final app = AppScope.of(context);
     final text = app.strings;
     try {
-      final pages = await _scanImageService.pickMenuScanPages();
+      final pages = await _pickMenuScanPages(context);
       if (pages.isEmpty) return;
       if (!context.mounted) return;
+      if (kDebugMode) {
+        final pageSummary = pages
+            .map(
+              (page) =>
+                  '${page.fileName}(${page.mimeType}, ${page.bytes.length} bytes)',
+            )
+            .join('; ');
+        debugPrint(
+          '[MENU_SCAN] pages selected count=${pages.length}: $pageSummary',
+        );
+      }
       setState(() => _scanBusy = true);
+      if (kDebugMode) {
+        debugPrint('[MENU_SCAN] scan start');
+      }
       final result = await app.scanAndImportMenu(
         pages
             .map(
@@ -201,6 +216,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         ),
       );
     } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[MENU_SCAN] scan failed error=$error');
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -208,6 +226,99 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     } finally {
       if (mounted) setState(() => _scanBusy = false);
     }
+  }
+
+  Future<List<PickedMenuScanPage>> _pickMenuScanPages(
+    BuildContext context,
+  ) async {
+    final text = AppScope.of(context).strings;
+    final source = await showModalBottomSheet<_MenuScanSource>(
+      context: context,
+      backgroundColor: PosColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: PosColors.lineStrong,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_camera_rounded),
+                title: Text(text.menuScanTakePhotos),
+                subtitle: Text(text.menuScanTakePhotosSubtitle),
+                onTap: () => Navigator.pop(context, _MenuScanSource.camera),
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_library_rounded),
+                title: Text(text.menuScanChooseGallery),
+                subtitle: Text(text.menuScanChooseGallerySubtitle),
+                onTap: () => Navigator.pop(context, _MenuScanSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!context.mounted) return const <PickedMenuScanPage>[];
+    if (source == null) return const <PickedMenuScanPage>[];
+    if (source == _MenuScanSource.gallery) {
+      return _scanImageService.pickMenuScanPages();
+    }
+    return _captureMenuScanPages(context);
+  }
+
+  Future<List<PickedMenuScanPage>> _captureMenuScanPages(
+    BuildContext context,
+  ) async {
+    final pages = <PickedMenuScanPage>[];
+    while (true) {
+      final page = await _scanImageService.captureMenuScanPage(
+        pageNumber: pages.length + 1,
+      );
+      if (page == null) break;
+      pages.add(page);
+      if (kDebugMode) {
+        debugPrint(
+          '[MENU_SCAN] captured ${page.fileName} '
+          '${page.bytes.length} bytes ${page.mimeType}',
+        );
+      }
+      if (!context.mounted) break;
+      final addAnother = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          final text = AppScope.of(context).strings;
+          return AlertDialog(
+            title: Text(text.menuScanAddAnotherTitle),
+            content: Text(text.menuScanAddAnotherMessage(pages.length)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(text.menuScanUsePhotos),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: Icon(Icons.add_a_photo_rounded),
+                label: Text(text.menuScanAddPage),
+              ),
+            ],
+          );
+        },
+      );
+      if (addAnother != true) break;
+    }
+    return pages;
   }
 
   Future<void> _openMenuForm(BuildContext context, {MenuItem? item}) async {
@@ -271,6 +382,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     ).showSnackBar(SnackBar(content: Text(text.menuDeleted)));
   }
 }
+
+enum _MenuScanSource { camera, gallery }
 
 class _NewMenuButton extends StatelessWidget {
   const _NewMenuButton({required this.onTap});

@@ -1,4 +1,7 @@
-import com.android.build.gradle.LibraryExtension
+import com.android.build.api.variant.AndroidComponentsExtension
+import com.android.build.api.dsl.LibraryExtension
+
+val androidLibraryCompileSdk = 36
 
 allprojects {
     repositories {
@@ -34,6 +37,14 @@ subprojects {
                     if (match != null) {
                         namespace = match.groupValues[1]
                     }
+                }
+            }
+        }
+
+        extensions.configure<AndroidComponentsExtension<LibraryExtension, *, *>>("androidComponents") {
+            finalizeDsl { extension ->
+                if ((extension.compileSdk ?: 0) < androidLibraryCompileSdk) {
+                    extension.compileSdk = androidLibraryCompileSdk
                 }
             }
         }

@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>QuickBites uses the camera to scan printed restaurant menus and import menu items.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>QuickBites lets you choose menu item photos from your gallery.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

@@ -77,6 +77,33 @@ class MenuImageService {
     return pages;
   }
 
+  Future<PickedMenuScanPage?> captureMenuScanPage({
+    required int pageNumber,
+  }) async {
+    final image = await _picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.rear,
+      maxWidth: maxEdgePx.toDouble(),
+      maxHeight: maxEdgePx.toDouble(),
+      imageQuality: 88,
+      requestFullMetadata: false,
+    );
+    if (image == null) return null;
+
+    final bytes = await image.readAsBytes();
+    if (bytes.length > maxBinaryBytes) {
+      throw MenuImageException(
+        'Captured menu photo is too large after compression. Please retake it a little farther away.',
+      );
+    }
+    final fallbackName = 'menu-page-$pageNumber.jpg';
+    return PickedMenuScanPage(
+      bytes: bytes,
+      mimeType: image.mimeType ?? _mimeTypeFromPath(image.name),
+      fileName: image.name.trim().isEmpty ? fallbackName : image.name,
+    );
+  }
+
   /// Wraps already-encoded bytes in a `data:` URL, enforcing the same size cap
   /// as the gallery picker so the saved cropped image stays uploadable.
   String encodeDataUrl(Uint8List bytes, {String mimeType = 'image/png'}) {

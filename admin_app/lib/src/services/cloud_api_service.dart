@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -291,7 +292,7 @@ class MenuScanCandidate {
     return MenuScanCandidate(
       name: name,
       description: description,
-      category: category.isEmpty ? 'General' : category,
+      category: category.isEmpty ? 'General / সাধারণ' : category,
       price: price,
       isAvailable: json['isAvailable'] is bool
           ? json['isAvailable'] as bool
@@ -973,6 +974,16 @@ class CloudApiService {
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    if (kDebugMode) {
+      final totalBytes = pages.fold<int>(
+        0,
+        (sum, page) => sum + page.bytes.length,
+      );
+      debugPrint(
+        '[MENU_SCAN] request POST ${uri.scheme}://${uri.host}${uri.path} '
+        'pages=${pages.length} bytes=$totalBytes',
+      );
+    }
 
     final request = http.MultipartRequest('POST', uri)
       ..headers['Accept'] = 'application/json'
@@ -994,6 +1005,12 @@ class CloudApiService {
 
     final streamed = await request.send().timeout(const Duration(seconds: 180));
     final body = await streamed.stream.bytesToString();
+    if (kDebugMode) {
+      debugPrint(
+        '[MENU_SCAN] response status=${streamed.statusCode} '
+        'bodyChars=${body.length}',
+      );
+    }
     final decoded = _decodeCloudJsonBody(body, uri);
     final payload = decoded is Map
         ? Map<String, Object?>.from(decoded)
@@ -1008,9 +1025,23 @@ class CloudApiService {
               ? detail['message']?.toString()
               : null) ??
           'Menu scan failed: HTTP ${streamed.statusCode}';
+      if (kDebugMode) {
+        debugPrint(
+          '[MENU_SCAN] request failed status=${streamed.statusCode} '
+          'detail=$message',
+        );
+      }
       throw CloudApiException(message);
     }
-    return MenuScanResult.fromJson(payload);
+    final result = MenuScanResult.fromJson(payload);
+    if (kDebugMode) {
+      debugPrint(
+        '[MENU_SCAN] response parsed provider=${result.provider} '
+        'pages=${result.pageCount} items=${result.items.length} '
+        'warnings=${result.warnings.length}',
+      );
+    }
+    return result;
   }
 
   Future<List<String>> uploadOutletImage(String dataUrl) async {

@@ -40,6 +40,22 @@ def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_pric
     assert items[0].description == "Juicy grilled beef burger."
 
 
+def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
+    messages = menu_scan._prompt(
+        [
+            "Scan Cafe\nMirpur, Dhaka\nChicken Biryani 220\nVAT 5%",
+            "চা ২০\nFree Wi-Fi",
+        ]
+    )
+    joined = "\n".join(message["content"] for message in messages)
+
+    assert "English and Bangla" in joined
+    assert "English / Bangla" in joined
+    assert "restaurant names" in joined
+    assert "VAT" in joined
+    assert "not a sellable menu item" in joined
+
+
 @pytest.mark.asyncio
 async def test_menu_scan_llm_falls_back_after_invalid_schema(monkeypatch):
     calls = []

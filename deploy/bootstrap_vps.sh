@@ -148,7 +148,7 @@ if [[ "${FAMILY}" == "debian" ]]; then
     postgresql postgresql-contrib \
     nginx \
     curl ca-certificates gnupg lsb-release \
-    build-essential libpq-dev \
+    build-essential libpq-dev libgl1 \
     >/dev/null
 else
   # RHEL family — prefer dnf, fall back to yum.
@@ -160,7 +160,7 @@ else
     postgresql-server postgresql-contrib \
     nginx \
     curl ca-certificates gnupg2 \
-    gcc gcc-c++ make libpq-devel \
+    gcc gcc-c++ make libpq-devel mesa-libGL \
     >/dev/null
 
   # Initialise the Postgres data directory if it's empty (RHEL doesn't do this on install)

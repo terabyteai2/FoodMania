@@ -139,7 +139,7 @@ class ImageUploadRequest(BaseModel):
 class MenuScanCandidate(BaseModel):
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
-    category: str = Field(default="General", min_length=1)
+    category: str = Field(default="General / সাধারণ", min_length=1)
     price: float = Field(gt=0)
     isAvailable: bool = True
 
