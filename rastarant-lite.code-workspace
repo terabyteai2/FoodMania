@@ -1,0 +1,59 @@
+{
+  "folders": [
+    {
+      "name": "backend",
+      "path": "backend"
+    },
+    {
+      "name": "admin_app",
+      "path": "admin_app"
+    },
+    {
+      "name": "customer_menu",
+      "path": "customer_menu/frontend"
+    },
+    {
+      "name": "platform_admin",
+      "path": "platform_admin"
+    },
+    {
+      "name": "deploy",
+      "path": "deploy"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.dart_tool": true,
+      "**/.pytest_cache": true,
+      "**/__pycache__": true,
+      "**/build": true,
+      "**/dist": true,
+      "**/node_modules": true,
+      "backend/frontend_dist": true,
+      "backend/uploads": true,
+      "admin_app/assets/customer_web": true
+    },
+    "search.exclude": {
+      "**/.dart_tool": true,
+      "**/.pytest_cache": true,
+      "**/__pycache__": true,
+      "**/build": true,
+      "**/dist": true,
+      "**/node_modules": true,
+      "backend/frontend_dist": true,
+      "backend/uploads": true,
+      "admin_app/assets/customer_web": true
+    },
+    "files.watcherExclude": {
+      "**/.dart_tool/**": true,
+      "**/.pytest_cache/**": true,
+      "**/__pycache__/**": true,
+      "**/build/**": true,
+      "**/dist/**": true,
+      "**/node_modules/**": true,
+      "backend/frontend_dist/**": true,
+      "backend/uploads/**": true,
+      "admin_app/assets/customer_web/**": true
+    }
+  }
+}

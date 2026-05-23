@@ -22,6 +22,15 @@ __pycache__/
 # ---------- Node deps (HUGE, regenerable via npm/yarn install) ----------
 node_modules/
 
+# ---------- Build outputs (regenerable) ----------
+build/
+dist/
+.cache/
+.turbo/
+.vite/
+coverage/
+backend/frontend_dist/
+
 # ---------- Secrets & runtime (never push) ----------
 backend/.env
 backend/uploads/
