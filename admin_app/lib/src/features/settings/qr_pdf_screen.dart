@@ -28,15 +28,14 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
     super.didChangeDependencies();
     if (_urlCtrl.text.isEmpty) {
       final app = AppScope.of(context);
-      final baseUrl =
-          app.cloudConfig.baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
       final outletId = app.serverConfig.outletId.trim();
-      if (baseUrl.isNotEmpty) {
-        _urlCtrl.text = '$baseUrl/menu/$outletId';
-      } else {
-        _urlCtrl.text =
-            '${CloudDefaults.defaultPublicApiBase}/menu/$outletId';
-      }
+      _urlCtrl.text = CloudDefaults.customerMenuUrl(
+        baseUrl: app.cloudConfig.baseUrl.isNotEmpty
+            ? app.cloudConfig.baseUrl
+            : CloudDefaults.defaultPublicApiBase,
+        outletId: outletId,
+        publicSlug: app.serverConfig.publicSlug,
+      );
     }
   }
 

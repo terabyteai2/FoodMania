@@ -67,7 +67,7 @@ sleep 8
 curl -fsS http://127.0.0.1:8000/health >/dev/null && echo "  ✓ /health OK"
 REMOTE
 
-API_BASE="${API_BASE:-https://160-187-130-80.sslip.io}"
+API_BASE="${API_BASE:-https://quickbytes.buzz}"
 say "Smoke test (${API_BASE})"
 curl -fsS --max-time 15 "${API_BASE}/health" >/dev/null \
   || die "Health check failed at ${API_BASE}/health"

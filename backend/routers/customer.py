@@ -45,9 +45,15 @@ def _item_to_dict(item: MenuItem, request: Request) -> dict:
     return {
         "id": item.id,
         "name": item.name,
+        "nameEn": item.name_en or item.name,
+        "nameBn": item.name_bn or "",
         "description": item.description or "",
+        "descriptionEn": item.description_en or item.description or "",
+        "descriptionBn": item.description_bn or "",
         "price": float(item.price),
         "category": item.category or "General",
+        "categoryEn": item.category_en or item.category or "General",
+        "categoryBn": item.category_bn or "",
         "isAvailable": item.is_available,
         "imageUrl": _rewrite_upload_url(request, item.image_url),
         "videoUrl": _rewrite_upload_url(request, item.video_url),
@@ -59,6 +65,7 @@ async def _get_outlet(outlet_ref: str, db: AsyncSession) -> Outlet:
         await db.execute(
             select(Outlet).where(
                 (Outlet.id == outlet_ref) | (Outlet.server_id == outlet_ref)
+                | (Outlet.public_slug == outlet_ref.lower())
             )
         )
     ).scalar_one_or_none()
@@ -121,6 +128,9 @@ async def place_customer_order(
     outlet = await _get_outlet(outlet_id, db)
 
     total = sum(item.price * item.qty for item in body.items)
+    vat_rate_percent = 5.0
+    vat_amount = round(total * vat_rate_percent / 100, 2)
+    final_total = round(total + vat_amount, 2)
     now = datetime.now(timezone.utc)
     order_id = str(uuid.uuid4())
 
@@ -140,7 +150,11 @@ async def place_customer_order(
         outlet_id=outlet.id,
         source="customer_web",
         status="pending",
-        total_amount=round(total, 2),
+        total_amount=final_total,
+        subtotal=round(total, 2),
+        vat_rate_percent=vat_rate_percent,
+        vat_amount=vat_amount,
+        service_type="dine_in" if body.tableNo else None,
         items=items_payload,
         notes=body.tableNo and f"Table {body.tableNo}" or body.note,
         created_at=now,
@@ -169,6 +183,12 @@ async def place_customer_order(
                 "source": order.source,
                 "status": order.status,
                 "totalAmount": float(order.total_amount),
+                "subtotal": float(order.subtotal or 0),
+                "vatRatePercent": float(order.vat_rate_percent or 0),
+                "vatAmount": float(order.vat_amount or 0),
+                "serviceType": order.service_type,
+                "covers": order.covers,
+                "paymentMethod": order.payment_method,
                 "items": order.items,
                 "notes": order.notes,
                 "createdByAccountId": None,
@@ -184,6 +204,9 @@ async def place_customer_order(
         "serialNumber": order.serial_number,
         "status": order.status,
         "total": float(order.total_amount),
+        "subtotal": float(order.subtotal or 0),
+        "vatRatePercent": float(order.vat_rate_percent or 0),
+        "vatAmount": float(order.vat_amount or 0),
         "items": order.items,
         "notes": order.notes,
     })
@@ -203,7 +226,11 @@ async def get_outlet_info(
     outlet = (
         await db.execute(
             select(Outlet)
-            .where((Outlet.id == outlet_id) | (Outlet.server_id == outlet_id))
+            .where(
+                (Outlet.id == outlet_id)
+                | (Outlet.server_id == outlet_id)
+                | (Outlet.public_slug == outlet_id.lower())
+            )
             .options(joinedload(Outlet.restaurant))
         )
     ).scalar_one_or_none()

@@ -68,7 +68,13 @@ class Settings(BaseSettings):
     SENTRY_ENVIRONMENT: str = ""
     GIT_COMMIT_SHA: str = ""
 
-    # Scan Menu: OCR text is parsed by xAI first, then DeepSeek, then OpenAI.
+    # Scan Menu: OCR.space JSON is parsed by Groq first, then other LLM fallbacks.
+    OCR_SPACE_API_KEY: str = ""
+    OCR_SPACE_API_URL: str = "https://api.ocr.space/parse/image"
+    OCR_SPACE_ENGINE: str = "3"
+    OCR_SPACE_LANGUAGE: str = "auto"
+    GROQ_API_KEY: str = ""
+    MENU_SCAN_GROQ_MODEL: str = "openai/gpt-oss-20b"
     XAI_API_KEY: str = ""
     DEEPSEEK_API_KEY: str = ""
     OPENAI_API_KEY: str = ""

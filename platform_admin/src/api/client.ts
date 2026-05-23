@@ -92,6 +92,7 @@ export type Outlet = {
   restaurantName?: string;
   name: string;
   serverId: string;
+  publicSlug?: string | null;
   status: string;
   notes: string | null;
   customerMenuUrl: string;
@@ -229,6 +230,17 @@ export type SystemConfig = {
   bkashEnabled: boolean;
   maintenanceMode: boolean;
   supportEmail: string;
+};
+
+export type AppUpdateConfig = {
+  enabled: boolean;
+  versionName: string;
+  versionCode: number;
+  apkUrl: string;
+  releaseNotes: string;
+  required: boolean;
+  publishedAt: string | null;
+  notifiedOutlets?: number;
 };
 
 // ── Health types ──────────────────────────────────────────────────────────────

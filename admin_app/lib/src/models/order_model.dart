@@ -1,4 +1,6 @@
 import 'order_item.dart';
+import 'order_payment_method.dart';
+import 'order_service_type.dart';
 import 'order_source.dart';
 import 'order_status.dart';
 import 'sync_status.dart';
@@ -12,16 +14,24 @@ class OrderModel {
     required this.items,
     required this.createdAt,
     required this.updatedAt,
+    double? subtotal,
+    double? vatRatePercent,
+    double? vatAmount,
     this.source = OrderSource.cloud,
     this.syncStatus = SyncStatus.synced,
     this.version = 1,
     this.sequenceNo = 0,
+    this.serviceType,
+    this.covers,
+    this.paymentMethod,
     this.customerName,
     this.tableNo,
     this.note,
     this.createdByAccountId,
     this.createdByRole,
-  });
+  }) : subtotal = subtotal ?? total,
+       vatRatePercent = vatRatePercent ?? 0,
+       vatAmount = vatAmount ?? 0;
 
   final String id;
   final String orderNo;
@@ -30,8 +40,14 @@ class OrderModel {
   final String? note;
   final String? createdByAccountId;
   final String? createdByRole;
+  final OrderServiceType? serviceType;
+  final int? covers;
+  final OrderPaymentMethod? paymentMethod;
   final OrderSource source;
   final OrderStatus status;
+  final double subtotal;
+  final double vatRatePercent;
+  final double vatAmount;
   final double total;
   final List<OrderItem> items;
   final SyncStatus syncStatus;
@@ -50,8 +66,14 @@ class OrderModel {
     String? note,
     String? createdByAccountId,
     String? createdByRole,
+    OrderServiceType? serviceType,
+    int? covers,
+    OrderPaymentMethod? paymentMethod,
     OrderSource? source,
     OrderStatus? status,
+    double? subtotal,
+    double? vatRatePercent,
+    double? vatAmount,
     double? total,
     List<OrderItem>? items,
     SyncStatus? syncStatus,
@@ -68,8 +90,14 @@ class OrderModel {
       note: note ?? this.note,
       createdByAccountId: createdByAccountId ?? this.createdByAccountId,
       createdByRole: createdByRole ?? this.createdByRole,
+      serviceType: serviceType ?? this.serviceType,
+      covers: covers ?? this.covers,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
       source: source ?? this.source,
       status: status ?? this.status,
+      subtotal: subtotal ?? this.subtotal,
+      vatRatePercent: vatRatePercent ?? this.vatRatePercent,
+      vatAmount: vatAmount ?? this.vatAmount,
       total: total ?? this.total,
       items: items ?? this.items,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -89,8 +117,14 @@ class OrderModel {
       'note': note,
       'createdByAccountId': createdByAccountId,
       'createdByRole': createdByRole,
+      'serviceType': serviceType?.value,
+      'covers': covers,
+      'paymentMethod': paymentMethod?.value,
       'source': source.value,
       'status': status.value,
+      'subtotal': subtotal,
+      'vatRatePercent': vatRatePercent,
+      'vatAmount': vatAmount,
       'total': total,
       'syncStatus': syncStatus.value,
       'version': version,
@@ -109,10 +143,16 @@ class OrderModel {
       'note': note,
       'createdByAccountId': createdByAccountId,
       'createdByRole': createdByRole,
+      'serviceType': serviceType?.value,
+      'covers': covers,
+      'paymentMethod': paymentMethod?.value,
       'source': source.value,
       'sourceLabel': source.label,
       'status': status.value,
       'statusLabel': status.label,
+      'subtotal': subtotal,
+      'vatRatePercent': vatRatePercent,
+      'vatAmount': vatAmount,
       'total': total,
       'items': items.map((item) => item.toJson()).toList(growable: false),
       'syncStatus': syncStatus.value,
@@ -135,10 +175,18 @@ class OrderModel {
       note: map['note'] as String?,
       createdByAccountId: map['createdByAccountId'] as String?,
       createdByRole: map['createdByRole'] as String?,
+      serviceType: OrderServiceType.tryParse(map['serviceType'] as String?),
+      covers: _intOrNull(map['covers']),
+      paymentMethod: OrderPaymentMethod.tryParse(
+        map['paymentMethod'] as String?,
+      ),
       source: OrderSource.parse(map['source'] as String?),
       status:
           OrderStatus.tryParse(map['status'] as String?) ?? OrderStatus.pending,
-      total: (map['total'] as num).toDouble(),
+      subtotal: _doubleOrNull(map['subtotal']) ?? _double(map['total']),
+      vatRatePercent: _doubleOrNull(map['vatRatePercent']) ?? 0,
+      vatAmount: _doubleOrNull(map['vatAmount']) ?? 0,
+      total: _double(map['total']),
       items: items,
       syncStatus: SyncStatus.parse(map['syncStatus'] as String?),
       version: map['version'] as int? ?? 1,
@@ -148,5 +196,22 @@ class OrderModel {
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );
+  }
+
+  static double _double(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
+
+  static double? _doubleOrNull(Object? value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value');
+  }
+
+  static int? _intOrNull(Object? value) {
+    if (value == null) return null;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value');
   }
 }

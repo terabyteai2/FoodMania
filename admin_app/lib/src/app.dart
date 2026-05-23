@@ -6,6 +6,7 @@ import 'app_scope.dart';
 import 'core/localization/app_strings.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/notification_center.dart';
+import 'models/app_update_info.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/inventory/inventory_screen.dart';
 import 'features/menu/menu_management_screen.dart';
@@ -29,7 +30,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   late final Future<void> _bootFuture;
   bool _showSplash = true;
   bool _showIntro = false;
-  int _initialShellIndex = 0;
+  int _initialShellIndex = _dashboardTabIndex;
 
   @override
   void initState() {
@@ -116,7 +117,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   void _onIntroFinished(String? nextStep) {
     setState(() {
       _showIntro = false;
-      _initialShellIndex = 0;
+      _initialShellIndex = _defaultShellIndex();
     });
   }
 
@@ -128,7 +129,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
           setState(() {
             _showSplash = false;
             _showIntro = !_controller.hasSeenIntro;
-            _initialShellIndex = 0;
+            _initialShellIndex = _defaultShellIndex();
           });
         },
       );
@@ -146,7 +147,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
       if (signupToken.isNotEmpty) {
         return TenantSetupScreen(
           onProvisioned: () {
-            setState(() => _initialShellIndex = 0);
+            setState(() => _initialShellIndex = _defaultShellIndex());
           },
         );
       }
@@ -156,7 +157,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
       return TenantSetupScreen(
         onProvisioned: () {
           setState(() {
-            _initialShellIndex = 0;
+            _initialShellIndex = _defaultShellIndex();
           });
         },
       );
@@ -167,14 +168,14 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
       return SubscriptionScreen(
         onFinished: () {
           setState(() {
-            _initialShellIndex = _menuTabIndex;
+            _initialShellIndex = _defaultShellIndex();
           });
         },
       );
     }
     final pending = _controller.pendingOnboardingLanding;
-    if (pending && _initialShellIndex != _menuTabIndex) {
-      _initialShellIndex = _menuTabIndex;
+    if (pending && _initialShellIndex != _dashboardTabIndex) {
+      _initialShellIndex = _defaultShellIndex();
     }
     return MainShell(
       initialIndex: _initialShellIndex,
@@ -186,7 +187,9 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     );
   }
 
-  static const int _menuTabIndex = 1;
+  int _defaultShellIndex() => _controller.isManager ? _dashboardTabIndex : 0;
+
+  static const int _dashboardTabIndex = 2;
 }
 
 enum _AppTab { orders, menu, home, stock, settings }
@@ -218,6 +221,7 @@ class _MainShellState extends State<MainShell> {
   late _AppTab _selected;
   List<_AppTab> _currentTabOrder = _managerTabOrder;
   String? _lastShownNotificationKey;
+  int? _lastShownAppUpdateVersionCode;
 
   @override
   void initState() {
@@ -239,30 +243,35 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  _Destination _destinationFor(_AppTab tab, AppStrings text) {
+  _Destination _destinationFor(_AppTab tab, AppStrings _) {
     return switch (tab) {
       _AppTab.orders => _Destination(
-        text.orders,
+        'Orders',
+        'অর্ডার',
         Icons.receipt_long_outlined,
         Icons.receipt_long,
       ),
       _AppTab.menu => _Destination(
-        text.menu,
+        'Menu',
+        'মেনু',
         Icons.restaurant_menu_outlined,
         Icons.restaurant_menu,
       ),
       _AppTab.home => _Destination(
-        text.home,
+        'Home',
+        'হোম',
         Icons.home_outlined,
         Icons.home_rounded,
       ),
       _AppTab.stock => _Destination(
-        text.inventory,
+        'Stock',
+        'স্টক',
         Icons.grid_on_outlined,
         Icons.grid_on_rounded,
       ),
       _AppTab.settings => _Destination(
-        text.settings,
+        'More',
+        'আরও',
         Icons.settings_outlined,
         Icons.settings_rounded,
       ),
@@ -290,7 +299,7 @@ class _MainShellState extends State<MainShell> {
     final ordersIndex = _AppTab.orders.index;
     void goToOrders() => _setIndex(ordersIndex);
     final allPages = [
-      OrdersScreen(),
+      const OrdersScreen(),
       MenuManagementScreen(onNavigateToOrders: goToOrders),
       DashboardScreen(onNavigate: _setIndex),
       InventoryScreen(onNavigateToOrders: goToOrders),
@@ -300,6 +309,7 @@ class _MainShellState extends State<MainShell> {
     // Each page renders the notification bell as one of its own header
     // actions (via HeaderNotificationBell) — no global floating overlay,
     // so it never sits on top of the menu page's "+ New" button etc.
+    _maybeShowAppUpdatePrompt(app);
     final body = IndexedStack(index: _selected.index, children: allPages);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -396,12 +406,232 @@ class _MainShellState extends State<MainShell> {
       );
     });
   }
+
+  void _maybeShowAppUpdatePrompt(PosAppController app) {
+    final update = app.pendingAppUpdate;
+    if (update == null || app.appUpdateBusy) return;
+    if (_lastShownAppUpdateVersionCode == update.versionCode) return;
+    _lastShownAppUpdateVersionCode = update.versionCode;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || app.pendingAppUpdate?.versionCode != update.versionCode) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: !update.required,
+        builder: (dialogContext) => _AppUpdateDialog(update: update),
+      );
+    });
+  }
+}
+
+class _AppUpdateDialog extends StatefulWidget {
+  const _AppUpdateDialog({required this.update});
+
+  final AppUpdateInfo update;
+
+  @override
+  State<_AppUpdateDialog> createState() => _AppUpdateDialogState();
+}
+
+class _AppUpdateDialogState extends State<_AppUpdateDialog> {
+  bool _busy = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final releaseNotes = widget.update.releaseNotes.trim();
+    final status = app.appUpdateStatus.trim();
+    final error = _error ?? app.appUpdateError;
+
+    return AlertDialog(
+      backgroundColor: PosColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        side: BorderSide(color: PosColors.line),
+      ),
+      titlePadding: EdgeInsets.fromLTRB(22, 20, 22, 8),
+      contentPadding: EdgeInsets.fromLTRB(22, 8, 22, 4),
+      actionsPadding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+      title: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: PosColors.primarySoft,
+              borderRadius: BorderRadius.circular(PosRadii.sm),
+              border: Border.all(color: PosColors.line),
+            ),
+            child: Icon(
+              Icons.system_update_alt_rounded,
+              color: PosColors.primaryDark,
+              size: 22,
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text.appUpdateAvailableTitle,
+              style: TextStyle(
+                color: PosColors.slate,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            text.appUpdateAvailableMessage(widget.update.versionName),
+            style: TextStyle(
+              color: PosColors.slate,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+          if (widget.update.required) ...[
+            SizedBox(height: 10),
+            _UpdateBadge(text.appUpdateRequired),
+          ],
+          if (releaseNotes.isNotEmpty) ...[
+            SizedBox(height: 14),
+            Text(
+              text.appUpdateReleaseNotes,
+              style: TextStyle(
+                color: PosColors.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.2,
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              releaseNotes,
+              style: TextStyle(
+                color: PosColors.slate,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ],
+          SizedBox(height: 14),
+          Text(
+            text.appUpdateAndroidNotice,
+            style: TextStyle(
+              color: PosColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+          if (status.isNotEmpty) ...[
+            SizedBox(height: 12),
+            Text(
+              status,
+              style: TextStyle(
+                color: PosColors.primaryDark,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+          if (error != null && error.trim().isNotEmpty) ...[
+            SizedBox(height: 10),
+            Text(
+              error,
+              style: TextStyle(
+                color: PosColors.danger,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (!widget.update.required)
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () async {
+                    await app.dismissAppUpdate(widget.update);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+            child: Text(text.later),
+          ),
+        FilledButton.icon(
+          onPressed: _busy
+              ? null
+              : () async {
+                  setState(() {
+                    _busy = true;
+                    _error = null;
+                  });
+                  await app.startAppUpdate(widget.update);
+                  if (!context.mounted) return;
+                  if (app.appUpdateError != null) {
+                    setState(() {
+                      _busy = false;
+                      _error = app.appUpdateError;
+                    });
+                    return;
+                  }
+                  Navigator.of(context).pop();
+                },
+          icon: _busy
+              ? SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(Icons.download_for_offline_outlined, size: 18),
+          label: Text(text.updateNow),
+        ),
+      ],
+    );
+  }
+}
+
+class _UpdateBadge extends StatelessWidget {
+  const _UpdateBadge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: PosColors.primarySoft,
+        borderRadius: BorderRadius.circular(PosRadii.xs),
+        border: Border.all(color: PosColors.line),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: PosColors.primaryDark,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
 }
 
 class _Destination {
-  _Destination(this.label, this.icon, this.selectedIcon);
+  _Destination(this.label, this.bnLabel, this.icon, this.selectedIcon);
 
   final String label;
+  final String bnLabel;
   final IconData icon;
   final IconData selectedIcon;
 }
@@ -478,31 +708,31 @@ class _FloatingBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final barHeight = 72.0;
-
     return SafeArea(
       top: false,
       minimum: EdgeInsets.zero,
       child: Container(
-        height: barHeight,
         decoration: BoxDecoration(
-          color: Color(0xFFF4EFE4),
-          border: Border(top: BorderSide(color: Color(0xFF14110E), width: 1)),
+          color: PosColors.surface,
+          border: Border(top: BorderSide(color: PosColors.line, width: 0.5)),
         ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(8, 5, 8, 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              for (var i = 0; i < destinations.length; i++)
-                Expanded(
-                  child: _BottomNavItem(
-                    destination: destinations[i],
-                    selected: i == selectedIndex,
-                    onTap: () => onChanged(i),
+        child: SizedBox(
+          height: 70,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < destinations.length; i++)
+                  Expanded(
+                    child: _BottomNavItem(
+                      destination: destinations[i],
+                      selected: i == selectedIndex,
+                      onTap: () => onChanged(i),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -523,8 +753,10 @@ class _BottomNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = PosColors.primaryDark;
-    final icon = selected ? destination.selectedIcon : destination.icon;
+    final foreground = selected
+        ? const Color(0xFF1C1A17)
+        : const Color(0xFF888780);
+    final icon = destination.icon; // outline icon — design uses outline only.
 
     return Tooltip(
       message: destination.label,
@@ -532,50 +764,55 @@ class _BottomNavItem extends StatelessWidget {
         button: true,
         selected: selected,
         label: destination.label,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 2),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(19),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onTap,
-              child: Center(
-                child: AnimatedContainer(
-                  duration: Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  width: selected ? 52 : 52,
-                  height: selected ? 56 : 52,
-                  padding: EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: selected ? PosColors.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(18),
-                    border: selected
-                        ? Border.all(color: Color(0xFF14110E), width: 1)
-                        : null,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: foreground, size: 22),
+                  const SizedBox(height: 4),
+                  Text(
+                    destination.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: foreground,
+                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                      fontSize: 11,
+                      letterSpacing: 0,
+                    ),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, color: foreground, size: 18),
-                      SizedBox(height: 3),
-                      Text(
-                        destination.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: foreground,
-                          fontWeight: selected
-                              ? FontWeight.w700
-                              : FontWeight.w600,
-                          fontSize: 10,
-                          fontStyle: FontStyle.italic,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 2),
+                  Text(
+                    destination.bnLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: foreground,
+                      fontFamily: 'Hind Siliguri',
+                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                      fontSize: 10,
+                      height: 1,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    width: selected ? 18 : 0,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5C127),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -37,6 +38,7 @@ from schemas import (
     PhoneCompleteManagerSignupRequest,
     PhoneSendOtpRequest,
     PhoneVerifyOtpRequest,
+    PublicSlugUpdateRequest,
     StaffDevBypassLoginRequest,
     StaffInviteRequest,
     StaffInviteRespondRequest,
@@ -51,11 +53,27 @@ from subscription_service import (
     subscription_access_dict,
     subscription_to_dict,
 )
+from services.app_update import get_app_update
 
 router = APIRouter()
 
 MANAGER = "manager"
 STAFF = "staff"
+RESERVED_PUBLIC_SLUGS = {
+    "admin",
+    "api",
+    "app",
+    "assets",
+    "customer",
+    "docs",
+    "health",
+    "menu",
+    "platform",
+    "pos",
+    "static",
+    "uploads",
+    "www",
+}
 GOOGLE_VERIFY_TIMEOUT_SECONDS = 5.0
 _google_verify_transport = google_requests.Request(session=http_requests.Session())
 
@@ -115,6 +133,28 @@ def _parse_phone_param(raw: str) -> str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
+def _normalize_public_slug(value: str) -> str:
+    slug = value.strip().lower()
+    slug = re.sub(r"[^a-z0-9-]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    if len(slug) < 3:
+        raise HTTPException(status_code=422, detail="URL name must be at least 3 characters.")
+    if len(slug) > 63:
+        raise HTTPException(status_code=422, detail="URL name must be 63 characters or less.")
+    if slug in RESERVED_PUBLIC_SLUGS:
+        raise HTTPException(status_code=422, detail="That URL name is reserved.")
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?", slug):
+        raise HTTPException(status_code=422, detail="Use letters, numbers, and hyphens only.")
+    return slug
+
+
+def _public_menu_url(slug: str | None) -> str | None:
+    clean = (slug or "").strip().lower()
+    if not clean:
+        return None
+    return f"https://{clean}.quickbytes.buzz"
+
+
 async def _accounts_by_phone(db: AsyncSession, phone: str) -> list[AdminAccount]:
     rows = (await db.execute(select(AdminAccount).where(AdminAccount.phone == phone))).scalars().all()
     return list(rows)
@@ -141,6 +181,8 @@ async def _auth_payload(
         "outletId": outlet.id,
         "restaurantName": restaurant.name,
         "outletName": outlet.name,
+        "publicSlug": outlet.public_slug,
+        "customerMenuUrl": _public_menu_url(outlet.public_slug),
         "tableCount": outlet.table_count or 10,
         "deviceToken": token,
         "account": _account_dict(account),
@@ -181,6 +223,15 @@ async def admin_app_access(
     if not outlet_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
     return ok(await resolve_subscription_access_for_outlet(db, outlet_id))
+
+
+@router.get("/admin/app-update")
+async def admin_app_update(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = payload
+    return ok(await get_app_update(db))
 
 
 async def _current_account(
@@ -489,7 +540,7 @@ async def phone_complete_manager_signup(
     if not restaurant_name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Restaurant name is required.")
 
-    outlet_name = (body.outletName or "Main Outlet").strip()
+    outlet_name = (body.outletName or restaurant_name).strip() or restaurant_name
     restaurant = Restaurant(name=restaurant_name)
     db.add(restaurant)
     await db.flush()
@@ -779,7 +830,7 @@ async def google_start_or_login(
         )
 
     restaurant_name = (body.restaurantName or "").strip()
-    outlet_name = (body.outletName or "Main Outlet").strip()
+    outlet_name = (body.outletName or restaurant_name).strip() or restaurant_name
     if not restaurant_name:
         # No restaurant name → this is a login attempt for a Google email
         # that has never signed up. Surface a 404 the app can recognize and
@@ -902,6 +953,38 @@ async def admin_me(
             request=request,
         )
     )
+
+
+@router.patch("/admin/public-url")
+async def update_public_url(
+    body: PublicSlugUpdateRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    manager = await _current_account(payload, db, require_manager=True)
+    outlet = (
+        await db.execute(select(Outlet).where(Outlet.id == manager.outlet_id))
+    ).scalar_one()
+    slug = _normalize_public_slug(body.publicSlug)
+    existing = (
+        await db.execute(
+            select(Outlet).where(
+                (
+                    (Outlet.public_slug == slug)
+                    | (Outlet.server_id == slug)
+                )
+                & (Outlet.id != outlet.id)
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That URL is already taken. Try adding a number.",
+        )
+    outlet.public_slug = slug
+    await db.commit()
+    return ok({"publicSlug": slug, "customerMenuUrl": _public_menu_url(slug)})
 
 
 @router.get("/admin/staff")

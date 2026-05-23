@@ -1,7 +1,10 @@
-from datetime import datetime, timedelta, timezone
+import logging
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,10 +18,86 @@ from schemas import (
     StockAdjustmentPayload,
     ok,
 )
+from services.receipt_scan import (
+    ReceiptScanError,
+    extract_receipt_page_texts,
+    parse_receipt_text,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 ADJUSTMENT_TYPES = {"restock", "usage", "waste", "correction"}
+
+# Run on Bangladesh local time so "today's spend / variance" matches the wall clock.
+BDT_OFFSET = timedelta(hours=6)
+VARIANCE_TOLERANCE = 0.05  # ignore tiny rounding noise below 5% of a unit
+
+
+def _bdt_day_bounds(reference: datetime) -> tuple[datetime, datetime]:
+    local = reference.astimezone(timezone(BDT_OFFSET))
+    start_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_utc = (start_local - BDT_OFFSET).replace(tzinfo=timezone.utc)
+    end_utc = start_utc + timedelta(days=1)
+    return start_utc, end_utc
+
+
+def _parse_as_of(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid as_of timestamp.",
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _parse_date_param(value: str | None) -> date:
+    if not value:
+        local = (datetime.now(timezone.utc) + BDT_OFFSET).date()
+        return local
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date — expected YYYY-MM-DD.",
+        ) from exc
+
+
+def _normalize_category(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if raw in {"raw", "kacha", "kaccha", "fresh", "produce"}:
+        return "raw"
+    if raw in {"dry", "shukno", "spice", "spices", "grain", "grains"}:
+        return "dry"
+    if raw in {"packaged", "packet", "boxed", "tin", "canned"}:
+        return "packaged"
+    if raw:
+        return raw
+    return "other"
+
+
+def _category_label(key: str) -> tuple[str, str]:
+    mapping = {
+        "raw": ("Raw", "কাঁচা"),
+        "dry": ("Dry", "শুকনা"),
+        "packaged": ("Packaged", "প্যাকেট"),
+        "other": ("Other", "অন্যান্য"),
+    }
+    return mapping.get(key, (key.title(), key.title()))
+
+
+def _split_bilingual(name: str) -> tuple[str, str]:
+    if "/" in name:
+        en, bn = name.split("/", 1)
+        return en.strip(), bn.strip()
+    return name.strip(), ""
 
 
 def _item_to_dict(item: InventoryItem) -> dict:
@@ -300,3 +379,388 @@ async def upsert_daily_stock_count(
     await db.refresh(row)
     await db.refresh(item)
     return ok({"item": _item_to_dict(item), "dailyCount": _daily_count_to_dict(row)})
+
+
+# ── Summary, daily report, receipt scan ───────────────────────────────────────
+
+
+@router.get("/outlets/{outlet_id}/inventory/summary")
+async def inventory_summary(
+    outlet_id: str,
+    as_of: str | None = None,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    now = _parse_as_of(as_of)
+    today_start, today_end = _bdt_day_bounds(now)
+    today_local = (today_start + BDT_OFFSET).date().isoformat()
+
+    items = (
+        await db.execute(
+            select(InventoryItem)
+            .where(InventoryItem.outlet_id == outlet_id)
+            .where(InventoryItem.deleted_at.is_(None))
+        )
+    ).scalars().all()
+
+    today_adjustments = (
+        await db.execute(
+            select(StockAdjustment)
+            .where(StockAdjustment.outlet_id == outlet_id)
+            .where(StockAdjustment.created_at >= today_start)
+            .where(StockAdjustment.created_at < today_end)
+        )
+    ).scalars().all()
+
+    today_counts = (
+        await db.execute(
+            select(DailyStockCount)
+            .where(DailyStockCount.outlet_id == outlet_id)
+            .where(DailyStockCount.count_date == today_local)
+        )
+    ).scalars().all()
+    count_by_item = {row.inventory_item_id: float(row.quantity) for row in today_counts}
+
+    in_by_item: dict[str, float] = defaultdict(float)
+    out_by_item: dict[str, float] = defaultdict(float)
+    spend_by_item: dict[str, float] = defaultdict(float)
+    for adj in today_adjustments:
+        delta = float(adj.delta or 0)
+        kind = (adj.type or "").lower()
+        if kind == "restock":
+            in_by_item[adj.inventory_item_id] += max(delta, 0.0)
+            spend_by_item[adj.inventory_item_id] += float(adj.total_cost_bdt or 0)
+        elif kind in {"usage", "waste"}:
+            out_by_item[adj.inventory_item_id] += abs(delta) if delta < 0 else delta
+        elif kind == "correction" and delta < 0:
+            out_by_item[adj.inventory_item_id] += abs(delta)
+        elif kind == "correction" and delta > 0:
+            in_by_item[adj.inventory_item_id] += delta
+
+    stock_value = 0.0
+    variance_total_bdt = 0.0
+    variance_item_count = 0
+    alerts = 0
+    category_counts: dict[str, int] = defaultdict(int)
+    summary_items: list[dict[str, Any]] = []
+
+    for item in items:
+        on_hand = float(item.quantity or 0)
+        threshold = float(item.min_threshold or 0)
+        cost_per_unit = float(item.cost_per_unit or 0)
+        category_key = _normalize_category(item.category)
+        category_counts[category_key] += 1
+        stock_value += on_hand * cost_per_unit
+
+        item_in = float(in_by_item.get(item.id, 0.0))
+        item_out = float(out_by_item.get(item.id, 0.0))
+
+        if on_hand <= 0:
+            status_key = "out"
+            variance_qty = 0.0
+        elif threshold > 0 and on_hand <= threshold:
+            status_key = "low"
+            variance_qty = 0.0
+        else:
+            status_key = "ok"
+            variance_qty = 0.0
+
+        counted = count_by_item.get(item.id)
+        if counted is not None:
+            expected = on_hand  # current quantity already reflects today's adjustments
+            diff = round(counted - expected, 4)
+            if abs(diff) > VARIANCE_TOLERANCE:
+                status_key = "variance"
+                variance_qty = diff
+                variance_total_bdt += diff * cost_per_unit
+                variance_item_count += 1
+
+        if status_key in {"out", "low", "variance"}:
+            alerts += 1
+
+        en, bn = _split_bilingual(item.name)
+        summary_items.append(
+            {
+                "id": item.id,
+                "nameEn": en or item.name,
+                "nameBn": bn,
+                "category": category_key,
+                "unit": item.unit or "pcs",
+                "onHand": round(on_hand, 3),
+                "minThreshold": round(threshold, 3),
+                "todayIn": round(item_in, 3),
+                "todayOut": round(item_out, 3),
+                "todaySpendBdt": round(spend_by_item.get(item.id, 0.0), 2),
+                "varianceQty": round(variance_qty, 3),
+                "varianceStatus": status_key,
+                "costPerUnit": round(cost_per_unit, 2),
+            }
+        )
+
+    categories = [
+        {
+            "key": key,
+            "labelEn": _category_label(key)[0],
+            "labelBn": _category_label(key)[1],
+            "count": count,
+        }
+        for key, count in sorted(category_counts.items(), key=lambda kv: kv[0])
+    ]
+    categories.insert(
+        0,
+        {"key": "all", "labelEn": "All", "labelBn": "সব", "count": len(summary_items)},
+    )
+
+    return ok(
+        {
+            "asOf": now.astimezone(timezone.utc).isoformat(),
+            "stockValueBdt": round(stock_value, 2),
+            "varianceTodayBdt": round(variance_total_bdt, 2),
+            "varianceItemCount": variance_item_count,
+            "alerts": alerts,
+            "categories": categories,
+            "items": summary_items,
+        }
+    )
+
+
+def _expected_from_history(
+    start_qty: float,
+    adjustments: list[StockAdjustment],
+) -> float:
+    expected = start_qty
+    for adj in adjustments:
+        delta = float(adj.delta or 0)
+        kind = (adj.type or "").lower()
+        if kind == "restock":
+            expected += max(delta, 0.0)
+        elif kind in {"usage", "waste"}:
+            expected -= abs(delta) if delta < 0 else delta
+        elif kind == "correction":
+            expected += delta
+    return max(expected, 0.0)
+
+
+@router.get("/outlets/{outlet_id}/inventory/daily-report")
+async def inventory_daily_report(
+    outlet_id: str,
+    date_param: str | None = Query(default=None, alias="date"),
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    target_date = _parse_date_param(date_param)
+    target_str = target_date.isoformat()
+    yesterday_str = (target_date - timedelta(days=1)).isoformat()
+    four_weeks_ago = target_date - timedelta(days=28)
+    day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone(BDT_OFFSET)).astimezone(timezone.utc)
+    day_end = day_start + timedelta(days=1)
+
+    items = (
+        await db.execute(
+            select(InventoryItem)
+            .where(InventoryItem.outlet_id == outlet_id)
+            .where(InventoryItem.deleted_at.is_(None))
+        )
+    ).scalars().all()
+    item_lookup = {item.id: item for item in items}
+
+    today_counts = (
+        await db.execute(
+            select(DailyStockCount)
+            .where(DailyStockCount.outlet_id == outlet_id)
+            .where(DailyStockCount.count_date == target_str)
+        )
+    ).scalars().all()
+
+    yesterday_counts = (
+        await db.execute(
+            select(DailyStockCount)
+            .where(DailyStockCount.outlet_id == outlet_id)
+            .where(DailyStockCount.count_date == yesterday_str)
+        )
+    ).scalars().all()
+    yest_lookup = {row.inventory_item_id: float(row.quantity) for row in yesterday_counts}
+
+    day_adjustments = (
+        await db.execute(
+            select(StockAdjustment)
+            .where(StockAdjustment.outlet_id == outlet_id)
+            .where(StockAdjustment.created_at >= day_start)
+            .where(StockAdjustment.created_at < day_end)
+        )
+    ).scalars().all()
+    adj_by_item: dict[str, list[StockAdjustment]] = defaultdict(list)
+    for adj in day_adjustments:
+        adj_by_item[adj.inventory_item_id].append(adj)
+
+    recent_counts = (
+        await db.execute(
+            select(DailyStockCount)
+            .where(DailyStockCount.outlet_id == outlet_id)
+            .where(DailyStockCount.count_date >= four_weeks_ago.isoformat())
+            .where(DailyStockCount.count_date < target_str)
+        )
+    ).scalars().all()
+
+    breakdown: list[dict[str, Any]] = []
+    unexplained = 0.0
+    variance_items = 0
+
+    for row in today_counts:
+        item = item_lookup.get(row.inventory_item_id)
+        if not item:
+            continue
+        start_qty = yest_lookup.get(row.inventory_item_id, float(item.quantity or 0))
+        expected = _expected_from_history(start_qty, adj_by_item.get(row.inventory_item_id, []))
+        actual = float(row.quantity)
+        diff = round(actual - expected, 3)
+        if abs(diff) <= VARIANCE_TOLERANCE:
+            continue
+        cost_per_unit = float(item.cost_per_unit or 0)
+        unexplained += diff * cost_per_unit
+        variance_items += 1
+
+        # Count past weeks where the same item showed expected > actual.
+        recurring_weeks = 0
+        seen_weeks: set[int] = set()
+        for past in recent_counts:
+            if past.inventory_item_id != row.inventory_item_id:
+                continue
+            try:
+                past_date = date.fromisoformat(past.count_date)
+            except ValueError:
+                continue
+            days_ago = (target_date - past_date).days
+            week_bucket = days_ago // 7
+            if week_bucket in seen_weeks:
+                continue
+            past_qty = float(past.quantity)
+            if past_qty < start_qty - VARIANCE_TOLERANCE:
+                seen_weeks.add(week_bucket)
+                recurring_weeks += 1
+
+        en, bn = _split_bilingual(item.name)
+        note_en = "Recurring pattern — review?" if recurring_weeks >= 2 else ""
+        breakdown.append(
+            {
+                "itemId": item.id,
+                "nameEn": en or item.name,
+                "nameBn": bn,
+                "varianceQty": diff,
+                "unit": item.unit or "pcs",
+                "expectedQty": round(expected, 3),
+                "actualQty": round(actual, 3),
+                "recurringWeeks": recurring_weeks,
+                "noteEn": note_en,
+                "varianceBdt": round(diff * cost_per_unit, 2),
+            }
+        )
+
+    breakdown.sort(key=lambda r: abs(r["varianceBdt"]), reverse=True)
+
+    reorder_suggestions: list[dict[str, Any]] = []
+    for item in items:
+        on_hand = float(item.quantity or 0)
+        threshold = float(item.min_threshold or 0)
+        if threshold > 0 and on_hand <= threshold and on_hand > 0:
+            qty_to_order = max(threshold * 2 - on_hand, threshold)
+            en, bn = _split_bilingual(item.name)
+            unit = item.unit or "pcs"
+            reorder_suggestions.append(
+                {
+                    "itemId": item.id,
+                    "nameEn": en or item.name,
+                    "nameBn": bn,
+                    "qtyToOrder": round(qty_to_order, 2),
+                    "unit": unit,
+                    "ctaEn": f"{en or item.name} below par · order ~{round(qty_to_order, 1)} {unit} before noon",
+                }
+            )
+
+    headline_en = ""
+    if breakdown:
+        worst = breakdown[0]
+        if worst["recurringWeeks"] >= 2:
+            headline_en = (
+                f"{worst['nameEn']} is short {worst['recurringWeeks']} weeks in a row. "
+                "Want me to flag shifts for review?"
+            )
+        else:
+            headline_en = f"{worst['nameEn']} is off by {abs(worst['varianceQty'])} {worst['unit']} today."
+
+    return ok(
+        {
+            "date": target_str,
+            "unexplainedVarianceBdt": round(unexplained, 2),
+            "varianceItemCount": variance_items,
+            "headlineEn": headline_en,
+            "headlineBn": "",
+            "breakdown": breakdown,
+            "reorderSuggestions": reorder_suggestions[:5],
+        }
+    )
+
+
+@router.post("/outlets/{outlet_id}/inventory/receipt/scan")
+async def scan_inventory_receipt(
+    outlet_id: str,
+    files: list[UploadFile] = File(...),
+    current_outlet: str = Depends(get_current_outlet_id),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least one receipt image.",
+        )
+
+    pages: list[tuple[bytes, str]] = []
+    for upload in files:
+        content_type = (upload.content_type or "").lower()
+        if not content_type.startswith("image/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{upload.filename or 'Uploaded file'} is not an image.",
+            )
+        data = await upload.read()
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{upload.filename or 'Uploaded file'} is empty.",
+            )
+        pages.append((data, content_type))
+
+    logger.info(
+        "receipt scan request outlet=%s pages=%s bytes=%s",
+        outlet_id,
+        len(pages),
+        sum(len(image_bytes) for image_bytes, _ in pages),
+    )
+
+    try:
+        page_texts = await extract_receipt_page_texts(pages)
+        parsed = await parse_receipt_text(page_texts)
+    except ReceiptScanError as error:
+        logger.warning("receipt scan failed outlet=%s error=%s", outlet_id, error)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
+
+    logger.info(
+        "receipt scan parsed outlet=%s provider=%s items=%s warnings=%s",
+        outlet_id,
+        parsed.provider,
+        len(parsed.items),
+        len(parsed.warnings),
+    )
+    return ok(
+        {
+            "items": [item.model_dump() for item in parsed.items],
+            "provider": parsed.provider,
+            "pageCount": len(pages),
+            "warnings": parsed.warnings,
+        }
+    )

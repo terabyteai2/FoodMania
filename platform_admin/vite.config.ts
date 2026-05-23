@@ -8,13 +8,13 @@ export default defineConfig({
     port: 5174,
     proxy: {
       // Only used when VITE_API_BASE_URL is NOT set (relative URL mode).
-      // When VITE_API_BASE_URL=http://160.187.130.80, these are bypassed.
+      // When VITE_API_BASE_URL=https://quickbytes.buzz, these are bypassed.
       "/platform": {
-        target: "http://160.187.130.80",
+        target: "https://quickbytes.buzz",
         changeOrigin: true,
       },
       "/health": {
-        target: "http://160.187.130.80",
+        target: "https://quickbytes.buzz",
         changeOrigin: true,
       },
     },

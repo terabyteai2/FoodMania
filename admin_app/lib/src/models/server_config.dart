@@ -5,6 +5,7 @@ class ServerConfig {
     required this.outletId,
     required this.restaurantName,
     required this.outletName,
+    this.publicSlug = '',
     this.tableCount = 10,
   });
 
@@ -13,6 +14,7 @@ class ServerConfig {
   final String outletId;
   final String restaurantName;
   final String outletName;
+  final String publicSlug;
   final int tableCount;
 
   ServerConfig copyWith({
@@ -21,6 +23,7 @@ class ServerConfig {
     String? outletId,
     String? restaurantName,
     String? outletName,
+    String? publicSlug,
     int? tableCount,
   }) {
     return ServerConfig(
@@ -29,6 +32,7 @@ class ServerConfig {
       outletId: outletId ?? this.outletId,
       restaurantName: restaurantName ?? this.restaurantName,
       outletName: outletName ?? this.outletName,
+      publicSlug: publicSlug ?? this.publicSlug,
       tableCount: tableCount ?? this.tableCount,
     );
   }

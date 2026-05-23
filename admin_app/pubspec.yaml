@@ -55,3 +55,23 @@ flutter:
     - assets/brand/
     - assets/brand/splash.jpeg
     - assets/sounds/
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+          weight: 400
+        - asset: assets/fonts/Inter.ttf
+          weight: 500
+    - family: Hind Siliguri
+      fonts:
+        - asset: assets/fonts/HindSiliguri-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/HindSiliguri-Medium.ttf
+          weight: 500
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono.ttf
+          weight: 500

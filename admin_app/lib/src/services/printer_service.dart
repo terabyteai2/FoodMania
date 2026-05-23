@@ -237,11 +237,11 @@ class PrinterService {
       final sub = bt_serial.FlutterBluetoothSerial.instance
           .startDiscovery()
           .listen((result) {
-        seen[result.device.address] = BluetoothPrinterDevice(
-          name: result.device.name ?? '',
-          address: result.device.address,
-        );
-      });
+            seen[result.device.address] = BluetoothPrinterDevice(
+              name: result.device.name ?? '',
+              address: result.device.address,
+            );
+          });
 
       // Wait for discovery to complete naturally or cut it off after 10 s.
       await Future.any<void>([
@@ -350,11 +350,9 @@ class PrinterService {
       final generator = Generator(PaperSize.mm58, profile);
       final labels = _ReceiptLabels(language);
 
-      // Render each copy as a bitmap first, then ship raster bytes to the
-      // printer. This means the printer never has to render fonts itself —
-      // Bangla, mixed Unicode, and arbitrary symbols all come out exactly
-      // as the manager sees them in the app preview because we send pixels,
-      // not characters.
+      // Render the kitchen/manager ticket as a bitmap, then ship raster bytes
+      // to the printer. The customer invoice is printed separately from the
+      // accepted order card when the bill is requested.
       final managerCopyBytes = await _buildBitmapCopyBytes(
         generator,
         order,
@@ -363,16 +361,40 @@ class PrinterService {
         restaurantName: restaurantName,
         outletName: outletName,
       );
-      final okManager = await PrintBluetoothThermal.writeBytes(managerCopyBytes);
+      final okManager = await PrintBluetoothThermal.writeBytes(
+        managerCopyBytes,
+      );
       if (!okManager) {
         throw PrinterException(
           'Printing manager copy of ${order.orderNo} failed.',
         );
       }
 
-      // Wait before printing customer copy (kitchen tears manager copy first).
-      await Future<void>.delayed(const Duration(seconds: 4));
+      if (markAsPrinted) {
+        await markOrderPrinted(order);
+      }
+      _emit(
+        _state.copyWith(
+          lastPrintedOrderNo: order.orderNo,
+          lastPrintedAt: DateTime.now(),
+          clearLastError: true,
+        ),
+      );
+      return true;
+    });
+  }
 
+  Future<bool> printCustomerInvoice(
+    OrderModel order, {
+    required String restaurantName,
+    required String outletName,
+    AppLanguage language = AppLanguage.en,
+  }) async {
+    return _withBusyBool(() async {
+      await _ensureConnected();
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(PaperSize.mm58, profile);
+      final labels = _ReceiptLabels(language);
       final customerCopyBytes = await _buildBitmapCopyBytes(
         generator,
         order,
@@ -381,16 +403,11 @@ class PrinterService {
         restaurantName: restaurantName,
         outletName: outletName,
       );
-      final okCustomer =
-          await PrintBluetoothThermal.writeBytes(customerCopyBytes);
-      if (!okCustomer) {
+      final ok = await PrintBluetoothThermal.writeBytes(customerCopyBytes);
+      if (!ok) {
         throw PrinterException(
-          'Printing customer copy of ${order.orderNo} failed.',
+          'Printing customer invoice of ${order.orderNo} failed.',
         );
-      }
-
-      if (markAsPrinted) {
-        await markOrderPrinted(order);
       }
       _emit(
         _state.copyWith(

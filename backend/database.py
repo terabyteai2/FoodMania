@@ -22,6 +22,8 @@ async def create_tables() -> None:
         from models import Base as ModelBase  # noqa: F401 – registers models
         await conn.run_sync(ModelBase.metadata.create_all)
         await _ensure_auth_columns(conn)
+        await _ensure_menu_columns(conn)
+        await _ensure_order_columns(conn)
         await _ensure_platform_columns(conn)
     await seed_platform_admin()
     await seed_system_config()
@@ -87,6 +89,7 @@ async def _ensure_platform_columns(conn) -> None:
     if dialect == "sqlite":
         statements = [
             "ALTER TABLE outlets ADD COLUMN status VARCHAR DEFAULT 'active'",
+            "ALTER TABLE outlets ADD COLUMN public_slug VARCHAR",
             "ALTER TABLE outlets ADD COLUMN notes TEXT",
             "ALTER TABLE outlets ADD COLUMN table_count INTEGER DEFAULT 10",
             "ALTER TABLE uddoktapay_sessions ADD COLUMN outlet_id VARCHAR",
@@ -96,16 +99,81 @@ async def _ensure_platform_columns(conn) -> None:
                 await conn.execute(text(statement))
             except Exception:
                 pass
+        await conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_outlets_public_slug ON outlets(public_slug)")
+        )
         return
 
     statements = [
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'active'",
+        "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS public_slug VARCHAR",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_outlets_public_slug ON outlets(public_slug)",
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS table_count INTEGER DEFAULT 10",
         "ALTER TABLE uddoktapay_sessions ADD COLUMN IF NOT EXISTS outlet_id VARCHAR",
     ]
     for statement in statements:
         await conn.execute(text(statement))
+
+
+async def _ensure_menu_columns(conn) -> None:
+    """Compatibility migration for bilingual menu item text."""
+    dialect = conn.dialect.name
+    columns = [
+        ("name_en", "TEXT"),
+        ("name_bn", "TEXT"),
+        ("description_en", "TEXT"),
+        ("description_bn", "TEXT"),
+        ("category_en", "TEXT"),
+        ("category_bn", "TEXT"),
+    ]
+    if dialect == "sqlite":
+        for column, column_type in columns:
+            try:
+                await conn.execute(
+                    text(f"ALTER TABLE menu_items ADD COLUMN {column} {column_type}")
+                )
+            except Exception:
+                pass
+        return
+
+    for column, column_type in columns:
+        await conn.execute(
+            text(
+                f"ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS {column} {column_type}"
+            )
+        )
+
+
+async def _ensure_order_columns(conn) -> None:
+    """Compatibility migration for Terafoods order metadata."""
+    dialect = conn.dialect.name
+    columns = [
+        ("subtotal", "NUMERIC(10, 2)"),
+        ("vat_rate_percent", "NUMERIC(5, 2)"),
+        ("vat_amount", "NUMERIC(10, 2)"),
+        ("service_type", "VARCHAR"),
+        ("covers", "INTEGER"),
+        ("payment_method", "VARCHAR"),
+    ]
+    if dialect == "sqlite":
+        for column, column_type in columns:
+            try:
+                await conn.execute(
+                    text(f"ALTER TABLE orders ADD COLUMN {column} {column_type}")
+                )
+            except Exception:
+                pass
+    else:
+        for column, column_type in columns:
+            await conn.execute(
+                text(
+                    f"ALTER TABLE orders ADD COLUMN IF NOT EXISTS {column} {column_type}"
+                )
+            )
+    await conn.execute(text("UPDATE orders SET subtotal = total_amount WHERE subtotal IS NULL"))
+    await conn.execute(text("UPDATE orders SET vat_rate_percent = 0 WHERE vat_rate_percent IS NULL"))
+    await conn.execute(text("UPDATE orders SET vat_amount = 0 WHERE vat_amount IS NULL"))
 
 
 async def seed_system_config() -> None:
@@ -117,6 +185,7 @@ async def seed_system_config() -> None:
         "bkash_enabled": "false",
         "maintenance_mode": "false",
         "support_email": "",
+        "admin_app_update": "",
     }
     async with AsyncSessionLocal() as db:
         for key, value in defaults.items():

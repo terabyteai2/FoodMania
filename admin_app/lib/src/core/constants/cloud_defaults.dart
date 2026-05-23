@@ -17,7 +17,7 @@ class CloudDefaults {
   /// Build override: `--dart-define=POS_CLOUD_API_URL=https://other.example.com`
   static const String _cloudApiUrlFromEnvironment = String.fromEnvironment(
     'POS_CLOUD_API_URL',
-    defaultValue: 'https://160-187-130-80.sslip.io',
+    defaultValue: 'https://quickbytes.buzz',
   );
 
   /// Public API base used when no `POS_CLOUD_API_URL` build override is set.
@@ -104,5 +104,25 @@ class CloudDefaults {
       return embeddedBaseUrl;
     }
     return trimmed;
+  }
+
+  static String customerMenuUrl({
+    required String baseUrl,
+    required String outletId,
+    String? publicSlug,
+  }) {
+    final resolvedBase = resolveBaseUrl(baseUrl).replaceAll(RegExp(r'/+$'), '');
+    final subdomain = (publicSlug ?? '').trim().toLowerCase();
+    final isUuidLike = RegExp(
+      r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$',
+    ).hasMatch(subdomain);
+    if (resolvedBase == 'https://quickbytes.buzz' &&
+        !isUuidLike &&
+        subdomain.isNotEmpty &&
+        RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$')
+            .hasMatch(subdomain)) {
+      return 'https://$subdomain.quickbytes.buzz';
+    }
+    return '$resolvedBase/menu/$outletId';
   }
 }

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_pos/src/app_controller.dart';
 import 'package:local_pos/src/app_scope.dart';
+import 'package:local_pos/src/core/localization/app_strings.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
 import 'package:local_pos/src/features/menu/menu_management_screen.dart';
 import 'package:local_pos/src/features/setup/tenant_setup_screen.dart';
 import 'package:local_pos/src/models/account_role.dart';
 import 'package:local_pos/src/services/cloud_api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Widget _scoped(PosAppController controller, Widget child) {
   return AppScope(
@@ -23,16 +25,22 @@ void main() {
         'pageCount': 2,
         'items': [
           {
-            'name': 'Chicken Roll',
-            'description': 'Warm chicken roll.',
-            'category': 'Snacks',
+            'nameEn': 'Chicken Roll',
+            'nameBn': 'চিকেন রোল',
+            'descriptionEn': 'Warm chicken roll.',
+            'descriptionBn': 'গরম চিকেন রোল।',
+            'categoryEn': 'Snacks',
+            'categoryBn': 'স্ন্যাকস',
             'price': 180,
             'isAvailable': true,
           },
           {
-            'name': 'Broken price',
-            'description': 'Skip this one.',
-            'category': 'General',
+            'nameEn': 'Broken price',
+            'nameBn': 'ভাঙা দাম',
+            'descriptionEn': 'Skip this one.',
+            'descriptionBn': 'এটি বাদ দিন।',
+            'categoryEn': 'General',
+            'categoryBn': 'সাধারণ',
             'price': 0,
           },
         ],
@@ -52,14 +60,14 @@ void main() {
 
     expect(result.provider, 'xai');
     expect(result.pageCount, 2);
-    expect(result.items.map((item) => item.name), ['Chicken Roll']);
+    expect(result.items.map((item) => item.nameEn), ['Chicken Roll']);
     expect(tenant.tableCount, 42);
   });
 
   testWidgets('scan menu floating action is manager only', (tester) async {
     final manager = PosAppController();
     await tester.pumpWidget(_scoped(manager, const MenuManagementScreen()));
-    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNWidgets(2));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -75,32 +83,36 @@ void main() {
   testWidgets('restaurant setup validates a default table count', (
     tester,
   ) async {
-    final controller = PosAppController();
+    SharedPreferences.setMockInitialValues({});
+    final controller = PosAppController()..language = AppLanguage.en;
+    var provisioned = false;
     await tester.pumpWidget(
-      _scoped(controller, TenantSetupScreen(onProvisioned: () {})),
+      _scoped(
+        controller,
+        TenantSetupScreen(onProvisioned: () => provisioned = true),
+      ),
     );
-
-    final tableField = find.byKey(const Key('tenant-setup-table-count'));
-    expect(tester.widget<TextField>(tableField).controller!.text, '10');
 
     await tester.enterText(find.byType(TextField).first, 'Scan Cafe');
-    await tester.enterText(tableField, '0');
+    await tester.enterText(find.byType(TextField).at(1), 'Moon Ahmed');
     await tester.pump();
-    expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Continue'))
-          .onPressed,
-      isNull,
-    );
+    expect(find.text('Continue'), findsOneWidget);
 
-    await tester.enterText(tableField, '12');
-    await tester.pump();
-    expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Continue'))
-          .onPressed,
-      isNotNull,
-    );
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open dashboard'));
+    for (var i = 0; i < 10 && !provisioned; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(provisioned, isTrue);
+    expect(controller.serverConfig.tableCount, 10);
     controller.dispose();
   });
 }

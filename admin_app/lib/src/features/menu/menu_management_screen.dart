@@ -40,6 +40,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
+    final language = app.language;
     final categories = [text.allCategories, ...app.categories];
     if (!categories.contains(_selectedCategory)) {
       _selectedCategory = text.allCategories;
@@ -50,12 +51,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         .where((item) {
           final matchesCategory =
               _selectedCategory == text.allCategories ||
-              item.category == _selectedCategory;
+              item.localizedCategory(language) == _selectedCategory;
           final matchesSearch =
-              query.isEmpty ||
-              item.name.toLowerCase().contains(query) ||
-              item.category.toLowerCase().contains(query) ||
-              item.description.toLowerCase().contains(query);
+              query.isEmpty || item.searchText(language).contains(query);
           return matchesCategory && matchesSearch;
         })
         .toList(growable: false);
@@ -64,27 +62,44 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     return Scaffold(
       backgroundColor: PosColors.background,
       floatingActionButton: app.isManager
-          ? SizedBox(
-              height: 58,
-              child: FloatingActionButton.extended(
-                onPressed: _scanBusy ? null : () => _scanMenu(context),
-                backgroundColor: PosColors.primary,
-                foregroundColor: PosColors.primaryDark,
-                tooltip: text.menuScan,
-                icon: _scanBusy
-                    ? SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(
-                          color: PosColors.primaryDark,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Icon(Icons.document_scanner_rounded, size: 22),
-                label: Text(
-                  _scanBusy ? text.menuScanning : text.menuScan,
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'add-menu-item',
+                  onPressed: () => _openMenuForm(context),
+                  backgroundColor: PosColors.surface,
+                  foregroundColor: PosColors.slate,
+                  tooltip: text.addMenuItem,
+                  icon: Icon(Icons.add_rounded, size: 22),
+                  label: Text(
+                    text.addMenuItem,
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                  ),
                 ),
-              ),
+                SizedBox(height: 10),
+                FloatingActionButton.extended(
+                  heroTag: 'scan-menu',
+                  onPressed: _scanBusy ? null : () => _scanMenu(context),
+                  backgroundColor: PosColors.primary,
+                  foregroundColor: PosColors.primaryDark,
+                  tooltip: text.menuScan,
+                  icon: _scanBusy
+                      ? SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            color: PosColors.primaryDark,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(Icons.document_scanner_rounded, size: 22),
+                  label: Text(
+                    _scanBusy ? text.menuScanning : text.menuScan,
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                  ),
+                ),
+              ],
             )
           : null,
       body: SafeArea(
@@ -109,8 +124,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                           onNavigateToOrders:
                               widget.onNavigateToOrders ?? () {},
                         ),
-                        if (app.isManager)
-                          _NewMenuButton(onTap: () => _openMenuForm(context)),
                       ],
                     ),
                     SizedBox(height: 14),
@@ -128,7 +141,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         countOf: (cat) => cat == text.allCategories
                             ? app.menuItems.length
                             : app.menuItems
-                                  .where((i) => i.category == cat)
+                                  .where(
+                                    (i) => i.localizedCategory(language) == cat,
+                                  )
                                   .length,
                         onSelected: (value) =>
                             setState(() => _selectedCategory = value),
@@ -150,6 +165,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     else
                       _MenuList(
                         items: items,
+                        language: language,
                         onEdit: app.isManager
                             ? (item) => _openMenuForm(context, item: item)
                             : (_) {},
@@ -231,50 +247,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   Future<List<PickedMenuScanPage>> _pickMenuScanPages(
     BuildContext context,
   ) async {
-    final text = AppScope.of(context).strings;
-    final source = await showModalBottomSheet<_MenuScanSource>(
-      context: context,
-      backgroundColor: PosColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 10, 16, 14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: PosColors.lineStrong,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              ListTile(
-                leading: Icon(Icons.photo_camera_rounded),
-                title: Text(text.menuScanTakePhotos),
-                subtitle: Text(text.menuScanTakePhotosSubtitle),
-                onTap: () => Navigator.pop(context, _MenuScanSource.camera),
-              ),
-              ListTile(
-                leading: Icon(Icons.photo_library_rounded),
-                title: Text(text.menuScanChooseGallery),
-                subtitle: Text(text.menuScanChooseGallerySubtitle),
-                onTap: () => Navigator.pop(context, _MenuScanSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!context.mounted) return const <PickedMenuScanPage>[];
-    if (source == null) return const <PickedMenuScanPage>[];
-    if (source == _MenuScanSource.gallery) {
-      return _scanImageService.pickMenuScanPages();
-    }
     return _captureMenuScanPages(context);
   }
 
@@ -335,8 +307,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     await app.saveMenuItem(
       id: item?.id,
       name: result.name,
+      nameEn: result.name,
+      nameBn: item?.nameBn,
       description: result.description,
+      descriptionEn: result.description,
+      descriptionBn: item?.descriptionBn,
       category: result.category,
+      categoryEn: result.category,
+      categoryBn: item?.categoryBn,
       price: result.price,
       imageUrl: result.imageUrl,
       isAvailable: result.isAvailable,
@@ -380,48 +358,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(text.menuDeleted)));
-  }
-}
-
-enum _MenuScanSource { camera, gallery }
-
-class _NewMenuButton extends StatelessWidget {
-  const _NewMenuButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = AppScope.of(context).strings.menuNewButton;
-    return SizedBox(
-      height: 36,
-      child: Material(
-        color: PosColors.primary,
-        borderRadius: BorderRadius.circular(9),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add_rounded, color: PosColors.primaryDark, size: 14),
-                SizedBox(width: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: PosColors.primaryDark,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -484,38 +420,73 @@ class _CategoryStrip extends StatelessWidget {
 class _MenuList extends StatelessWidget {
   const _MenuList({
     required this.items,
+    required this.language,
     required this.onEdit,
     required this.onDelete,
     required this.onAvailabilityChanged,
   });
 
   final List<MenuItem> items;
+  final AppLanguage language;
   final ValueChanged<MenuItem> onEdit;
   final ValueChanged<MenuItem> onDelete;
   final void Function(MenuItem item, bool value) onAvailabilityChanged;
 
   @override
   Widget build(BuildContext context) {
-    return CompactSurface(
-      padding: EdgeInsets.zero,
-      radius: 10,
-      child: ListView.separated(
-        itemCount: items.length,
-        shrinkWrap: true,
-        physics: NeverScrollableScrollPhysics(),
-        separatorBuilder: (_, _) =>
-            Divider(height: 1, color: PosColors.lineStrong),
-        itemBuilder: (context, index) {
-          final item = items[index];
-          return _MenuRow(
-            item: item,
-            onEdit: () => onEdit(item),
-            onDelete: () => onDelete(item),
-            onAvailabilityChanged: (value) =>
-                onAvailabilityChanged(item, value),
-          );
-        },
-      ),
+    final grouped = <String, List<MenuItem>>{};
+    for (final item in items) {
+      final category = item.localizedCategory(language).trim().isEmpty
+          ? 'General'
+          : item.localizedCategory(language).trim();
+      grouped.putIfAbsent(category, () => <MenuItem>[]).add(item);
+    }
+    final categoryNames = grouped.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final category in categoryNames) ...[
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              2,
+              category == categoryNames.first ? 0 : 14,
+              2,
+              7,
+            ),
+            child: Text(
+              category,
+              style: TextStyle(
+                color: PosColors.slate,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          CompactSurface(
+            padding: EdgeInsets.zero,
+            radius: 10,
+            child: ListView.separated(
+              itemCount: grouped[category]!.length,
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: PosColors.lineStrong),
+              itemBuilder: (context, index) {
+                final item = grouped[category]![index];
+                return _MenuRow(
+                  item: item,
+                  language: language,
+                  onEdit: () => onEdit(item),
+                  onDelete: () => onDelete(item),
+                  onAvailabilityChanged: (value) =>
+                      onAvailabilityChanged(item, value),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -523,12 +494,14 @@ class _MenuList extends StatelessWidget {
 class _MenuRow extends StatelessWidget {
   const _MenuRow({
     required this.item,
+    required this.language,
     required this.onEdit,
     required this.onDelete,
     required this.onAvailabilityChanged,
   });
 
   final MenuItem item;
+  final AppLanguage language;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final ValueChanged<bool> onAvailabilityChanged;
@@ -562,7 +535,7 @@ class _MenuRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item.name,
+                      item.localizedName(language),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -574,9 +547,9 @@ class _MenuRow extends StatelessWidget {
                     ),
                     SizedBox(height: 3),
                     Text(
-                      item.description.trim().isEmpty
-                          ? item.category
-                          : '${item.category} · ${item.description}',
+                      item.localizedDescription(language).trim().isEmpty
+                          ? item.localizedCategory(language)
+                          : item.localizedDescription(language),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

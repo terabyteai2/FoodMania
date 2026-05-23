@@ -1,299 +1,180 @@
 import 'package:flutter/material.dart';
 
-// ignore_for_file: unused_element
 enum PosThemeTone { dark, light }
 
-class _PosPalette {
-  const _PosPalette({
-    required this.primary,
-    required this.primaryDark,
-    required this.primarySoft,
-    required this.primaryGlow,
-    required this.accent,
-    required this.accentSoft,
-    required this.background,
-    required this.surface,
-    required this.surfaceWarm,
-    required this.surfaceTinted,
-    required this.slate,
-    required this.slateSoft,
-    required this.muted,
-    required this.mutedSoft,
-    required this.success,
-    required this.warning,
-    required this.danger,
-    required this.info,
-    required this.purple,
-    required this.line,
-    required this.lineStrong,
-  });
-
-  final Color primary;
-  final Color primaryDark;
-  final Color primarySoft;
-  final Color primaryGlow;
-  final Color accent;
-  final Color accentSoft;
-  final Color background;
-  final Color surface;
-  final Color surfaceWarm;
-  final Color surfaceTinted;
-  final Color slate;
-  final Color slateSoft;
-  final Color muted;
-  final Color mutedSoft;
-  final Color success;
-  final Color warning;
-  final Color danger;
-  final Color info;
-  final Color purple;
-  final Color line;
-  final Color lineStrong;
-}
-
 class PosColors {
-  // Dark-first palette — exact tokens from wireframe SystemNotes
-  static const _dark = _PosPalette(
-    primary: Color(0xFFF2C744),     // brand
-    primaryDark: Color(0xFF14110E), // surface-0 / app bg (used as dark fg on brand buttons)
-    primarySoft: Color(0x33F2C744), // brand/20 tint
-    primaryGlow: Color(0xFFF2C744),
-    accent: Color(0xFFE8A14A),      // cooking / warm accent
-    accentSoft: Color(0x1AE8C547),
-    background: Color(0xFF14110E), // surface-0
-    surface: Color(0xFF1F1C18),    // surface-1 / cards
-    surfaceWarm: Color(0xFF2A2622), // surface-2 / raised elements
-    surfaceTinted: Color(0xFF2A2622),
-    slate: Color(0xFFF6F1E4),      // ink-hi / titles
-    slateSoft: Color(0xFFD8D2C2),
-    muted: Color(0xFF9A9388),      // ink-lo / supporting text
-    mutedSoft: Color(0xFF5A5450),
-    success: Color(0xFF7BB47C),    // ready / green state
-    warning: Color(0xFFE8A14A),    // cooking state
-    danger: Color(0xFFD86A55),     // danger state
-    info: Color(0xFF4BA3F5),
-    purple: Color(0xFFB97AF7),
-    line: Color(0xFF2A2622),       // hairline divider
-    lineStrong: Color(0xFF3A3630),
-  );
+  static const Color primary = Color(0xFFF5C127);
+  static const Color primarySoft = Color(0xFFFEF1C5);
+  static const Color primaryWash = Color(0xFFFFF9E0);
+  static const Color primaryDark = Color(0xFF1C1A17);
+  static const Color primaryGlow = Color(0xFFF5C127);
 
-  // Light palette (kept for compatibility)
-  static const _light = _PosPalette(
-    primary: Color(0xFFF2C744),
-    primaryDark: Color(0xFF111111),
-    primarySoft: Color(0xFFFCE9A6),
-    primaryGlow: Color(0xFFF6D670),
-    accent: Color(0xFFF2C744),
-    accentSoft: Color(0xFFFFF7D6),
-    background: Color(0xFFFFFFFF),
-    surface: Color(0xFFF8F7F5),
-    surfaceWarm: Color(0xFFF4F3F0),
-    surfaceTinted: Color(0xFFFFFBF0),
-    slate: Color(0xFF0B0B0B),
-    slateSoft: Color(0xFF1F1F1F),
-    muted: Color(0xFF4B4B4B),
-    mutedSoft: Color(0xFF9B9B9B),
-    success: Color(0xFF16A34A),
-    warning: Color(0xFFFFB300),
-    danger: Color(0xFFDC2626),
-    info: Color(0xFF2563EB),
-    purple: Color(0xFF7C3AED),
-    line: Color(0xFFEDEDED),
-    lineStrong: Color(0xFFD8D8D8),
-  );
+  static const Color background = Color(0xFFF7F4EE);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceWarm = Color(0xFFF7F4EE);
+  static const Color surfaceTinted = Color(0xFFFFF9E0);
 
-  static _PosPalette _active = _dark;
-  static PosThemeTone _tone = PosThemeTone.dark;
+  static const Color slate = Color(0xFF1C1A17);
+  static const Color slateSoft = Color(0xFF1C1A17);
+  static const Color muted = Color(0xFF888780);
+  static const Color mutedSoft = Color(0xFFE8E4DC);
 
-  static PosThemeTone get tone => _tone;
+  static const Color success = Color(0xFF3D7A5A);
+  static const Color successSoft = Color(0xFFEAF4EE);
+  static const Color warning = Color(0xFFF5C127);
+  static const Color warningSoft = Color(0xFFFEF1C5);
+  static const Color danger = Color(0xFFA32D2D);
+  static const Color dangerSoft = Color(0xFFFCEBEB);
+  static const Color info = Color(0xFF888780);
+  static const Color purple = Color(0xFF888780);
 
-  static void setTone(PosThemeTone tone) {
-    _tone = tone;
-    _active = tone == PosThemeTone.dark ? _dark : _light;
-  }
+  static const Color coral = Color(0xFFE88060);
+  static const Color coralSoft = Color(0xFFFBE4DB);
+  static const Color coralWash = Color(0xFFFDEFE9);
 
-  static Color get primary => _active.primary;
-  static Color get primaryDark => _active.primaryDark;
-  static Color get primarySoft => _active.primarySoft;
-  static Color get primaryGlow => _active.primaryGlow;
-  static Color get accent => _active.accent;
-  static Color get accentSoft => _active.accentSoft;
-  static Color get background => _active.background;
-  static Color get surface => _active.surface;
-  static Color get surfaceWarm => _active.surfaceWarm;
-  static Color get surfaceTinted => _active.surfaceTinted;
-  static Color get slate => _active.slate;
-  static Color get slateSoft => _active.slateSoft;
-  static Color get muted => _active.muted;
-  static Color get mutedSoft => _active.mutedSoft;
-  static Color get success => _active.success;
-  static Color get warning => _active.warning;
-  static Color get danger => _active.danger;
-  static Color get info => _active.info;
-  static Color get purple => _active.purple;
-  static Color get line => _active.line;
-  static Color get lineStrong => _active.lineStrong;
+  static const Color accent = primary;
+  static const Color accentSoft = primaryWash;
+  static const Color line = Color(0xFFE8E4DC);
+  static const Color lineStrong = Color(0xFFE8E4DC);
+
+  static PosThemeTone get tone => PosThemeTone.light;
+
+  static void setTone(PosThemeTone tone) {}
 }
 
 class PosRadii {
   static const double xs = 8;
   static const double sm = 12;
-  static const double md = 16;
-  static const double lg = 20;
-  static const double xl = 24;
+  static const double md = 12;
+  static const double lg = 12;
+  static const double xl = 12;
   static const double pill = 999;
 }
 
 class PosShadows {
-  static List<BoxShadow> get card => [
+  static const List<BoxShadow> card = [];
+  static const List<BoxShadow> raised = [
     BoxShadow(
-      color: Color(0x55000000),
-      blurRadius: 18,
-      offset: Offset(0, 8),
-    ),
-    BoxShadow(
-      color: Color(0x22000000),
-      blurRadius: 30,
-      offset: Offset(0, 16),
-    ),
-  ];
-
-  static List<BoxShadow> get raised => [
-    BoxShadow(
-      color: Color(0x55000000),
+      color: Color(0x14000000),
       blurRadius: 24,
       offset: Offset(0, 10),
     ),
   ];
-
-  static List<BoxShadow> get glow => [
+  static const List<BoxShadow> glow = [
     BoxShadow(
-      color: Color(0x44F2C744),
-      blurRadius: 26,
-      offset: Offset(0, 14),
+      color: Color(0x73F5C127),
+      blurRadius: 16,
+      offset: Offset(0, 6),
+    ),
+    BoxShadow(
+      color: Color(0x1A000000),
+      blurRadius: 4,
+      offset: Offset(0, 2),
     ),
   ];
 }
 
 class PosGradients {
-  static LinearGradient get brand => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [PosColors.primary, Color(0xFFE0B030)],
+  static const LinearGradient brand = LinearGradient(
+    colors: [PosColors.primary, PosColors.primary],
   );
 
-  static LinearGradient get brandDeep => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [PosColors.primary, Color(0xFFC89A20)],
+  static const LinearGradient brandDeep = LinearGradient(
+    colors: [PosColors.primaryDark, PosColors.primaryDark],
   );
 
-  static LinearGradient softWash({double opacity = 0.72}) => LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
+  static LinearGradient softWash({double opacity = 1}) => const LinearGradient(
     colors: [PosColors.background, PosColors.background],
   );
 
-  static LinearGradient cardTint(Color color) => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+  static LinearGradient cardTint(Color color) => const LinearGradient(
     colors: [PosColors.surface, PosColors.surface],
   );
 }
 
 class AppTheme {
-  static ThemeData dark({double uiScale = 1.0}) {
-    PosColors.setTone(PosThemeTone.dark);
-    return _build(uiScale: uiScale, brightness: Brightness.dark);
-  }
+  static ThemeData dark({double uiScale = 1.0}) => light(uiScale: uiScale);
 
   static ThemeData light({double uiScale = 1.0}) {
     PosColors.setTone(PosThemeTone.light);
-    return _build(uiScale: uiScale, brightness: Brightness.light);
+    return _build(uiScale: uiScale);
   }
 
-  static ThemeData _build({
-    required double uiScale,
-    required Brightness brightness,
-  }) {
+  static ThemeData _build({required double uiScale}) {
     final scale = uiScale.clamp(0.78, 1.08).toDouble();
     double s(double value) => (value * scale).toDouble();
 
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: PosColors.primary,
+    const colorScheme = ColorScheme.light(
       primary: PosColors.primary,
-      secondary: PosColors.accent,
-      surface: PosColors.surface,
-      error: PosColors.danger,
-      brightness: brightness,
-    ).copyWith(
+      onPrimary: PosColors.primaryDark,
+      secondary: PosColors.primaryDark,
+      onSecondary: Colors.white,
       surface: PosColors.surface,
       onSurface: PosColors.slate,
-      surfaceContainerHighest: PosColors.surfaceWarm,
+      error: PosColors.danger,
+      onError: Colors.white,
+    );
+
+    final baseText = TextStyle(
+      fontFamily: 'Inter',
+      color: PosColors.slate,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: PosColors.background,
-      fontFamily: 'Roboto',
-      splashFactory: InkSparkle.splashFactory,
+      fontFamily: 'Inter',
+      splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       textTheme: TextTheme(
-        displaySmall: TextStyle(
-          fontSize: 30,
-          fontWeight: FontWeight.w900,
-          color: PosColors.slate,
+        displaySmall: baseText.copyWith(
+          fontSize: s(28),
+          fontWeight: FontWeight.w500,
           height: 1.06,
+          letterSpacing: -0.4,
         ),
-        headlineMedium: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w900,
-          color: PosColors.slate,
+        headlineMedium: baseText.copyWith(
+          fontSize: s(24),
+          fontWeight: FontWeight.w500,
           height: 1.1,
+          letterSpacing: -0.4,
         ),
-        titleLarge: TextStyle(
-          fontSize: 18.5,
-          fontWeight: FontWeight.w800,
-          color: PosColors.slate,
+        titleLarge: baseText.copyWith(
+          fontSize: s(18),
+          fontWeight: FontWeight.w500,
           height: 1.18,
+          letterSpacing: -0.3,
         ),
-        titleMedium: TextStyle(
-          fontSize: 14.5,
-          fontWeight: FontWeight.w700,
-          color: PosColors.slate,
+        titleMedium: baseText.copyWith(
+          fontSize: s(15),
+          fontWeight: FontWeight.w500,
           height: 1.22,
         ),
-        titleSmall: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: PosColors.slate,
+        titleSmall: baseText.copyWith(
+          fontSize: s(13),
+          fontWeight: FontWeight.w500,
           height: 1.22,
         ),
-        bodyLarge: TextStyle(
-          fontSize: 14.4,
-          color: PosColors.slate,
-          height: 1.4,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 12.8,
+        bodyLarge: baseText.copyWith(fontSize: s(15), height: 1.4),
+        bodyMedium: baseText.copyWith(
+          fontSize: s(14),
           color: PosColors.muted,
           height: 1.4,
         ),
-        bodySmall: TextStyle(
-          fontSize: 11.5,
+        bodySmall: baseText.copyWith(
+          fontSize: s(12),
           color: PosColors.muted,
           height: 1.3,
-          fontWeight: FontWeight.w600,
         ),
-        labelLarge: TextStyle(
-          fontSize: 13.2,
-          color: PosColors.slate,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.1,
+        labelLarge: baseText.copyWith(
+          fontSize: s(14),
+          fontWeight: FontWeight.w500,
         ),
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         elevation: 0,
         centerTitle: false,
         backgroundColor: PosColors.background,
@@ -302,150 +183,131 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        shadowColor: const Color(0x66000000),
+        shadowColor: Colors.transparent,
         color: PosColors.surface,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.lg)),
-          side: BorderSide(color: PosColors.line),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          side: const BorderSide(color: PosColors.line, width: 0.5),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: PosColors.surfaceWarm,
+        fillColor: PosColors.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.md)),
-          borderSide: BorderSide(color: PosColors.line),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderSide: const BorderSide(color: PosColors.line, width: 0.5),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.md)),
-          borderSide: BorderSide(color: PosColors.line),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderSide: const BorderSide(color: PosColors.line, width: 0.5),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.md)),
-          borderSide: BorderSide(color: PosColors.primary, width: 1.4),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderSide: const BorderSide(color: PosColors.primaryDark, width: 1),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.md)),
-          borderSide: BorderSide(color: PosColors.danger),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderSide: const BorderSide(color: PosColors.danger, width: 0.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.md)),
-          borderSide: BorderSide(color: PosColors.danger, width: 1.6),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderSide: const BorderSide(color: PosColors.danger, width: 1),
         ),
         contentPadding: EdgeInsets.symmetric(
           horizontal: s(14),
           vertical: s(13),
         ),
-        labelStyle: TextStyle(
+        labelStyle: const TextStyle(
           color: PosColors.muted,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w400,
         ),
-        hintStyle: TextStyle(color: PosColors.muted),
+        hintStyle: const TextStyle(color: PosColors.muted),
         prefixIconColor: PosColors.muted,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          minimumSize: Size(s(44), s(40)),
-          elevation: 0,
-          shadowColor: Colors.transparent,
-          backgroundColor: PosColors.primary,
-          foregroundColor: PosColors.primaryDark,
-          padding: EdgeInsets.symmetric(horizontal: s(16), vertical: s(10)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(s(PosRadii.sm + 2)),
-          ),
-          textStyle: TextStyle(
-            fontSize: s(13.0),
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.1,
-          ),
+        style: _buttonStyle(
+          background: PosColors.primary,
+          foreground: PosColors.primaryDark,
+          height: s(42),
+          radius: PosRadii.sm,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: Size(s(44), s(40)),
-          backgroundColor: PosColors.primary,
-          foregroundColor: PosColors.primaryDark,
-          padding: EdgeInsets.symmetric(horizontal: s(16), vertical: s(10)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(s(PosRadii.sm + 2)),
-          ),
-          textStyle: TextStyle(fontSize: s(13.0), fontWeight: FontWeight.w800),
+        style: _buttonStyle(
+          background: PosColors.primary,
+          foreground: PosColors.primaryDark,
+          height: s(42),
+          radius: PosRadii.sm,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: Size(s(44), s(40)),
+          minimumSize: Size(s(44), s(42)),
           foregroundColor: PosColors.slate,
           backgroundColor: Colors.transparent,
-          side: BorderSide(color: PosColors.lineStrong),
+          side: const BorderSide(color: PosColors.line, width: 0.5),
           padding: EdgeInsets.symmetric(horizontal: s(14), vertical: s(10)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(s(PosRadii.sm + 2)),
+            borderRadius: BorderRadius.circular(PosRadii.sm),
           ),
           textStyle: TextStyle(
-            fontSize: s(13.0),
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.1,
+            fontSize: s(14),
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0,
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: PosColors.primary,
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          foregroundColor: PosColors.primaryDark,
+          textStyle: const TextStyle(fontWeight: FontWeight.w500),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
           foregroundColor: PosColors.slate,
+          minimumSize: const Size(38, 38),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(s(PosRadii.sm)),
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: s(66),
+        height: s(70),
         backgroundColor: PosColors.surface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        shadowColor: const Color(0x50000000),
-        indicatorColor: PosColors.primarySoft,
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(s(PosRadii.md)),
-        ),
+        indicatorColor: Colors.transparent,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
             fontSize: s(11),
-            fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-            color: selected ? PosColors.primary : PosColors.muted,
-            letterSpacing: 0.1,
+            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+            color: selected ? PosColors.slate : PosColors.muted,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
-            size: selected ? s(22) : s(20),
-            color: selected ? PosColors.primary : PosColors.muted,
+            size: s(22),
+            color: selected ? PosColors.slate : PosColors.muted,
           );
         }),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: PosColors.surface,
-        selectedIconTheme: IconThemeData(color: PosColors.primary, size: s(21)),
+        selectedIconTheme: IconThemeData(color: PosColors.slate, size: s(21)),
         unselectedIconTheme: IconThemeData(color: PosColors.muted, size: s(20)),
         selectedLabelTextStyle: TextStyle(
-          color: PosColors.primary,
-          fontWeight: FontWeight.w900,
+          color: PosColors.slate,
+          fontWeight: FontWeight.w500,
           fontSize: s(12),
-          letterSpacing: 0.1,
         ),
         unselectedLabelTextStyle: TextStyle(
           color: PosColors.muted,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w400,
           fontSize: s(12),
         ),
         indicatorColor: PosColors.primarySoft,
@@ -455,39 +317,41 @@ class AppTheme {
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? PosColors.primarySoft
+                ? PosColors.primaryDark
                 : PosColors.surface,
           ),
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? PosColors.primary
-                : PosColors.muted,
+                ? Colors.white
+                : PosColors.slate,
           ),
-          side: WidgetStateProperty.all(BorderSide(color: PosColors.line)),
+          side: WidgetStateProperty.all(
+            const BorderSide(color: PosColors.line, width: 0.5),
+          ),
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(PosRadii.sm + 2),
+              borderRadius: BorderRadius.circular(PosRadii.pill),
             ),
           ),
           textStyle: WidgetStateProperty.all(
-            const TextStyle(fontWeight: FontWeight.w800),
+            const TextStyle(fontWeight: FontWeight.w500),
           ),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: PosColors.surface,
-        selectedColor: PosColors.primarySoft,
-        side: BorderSide(color: PosColors.line),
-        labelStyle: TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
+        selectedColor: PosColors.primaryDark,
+        side: const BorderSide(color: PosColors.line, width: 0.5),
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.w400,
+          fontSize: 13,
           color: PosColors.slate,
         ),
-        secondaryLabelStyle: TextStyle(
-          fontWeight: FontWeight.w800,
-          color: PosColors.primary,
+        secondaryLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PosRadii.pill),
         ),
@@ -501,13 +365,13 @@ class AppTheme {
         trackColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
               ? PosColors.primary
-              : PosColors.lineStrong,
+              : PosColors.line,
         ),
         trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
       ),
-      dividerTheme: DividerThemeData(
+      dividerTheme: const DividerThemeData(
         color: PosColors.line,
-        thickness: 1,
+        thickness: 0.5,
         space: 1,
       ),
       dialogTheme: DialogThemeData(
@@ -515,68 +379,88 @@ class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.xl),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          side: const BorderSide(color: PosColors.line, width: 0.5),
         ),
-        titleTextStyle: TextStyle(
+        titleTextStyle: const TextStyle(
+          fontFamily: 'Inter',
           fontSize: 18,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           color: PosColors.slate,
         ),
-        contentTextStyle: TextStyle(
-          fontSize: 13.6,
+        contentTextStyle: const TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 14,
           color: PosColors.muted,
           height: 1.45,
         ),
       ),
-      bottomSheetTheme: BottomSheetThemeData(
+      bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: PosColors.surface,
         modalBackgroundColor: PosColors.surface,
         showDragHandle: true,
-        dragHandleColor: PosColors.lineStrong,
+        dragHandleColor: PosColors.line,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: PosColors.surfaceWarm,
-        contentTextStyle: TextStyle(
-          color: PosColors.slate,
-          fontWeight: FontWeight.w700,
+        backgroundColor: PosColors.primaryDark,
+        contentTextStyle: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w400,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.md),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
         ),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: PosColors.surfaceWarm,
-          borderRadius: BorderRadius.circular(PosRadii.xs + 2),
-          border: Border.all(color: PosColors.line),
+          color: PosColors.primaryDark,
+          borderRadius: BorderRadius.circular(8),
         ),
-        textStyle: TextStyle(
-          color: PosColors.slate,
-          fontWeight: FontWeight.w700,
-          fontSize: 11.5,
-        ),
+        textStyle: const TextStyle(color: Colors.white, fontSize: 12),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: PosColors.primary,
-        linearTrackColor: PosColors.surfaceWarm,
-        circularTrackColor: PosColors.surfaceWarm,
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: PosColors.primaryDark,
+        linearTrackColor: PosColors.line,
+        circularTrackColor: PosColors.line,
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: PosColors.primary,
-        inactiveTrackColor: PosColors.lineStrong,
-        thumbColor: PosColors.primary,
+        inactiveTrackColor: PosColors.line,
+        thumbColor: PosColors.primaryDark,
         overlayColor: PosColors.primary.withValues(alpha: 0.12),
-        valueIndicatorColor: PosColors.primary,
-        valueIndicatorTextStyle: TextStyle(
-          color: PosColors.primaryDark,
-          fontWeight: FontWeight.w800,
+        valueIndicatorColor: PosColors.primaryDark,
+        valueIndicatorTextStyle: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w500,
         ),
+      ),
+    );
+  }
+
+  static ButtonStyle _buttonStyle({
+    required Color background,
+    required Color foreground,
+    required double height,
+    required double radius,
+  }) {
+    return FilledButton.styleFrom(
+      minimumSize: Size(44, height),
+      backgroundColor: background,
+      foregroundColor: foreground,
+      disabledBackgroundColor: PosColors.line,
+      disabledForegroundColor: PosColors.muted,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
+      textStyle: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0,
       ),
     );
   }

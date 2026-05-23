@@ -21,6 +21,7 @@ async def bootstrap_tenant(
 ):
     # Re-use existing outlet if serverId already registered
     outlet = (await db.execute(select(Outlet).where(Outlet.server_id == body.serverId))).scalar_one_or_none()
+    outlet_name = (body.outletName or body.restaurantName).strip()
 
     if outlet is None:
         import uuid
@@ -52,7 +53,7 @@ async def bootstrap_tenant(
         outlet = Outlet(
             id=outlet_id,
             restaurant_id=restaurant.id,
-            name=body.outletName,
+            name=outlet_name,
             server_id=body.serverId,
             table_count=body.tableCount or 10,
         )
@@ -66,8 +67,8 @@ async def bootstrap_tenant(
         if body.restaurantName.strip() and restaurant.name != body.restaurantName:
             restaurant.name = body.restaurantName
             changed = True
-        if body.outletName.strip() and outlet.name != body.outletName:
-            outlet.name = body.outletName
+        if outlet_name and outlet.name != outlet_name:
+            outlet.name = outlet_name
             changed = True
         if body.tableCount is not None and outlet.table_count != body.tableCount:
             outlet.table_count = body.tableCount

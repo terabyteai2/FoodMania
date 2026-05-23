@@ -16,13 +16,20 @@ import 'core/constants/google_auth_defaults.dart';
 import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
 import 'models/account_role.dart';
+import 'models/app_update_info.dart';
 import 'models/bkash_payment_session.dart';
+import 'models/daily_report.dart';
 import 'models/dashboard_metrics.dart';
+import 'models/dashboard_summary.dart';
 import 'models/inventory_item.dart';
+import 'models/inventory_summary.dart';
 import 'models/inventory_unit.dart';
+import 'models/receipt_scan.dart';
 import 'models/menu_item.dart';
 import 'models/order_item.dart';
 import 'models/order_model.dart';
+import 'models/order_payment_method.dart';
+import 'models/order_service_type.dart';
 import 'models/order_source.dart';
 import 'models/order_status.dart';
 import 'models/pos_notification.dart';
@@ -30,6 +37,7 @@ import 'models/sales_report.dart';
 import 'models/server_config.dart';
 import 'models/stock_adjustment.dart';
 import 'models/sync_event.dart';
+import 'services/app_update_installer_service.dart';
 import 'services/cloud_api_service.dart';
 import 'services/cloud_realtime_service.dart';
 import 'services/connectivity_service.dart';
@@ -85,6 +93,7 @@ class PosAppController extends ChangeNotifier {
     PrinterService? printerService,
     CloudApiService? cloudApiService,
     CloudRealtimeService? cloudRealtimeService,
+    AppUpdateInstallerService? appUpdateInstaller,
     ConnectivityService? connectivityService,
     SyncService? syncService,
     SystemNotificationService? systemNotifications,
@@ -92,6 +101,7 @@ class PosAppController extends ChangeNotifier {
        printerService = printerService ?? PrinterService(),
        cloudApiService = cloudApiService ?? CloudApiService(),
        cloudRealtimeService = cloudRealtimeService ?? CloudRealtimeService(),
+       appUpdateInstaller = appUpdateInstaller ?? AppUpdateInstallerService(),
        connectivityService = connectivityService ?? ConnectivityService(),
        systemNotifications =
            systemNotifications ?? SystemNotificationService() {
@@ -102,6 +112,7 @@ class PosAppController extends ChangeNotifier {
           cloudApi: this.cloudApiService,
           cloudRealtime: this.cloudRealtimeService,
           connectivity: this.connectivityService,
+          onRemoteEvent: _handleRemoteSyncEvent,
         );
   }
 
@@ -109,6 +120,7 @@ class PosAppController extends ChangeNotifier {
   final PrinterService printerService;
   final CloudApiService cloudApiService;
   final CloudRealtimeService cloudRealtimeService;
+  final AppUpdateInstallerService appUpdateInstaller;
   final ConnectivityService connectivityService;
   final SystemNotificationService systemNotifications;
   late final SyncService syncService;
@@ -211,6 +223,19 @@ class PosAppController extends ChangeNotifier {
     failedCount: 0,
     logs: [],
   );
+  DashboardSummary? dashboardSummary;
+  bool dashboardSummaryLoading = false;
+  String? dashboardSummaryError;
+  InventorySummary? inventorySummary;
+  bool inventorySummaryLoading = false;
+  String? inventorySummaryError;
+  AppUpdateInfo? pendingAppUpdate;
+  bool appUpdateBusy = false;
+  String appUpdateStatus = '';
+  String? appUpdateError;
+  int _dismissedAppUpdateVersionCode = 0;
+  AppUpdateInfo? _appUpdateWaitingForPermission;
+  bool _checkingForAppUpdate = false;
 
   ServerConfig serverConfig = ServerConfig(
     serverId: '',
@@ -273,8 +298,12 @@ class PosAppController extends ChangeNotifier {
     if (!isCloudReady || !cloudConfig.canSync) return;
     final hasInternet = await connectivityService.hasInternetAccess();
     if (hasInternet) {
+      if (_appUpdateWaitingForPermission != null) {
+        unawaited(_resumeAppUpdateAfterPermission());
+      }
       unawaited(syncService.syncNow());
       unawaited(syncSubscriptionAccessFromCloud());
+      unawaited(checkForAppUpdate());
     }
   }
 
@@ -315,6 +344,9 @@ class PosAppController extends ChangeNotifier {
       uiScale = (preferences.getDouble(_uiScaleKey) ?? 1.06)
           .clamp(minUiScale, maxUiScale)
           .toDouble();
+      final storedRestaurantName =
+          preferences.getString(_restaurantNameKey) ?? '';
+      final storedOutletName = preferences.getString(_outletNameKey) ?? '';
       serverConfig = ServerConfig(
         serverId: await _getOrCreatePreference(
           preferences,
@@ -323,8 +355,11 @@ class PosAppController extends ChangeNotifier {
         ),
         restaurantId: preferences.getString(_restaurantIdKey) ?? '',
         outletId: preferences.getString(_outletIdKey) ?? '',
-        restaurantName: preferences.getString(_restaurantNameKey) ?? '',
-        outletName: preferences.getString(_outletNameKey) ?? '',
+        restaurantName: storedRestaurantName,
+        outletName: storedOutletName.trim().isEmpty
+            ? storedRestaurantName
+            : storedOutletName,
+        publicSlug: preferences.getString(_publicSlugKey) ?? '',
         tableCount: preferences.getInt(_tableCountKey) ?? 10,
       );
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
@@ -359,6 +394,8 @@ class PosAppController extends ChangeNotifier {
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
       notificationSoundPath =
           preferences.getString(_notificationSoundPathKey) ?? '';
+      _dismissedAppUpdateVersionCode =
+          preferences.getInt(_dismissedAppUpdateVersionCodeKey) ?? 0;
       isLoggedIn = preferences.getBool(_accountLoggedInKey) ?? isTenantReady;
 
       await printerService.initialize();
@@ -439,6 +476,7 @@ class PosAppController extends ChangeNotifier {
       }
       if (isLoggedIn && cloudConfig.hasDeviceToken) {
         unawaited(syncSubscriptionAccessFromCloud());
+        unawaited(checkForAppUpdate());
       }
       initialized = true;
       lastError = null;
@@ -484,8 +522,13 @@ class PosAppController extends ChangeNotifier {
   }
 
   List<String> get categories {
-    final values = menuItems.map((item) => item.category).toSet().toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final values =
+        menuItems
+            .map((item) => item.localizedCategory(language))
+            .where((category) => category.trim().isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return values;
   }
 
@@ -587,13 +630,10 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> saveLocalSetup({
     required String restaurantName,
-    required String outletName,
     required int tableCount,
   }) async {
     final cleanRestaurantName = restaurantName.trim();
-    final cleanOutletName = outletName.trim().isEmpty
-        ? 'Main Outlet'
-        : outletName.trim();
+    final cleanOutletName = cleanRestaurantName;
     final cleanTableCount = tableCount.clamp(1, 200);
     if (phoneSignupToken != null && phoneSignupToken!.isNotEmpty) {
       final ok = await completeManagerPhoneSignup(
@@ -759,6 +799,64 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshDashboardSummary() async {
+    if (!isCloudReady) {
+      dashboardSummaryError = 'Cloud sync not configured.';
+      notifyListeners();
+      return;
+    }
+    dashboardSummaryLoading = true;
+    dashboardSummaryError = null;
+    notifyListeners();
+    try {
+      dashboardSummary = await cloudApiService.fetchDashboardSummary();
+    } on CloudApiException catch (error) {
+      dashboardSummaryError = error.message;
+    } catch (error) {
+      dashboardSummaryError = error.toString();
+    } finally {
+      dashboardSummaryLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshInventorySummary() async {
+    if (!isCloudReady) {
+      inventorySummaryError = 'Cloud sync not configured.';
+      notifyListeners();
+      return;
+    }
+    inventorySummaryLoading = true;
+    inventorySummaryError = null;
+    notifyListeners();
+    try {
+      inventorySummary = await cloudApiService.fetchInventorySummary();
+    } on CloudApiException catch (error) {
+      inventorySummaryError = error.message;
+    } catch (error) {
+      inventorySummaryError = error.toString();
+    } finally {
+      inventorySummaryLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<DailyReport> fetchDailyReport({DateTime? date}) {
+    if (!isCloudReady) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchInventoryDailyReport(date: date);
+  }
+
+  Future<ReceiptScanResult> scanInventoryReceipt(
+    List<MenuScanPageUpload> pages,
+  ) {
+    if (!isCloudReady) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.scanInventoryReceipt(pages);
+  }
+
   void _scheduleDatabaseChanged() {
     _databaseChangeDebounce?.cancel();
     _databaseChangeDebounce = Timer(
@@ -815,7 +913,6 @@ class PosAppController extends ChangeNotifier {
 
   Future<bool> saveSettings({
     required String restaurantName,
-    required String outletName,
     required String cloudApiUrl,
     required String restaurantId,
     required String outletId,
@@ -823,9 +920,10 @@ class PosAppController extends ChangeNotifier {
     required int autoSyncIntervalSeconds,
   }) async {
     return _runBusy(() async {
+      final cleanRestaurantName = restaurantName.trim();
       serverConfig = serverConfig.copyWith(
-        restaurantName: restaurantName.trim(),
-        outletName: outletName.trim(),
+        restaurantName: cleanRestaurantName,
+        outletName: cleanRestaurantName,
         restaurantId: restaurantId.trim().isEmpty
             ? serverConfig.restaurantId
             : restaurantId.trim(),
@@ -853,6 +951,31 @@ class PosAppController extends ChangeNotifier {
         unawaited(syncService.syncNow());
       }
     });
+  }
+
+  Future<bool> updatePublicMenuUrl(String publicSlug) async {
+    return _runBusy(() async {
+      final requestedSlug = _normalizePublicSlug(publicSlug);
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final data = await cloudApiService.updatePublicUrl(
+        publicSlug: requestedSlug,
+      );
+      final cleanSlug = _normalizePublicSlug(
+        data['publicSlug']?.toString().trim() ?? requestedSlug,
+      );
+      serverConfig = serverConfig.copyWith(publicSlug: cleanSlug);
+      await _persistSettings();
+    });
+  }
+
+  Future<void> saveLocalPublicSlug(String publicSlug) async {
+    final cleanSlug = _normalizePublicSlug(publicSlug);
+    serverConfig = serverConfig.copyWith(publicSlug: cleanSlug);
+    await _persistSettings();
+    notifyListeners();
   }
 
   Future<bool> provisionTenant({
@@ -1292,7 +1415,7 @@ class PosAppController extends ChangeNotifier {
           serverId: serverConfig.serverId,
           tableCount: serverConfig.tableCount,
           restaurantName: 'My Restaurant',
-          outletName: 'Main Outlet',
+          outletName: 'My Restaurant',
           restaurantId: serverConfig.restaurantId,
           outletId: serverConfig.outletId,
         );
@@ -1515,6 +1638,136 @@ class PosAppController extends ChangeNotifier {
     return CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl);
   }
 
+  void _handleRemoteSyncEvent(Map<String, Object?> event) {
+    final type = event['type']?.toString() ?? '';
+    final data = event['data'];
+    if (type == 'app_update_disabled') {
+      pendingAppUpdate = null;
+      appUpdateError = null;
+      appUpdateStatus = '';
+      notifyListeners();
+      return;
+    }
+    if (type != 'app_update_available' || data is! Map) return;
+    unawaited(
+      _considerAppUpdate(
+        AppUpdateInfo.fromJson(Map<String, Object?>.from(data)),
+      ),
+    );
+  }
+
+  Future<void> checkForAppUpdate({bool quiet = true}) async {
+    if (_checkingForAppUpdate ||
+        !isLoggedIn ||
+        !cloudConfig.canSync ||
+        !cloudConfig.hasDeviceToken ||
+        !cloudConfig.hasValidBaseUrl ||
+        serverConfig.outletId.trim().isEmpty) {
+      return;
+    }
+    _checkingForAppUpdate = true;
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final update = await cloudApiService.fetchAppUpdate();
+      await _considerAppUpdate(update);
+    } catch (error) {
+      if (!quiet) rethrow;
+      debugPrint('[QB-UPDATE] check failed: $error');
+    } finally {
+      _checkingForAppUpdate = false;
+    }
+  }
+
+  Future<void> _considerAppUpdate(AppUpdateInfo update) async {
+    final runtime = await appUpdateInstaller.runtimeInfo();
+    if (!runtime.supported || !update.isNewerThan(runtime.versionCode)) {
+      if (pendingAppUpdate?.versionCode == update.versionCode ||
+          !update.enabled) {
+        pendingAppUpdate = null;
+        notifyListeners();
+      }
+      return;
+    }
+    if (!update.required &&
+        _dismissedAppUpdateVersionCode == update.versionCode) {
+      return;
+    }
+    if (pendingAppUpdate?.versionCode == update.versionCode) return;
+    pendingAppUpdate = update;
+    appUpdateError = null;
+    appUpdateStatus = '';
+    notifyListeners();
+  }
+
+  Future<void> dismissAppUpdate(AppUpdateInfo update) async {
+    if (update.required) return;
+    _dismissedAppUpdateVersionCode = update.versionCode;
+    pendingAppUpdate = null;
+    appUpdateError = null;
+    appUpdateStatus = '';
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setInt(
+      _dismissedAppUpdateVersionCodeKey,
+      update.versionCode,
+    );
+    notifyListeners();
+  }
+
+  Future<void> startAppUpdate(AppUpdateInfo update) async {
+    if (appUpdateBusy) return;
+    appUpdateBusy = true;
+    appUpdateError = null;
+    appUpdateStatus = strings.appUpdatePreparing;
+    notifyListeners();
+    try {
+      final canInstall = await appUpdateInstaller.canRequestPackageInstalls();
+      if (!canInstall) {
+        _appUpdateWaitingForPermission = update;
+        appUpdateStatus = strings.appUpdatePermissionRequired;
+        appUpdateBusy = false;
+        notifyListeners();
+        await appUpdateInstaller.openInstallPermissionSettings();
+        return;
+      }
+      await _downloadAndOpenAppUpdate(update);
+    } catch (error) {
+      appUpdateError = error.toString().replaceFirst('Exception: ', '');
+      appUpdateStatus = '';
+      appUpdateBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _resumeAppUpdateAfterPermission() async {
+    final update = _appUpdateWaitingForPermission;
+    if (update == null) return;
+    final canInstall = await appUpdateInstaller.canRequestPackageInstalls();
+    if (!canInstall) {
+      appUpdateError = strings.appUpdatePermissionStillNeeded;
+      appUpdateStatus = '';
+      notifyListeners();
+      return;
+    }
+    _appUpdateWaitingForPermission = null;
+    await startAppUpdate(update);
+  }
+
+  Future<void> _downloadAndOpenAppUpdate(AppUpdateInfo update) async {
+    appUpdateStatus = strings.appUpdateDownloading;
+    notifyListeners();
+    final path = await appUpdateInstaller.downloadApk(update);
+    appUpdateStatus = strings.appUpdateOpeningInstaller;
+    notifyListeners();
+    await appUpdateInstaller.installApk(path);
+    pendingAppUpdate = null;
+    appUpdateStatus = '';
+    appUpdateBusy = false;
+    notifyListeners();
+  }
+
   Future<void> syncSubscriptionAccessFromCloud({bool quiet = true}) async {
     if (!isLoggedIn ||
         !cloudConfig.hasDeviceToken ||
@@ -1597,6 +1850,7 @@ class PosAppController extends ChangeNotifier {
       outletId: result.outletId,
       restaurantName: result.restaurantName,
       outletName: result.outletName,
+      publicSlug: result.publicSlug ?? serverConfig.publicSlug,
       tableCount: result.tableCount,
     );
     cloudConfig = cloudConfig.copyWith(
@@ -1639,6 +1893,10 @@ class PosAppController extends ChangeNotifier {
     phoneSignupToken = null;
     verifiedPhoneDisplay = null;
     pendingStaffInvite = null;
+    pendingAppUpdate = null;
+    _appUpdateWaitingForPermission = null;
+    appUpdateError = null;
+    appUpdateStatus = '';
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(_accountLoggedInKey, false);
     // Clear tenant-scoped prefs so the next login cannot briefly show the
@@ -1722,6 +1980,12 @@ class PosAppController extends ChangeNotifier {
     required String category,
     required double price,
     required bool isAvailable,
+    String? nameEn,
+    String? nameBn,
+    String? descriptionEn,
+    String? descriptionBn,
+    String? categoryEn,
+    String? categoryBn,
     String? imageUrl,
     int? preparationTimeMinutes,
     List<String> tags = const [],
@@ -1731,8 +1995,16 @@ class PosAppController extends ChangeNotifier {
     final item = MenuItem(
       id: id ?? _uuid.v4(),
       name: name.trim(),
+      nameEn: (nameEn ?? name).trim(),
+      nameBn: (nameBn ?? '').trim(),
       description: description.trim(),
+      descriptionEn: (descriptionEn ?? description).trim(),
+      descriptionBn: (descriptionBn ?? '').trim(),
       category: category.trim().isEmpty ? 'General' : category.trim(),
+      categoryEn: (categoryEn ?? category).trim().isEmpty
+          ? 'General'
+          : (categoryEn ?? category).trim(),
+      categoryBn: (categoryBn ?? '').trim(),
       price: price,
       imageUrl: _cleanNullable(imageUrl),
       isAvailable: isAvailable,
@@ -1765,21 +2037,27 @@ class PosAppController extends ChangeNotifier {
       );
     }
     final seenKeys = menuItems
-        .map((item) => _menuScanDuplicateKey(item.name, item.category))
+        .map((item) => _menuScanDuplicateKey(item.nameEn, item.categoryEn))
         .toSet();
     var created = 0;
     var skipped = 0;
 
     for (final candidate in scanResult.items) {
-      final key = _menuScanDuplicateKey(candidate.name, candidate.category);
+      final key = _menuScanDuplicateKey(candidate.nameEn, candidate.categoryEn);
       if (!seenKeys.add(key)) {
         skipped += 1;
         continue;
       }
       await saveMenuItem(
-        name: candidate.name,
-        description: candidate.description,
-        category: candidate.category,
+        name: candidate.nameEn,
+        nameEn: candidate.nameEn,
+        nameBn: candidate.nameBn,
+        description: candidate.descriptionEn,
+        descriptionEn: candidate.descriptionEn,
+        descriptionBn: candidate.descriptionBn,
+        category: candidate.categoryEn,
+        categoryEn: candidate.categoryEn,
+        categoryBn: candidate.categoryBn,
         price: candidate.price,
         isAvailable: candidate.isAvailable,
       );
@@ -1796,6 +2074,26 @@ class PosAppController extends ChangeNotifier {
       skippedDuplicateCount: skipped,
       scanResult: scanResult,
     );
+  }
+
+  Future<OrderHistoryImportResult> importOrderHistoryCsv({
+    required List<int> bytes,
+    required String fileName,
+  }) async {
+    if (!isManager) {
+      throw Exception('Only managers can import order history.');
+    }
+    if (!cloudConfig.canSync) {
+      throw Exception('Order history import needs an online cloud connection.');
+    }
+    cloudApiService.configure(
+      cloudConfig: cloudConfig,
+      serverConfig: serverConfig,
+    );
+    final result = await cloudApiService.importOrderHistoryCsv(bytes, fileName);
+    await _syncWithFreshTenantToken();
+    await reloadData();
+    return result;
   }
 
   String _menuScanDuplicateKey(String name, String category) {
@@ -1953,12 +2251,18 @@ class PosAppController extends ChangeNotifier {
     String? customerName,
     String? tableNo,
     String? note,
+    OrderServiceType? serviceType,
+    int? covers,
+    OrderPaymentMethod? paymentMethod,
   }) async {
     final order = await database.createOrder(
       requestedItems: requestedItems,
       customerName: customerName,
       tableNo: tableNo,
       note: note,
+      serviceType: serviceType,
+      covers: covers,
+      paymentMethod: paymentMethod,
       source: OrderSource.manual,
       createdByAccountId: accountId.isEmpty ? null : accountId,
       createdByRole: accountRole.value,
@@ -2187,6 +2491,38 @@ class PosAppController extends ChangeNotifier {
         });
     _orderPrintFutures[order.id] = future;
     return future.whenComplete(() => _orderPrintFutures.remove(order.id));
+  }
+
+  Future<bool> printCustomerInvoice(OrderModel order) async {
+    if (!isManager) return false;
+    final ok = await printerService.printCustomerInvoice(
+      order,
+      restaurantName: restaurantName,
+      outletName: outletName,
+      language: language,
+    );
+    printerState = printerService.state;
+    if (ok && order.status.adminStatus == OrderStatus.accepted) {
+      await updateOrderStatus(order.id, OrderStatus.served);
+    }
+    if (!_alertedPrintOrderIds.contains('${order.id}:invoice')) {
+      _alertedPrintOrderIds.add('${order.id}:invoice');
+      await addNotification(
+        type: ok
+            ? PosNotificationType.printSuccess
+            : PosNotificationType.printFailed,
+        title: ok ? strings.printBillAction : strings.printFailed,
+        body: ok
+            ? '${order.displaySequence} customer invoice was sent to the printer.'
+            : (printerState.lastError ??
+                  '${order.displaySequence} customer invoice could not print.'),
+        orderId: order.id,
+        actionTarget: 'orders',
+        playSound: !ok,
+      );
+    }
+    notifyListeners();
+    return ok;
   }
 
   Future<void> addNotification({
@@ -2458,6 +2794,11 @@ class PosAppController extends ChangeNotifier {
       final status = order.status.adminStatus;
       final wasKnown = previousOrderIds.contains(id);
       final previousStatus = previousStatusById[id];
+      if (order.createdByRole?.trim().toLowerCase() == 'legacy_import') {
+        _alertedAcceptedOrderIds.add(id);
+        _alertedPrintOrderIds.add(id);
+        continue;
+      }
 
       if (status == OrderStatus.pending) {
         final becamePending =
@@ -2544,6 +2885,7 @@ class PosAppController extends ChangeNotifier {
     unawaited(syncService.dispose());
     unawaited(printerService.dispose());
     unawaited(_notificationPlayer.dispose());
+    appUpdateInstaller.close();
     cloudApiService.close();
     unawaited(database.close());
     super.dispose();
@@ -2556,6 +2898,17 @@ class PosAppController extends ChangeNotifier {
       m = m.substring(prefix.length).trim();
     }
     return m;
+  }
+
+  static String _normalizePublicSlug(String value) {
+    final slug = value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+        .replaceAll(RegExp(r'\s+'), '-')
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    return slug.isEmpty ? 'your-restaurant' : slug;
   }
 
   Future<bool> _runBusy(Future<void> Function() action) async {
@@ -2584,6 +2937,7 @@ class PosAppController extends ChangeNotifier {
     await preferences.setString(_restaurantIdKey, serverConfig.restaurantId);
     await preferences.setString(_outletIdKey, serverConfig.outletId);
     await preferences.setString(_serverIdKey, serverConfig.serverId);
+    await preferences.setString(_publicSlugKey, serverConfig.publicSlug);
     await preferences.setString(_cloudApiUrlKey, cloudConfig.baseUrl);
     await preferences.setBool(_cloudSyncEnabledKey, cloudConfig.enabled);
     await preferences.setString(_deviceTokenKey, cloudConfig.deviceToken);
@@ -2612,6 +2966,10 @@ class PosAppController extends ChangeNotifier {
     required String restaurantName,
     required String outletName,
   }) async {
+    final cleanRestaurantName = restaurantName.trim();
+    final cleanOutletName = outletName.trim().isEmpty
+        ? cleanRestaurantName
+        : outletName.trim();
     final bootstrapCloudConfig = cloudConfig.copyWith(
       baseUrl: CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl),
       enabled: true,
@@ -2622,8 +2980,8 @@ class PosAppController extends ChangeNotifier {
     );
     final tenant = await cloudApiService.bootstrapTenant(
       serverId: serverConfig.serverId,
-      restaurantName: restaurantName.trim(),
-      outletName: outletName.trim(),
+      restaurantName: cleanRestaurantName,
+      outletName: cleanOutletName,
       tableCount: serverConfig.tableCount,
       restaurantId: serverConfig.restaurantId,
       outletId: serverConfig.outletId,
@@ -2730,6 +3088,7 @@ class PosAppController extends ChangeNotifier {
   static final String _restaurantNameKey = 'local_pos_restaurant_name';
   static final String _outletNameKey = 'local_pos_outlet_name';
   static final String _serverIdKey = 'local_pos_server_id';
+  static final String _publicSlugKey = 'local_pos_public_slug';
   static final String _restaurantIdKey = 'local_pos_restaurant_id';
   static final String _outletIdKey = 'local_pos_outlet_id';
   static final String _cloudApiUrlKey = 'local_pos_cloud_api_url';
@@ -2756,6 +3115,8 @@ class PosAppController extends ChangeNotifier {
       'local_pos_notification_sound_enabled';
   static final String _notificationSoundPathKey =
       'local_pos_notification_sound_path';
+  static final String _dismissedAppUpdateVersionCodeKey =
+      'local_pos_dismissed_app_update_version_code';
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
   static final String _needsOnboardingPaymentKey =

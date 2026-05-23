@@ -108,7 +108,7 @@ say "Running remote bootstrap on the VPS (this takes 2–3 minutes the first tim
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
     "REMOTE_DIR='${REMOTE_DIR}' \
      SERVICE_NAME='${SERVICE_NAME}' \
-     BASE_URL='https://160-187-130-80.sslip.io' \
+     BASE_URL='https://quickbytes.buzz' \
      DB_PASS='${DB_PASS}' \
      SECRET_KEY='${SECRET_KEY}' \
      GOOGLE_CLIENT_IDS='${GOOGLE_CLIENT_IDS_VALUE}' \

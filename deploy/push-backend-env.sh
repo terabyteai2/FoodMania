@@ -39,6 +39,12 @@ SYNC_KEYS=(
   SENTRY_DSN
   SENTRY_ENVIRONMENT
   GIT_COMMIT_SHA
+  OCR_SPACE_API_KEY
+  OCR_SPACE_API_URL
+  OCR_SPACE_ENGINE
+  OCR_SPACE_LANGUAGE
+  GROQ_API_KEY
+  MENU_SCAN_GROQ_MODEL
   XAI_API_KEY
   DEEPSEEK_API_KEY
   OPENAI_API_KEY
@@ -88,7 +94,7 @@ REMOTE
 rm -f "${BLOCK_FILE}"
 
 say "Health check"
-curl -fsS "https://160-187-130-80.sslip.io/health" | python3 -c "
+curl -fsS "https://quickbytes.buzz/health" | python3 -c "
 import json,sys
 d=json.load(sys.stdin).get('data',{})
 print('  phoneOtpMode:', d.get('phoneOtpMode'))

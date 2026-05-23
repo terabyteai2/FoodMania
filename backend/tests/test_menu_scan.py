@@ -1,4 +1,5 @@
 import json
+import logging
 
 import httpx
 import pytest
@@ -18,16 +19,22 @@ def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_pric
             {
                 "items": [
                     {
-                        "name": "Beef Burger",
-                        "description": "Juicy grilled beef burger.",
-                        "category": "Burgers",
+                        "nameEn": "Beef Burger",
+                        "nameBn": "বিফ বার্গার",
+                        "descriptionEn": "Juicy grilled beef burger.",
+                        "descriptionBn": "রসালো গ্রিলড বিফ বার্গার।",
+                        "categoryEn": "Burgers",
+                        "categoryBn": "বার্গার",
                         "price": 320,
                         "isAvailable": True,
                     },
                     {
-                        "name": "Free Water",
-                        "description": "Water.",
-                        "category": "Drinks",
+                        "nameEn": "Free Water",
+                        "nameBn": "ফ্রি পানি",
+                        "descriptionEn": "Water.",
+                        "descriptionBn": "পানি।",
+                        "categoryEn": "Drinks",
+                        "categoryBn": "ড্রিংকস",
                         "price": 0,
                         "isAvailable": True,
                     },
@@ -36,8 +43,9 @@ def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_pric
         )
     )
 
-    assert [item.name for item in items] == ["Beef Burger"]
-    assert items[0].description == "Juicy grilled beef burger."
+    assert [item.nameEn for item in items] == ["Beef Burger"]
+    assert items[0].nameBn == "বিফ বার্গার"
+    assert items[0].descriptionEn == "Juicy grilled beef burger."
 
 
 def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
@@ -50,10 +58,62 @@ def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
     joined = "\n".join(message["content"] for message in messages)
 
     assert "English and Bangla" in joined
-    assert "English / Bangla" in joined
+    assert "nameEn, nameBn, descriptionEn, descriptionBn" in joined
+    assert "around 40 words" in joined
     assert "restaurant names" in joined
     assert "VAT" in joined
     assert "not a sellable menu item" in joined
+
+
+def test_menu_scan_uses_json_object_mode_for_groq():
+    groq = next(provider for provider in menu_scan._providers() if provider.name == "groq")
+
+    payload = menu_scan._request_payload(groq, ["Tea 50"])
+
+    assert payload["response_format"] == {"type": "json_object"}
+    assert payload["reasoning_format"] == "hidden"
+    assert payload["reasoning_effort"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_menu_scan_ocr_space_sends_image_and_keeps_json_for_llm(monkeypatch):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "ParsedResults": [
+                    {
+                        "FileParseExitCode": 1,
+                        "ParsedText": "Tea 50\nচা ৫০",
+                    }
+                ],
+                "OCRExitCode": 1,
+                "IsErroredOnProcessing": False,
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*, timeout):
+        assert timeout == menu_scan.OCR_TIMEOUT_SECONDS
+        return real_async_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(menu_scan.settings, "OCR_SPACE_API_KEY", "ocr-space-test")
+    monkeypatch.setattr(menu_scan.httpx, "AsyncClient", mock_client)
+
+    pages = await menu_scan.extract_menu_page_texts([(b"menu-image", "image/png")])
+    payload = json.loads(pages[0])
+
+    assert payload["ParsedResults"][0]["ParsedText"] == "Tea 50\nচা ৫০"
+    assert calls[0].headers["apikey"] == "ocr-space-test"
+    assert "multipart/form-data" in calls[0].headers["content-type"]
+    assert b"menu-page.png" in calls[0].content
 
 
 @pytest.mark.asyncio
@@ -77,9 +137,12 @@ async def test_menu_scan_llm_falls_back_after_invalid_schema(monkeypatch):
                                 {
                                     "items": [
                                         {
-                                            "name": "Lassi",
-                                            "description": "Cool yogurt drink.",
-                                            "category": "Drinks",
+                                            "nameEn": "Lassi",
+                                            "nameBn": "লাচ্ছি",
+                                            "descriptionEn": "Cool yogurt drink.",
+                                            "descriptionBn": "ঠান্ডা দইয়ের পানীয়।",
+                                            "categoryEn": "Drinks",
+                                            "categoryBn": "ড্রিংকস",
                                             "price": 120,
                                             "isAvailable": True,
                                         }
@@ -101,6 +164,7 @@ async def test_menu_scan_llm_falls_back_after_invalid_schema(monkeypatch):
         )
 
     monkeypatch.setattr(menu_scan.settings, "XAI_API_KEY", "xai-test")
+    monkeypatch.setattr(menu_scan.settings, "GROQ_API_KEY", "")
     monkeypatch.setattr(menu_scan.settings, "DEEPSEEK_API_KEY", "deepseek-test")
     monkeypatch.setattr(menu_scan.settings, "OPENAI_API_KEY", "openai-test")
     monkeypatch.setattr(menu_scan.httpx, "AsyncClient", mock_client)
@@ -108,12 +172,84 @@ async def test_menu_scan_llm_falls_back_after_invalid_schema(monkeypatch):
     parsed = await menu_scan.parse_menu_text(["Drinks\nLassi 120"])
 
     assert parsed.provider == "deepseek"
-    assert [item.name for item in parsed.items] == ["Lassi"]
+    assert [item.nameEn for item in parsed.items] == ["Lassi"]
     assert calls[:2] == [
         "https://api.x.ai/v1/chat/completions",
         "https://api.deepseek.com/chat/completions",
     ]
     assert parsed.warnings and parsed.warnings[0].startswith("xai:")
+
+
+@pytest.mark.asyncio
+async def test_menu_scan_llm_logs_bounded_provider_rejection(monkeypatch, caplog):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if "api.groq.com" in str(request.url):
+            return httpx.Response(
+                400,
+                json={"error": {"message": f"bad request {'x' * 900}"}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "items": [
+                                        {
+                                            "nameEn": "Coffee",
+                                            "nameBn": "কফি",
+                                            "descriptionEn": "Fresh coffee.",
+                                            "descriptionBn": "তাজা কফি।",
+                                            "categoryEn": "Drinks",
+                                            "categoryBn": "ড্রিংকস",
+                                            "price": 90,
+                                            "isAvailable": True,
+                                        }
+                                    ]
+                                }
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*, timeout):
+        return real_async_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(menu_scan.settings, "GROQ_API_KEY", "groq-test")
+    monkeypatch.setattr(menu_scan.settings, "XAI_API_KEY", "")
+    monkeypatch.setattr(menu_scan.settings, "DEEPSEEK_API_KEY", "deepseek-test")
+    monkeypatch.setattr(menu_scan.settings, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(menu_scan.httpx, "AsyncClient", mock_client)
+
+    with caplog.at_level(logging.WARNING, logger="services.menu_scan"):
+        parsed = await menu_scan.parse_menu_text(["Drinks\nCoffee 90"])
+
+    assert parsed.provider == "deepseek"
+    assert calls == [
+        "https://api.groq.com/openai/v1/chat/completions",
+        "https://api.deepseek.com/chat/completions",
+    ]
+    rejection = next(
+        record.message
+        for record in caplog.records
+        if "menu scan llm provider rejected provider=groq" in record.message
+    )
+    assert "status=400" in rejection
+    assert "bad request" in rejection
+    assert rejection.endswith("...")
+    assert len(rejection) < 1000
 
 
 @pytest.mark.asyncio
@@ -146,9 +282,12 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
         return menu_scan.MenuScanParseResult(
             items=[
                 MenuScanCandidate(
-                    name="Tea",
-                    description="Fresh milk tea.",
-                    category="Drinks",
+                    nameEn="Tea",
+                    nameBn="চা",
+                    descriptionEn="Fresh milk tea.",
+                    descriptionBn="তাজা দুধ চা।",
+                    categoryEn="Drinks",
+                    categoryBn="ড্রিংকস",
                     price=50,
                     isAvailable=True,
                 )
@@ -185,4 +324,5 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
     assert response.status_code == 200
     assert seen_pages == [(b"first", "image/png"), (b"second", "image/jpeg")]
     assert seen_texts == ["first page OCR", "second page OCR"]
-    assert response.json()["data"]["items"][0]["name"] == "Tea"
+    assert response.json()["data"]["items"][0]["nameEn"] == "Tea"
+    assert response.json()["data"]["items"][0]["nameBn"] == "চা"

@@ -26,15 +26,55 @@ def _item_to_dict(item: MenuItem) -> dict:
         "id": item.id,
         "outletId": item.outlet_id,
         "name": item.name,
+        "nameEn": item.name_en or item.name,
+        "nameBn": item.name_bn or "",
         "description": item.description,
+        "descriptionEn": item.description_en or item.description or "",
+        "descriptionBn": item.description_bn or "",
         "price": float(item.price),
         "category": item.category,
+        "categoryEn": item.category_en or item.category or "General",
+        "categoryBn": item.category_bn or "",
         "isAvailable": item.is_available,
         "imageUrl": item.image_url,
         "version": item.version,
         "updatedAt": item.updated_at.isoformat(),
         "deletedAt": item.deleted_at.isoformat() if item.deleted_at else None,
     }
+
+
+def _clean(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _apply_menu_payload(
+    item: MenuItem, body: MenuItemPayload, image_url: str | None
+) -> None:
+    name_en = _clean(body.nameEn) or body.name.strip()
+    name_bn = _clean(body.nameBn)
+    description_en = _clean(body.descriptionEn) or _clean(body.description)
+    description_bn = _clean(body.descriptionBn)
+    category_en = _clean(body.categoryEn) or _clean(body.category) or "General"
+    category_bn = _clean(body.categoryBn)
+
+    item.name = name_en
+    item.name_en = name_en
+    item.name_bn = name_bn
+    item.description = description_en
+    item.description_en = description_en
+    item.description_bn = description_bn
+    item.price = body.price
+    item.category = category_en
+    item.category_en = category_en
+    item.category_bn = category_bn
+    item.is_available = body.isAvailable
+    item.image_url = image_url
+    item.version = max(item.version, body.version)
+    item.updated_at = datetime.now(timezone.utc)
+    item.deleted_at = None
 
 
 def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
@@ -125,15 +165,7 @@ async def push_menu_item(
     existing = (await db.execute(select(MenuItem).where(MenuItem.id == body.id))).scalar_one_or_none()
     if existing:
         existing.outlet_id = outlet_id
-        existing.name = body.name
-        existing.description = body.description
-        existing.price = body.price
-        existing.category = body.category
-        existing.is_available = body.isAvailable
-        existing.image_url = image_url
-        existing.version = max(existing.version, body.version)
-        existing.updated_at = datetime.now(timezone.utc)
-        existing.deleted_at = None
+        _apply_menu_payload(existing, body, image_url)
         await db.commit()
         await db.refresh(existing)
         await manager.broadcast(outlet_id, {"type": "menu_updated", "data": _item_to_dict(existing)})
@@ -142,15 +174,10 @@ async def push_menu_item(
     item = MenuItem(
         id=body.id,
         outlet_id=outlet_id,
-        name=body.name,
-        description=body.description,
-        price=body.price,
-        category=body.category,
-        is_available=body.isAvailable,
-        image_url=image_url,
         version=body.version,
         updated_at=datetime.now(timezone.utc),
     )
+    _apply_menu_payload(item, body, image_url)
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -175,14 +202,8 @@ async def update_menu_item(
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found.")
 
-    item.name = body.name
-    item.description = body.description
-    item.price = body.price
-    item.category = body.category
-    item.is_available = body.isAvailable
-    item.image_url = image_url
+    _apply_menu_payload(item, body, image_url)
     item.version = body.version
-    item.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(item)
 

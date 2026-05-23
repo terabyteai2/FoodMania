@@ -378,7 +378,9 @@ class SyncService {
       for (final raw in itemPayloads) {
         if (raw is! Map) continue;
         try {
-          final item = _inventoryItemFromPayload(Map<String, Object?>.from(raw));
+          final item = _inventoryItemFromPayload(
+            Map<String, Object?>.from(raw),
+          );
           if (item == null) continue;
           final applied = await _database.applyRemoteInventoryItem(item);
           if (applied != null) imported++;
@@ -399,7 +401,10 @@ class SyncService {
           await _database.applyRemoteStockAdjustment(adjustment);
           imported++;
         } catch (error) {
-          _addLog('Cloud stock adjustment import skipped: $error', isError: true);
+          _addLog(
+            'Cloud stock adjustment import skipped: $error',
+            isError: true,
+          );
         }
       }
     }
@@ -453,6 +458,12 @@ class SyncService {
     if (data is! Map) return;
 
     try {
+      if (type == 'app_update_available' || type == 'app_update_disabled') {
+        _onRemoteEvent?.call(event);
+        _addLog('Cloud realtime app update signal received.');
+        return;
+      }
+
       if (type == 'menu_updated') {
         final item = _menuFromPayload(Map<String, Object?>.from(data));
         final applied = await _database.applyRemoteMenuItem(item);

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -33,7 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _restaurantInfoFormKey = GlobalKey<FormState>();
   final TextEditingController _restaurantController = TextEditingController();
-  final TextEditingController _outletController = TextEditingController();
+  final TextEditingController _publicSlugController = TextEditingController();
   final TextEditingController _cloudUrlController = TextEditingController();
   final TextEditingController _restaurantIdController = TextEditingController();
   final TextEditingController _outletIdController = TextEditingController();
@@ -49,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       TextEditingController();
   Timer? _autoSaveDebounce;
   bool _cloudSyncEnabled = false;
+  bool _importingOrderHistory = false;
   double _displayScale = 1.0;
   bool _hydrated = false;
 
@@ -58,7 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_hydrated) return;
     final app = AppScope.of(context);
     _restaurantController.text = app.serverConfig.restaurantName;
-    _outletController.text = app.serverConfig.outletName;
+    _publicSlugController.text = app.serverConfig.publicSlug;
     _cloudUrlController.text = app.cloudConfig.baseUrl;
     _restaurantIdController.text = app.serverConfig.restaurantId;
     _outletIdController.text = app.serverConfig.outletId;
@@ -67,7 +69,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _cloudSyncEnabled = app.cloudConfig.enabled;
     _displayScale = app.uiScale;
     _restaurantController.addListener(_scheduleAutoSave);
-    _outletController.addListener(_scheduleAutoSave);
     _cloudUrlController.addListener(_scheduleAutoSave);
     _outletIdController.addListener(_scheduleAutoSave);
     _syncIntervalController.addListener(_scheduleAutoSave);
@@ -78,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _autoSaveDebounce?.cancel();
     _restaurantController.dispose();
-    _outletController.dispose();
+    _publicSlugController.dispose();
     _cloudUrlController.dispose();
     _restaurantIdController.dispose();
     _outletIdController.dispose();
@@ -160,6 +161,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: 'Sales summaries, trends, and export.',
                   icon: Icons.assessment_outlined,
                   onTap: _openReports,
+                ),
+                _SettingActionData(
+                  title: 'Import order history',
+                  subtitle: 'Upload a CSV export from an older POS.',
+                  icon: Icons.upload_file_outlined,
+                  trailing: _importingOrderHistory ? 'Importing' : 'CSV',
+                  onTap: _importingOrderHistory ? null : _importOrderHistory,
                 ),
                 _SettingActionData(
                   title: text.yourRestaurantInfo,
@@ -360,25 +368,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: text.restaurantSubtitle,
               icon: Icons.storefront_outlined,
               children: [
-                _ResponsiveFields(
-                  children: [
-                    TextFormField(
-                      controller: _restaurantController,
-                      decoration: InputDecoration(
-                        labelText: text.restaurantName,
-                        prefixIcon: Icon(Icons.restaurant_outlined),
-                      ),
-                      validator: _required,
-                    ),
-                    TextFormField(
-                      controller: _outletController,
-                      decoration: InputDecoration(
-                        labelText: text.outletName,
-                        prefixIcon: Icon(Icons.location_on_outlined),
-                      ),
-                      validator: _required,
-                    ),
+                TextFormField(
+                  controller: _restaurantController,
+                  decoration: InputDecoration(
+                    labelText: text.restaurantName,
+                    prefixIcon: Icon(Icons.restaurant_outlined),
+                  ),
+                  validator: _required,
+                ),
+                SizedBox(height: 10),
+                TextFormField(
+                  controller: _publicSlugController,
+                  decoration: InputDecoration(
+                    labelText: 'Customer URL',
+                    prefixIcon: Icon(Icons.link_rounded),
+                    helperText: 'https://name.quickbytes.buzz',
+                    suffixText: '.quickbytes.buzz',
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
+                    TextInputFormatter.withFunction((oldValue, newValue) {
+                      return newValue.copyWith(
+                        text: newValue.text.toLowerCase(),
+                        selection: newValue.selection,
+                      );
+                    }),
                   ],
+                ),
+                SizedBox(height: 10),
+                PrimaryButton(
+                  label: 'Save customer URL',
+                  icon: Icons.check_rounded,
+                  busy: AppScope.of(context).busy,
+                  onPressed: AppScope.of(context).busy
+                      ? null
+                      : () => _savePublicUrl(context),
                 ),
                 SizedBox(height: 10),
                 _ResponsiveFields(
@@ -436,6 +460,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const ReportsScreen()));
+  }
+
+  Future<void> _importOrderHistory() async {
+    final app = AppScope.of(context);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['csv'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty || !mounted) return;
+      final file = picked.files.single;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw Exception('Could not read the selected CSV file.');
+      }
+
+      setState(() => _importingOrderHistory = true);
+      final result = await app.importOrderHistoryCsv(
+        bytes: bytes,
+        fileName: file.name,
+      );
+      if (!mounted) return;
+      final skipped = result.duplicateOrders + result.skippedRows;
+      final detail = result.errors.isEmpty ? '' : ' ${result.errors.first}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${result.importedOrders} historical orders imported'
+            '${skipped > 0 ? ', $skipped skipped.' : '.'}$detail',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Order history import failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _importingOrderHistory = false);
+    }
   }
 
   Future<void> _openReceiptPrinter() async {
@@ -532,14 +597,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       label: t.restaurantName,
                       value: a.serverConfig.restaurantName.isNotEmpty
                           ? a.serverConfig.restaurantName
-                          : '—',
-                    ),
-                    SizedBox(height: 8),
-                    _ReadOnlyInfoTile(
-                      icon: Icons.store_outlined,
-                      label: t.outletName,
-                      value: a.serverConfig.outletName.isNotEmpty
-                          ? a.serverConfig.outletName
                           : '—',
                     ),
                     SizedBox(height: 8),
@@ -681,7 +738,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final app = AppScope.of(context);
     await app.saveSettings(
       restaurantName: _restaurantController.text,
-      outletName: _outletController.text,
       cloudApiUrl: _cloudUrlController.text,
       restaurantId: _restaurantIdController.text,
       outletId: _outletIdController.text,
@@ -713,9 +769,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _savePublicUrl(BuildContext context) async {
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final slug = _publicSlugController.text.trim().toLowerCase();
+    if (slug.length < 3) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('URL name must be at least 3 characters.')),
+      );
+      return;
+    }
+    final ok = await app.updatePublicMenuUrl(slug);
+    if (!mounted) return;
+    _publicSlugController.text = app.serverConfig.publicSlug;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Customer URL saved: https://${app.serverConfig.publicSlug}.quickbytes.buzz'
+              : app.lastError ?? 'Could not save customer URL.',
+        ),
+      ),
+    );
+    setState(() {});
+  }
+
   bool _isValidAutoSavePayload() {
     if (_restaurantController.text.trim().isEmpty) return false;
-    if (_outletController.text.trim().isEmpty) return false;
     final seconds = int.tryParse(_syncIntervalController.text.trim());
     if (seconds == null || seconds < 10) return false;
     return true;

@@ -1,5 +1,6 @@
 """Company platform admin API — manage all restaurants, outlets, subscriptions."""
 
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,9 +30,11 @@ from models import (
     UddoktaPaySession,
 )
 from routers.orders import _order_to_dict
+from routers.ws import manager
 from schemas import (
     OutletAccountCreateRequest,
     OutletCreateRequest,
+    PlatformAppUpdateRequest,
     PlatformAccountPatchRequest,
     PlatformAdminCreateRequest,
     PlatformAdminPatchRequest,
@@ -53,9 +56,28 @@ from subscription_service import (
     subscription_period_days,
     subscription_to_dict,
 )
+from services.app_update import clear_app_update, get_app_update, set_app_update
 from uddoktapay_client import uddokta_configured
 
 router = APIRouter(prefix="/platform", tags=["platform"])
+
+
+def _customer_menu_url(outlet: Outlet) -> str:
+    base_url = settings.BASE_URL.rstrip("/")
+    subdomain = (outlet.public_slug or "").strip().lower()
+    is_uuid_like = bool(
+        re.fullmatch(
+            r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",
+            subdomain,
+        )
+    )
+    if (
+        not is_uuid_like
+        and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", subdomain)
+    ):
+        if base_url == "https://quickbytes.buzz":
+            return f"https://{subdomain}.quickbytes.buzz"
+    return f"{base_url}/menu/{outlet.id}"
 
 
 def _admin_dict(admin: PlatformAdmin) -> dict:
@@ -79,16 +101,16 @@ def _platform_admin_full_dict(admin: PlatformAdmin) -> dict:
 
 
 def _outlet_dict(outlet: Outlet, *, restaurant_name: str | None = None) -> dict:
-    base_url = settings.BASE_URL.rstrip("/")
     return {
         "id": outlet.id,
         "restaurantId": outlet.restaurant_id,
         "restaurantName": restaurant_name,
         "name": outlet.name,
         "serverId": outlet.server_id,
+        "publicSlug": outlet.public_slug,
         "status": outlet.status or "active",
         "notes": outlet.notes,
-        "customerMenuUrl": f"{base_url}/menu/{outlet.id}",
+        "customerMenuUrl": _customer_menu_url(outlet),
         "createdAt": outlet.created_at.isoformat(),
     }
 
@@ -1182,13 +1204,13 @@ async def outlet_customer_info(
         )
     ).scalar() or 0
 
-    base_url = settings.BASE_URL.rstrip("/")
     return ok(
         {
             "outletId": outlet.id,
             "outletName": outlet.name,
             "restaurantName": outlet.restaurant.name,
-            "customerMenuUrl": f"{base_url}/menu/{outlet.id}",
+            "customerMenuUrl": _customer_menu_url(outlet),
+            "publicSlug": outlet.public_slug,
             "bannerUrl": outlet.banner_url,
             "videoUrl": outlet.video_url,
             "galleryImageCount": len(outlet.gallery_images or []),
@@ -1390,3 +1412,51 @@ async def update_system_config(
             "supportEmail": cfg.get("support_email", ""),
         }
     )
+
+
+@router.get("/app-update")
+async def current_app_update(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    return ok(await get_app_update(db))
+
+
+@router.post("/app-update")
+async def publish_app_update(
+    body: PlatformAppUpdateRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    payload = await set_app_update(db, body)
+    await db.commit()
+
+    outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
+    for outlet_id in outlet_ids:
+        await manager.broadcast(
+            outlet_id,
+            {"type": "app_update_available", "data": payload},
+        )
+
+    return ok({**payload, "notifiedOutlets": len(outlet_ids)})
+
+
+@router.delete("/app-update")
+async def disable_app_update(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    payload = await clear_app_update(db)
+    await db.commit()
+
+    outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
+    for outlet_id in outlet_ids:
+        await manager.broadcast(
+            outlet_id,
+            {"type": "app_update_disabled", "data": payload},
+        )
+
+    return ok({**payload, "notifiedOutlets": len(outlet_ids)})

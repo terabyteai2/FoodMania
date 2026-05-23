@@ -18,7 +18,6 @@ async def test_table_count_round_trips_through_bootstrap_and_device_register():
             json={
                 "serverId": server_id,
                 "restaurantName": "Table Test",
-                "outletName": "Main Outlet",
                 "tableCount": 24,
             },
         )
@@ -37,6 +36,7 @@ async def test_table_count_round_trips_through_bootstrap_and_device_register():
         )
 
     assert bootstrap.status_code == 200
+    assert data["outletName"] == "Table Test"
     assert data["tableCount"] == 24
     assert registered.status_code == 200
     assert registered.json()["data"]["tableCount"] == 31

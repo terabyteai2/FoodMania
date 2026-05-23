@@ -11,9 +11,12 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/pos_compact_ui.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
 import '../../models/order_item.dart';
 import '../../models/order_model.dart';
+import '../../models/order_payment_method.dart';
+import '../../models/order_service_type.dart';
 import '../../models/order_source.dart';
 import '../../models/order_status.dart';
 import 'order_list_filters.dart';
@@ -50,46 +53,46 @@ class _OrdersScreenState extends State<OrdersScreen>
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final allOrders = app
-        .ordersFor()
+    final rawOrders = app.ordersFor();
+    final allOrders = rawOrders
         .where((o) => _filters.matches(o))
         .toList(growable: false);
 
-    final pendingOrders = allOrders
-        .where((o) => o.status.adminStatus == OrderStatus.pending)
-        .toList(growable: false);
+    final rawPendingOrders = _pendingOrders(rawOrders);
+    final rawAcceptedOrders = _acceptedOrders(rawOrders);
+    final pendingOrders = _pendingOrders(allOrders);
     pendingOrders.sort(_sortOrders);
-    final acceptedOrders = allOrders
-        .where(
-          (o) =>
-              o.status.adminStatus == OrderStatus.accepted ||
-              o.status.adminStatus == OrderStatus.served ||
-              o.status == OrderStatus.preparing ||
-              o.status == OrderStatus.ready,
-        )
-        .toList(growable: false);
+    final acceptedOrders = _acceptedOrders(allOrders);
     acceptedOrders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     final text = app.strings;
     final canCreate = app.menuItems.any((i) => i.isAvailable);
-    _syncTabWithPendingOrders(pendingOrders.length);
+    final pendingShortcut = _emptyShortcut(
+      context: context,
+      currentFiltered: pendingOrders,
+      currentUnfiltered: rawPendingOrders,
+      otherFiltered: acceptedOrders,
+      otherLabel: text.acceptedTab,
+      otherTabIndex: 1,
+    );
+    final acceptedShortcut = _emptyShortcut(
+      context: context,
+      currentFiltered: acceptedOrders,
+      currentUnfiltered: rawAcceptedOrders,
+      otherFiltered: pendingOrders,
+      otherLabel: text.pendingTab,
+      otherTabIndex: 0,
+    );
+    _syncTabWithPendingOrders(pendingOrders.length, acceptedOrders.length);
+    final hasAnyOpenOrders =
+        pendingOrders.isNotEmpty || acceptedOrders.isNotEmpty;
 
     return Scaffold(
       backgroundColor: PosColors.background,
-      floatingActionButton: canCreate
-          ? SizedBox(
-              height: 58,
-              child: FloatingActionButton.extended(
-                onPressed: () => _openNewOrderForm(context),
-                backgroundColor: PosColors.primary,
-                foregroundColor: PosColors.primaryDark,
-                tooltip: text.newOrder,
-                icon: const Icon(Icons.add_rounded, size: 24),
-                label: Text(
-                  text.newOrder,
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
-                ),
-              ),
+      floatingActionButton: canCreate && hasAnyOpenOrders
+          ? TfFab(
+              tooltip: text.newOrder,
+              onPressed: () => _openNewOrderForm(context),
             )
           : null,
       body: SafeArea(
@@ -113,16 +116,20 @@ class _OrdersScreenState extends State<OrdersScreen>
                 children: [
                   _OrderList(
                     orders: pendingOrders,
-                    emptyLabel: text.noPendingOrders,
-                    emptyIcon: Icons.inbox_outlined,
-                    onPrint: (o) => _printDirect(context, o),
+                    emptyTitle: text.quietForNow,
+                    canCreate: canCreate,
+                    onCreate: () => _openNewOrderForm(context),
+                    shortcut: pendingShortcut,
+                    onPrint: (o) => _printBill(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                   ),
                   _OrderList(
                     orders: acceptedOrders,
-                    emptyLabel: text.noAcceptedOrders,
-                    emptyIcon: Icons.check_circle_outline_rounded,
-                    onPrint: (o) => _printDirect(context, o),
+                    emptyTitle: text.noAcceptedOrdersRightNow,
+                    canCreate: canCreate,
+                    onCreate: () => _openNewOrderForm(context),
+                    shortcut: acceptedShortcut,
+                    onPrint: (o) => _printBill(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                   ),
                 ],
@@ -140,11 +147,55 @@ class _OrdersScreenState extends State<OrdersScreen>
     return b.createdAt.compareTo(a.createdAt);
   }
 
-  void _syncTabWithPendingOrders(int pendingCount) {
+  List<OrderModel> _pendingOrders(List<OrderModel> orders) {
+    return orders
+        .where((o) => o.status.adminStatus == OrderStatus.pending)
+        .toList(growable: false);
+  }
+
+  List<OrderModel> _acceptedOrders(List<OrderModel> orders) {
+    return orders
+        .where(
+          (o) =>
+              o.status.adminStatus == OrderStatus.accepted ||
+              o.status.adminStatus == OrderStatus.served ||
+              o.status == OrderStatus.preparing ||
+              o.status == OrderStatus.ready,
+        )
+        .toList(growable: false);
+  }
+
+  _EmptyShortcut? _emptyShortcut({
+    required BuildContext context,
+    required List<OrderModel> currentFiltered,
+    required List<OrderModel> currentUnfiltered,
+    required List<OrderModel> otherFiltered,
+    required String otherLabel,
+    required int otherTabIndex,
+  }) {
+    if (currentFiltered.isNotEmpty) return null;
+    final text = AppScope.of(context).strings;
+    if (_filters.isActive && currentUnfiltered.isNotEmpty) {
+      return _EmptyShortcut(
+        label: text.clearFiltersShortcut,
+        onTap: () => setState(() => _filters = OrderListFilters.none),
+      );
+    }
+    if (otherFiltered.isNotEmpty) {
+      return _EmptyShortcut(
+        label: text.viewOtherOrdersInstead(otherLabel),
+        onTap: () => _tabs.animateTo(otherTabIndex),
+      );
+    }
+    return null;
+  }
+
+  void _syncTabWithPendingOrders(int pendingCount, int acceptedCount) {
     final previousPendingCount = _lastPendingCount;
     _lastPendingCount = pendingCount;
 
-    final shouldShowAccepted = pendingCount == 0 && _tabs.index != 1;
+    final shouldShowAccepted =
+        pendingCount == 0 && acceptedCount > 0 && _tabs.index != 1;
     final hasNewPendingOrder =
         pendingCount > 0 &&
         pendingCount > (previousPendingCount ?? pendingCount) &&
@@ -167,10 +218,8 @@ class _OrdersScreenState extends State<OrdersScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _OrdersFilterSheet(
-        initial: _filters,
-        strings: app.strings,
-      ),
+      builder: (_) =>
+          _OrdersFilterSheet(initial: _filters, strings: app.strings),
     );
     if (result != null && mounted) {
       setState(() => _filters = result);
@@ -190,64 +239,41 @@ class _OrdersScreenState extends State<OrdersScreen>
     final occupiedTables = <String>{
       for (final order in app.ordersFor())
         if (order.status.isOpen)
-          if ((order.tableNo ?? '').trim().isNotEmpty)
-            order.tableNo!.trim(),
+          if ((order.tableNo ?? '').trim().isNotEmpty) order.tableNo!.trim(),
     };
 
-    final result = await Navigator.of(context).push<_OrderResult>(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         fullscreenDialog: true,
         builder: (_) => _NewOrderPage(
           menuItems: menuItems,
           tableCount: tableCount,
           occupiedTables: occupiedTables,
+          onCreateOrder: (result) async {
+            final order = await app.createManualOrder(
+              requestedItems: result.items,
+              tableNo: result.tableNo,
+              note: result.note,
+              serviceType: result.serviceType,
+              covers: result.covers,
+              paymentMethod: result.paymentMethod,
+            );
+            final shouldPrint =
+                app.isManager &&
+                !app.printerState.autoPrintEnabled &&
+                app.printerState.hasSelectedPrinter &&
+                !app.printerService.hasPrintedOrder(order.id);
+            if (shouldPrint) {
+              await app.printOrderTicket(order);
+            }
+            return order;
+          },
         ),
       ),
     );
-    if (result == null || !context.mounted) return;
-
-    final order = await app.createManualOrder(
-      requestedItems: result.items,
-      tableNo: result.tableNo,
-      note: result.note,
-    );
-
-    if (!context.mounted) return;
-
-    // Manual orders are created as accepted; auto-print runs on DB change.
-    // Only print here when auto-print is off (otherwise two paths would fire).
-    final autoPrintOn =
-        app.printerState.autoPrintEnabled && app.printerState.hasSelectedPrinter;
-    final printed =
-        app.isManager &&
-            !app.printerState.autoPrintEnabled &&
-            app.printerState.hasSelectedPrinter &&
-            !app.printerService.hasPrintedOrder(order.id)
-        ? await app.printOrderTicket(order)
-        : app.isManager && autoPrintOn;
-
-    if (!context.mounted) return;
-
-    // Fast-paced cafes can flip on "Auto-accept & auto-print" in Settings to
-    // skip the confirmation modal entirely — we show a brief snackbar
-    // instead. Anything that needs manager attention (no printer attached,
-    // print failed, auto-print disabled) still gets the full modal.
-    if (app.isManager && autoPrintOn && printed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${app.strings.ticketSentToPrinter} · ${order.displaySequence}',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    _showOrderCreated(context, order, printed: printed);
   }
 
-  Future<void> _printDirect(BuildContext context, OrderModel order) async {
+  Future<void> _printBill(BuildContext context, OrderModel order) async {
     final app = AppScope.of(context);
     if (!app.isManager) return;
     final text = app.strings;
@@ -260,13 +286,13 @@ class _OrdersScreenState extends State<OrdersScreen>
       );
       return;
     }
-    final ok = await app.printOrderTicket(order);
+    final ok = await app.printCustomerInvoice(order);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           ok
-              ? text.ticketPrinted(order.displaySequence)
+              ? text.billPrinted(order.displaySequence)
               : (app.printerState.lastError ?? text.printFailed),
         ),
       ),
@@ -281,35 +307,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     final app = AppScope.of(context);
     if (!app.isManager) return;
     await app.updateOrderStatus(order.id, status);
-  }
-
-  void _showOrderCreated(
-    BuildContext context,
-    OrderModel order, {
-    required bool printed,
-  }) {
-    final app = AppScope.of(context);
-    final baseUrl = app.cloudConfig.baseUrl.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final outletId = app.serverConfig.outletId.trim();
-    final menuUrl = baseUrl.isNotEmpty && outletId.isNotEmpty
-        ? '$baseUrl/menu/$outletId'
-        : null;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _OrderCreatedSheet(
-        order: order,
-        autoPrinted: printed,
-        canPrint: app.isManager,
-        menuUrl: menuUrl,
-        onPrint: () => _printDirect(context, order),
-      ),
-    );
   }
 }
 
@@ -336,8 +333,15 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final subtitle = filtersActive
-        ? text.ordersFilteredSubtitle(pendingCount, acceptedCount, totalFiltered)
+        ? text.ordersFilteredSubtitle(
+            pendingCount,
+            acceptedCount,
+            totalFiltered,
+          )
+        : totalFiltered == 0
+        ? text.ordersEmptySubtitle
         : text.pendingSubtitle(pendingCount, acceptedCount);
+    final quietEmpty = totalFiltered == 0 && !filtersActive;
     return Padding(
       padding: EdgeInsets.fromLTRB(12, 14, 12, 7),
       child: CompactHeader(
@@ -346,14 +350,15 @@ class _TopBar extends StatelessWidget {
         actions: [
           // Tapping the bell on this screen is a no-op for navigation,
           // since we're already on the Orders tab.
-          HeaderLanguageButton(),
+          if (!quietEmpty) HeaderLanguageButton(),
           HeaderNotificationBell(onNavigateToOrders: () {}),
-          CompactIconButton(
-            icon: Icons.tune_rounded,
-            tooltip: text.filterOrders,
-            filled: filtersActive,
-            onPressed: onFilterPressed,
-          ),
+          if (!quietEmpty)
+            CompactIconButton(
+              icon: Icons.tune_rounded,
+              tooltip: text.filterOrders,
+              filled: filtersActive,
+              onPressed: onFilterPressed,
+            ),
         ],
       ),
     );
@@ -365,10 +370,7 @@ class _TopBar extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _OrdersFilterSheet extends StatefulWidget {
-  const _OrdersFilterSheet({
-    required this.initial,
-    required this.strings,
-  });
+  const _OrdersFilterSheet({required this.initial, required this.strings});
 
   final OrderListFilters initial;
   final AppStrings strings;
@@ -520,8 +522,7 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                     labelStyle: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
-                      color:
-                          selected ? PosColors.primaryDark : PosColors.slate,
+                      color: selected ? PosColors.primaryDark : PosColors.slate,
                     ),
                     side: BorderSide(
                       color: selected
@@ -583,93 +584,21 @@ class _TabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
     return Padding(
-      padding: EdgeInsets.fromLTRB(12, 2, 12, 10),
-      child: Container(
-        height: 43,
-        alignment: Alignment.centerLeft,
-        child: TabBar(
-          controller: controller,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          indicatorSize: TabBarIndicatorSize.label,
-          dividerColor: Colors.transparent,
-          indicator: BoxDecoration(
-            color: PosColors.surface,
-            borderRadius: BorderRadius.circular(PosRadii.pill),
-            border: Border.all(color: PosColors.lineStrong),
-          ),
-          labelColor: PosColors.slate,
-          unselectedLabelColor: PosColors.muted,
-          labelStyle: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5),
-          unselectedLabelStyle: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 11.5,
-          ),
-          labelPadding: EdgeInsets.only(right: 8),
-          padding: EdgeInsets.zero,
-          tabs: [
-            Tab(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(AppScope.of(context).strings.pendingTab),
-                    if (pendingCount > 0) ...[
-                      SizedBox(width: 6),
-                      _TabBadge(count: pendingCount, active: true),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            Tab(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(AppScope.of(context).strings.acceptedTab),
-                    if (acceptedCount > 0) ...[
-                      SizedBox(width: 6),
-                      _TabBadge(count: acceptedCount, active: false),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TabBadge extends StatelessWidget {
-  const _TabBadge({required this.count, required this.active});
-  final int count;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: active
-            ? PosColors.primary
-            : PosColors.surfaceWarm.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(PosRadii.pill),
-      ),
-      child: Text(
-        '$count',
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w900,
-          color: active ? PosColors.primaryDark : PosColors.muted,
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          return TfTabs(
+            activeIndex: controller.index,
+            onChanged: (i) => controller.animateTo(i),
+            items: [
+              TfTabItem(label: text.pendingTab, count: pendingCount),
+              TfTabItem(label: text.acceptedTab, count: acceptedCount),
+            ],
+          );
+        },
       ),
     );
   }
@@ -679,40 +608,162 @@ class _TabBadge extends StatelessWidget {
 // Order list
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _EmptyShortcut {
+  const _EmptyShortcut({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+}
+
 class _OrderList extends StatelessWidget {
   const _OrderList({
     required this.orders,
-    required this.emptyLabel,
-    required this.emptyIcon,
+    required this.emptyTitle,
+    required this.canCreate,
+    required this.onCreate,
+    required this.shortcut,
     required this.onPrint,
     required this.onStatus,
   });
 
   final List<OrderModel> orders;
-  final String emptyLabel;
-  final IconData emptyIcon;
+  final String emptyTitle;
+  final bool canCreate;
+  final VoidCallback onCreate;
+  final _EmptyShortcut? shortcut;
   final void Function(OrderModel) onPrint;
   final void Function(OrderModel, OrderStatus) onStatus;
 
   @override
   Widget build(BuildContext context) {
     if (orders.isEmpty) {
-      return EmptyCompactState(
-        icon: emptyIcon,
-        title: emptyLabel,
-        message: AppScope.of(context).strings.newTickets,
+      return _SmartOrdersEmptyState(
+        title: emptyTitle,
+        canCreate: canCreate,
+        onCreate: onCreate,
+        shortcut: shortcut,
       );
     }
 
     return ListView.separated(
-      padding: EdgeInsets.fromLTRB(12, 0, 12, 18),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
       itemCount: orders.length,
-      separatorBuilder: (_, _) => SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, i) => _OrderCard(
         order: orders[i],
         onPrint: () => onPrint(orders[i]),
         onStatus: (s) => onStatus(orders[i], s),
       ),
+    );
+  }
+}
+
+class _SmartOrdersEmptyState extends StatelessWidget {
+  const _SmartOrdersEmptyState({
+    required this.title,
+    required this.canCreate,
+    required this.onCreate,
+    required this.shortcut,
+  });
+
+  final String title;
+  final bool canCreate;
+  final VoidCallback onCreate;
+  final _EmptyShortcut? shortcut;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          children: [
+            SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 48, 24, 112),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: (constraints.maxHeight - 160)
+                      .clamp(220, 420)
+                      .toDouble(),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 78,
+                      height: 78,
+                      decoration: BoxDecoration(
+                        color: PosColors.primarySoft,
+                        borderRadius: BorderRadius.circular(39),
+                      ),
+                      child: const Icon(
+                        TfNavIcon.orders,
+                        color: PosColors.primaryDark,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TfText(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: PosColors.slate,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        height: 1.2,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TfText(
+                      text.quietOrdersMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: PosColors.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (!canCreate) ...[
+                      const SizedBox(height: 12),
+                      TfText(
+                        text.addMenuItemsBeforeOrders,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: PosColors.danger,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                    if (shortcut != null) ...[
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: shortcut!.onTap,
+                        child: Text(shortcut!.label),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: TfButton(
+                label: text.newOrder,
+                icon: TfNavIcon.plus,
+                size: TfButtonSize.lg,
+                onPressed: canCreate ? onCreate : null,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -735,236 +786,218 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final text = app.strings;
     final canPrint = app.isManager;
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
-    final time = _formatTime(order.createdAt.toLocal());
     final adminStatus = order.status.adminStatus;
     final isPending = adminStatus == OrderStatus.pending;
-    final accentColor = switch (adminStatus) {
-      OrderStatus.pending => PosColors.warning,
-      OrderStatus.accepted => PosColors.success,
-      OrderStatus.served => PosColors.success,
-      OrderStatus.cancelled => PosColors.danger,
-      OrderStatus.preparing => PosColors.success,
-      OrderStatus.ready => PosColors.success,
+    final isAccepted = adminStatus == OrderStatus.accepted;
+    final elapsedMinutes = DateTime.now()
+        .difference(order.createdAt.toLocal())
+        .inMinutes;
+    final lateMinutes = isPending && elapsedMinutes > 20
+        ? elapsedMinutes - 20
+        : 0;
+    final isLate = lateMinutes > 0;
+
+    // Rail colour: amber pending · red late pending · green in-kitchen/served.
+    final railColor = switch (adminStatus) {
+      OrderStatus.pending => isLate ? PosColors.danger : PosColors.primary,
+      OrderStatus.cancelled => PosColors.coral,
+      _ => PosColors.success,
     };
+
+    // Status pill kind.
+    final TfStatusKind? statusKind = isLate
+        ? TfStatusKind.late
+        : isPending
+        ? TfStatusKind.pending
+        : (isAccepted ||
+              adminStatus == OrderStatus.preparing ||
+              adminStatus == OrderStatus.ready)
+        ? TfStatusKind.accepted
+        : adminStatus == OrderStatus.served
+        ? TfStatusKind.served
+        : null;
+
+    final statusLabel = isLate
+        ? text.orderStatusLate(lateMinutes)
+        : isPending
+        ? text.orderStatusPending
+        : (isAccepted ||
+              adminStatus == OrderStatus.preparing ||
+              adminStatus == OrderStatus.ready)
+        ? text.orderStatusInKitchen
+        : adminStatus == OrderStatus.served
+        ? text.servedAction
+        : null;
+
+    final sourceLabel = _sourceLabel(order, text);
+    final subline = isPending
+        ? '$sourceLabel · ${text.agoMinutes(elapsedMinutes)} · ${text.orderItemsCount(order.items.length)}'
+        : '${text.agoMinutes(elapsedMinutes)} · ${text.orderItemsCount(order.items.length)}';
+
     final nextStatus = (isPending && app.isManager)
         ? OrderStatus.accepted
         : null;
-    final statusLabel = isPending ? 'PENDING' : 'ACCEPTED';
 
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
+    return TfCard(
+      padded: false,
+      clip: true,
       child: InkWell(
-        onLongPress: canPrint ? onPrint : null,
-        child: Container(
-          decoration: BoxDecoration(
-            color: PosColors.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.lineStrong),
-          ),
+        onLongPress: canPrint && isAccepted ? onPrint : null,
+        child: IntrinsicHeight(
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 4,
-                height: 184,
-                decoration: BoxDecoration(
-                  color: accentColor,
-                  borderRadius: BorderRadius.horizontal(
-                    left: Radius.circular(10),
-                  ),
-                ),
-              ),
+              TfRail(color: railColor),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(12, 11, 10, 10),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Header: #id · source · status · total
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            order.displaySequence,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 15,
-                              color: PosColors.slate,
-                              letterSpacing: 0,
+                          Expanded(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  order.displaySequence,
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                    color: PosColors.slate,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                Text(
+                                  '· $sourceLabel',
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 14,
+                                    color: PosColors.slate,
+                                  ),
+                                ),
+                                if (statusKind != null && statusLabel != null)
+                                  TfStatusBadge(
+                                    label: statusLabel,
+                                    kind: statusKind,
+                                  ),
+                              ],
                             ),
                           ),
-                          SizedBox(width: 8),
-                          if ((order.tableNo ?? '').isNotEmpty) ...[
-                            Icon(
-                              Icons.table_restaurant_outlined,
-                              size: 11,
-                              color: PosColors.muted,
-                            ),
-                            SizedBox(width: 3),
-                            Text(
-                              'Table ${order.tableNo}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 9.5,
-                                color: PosColors.muted,
-                              ),
-                            ),
-                          ],
-                          Spacer(),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: accentColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(
-                                PosRadii.pill,
-                              ),
-                              border: Border.all(
-                                color: accentColor.withValues(alpha: 0.35),
-                              ),
-                            ),
-                            child: Text(
-                              statusLabel,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 8,
-                                color: accentColor,
-                              ),
+                          const SizedBox(width: 10),
+                          Text(
+                            currency.format(order.total),
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                              color: PosColors.slate,
+                              letterSpacing: -0.3,
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'placed $time · ${_ago(order.createdAt)}',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(height: 4),
+                      TfText(
+                        subline,
+                        style: const TextStyle(
+                          fontSize: 12,
                           color: PosColors.muted,
+                          height: 1.4,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 10),
+                      // Items list — first 3, then "+N more".
                       ...order.items
-                          .take(4)
+                          .take(3)
                           .map(
                             (item) => Padding(
-                              padding: EdgeInsets.symmetric(vertical: 2.2),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 24,
-                                    child: Text(
-                                      '×${item.qty}',
-                                      style: TextStyle(
-                                        color: PosColors.muted,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 9.5,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      item.name,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 10.5,
-                                        color: PosColors.slate,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    currency.format(item.lineTotal),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 9.5,
-                                      color: PosColors.muted,
-                                    ),
-                                  ),
-                                ],
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: TfText(
+                                '${item.qty}× ${item.name}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: PosColors.slate,
+                                  height: 1.35,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                      if (order.items.length > 4)
+                      if (order.items.length > 3)
                         Padding(
-                          padding: EdgeInsets.only(top: 2),
+                          padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            '+${order.items.length - 4} more',
-                            style: TextStyle(
+                            '+${order.items.length - 3} more',
+                            style: const TextStyle(
+                              fontSize: 11,
                               color: PosColors.muted,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
-                      SizedBox(height: 13),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      if ((order.note ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        TfText(
+                          order.note!.trim(),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: PosColors.muted,
+                            fontStyle: FontStyle.italic,
+                            height: 1.35,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      // Actions row.
+                      if (canPrint && (isPending || isAccepted)) ...[
+                        const SizedBox(height: 12),
+                        if (isPending)
+                          Row(
                             children: [
-                              Text(
-                                'TOTAL',
-                                style: TextStyle(
-                                  color: PosColors.muted,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.7,
+                              Expanded(
+                                child: TfButton(
+                                  label: text.rejectOrderAction,
+                                  variant: TfButtonVariant.ghost,
+                                  size: TfButtonSize.md,
+                                  onPressed: () =>
+                                      onStatus(OrderStatus.cancelled),
                                 ),
                               ),
-                              SizedBox(height: 2),
-                              Text(
-                                currency.format(order.total),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                  color: PosColors.slate,
-                                  letterSpacing: 0,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TfButton(
+                                  label: text.acceptAndSendToKitchen,
+                                  icon: TfNavIcon.check,
+                                  size: TfButtonSize.md,
+                                  onPressed: () => onStatus(nextStatus!),
                                 ),
                               ),
                             ],
+                          )
+                        else
+                          TfButton(
+                            label: text.printBillAction,
+                            icon: TfNavIcon.printer,
+                            variant: TfButtonVariant.dark,
+                            size: TfButtonSize.md,
+                            onPressed: onPrint,
                           ),
-                          if ((order.note ?? '').isNotEmpty)
-                            Flexible(
-                              child: Text(
-                                order.note!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: PosColors.muted,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ),
-                          Spacer(),
-                          if (canPrint)
-                            IconButton(
-                              tooltip: app.strings.printTicket,
-                              onPressed: onPrint,
-                              icon: Icon(
-                                Icons.print_outlined,
-                                color: PosColors.muted,
-                                size: 18,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          if (nextStatus != null) ...[
-                            SizedBox(width: 4),
-                            _AdvanceButton(
-                              label: 'Accept',
-                              color: PosColors.primary,
-                              onTap: () => onStatus(nextStatus),
-                            ),
-                          ],
-                        ],
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -976,58 +1009,20 @@ class _OrderCard extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final isToday =
-        dt.year == now.year && dt.month == now.month && dt.day == now.day;
-    return DateFormat(isToday ? 'h:mm a' : 'MMM d  h:mm a').format(dt);
-  }
-
-  String _ago(DateTime dt) {
-    final minutes = DateTime.now().difference(dt.toLocal()).inMinutes;
-    if (minutes < 1) return 'now';
-    if (minutes < 60) return '$minutes min';
-    final hours = (minutes / 60).floor();
-    return '$hours hr';
-  }
-}
-
-class _AdvanceButton extends StatelessWidget {
-  const _AdvanceButton({
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 38,
-        padding: EdgeInsets.symmetric(horizontal: 18),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 11,
-              color: color.computeLuminance() > 0.4
-                  ? PosColors.slate
-                  : Colors.white,
-            ),
-          ),
-        ),
-      ),
-    );
+  String _sourceLabel(OrderModel order, AppStrings text) {
+    final table = (order.tableNo ?? '').trim();
+    if (table.isNotEmpty) {
+      return text.isBn ? 'টেবিল $table' : 'Table $table';
+    }
+    switch (order.serviceType) {
+      case OrderServiceType.takeaway:
+        return text.isBn ? 'টেক-অ্যাওয়ে' : 'Takeaway';
+      case OrderServiceType.delivery:
+        return text.isBn ? 'ডেলিভারি' : 'Delivery';
+      case OrderServiceType.dineIn:
+      case null:
+        return text.isBn ? 'ডাইন-ইন' : 'Dine-in';
+    }
   }
 }
 
@@ -1035,12 +1030,15 @@ class _AdvanceButton extends StatelessWidget {
 // Order created sheet
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ignore: unused_element
 class _OrderCreatedSheet extends StatelessWidget {
+  // ignore: unused_element_parameter
   const _OrderCreatedSheet({
     required this.order,
     required this.autoPrinted,
     required this.canPrint,
     required this.onPrint,
+    // ignore: unused_element_parameter
     this.menuUrl,
   });
 
@@ -1055,159 +1053,315 @@ class _OrderCreatedSheet extends StatelessWidget {
     final text = AppScope.of(context).strings;
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
-      child: SingleChildScrollView(
+      color: PosColors.background,
+      child: SafeArea(
+        bottom: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // Yellow handle bar — brand accent
-            Container(
-              margin: EdgeInsets.symmetric(vertical: 10),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: PosColors.primary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            SizedBox(height: 6),
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: PosColors.success.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.check_rounded,
-                color: PosColors.success,
-                size: 32,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Order Created!',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-            ),
-            SizedBox(height: 6),
-            // Yellow sequence number pill
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              decoration: BoxDecoration(
-                color: PosColors.primary,
-                borderRadius: BorderRadius.circular(PosRadii.pill),
-                border: Border.all(color: PosColors.primary),
-              ),
-              child: Text(
-                order.displaySequence,
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 32,
-                  color: PosColors.primaryDark,
-                  letterSpacing: -1,
-                ),
-              ),
-            ),
-            SizedBox(height: 8),
-            if ((order.tableNo ?? '').isNotEmpty)
-              Text(
-                'Table ${order.tableNo}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: PosColors.muted,
-                ),
-              ),
-            Text(
-              currency.format(order.total),
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-                color: PosColors.slate,
-              ),
-            ),
-            SizedBox(height: 18),
-            // QR code — encodes the customer menu URL when available,
-            // otherwise falls back to the order's unique ID
-            QrImageView(
-              data: menuUrl ?? order.id,
-              version: QrVersions.auto,
-              size: 140,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: Color(0xFF1A1A1A),
-              ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Color(0xFF1A1A1A),
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              menuUrl != null ? 'Scan to view our menu' : order.orderNo,
-              style: TextStyle(
-                fontSize: 10,
-                color: PosColors.muted,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            SizedBox(height: 20),
-            if (!canPrint)
-              SizedBox.shrink()
-            else if (autoPrinted)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            // Header — Back to orders. Always reachable so a manager never
+            // gets stuck on the receipt.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 16, 4),
+              child: Row(
                 children: [
-                  Icon(Icons.print_rounded, size: 16, color: PosColors.success),
-                  SizedBox(width: 6),
-                  Text(
-                    text.ticketSentToPrinter,
-                    style: TextStyle(
-                      color: PosColors.success,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    color: const Color(0xFF1C1A17),
+                    tooltip: 'Back to orders',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Receipt',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        color: Color(0xFF1C1A17),
+                      ),
+                    ),
+                  ),
+                  if (autoPrinted)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF4EE),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.print_rounded,
+                            size: 12,
+                            color: Color(0xFF3D7A5A),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            text.ticketSentToPrinter,
+                            style: const TextStyle(
+                              color: Color(0xFF3D7A5A),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: PosColors.line, width: 0.5),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEAF4EE),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            color: Color(0xFF3D7A5A),
+                            size: 30,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Order created',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Color(0xFF888780),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Big order # focus.
+                        Text(
+                          '#${order.displaySequence}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 56,
+                            color: Color(0xFF1C1A17),
+                            height: 1,
+                            letterSpacing: -1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        if ((order.tableNo ?? '').isNotEmpty)
+                          Text(
+                            'Table ${order.tableNo}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: Color(0xFF888780),
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: PosColors.line,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: QrImageView(
+                            data: menuUrl ?? order.id,
+                            version: QrVersions.auto,
+                            size: 130,
+                            backgroundColor: Colors.white,
+                            eyeStyle: const QrEyeStyle(
+                              eyeShape: QrEyeShape.square,
+                              color: Color(0xFF1C1A17),
+                            ),
+                            dataModuleStyle: const QrDataModuleStyle(
+                              dataModuleShape: QrDataModuleShape.square,
+                              color: Color(0xFF1C1A17),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          menuUrl != null
+                              ? 'Scan to view the menu'
+                              : order.orderNo,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF888780),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Items list
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: PosColors.line, width: 0.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'ITEMS',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF888780),
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        for (final item in order.items)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                    '${item.qty}×',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12.5,
+                                      color: Color(0xFF888780),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    item.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: Color(0xFF1C1A17),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  currency.format(item.lineTotal),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13,
+                                    color: Color(0xFF1C1A17),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Divider(color: PosColors.line, height: 22),
+                        Row(
+                          children: [
+                            const Text(
+                              'TOTAL',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1C1A17),
+                                letterSpacing: 0.7,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              currency.format(order.total),
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1C1A17),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              )
-            else
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    onPrint();
-                  },
-                  icon: Icon(Icons.print_rounded),
-                  label: Text(
-                    text.printTicket,
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
+              ),
+            ),
+            // Bottom action bar: Print bill + Back to orders.
+            Container(
+              decoration: BoxDecoration(
+                color: PosColors.surface,
+                border: Border(
+                  top: BorderSide(color: PosColors.line, width: 0.5),
                 ),
               ),
-            SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context),
-                style: FilledButton.styleFrom(
-                  backgroundColor: PosColors.slate,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(PosRadii.md),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                MediaQuery.of(context).padding.bottom + 12,
+              ),
+              child: Row(
+                children: [
+                  if (canPrint)
+                    Expanded(
+                      child: SizedBox(
+                        height: 50,
+                        child: OutlinedButton.icon(
+                          onPressed: onPrint,
+                          icon: const Icon(Icons.print_rounded, size: 18),
+                          label: const Text(
+                            'Print bill',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF1C1A17),
+                            side: BorderSide(color: PosColors.line, width: 0.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (canPrint) const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFF5C127),
+                          foregroundColor: const Color(0xFF1C1A17),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text(
+                          'Back to orders',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                child: Text(
-                  'Done',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
+                ],
               ),
             ),
           ],
@@ -1218,13 +1372,24 @@ class _OrderCreatedSheet extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// New order page — 2-step wizard
+// New order page — source, items, review, success
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _OrderResult {
-  _OrderResult({required this.items, this.tableNo, this.note});
+  _OrderResult({
+    required this.items,
+    required this.serviceType,
+    required this.paymentMethod,
+    this.tableNo,
+    this.covers,
+    this.note,
+  });
+
   final List<OrderRequestItem> items;
+  final OrderServiceType serviceType;
+  final OrderPaymentMethod paymentMethod;
   final String? tableNo;
+  final int? covers;
   final String? note;
 }
 
@@ -1233,10 +1398,13 @@ class _NewOrderPage extends StatefulWidget {
     required this.menuItems,
     required this.tableCount,
     required this.occupiedTables,
+    required this.onCreateOrder,
   });
+
   final List<MenuItem> menuItems;
   final int tableCount;
   final Set<String> occupiedTables;
+  final Future<OrderModel> Function(_OrderResult result) onCreateOrder;
 
   @override
   State<_NewOrderPage> createState() => _NewOrderPageState();
@@ -1245,24 +1413,31 @@ class _NewOrderPage extends StatefulWidget {
 class _NewOrderPageState extends State<_NewOrderPage> {
   final _pageCtrl = PageController();
   int _step = 0;
+  static const int _totalSteps = 4;
 
-  // Step 1 — table
-  String? _selectedTable; // null = not yet chosen; '' = take-away
+  OrderServiceType? _source;
+  String? _selectedTable;
+  int _covers = 2;
 
-  // Step 2 — menu
   final Map<String, int> _cart = {};
   String _selectedCategory = 'All';
+  final _searchCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
-  bool _showNote = false;
+  String _query = '';
+  OrderPaymentMethod _paymentMethod = OrderPaymentMethod.cash;
+  OrderModel? _createdOrder;
+  bool _creating = false;
 
   @override
   void dispose() {
     _pageCtrl.dispose();
+    _searchCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
 
   void _goToStep(int index) {
+    if (index < 0 || index >= _totalSteps) return;
     setState(() => _step = index);
     _pageCtrl.animateToPage(
       index,
@@ -1273,7 +1448,23 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 
   void _selectTable(String? table) {
     setState(() => _selectedTable = table);
-    Future.delayed(Duration(milliseconds: 160), () => _goToStep(1));
+  }
+
+  void _selectSource(OrderServiceType src) {
+    setState(() {
+      _source = src;
+      if (src != OrderServiceType.dineIn) {
+        _selectedTable = '';
+      } else {
+        _selectedTable = null;
+      }
+    });
+  }
+
+  void _continueFromSource() {
+    if (_source == null) return;
+    if (_source == OrderServiceType.dineIn && _selectedTable == null) return;
+    _goToStep(1);
   }
 
   List<String> get _categories {
@@ -1283,14 +1474,26 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   }
 
   List<MenuItem> get _visibleItems => widget.menuItems
-      .where(
-        (i) => _selectedCategory == 'All' || i.category == _selectedCategory,
-      )
+      .where((i) {
+        final matchesCategory =
+            _selectedCategory == 'All' || i.category == _selectedCategory;
+        if (!matchesCategory) return false;
+        final query = _query.trim().toLowerCase();
+        if (query.isEmpty) return true;
+        final searchable = [
+          i.name,
+          i.nameEn,
+          i.nameBn,
+          i.category,
+          i.description,
+        ].whereType<String>().join(' ').toLowerCase();
+        return searchable.contains(query);
+      })
       .toList(growable: false);
 
   int get _totalQty => _cart.values.fold(0, (s, q) => s + q);
 
-  double get _total {
+  double get _subtotal {
     var sum = 0.0;
     for (final entry in _cart.entries) {
       final item = widget.menuItems.firstWhere(
@@ -1301,6 +1504,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     }
     return sum;
   }
+
+  double get _vatAmount => _roundMoney(_subtotal * 0.05);
+
+  double get _total => _roundMoney(_subtotal + _vatAmount);
+
+  double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
 
   void _tap(String id) {
     HapticFeedback.lightImpact();
@@ -1318,30 +1527,76 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     });
   }
 
-  void _submit() {
+  void _goToReview() {
     if (_cart.isEmpty) return;
+    _goToStep(2);
+  }
+
+  Future<void> _submit() async {
+    if (_cart.isEmpty || _source == null || _creating) return;
     final items = _cart.entries
         .map((e) => OrderRequestItem(menuItemId: e.key, qty: e.value))
         .toList(growable: false);
-    final tableNo = (_selectedTable ?? '').isEmpty ? null : _selectedTable;
-    Navigator.pop(
-      context,
-      _OrderResult(
-        items: items,
-        tableNo: tableNo,
-        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-      ),
-    );
+    final isDineIn = _source == OrderServiceType.dineIn;
+    final tableNo = isDineIn && (_selectedTable ?? '').isNotEmpty
+        ? _selectedTable
+        : null;
+    setState(() => _creating = true);
+    try {
+      final order = await widget.onCreateOrder(
+        _OrderResult(
+          items: items,
+          serviceType: _source!,
+          paymentMethod: _paymentMethod,
+          tableNo: tableNo,
+          covers: isDineIn ? _covers : null,
+          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _createdOrder = order;
+        _creating = false;
+      });
+      _goToStep(3);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _creating = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not create order: $error')));
+    }
+  }
+
+  void _startAnotherOrder() {
+    setState(() {
+      _step = 0;
+      _source = null;
+      _selectedTable = null;
+      _covers = 2;
+      _cart.clear();
+      _selectedCategory = 'All';
+      _query = '';
+      _searchCtrl.clear();
+      _noteCtrl.clear();
+      _paymentMethod = OrderPaymentMethod.cash;
+      _createdOrder = null;
+      _creating = false;
+    });
+    _pageCtrl.jumpToPage(0);
   }
 
   String get _tableLabel {
+    if (_source == OrderServiceType.takeaway) return 'Takeaway';
+    if (_source == OrderServiceType.delivery) return 'Delivery';
     if (_selectedTable == null) return '';
-    if (_selectedTable!.isEmpty) return 'Take Away';
+    if (_selectedTable!.isEmpty) return 'Takeaway';
     return 'Table $_selectedTable';
   }
 
   @override
   Widget build(BuildContext context) {
+    final isSuccess = _step == 3;
     return Scaffold(
       backgroundColor: PosColors.background,
       body: SafeArea(
@@ -1349,21 +1604,34 @@ class _NewOrderPageState extends State<_NewOrderPage> {
           children: [
             _WizardHeader(
               step: _step,
+              totalSteps: _totalSteps,
               tableLabel: _tableLabel,
               onClose: () => Navigator.pop(context),
-              onBack: _step > 0 ? () => _goToStep(_step - 1) : null,
+              onBack: _step > 0 && !isSuccess
+                  ? () => _goToStep(_step - 1)
+                  : null,
             ),
-            _StepIndicator(step: _step),
+            _StepIndicator(step: _step, total: _totalSteps),
             Expanded(
               child: PageView(
                 controller: _pageCtrl,
-                physics: NeverScrollableScrollPhysics(),
+                physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _TablePickerStep(
+                  _SourceAndTableStep(
+                    source: _source,
+                    onSelectSource: _selectSource,
                     tableCount: widget.tableCount,
-                    selected: _selectedTable,
+                    selectedTable: _selectedTable,
                     occupiedTables: widget.occupiedTables,
-                    onSelect: _selectTable,
+                    covers: _covers,
+                    onCoversChanged: (value) => setState(() => _covers = value),
+                    onSelectTable: _selectTable,
+                    onContinue:
+                        _source != null &&
+                            (_source != OrderServiceType.dineIn ||
+                                _selectedTable != null)
+                        ? _continueFromSource
+                        : null,
                   ),
                   _MenuStep(
                     menuItems: widget.menuItems,
@@ -1373,14 +1641,38 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     cart: _cart,
                     total: _total,
                     totalQty: _totalQty,
-                    showNote: _showNote,
-                    noteCtrl: _noteCtrl,
+                    searchCtrl: _searchCtrl,
+                    query: _query,
+                    onSearchChanged: (value) => setState(() => _query = value),
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),
                     onTap: _tap,
                     onDecrement: _decrement,
-                    onToggleNote: () => setState(() => _showNote = !_showNote),
-                    onSubmit: _cart.isNotEmpty ? _submit : null,
+                    onSubmit: _cart.isNotEmpty ? _goToReview : null,
+                  ),
+                  _ReviewStep(
+                    menuItems: widget.menuItems,
+                    cart: _cart,
+                    subtotal: _subtotal,
+                    vatAmount: _vatAmount,
+                    total: _total,
+                    totalQty: _totalQty,
+                    noteCtrl: _noteCtrl,
+                    sourceLabel: _tableLabel.isEmpty ? '—' : _tableLabel,
+                    paymentMethod: _paymentMethod,
+                    onPaymentChanged: (value) =>
+                        setState(() => _paymentMethod = value),
+                    onEdit: () => _goToStep(1),
+                    onCreate: _submit,
+                    creating: _creating,
+                  ),
+                  _OrderCreatedStep(
+                    order: _createdOrder,
+                    serviceLabel: _tableLabel,
+                    paymentMethod: _paymentMethod,
+                    total: _total,
+                    onDone: () => Navigator.pop(context),
+                    onNewOrder: _startAnotherOrder,
                   ),
                 ],
               ),
@@ -1395,69 +1687,95 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 class _WizardHeader extends StatelessWidget {
   const _WizardHeader({
     required this.step,
+    required this.totalSteps,
     required this.tableLabel,
     required this.onClose,
     required this.onBack,
   });
 
   final int step;
+  final int totalSteps;
   final String tableLabel;
   final VoidCallback onClose;
   final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final isBn = text.isBn;
+    final stepLabels = isBn
+        ? const [
+            'অর্ডার কোথা থেকে?',
+            'আইটেম যোগ করুন',
+            'রিভিউ ও পাঠান',
+            'অর্ডার তৈরি হয়েছে',
+          ]
+        : const [
+            "Where's this order for?",
+            'Add items',
+            'Review & send',
+            'Sent to kitchen',
+          ];
+    final stepLabel = stepLabels[step.clamp(0, stepLabels.length - 1)];
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(4, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (onBack != null)
-            IconButton(
-              icon: Icon(Icons.arrow_back_rounded),
-              color: PosColors.slate,
-              tooltip: 'Back',
-              onPressed: onBack,
-            )
-          else
-            IconButton(
-              icon: Icon(Icons.close_rounded),
-              color: PosColors.slate,
-              tooltip: 'Cancel',
-              onPressed: onClose,
-            ),
-          SizedBox(width: 4),
+          TfIconButton(
+            icon: onBack != null ? TfNavIcon.back : TfNavIcon.close,
+            tooltip: onBack != null
+                ? (isBn ? 'পেছনে' : 'Back')
+                : (isBn ? 'বাতিল' : 'Close'),
+            onPressed: onBack ?? onClose,
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  step == 0 ? 'Select Table' : 'Select Items',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                    color: PosColors.slate,
+                TfText(
+                  '${isBn ? 'ধাপ' : 'STEP'} ${step + 1} ${isBn ? 'এর' : 'OF'} $totalSteps'
+                      .toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.muted,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                if (tableLabel.isNotEmpty)
-                  Text(
-                    tableLabel,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                      color: PosColors.primary,
-                    ),
+                const SizedBox(height: 2),
+                TfText(
+                  stepLabel,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.slate,
+                    letterSpacing: -0.3,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
-          Text(
-            'Step ${step + 1} of 2',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-              color: PosColors.muted,
+          if (tableLabel.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: TfText(
+                tableLabel,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.muted,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1465,19 +1783,20 @@ class _WizardHeader extends StatelessWidget {
 }
 
 class _StepIndicator extends StatelessWidget {
-  const _StepIndicator({required this.step});
+  const _StepIndicator({required this.step, this.total = 3});
   final int step;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
-          for (var i = 0; i < 2; i++) ...[
+          for (var i = 0; i < total; i++) ...[
             Expanded(
               child: AnimatedContainer(
-                duration: Duration(milliseconds: 280),
+                duration: const Duration(milliseconds: 280),
                 height: 3,
                 decoration: BoxDecoration(
                   color: i <= step ? PosColors.primary : PosColors.line,
@@ -1485,7 +1804,7 @@ class _StepIndicator extends StatelessWidget {
                 ),
               ),
             ),
-            if (i < 1) SizedBox(width: 6),
+            if (i < total - 1) const SizedBox(width: 6),
           ],
         ],
       ),
@@ -1493,67 +1812,146 @@ class _StepIndicator extends StatelessWidget {
   }
 }
 
-class _TablePickerStep extends StatelessWidget {
-  const _TablePickerStep({
+// ─────────────────────────────────────────────────────────────────────────────
+// Source picker (Dine-in / Takeaway / Delivery) — wraps the existing
+// table picker so dine-in shows tables directly underneath the source choice.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SourceAndTableStep extends StatelessWidget {
+  const _SourceAndTableStep({
+    required this.source,
+    required this.onSelectSource,
     required this.tableCount,
-    required this.selected,
+    required this.selectedTable,
     required this.occupiedTables,
-    required this.onSelect,
+    required this.covers,
+    required this.onCoversChanged,
+    required this.onSelectTable,
+    required this.onContinue,
   });
 
+  final OrderServiceType? source;
+  final ValueChanged<OrderServiceType> onSelectSource;
   final int tableCount;
-  final String? selected;
+  final String? selectedTable;
   final Set<String> occupiedTables;
-  final ValueChanged<String> onSelect;
+  final int covers;
+  final ValueChanged<int> onCoversChanged;
+  final ValueChanged<String> onSelectTable;
+  final VoidCallback? onContinue;
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final isDineIn = source == OrderServiceType.dineIn;
     return Column(
       children: [
-        // Tiny legend so the manager understands the red tiles at a glance.
-        if (occupiedTables.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Row(
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _LegendDot(color: PosColors.line, label: 'Available'),
-                SizedBox(width: 14),
-                _LegendDot(color: PosColors.danger, label: 'Occupied'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SourceTile(
+                        emoji: '🪑',
+                        source: OrderServiceType.dineIn,
+                        selected: source == OrderServiceType.dineIn,
+                        onTap: () => onSelectSource(OrderServiceType.dineIn),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SourceTile(
+                        emoji: '🥡',
+                        source: OrderServiceType.takeaway,
+                        selected: source == OrderServiceType.takeaway,
+                        onTap: () => onSelectSource(OrderServiceType.takeaway),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SourceTile(
+                        emoji: '🛵',
+                        source: OrderServiceType.delivery,
+                        selected: source == OrderServiceType.delivery,
+                        onTap: () => onSelectSource(OrderServiceType.delivery),
+                      ),
+                    ),
+                  ],
+                ),
+                if (isDineIn) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TfText(
+                          text.pickATable,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: PosColors.slate,
+                          ),
+                        ),
+                      ),
+                      TfText(
+                        '$tableCount ${text.isBn ? "টেবিল" : "tables"}'
+                        ' · ${tableCount - occupiedTables.length} ${text.isBn ? "খালি" : "free"}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 80,
+                          mainAxisExtent: 80,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                        ),
+                    itemCount: tableCount,
+                    itemBuilder: (_, i) {
+                      final tableNo = '${i + 1}';
+                      final sel = selectedTable == tableNo;
+                      final occ = occupiedTables.contains(tableNo);
+                      return _TableTile(
+                        number: i + 1,
+                        selected: sel,
+                        occupied: occ,
+                        onTap: () => onSelectTable(tableNo),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 22),
+                  TfText(
+                    text.howManyPeople,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: PosColors.slate,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _CoversRow(value: covers, onChanged: onCoversChanged),
+                ],
               ],
             ),
           ),
-        Expanded(
-          child: GridView.builder(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, 20),
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 100,
-              mainAxisExtent: 76,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-            ),
-            itemCount: tableCount + 1, // +1 for Take Away
-            itemBuilder: (_, i) {
-              if (i == 0) {
-                final sel = selected == '';
-                return _TableTile(
-                  label: 'Take Away',
-                  icon: Icons.shopping_bag_outlined,
-                  selected: sel,
-                  occupied: false,
-                  onTap: () => onSelect(''),
-                );
-              }
-              final tableNo = '$i';
-              final sel = selected == tableNo;
-              final occ = occupiedTables.contains(tableNo);
-              return _TableTile(
-                label: 'T$i',
-                icon: Icons.table_restaurant_outlined,
-                selected: sel,
-                occupied: occ,
-                onTap: () => onSelect(tableNo),
-              );
-            },
+        ),
+        TfStickyCTA(
+          child: TfButton(
+            label: text.continueAction,
+            trailingIcon: TfNavIcon.arrow,
+            size: TfButtonSize.lg,
+            onPressed: onContinue,
           ),
         ),
       ],
@@ -1561,127 +1959,699 @@ class _TablePickerStep extends StatelessWidget {
   }
 }
 
-class _LegendDot extends StatelessWidget {
-  const _LegendDot({required this.color, required this.label});
-  final Color color;
+class _SourceTile extends StatelessWidget {
+  const _SourceTile({
+    required this.emoji,
+    required this.source,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final OrderServiceType source;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = tfIsBn(context);
+    final label = isBn ? source.banglaLabel : source.label;
+    return Material(
+      color: selected ? PosColors.primaryDark : PosColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? PosColors.primaryDark : PosColors.line,
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 28, height: 1)),
+              const SizedBox(height: 10),
+              TfText(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: selected ? Colors.white : PosColors.slate,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Single-row covers picker: 1 / 2 / 3 / 4 / 5 / 6 / 7+. Mirrors the design's
+// chip strip rather than a +/- stepper.
+class _CoversRow extends StatelessWidget {
+  const _CoversRow({required this.value, required this.onChanged});
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const options = [1, 2, 3, 4, 5, 6];
+    return Row(
+      children: [
+        for (var i = 0; i < options.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(
+            child: _CoverChip(
+              value: options[i],
+              selected: value == options[i],
+              onTap: () => onChanged(options[i]),
+            ),
+          ),
+        ],
+        const SizedBox(width: 6),
+        Expanded(
+          child: _CoverChip(
+            value: 7,
+            selected: value >= 7,
+            label: '7+',
+            onTap: () => onChanged(7),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CoverChip extends StatelessWidget {
+  const _CoverChip({
+    required this.value,
+    required this.selected,
+    required this.onTap,
+    this.label,
+  });
+  final int value;
+  final bool selected;
+  final String? label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? PosColors.primaryDark : PosColors.surface,
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? PosColors.primaryDark : PosColors.line,
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            label ?? '$value',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+              color: selected ? Colors.white : PosColors.slate,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Review step with VAT, kitchen note, payment method, and create CTA.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ReviewStep extends StatelessWidget {
+  const _ReviewStep({
+    required this.menuItems,
+    required this.cart,
+    required this.subtotal,
+    required this.vatAmount,
+    required this.total,
+    required this.totalQty,
+    required this.noteCtrl,
+    required this.sourceLabel,
+    required this.paymentMethod,
+    required this.onPaymentChanged,
+    required this.onEdit,
+    required this.onCreate,
+    required this.creating,
+  });
+
+  final List<MenuItem> menuItems;
+  final Map<String, int> cart;
+  final double subtotal;
+  final double vatAmount;
+  final double total;
+  final int totalQty;
+  final TextEditingController noteCtrl;
+  final String sourceLabel;
+  final OrderPaymentMethod paymentMethod;
+  final ValueChanged<OrderPaymentMethod> onPaymentChanged;
+  final VoidCallback onEdit;
+  final Future<void> Function() onCreate;
+  final bool creating;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            children: [
+              TfCard(
+                padded: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                      child: Row(
+                        children: [
+                          TfText(
+                            text.sourceLabel.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: PosColors.muted,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const Spacer(),
+                          TfText(
+                            sourceLabel,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: PosColors.slate,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(
+                      color: PosColors.line,
+                      height: 1,
+                      thickness: 0.5,
+                    ),
+                    ...cart.entries.map((entry) {
+                      final item = menuItems.firstWhere(
+                        (m) => m.id == entry.key,
+                        orElse: () => menuItems.first,
+                      );
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 26,
+                              child: Text(
+                                '${entry.value}×',
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 14,
+                                  color: PosColors.slate,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: TfText(
+                                item.name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: PosColors.slate,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              currency.format(item.price * entry.value),
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                                color: PosColors.slate,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+                      child: TfButton(
+                        label: text.editItemsAction,
+                        icon: Icons.edit_outlined,
+                        variant: TfButtonVariant.ghost,
+                        size: TfButtonSize.sm,
+                        fullWidth: false,
+                        onPressed: onEdit,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.only(left: 2, bottom: 6),
+                child: Row(
+                  children: [
+                    TfText(
+                      text.kitchenNote,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.slate,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    TfText(
+                      text.kitchenNoteOptional,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: PosColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TfCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
+                child: TextField(
+                  controller: noteCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  minLines: 1,
+                  maxLines: 3,
+                  style: TextStyle(
+                    fontFamily: text.isBn ? 'Hind Siliguri' : 'Inter',
+                    fontSize: 14,
+                    color: PosColors.slate,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    hintText: text.kitchenNoteHint,
+                    hintStyle: TextStyle(
+                      fontFamily: text.isBn ? 'Hind Siliguri' : 'Inter',
+                      color: PosColors.muted,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TfCard(
+                child: Column(
+                  children: [
+                    _AmountLine(
+                      label: text.subtotalLabel,
+                      value: currency.format(subtotal),
+                    ),
+                    const SizedBox(height: 4),
+                    _AmountLine(
+                      label: '${text.vatLabel} 5%',
+                      value: currency.format(vatAmount),
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(
+                      color: PosColors.line,
+                      height: 1,
+                      thickness: 0.5,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        TfText(
+                          text.totalLabel,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: PosColors.slate,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          currency.format(total),
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                            color: PosColors.slate,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.only(left: 2, bottom: 6),
+                child: TfText(
+                  text.paymentLabel,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.slate,
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  for (
+                    var i = 0;
+                    i < OrderPaymentMethod.values.length;
+                    i++
+                  ) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    Expanded(
+                      child: _PaymentTile(
+                        method: OrderPaymentMethod.values[i],
+                        selected: paymentMethod == OrderPaymentMethod.values[i],
+                        onTap: () =>
+                            onPaymentChanged(OrderPaymentMethod.values[i]),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        TfStickyCTA(
+          child: TfButton(
+            label: creating ? '…' : text.sendToKitchen,
+            icon: creating ? null : TfNavIcon.check,
+            size: TfButtonSize.lg,
+            onPressed: creating ? null : () => onCreate(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AmountLine extends StatelessWidget {
+  const _AmountLine({required this.label, required this.value});
+
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 9,
-          height: 9,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        SizedBox(width: 6),
         Text(
           label,
           style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 11,
+            fontSize: 12.5,
             color: PosColors.muted,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12.5,
+            color: PosColors.slate,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PaymentTile extends StatelessWidget {
+  const _PaymentTile({
+    required this.method,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final OrderPaymentMethod method;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (method) {
+      OrderPaymentMethod.cash => Icons.payments_outlined,
+      OrderPaymentMethod.card => Icons.credit_card_outlined,
+      OrderPaymentMethod.bkash => Icons.account_balance_wallet_outlined,
+      OrderPaymentMethod.payLater => Icons.schedule_outlined,
+    };
+    final isBn = tfIsBn(context);
+    final label = isBn ? method.banglaLabel : method.label;
+    return Material(
+      color: selected ? PosColors.primaryDark : PosColors.surface,
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? PosColors.primaryDark : PosColors.line,
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? Colors.white : PosColors.slate,
+              ),
+              const SizedBox(height: 6),
+              TfText(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: selected ? Colors.white : PosColors.slate,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderCreatedStep extends StatelessWidget {
+  const _OrderCreatedStep({
+    required this.order,
+    required this.serviceLabel,
+    required this.paymentMethod,
+    required this.total,
+    required this.onDone,
+    required this.onNewOrder,
+  });
+
+  final OrderModel? order;
+  final String serviceLabel;
+  final OrderPaymentMethod paymentMethod;
+  final double total;
+  final VoidCallback onDone;
+  final VoidCallback onNewOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final isBn = text.isBn;
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    final source = serviceLabel.isEmpty
+        ? (isBn ? 'টেক-অ্যাওয়ে' : 'Takeaway')
+        : serviceLabel;
+    final paymentName = isBn ? paymentMethod.banglaLabel : paymentMethod.label;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 40, 16, 24),
+      child: Column(
+        children: [
+          Container(
+            width: 92,
+            height: 92,
+            decoration: BoxDecoration(
+              color: PosColors.successSoft,
+              borderRadius: BorderRadius.circular(46),
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              size: 44,
+              color: PosColors.success,
+            ),
+          ),
+          const SizedBox(height: 18),
+          TfText(
+            text.sentToKitchenTitle,
+            style: const TextStyle(
+              color: PosColors.slate,
+              fontSize: 24,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TfText(
+            '${order?.displaySequence ?? "#order"} · $source · ${currency.format(order?.total ?? total)}',
+            style: const TextStyle(color: PosColors.muted, fontSize: 13),
+          ),
+          const SizedBox(height: 22),
+          TfCard(
+            child: Column(
+              children: [
+                _AmountLine(
+                  label: text.orderLabel,
+                  value: order?.displaySequence ?? '#order',
+                ),
+                const SizedBox(height: 8),
+                _AmountLine(label: text.sourceLabel, value: source),
+                const SizedBox(height: 8),
+                _AmountLine(label: text.paymentLabel, value: paymentName),
+                const SizedBox(height: 8),
+                _AmountLine(
+                  label: text.totalLabel,
+                  value: currency.format(order?.total ?? total),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          TfButton(
+            label: text.takeAnotherOrder,
+            icon: TfNavIcon.plus,
+            variant: TfButtonVariant.dark,
+            size: TfButtonSize.lg,
+            onPressed: onNewOrder,
+          ),
+          const SizedBox(height: 10),
+          TfButton(
+            label: text.backToOrders,
+            icon: Icons.list_alt_outlined,
+            variant: TfButtonVariant.ghost,
+            size: TfButtonSize.md,
+            onPressed: onDone,
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _TableTile extends StatelessWidget {
   const _TableTile({
-    required this.label,
-    required this.icon,
+    required this.number,
     required this.selected,
     required this.occupied,
     required this.onTap,
   });
 
-  final String label;
-  final IconData icon;
+  final int number;
   final bool selected;
   final bool occupied;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    // Background + accent colour priority: selected wins (yellow), otherwise
-    // occupied tables get a clear red wash so an at-a-glance scan of the
-    // floor reveals which seats are still eating. Empty tables stay the
-    // neutral surface.
+    final text = AppScope.of(context).strings;
+    // Selected: amber; occupied (and not selected): muted/disabled; free: paper.
     final bg = selected
         ? PosColors.primary
         : occupied
-            ? PosColors.danger.withValues(alpha: 0.12)
-            : PosColors.surface;
-    final borderColor = selected
-        ? PosColors.primary
-        : occupied
-            ? PosColors.danger.withValues(alpha: 0.45)
-            : PosColors.line;
-    final iconColor = selected
+        ? PosColors.background
+        : PosColors.surface;
+    final borderColor = selected ? PosColors.primaryDark : PosColors.line;
+    final numberColor = selected
         ? PosColors.primaryDark
         : occupied
-            ? PosColors.danger
-            : PosColors.muted;
-    final textColor = selected
-        ? PosColors.primaryDark
+        ? PosColors.muted
+        : PosColors.slate;
+    final subColor = selected ? PosColors.primaryDark : PosColors.muted;
+    final sub = selected
+        ? text.isBn
+              ? 'নির্বাচিত'
+              : 'selected'
         : occupied
-            ? PosColors.danger
-            : PosColors.slate;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(PosRadii.md),
-          border: Border.all(
-            color: borderColor,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Stack(
-          children: [
-            Column(
+        ? text.isBn
+              ? 'বসা'
+              : 'busy'
+        : text.isBn
+        ? 'খালি'
+        : 'free';
+    return Opacity(
+      opacity: occupied && !selected ? 0.6 : 1,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor, width: 0.5),
+            ),
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 20, color: iconColor),
-                SizedBox(height: 4),
                 Text(
-                  label,
+                  '$number',
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    color: textColor,
+                    fontFamily: 'Inter',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    color: numberColor,
+                    height: 1,
                   ),
                 ),
+                const SizedBox(height: 4),
+                TfText(sub, style: TextStyle(fontSize: 10, color: subColor)),
               ],
             ),
-            if (occupied && !selected)
-              Positioned(
-                top: 5,
-                right: 6,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: PosColors.danger,
-                    borderRadius: BorderRadius.circular(PosRadii.pill),
-                  ),
-                  child: Text(
-                    'BUSY',
-                    style: TextStyle(
-                      fontSize: 7.5,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -1697,12 +2667,12 @@ class _MenuStep extends StatelessWidget {
     required this.cart,
     required this.total,
     required this.totalQty,
-    required this.showNote,
-    required this.noteCtrl,
+    required this.searchCtrl,
+    required this.query,
+    required this.onSearchChanged,
     required this.onCategorySelected,
     required this.onTap,
     required this.onDecrement,
-    required this.onToggleNote,
     required this.onSubmit,
   });
 
@@ -1713,12 +2683,12 @@ class _MenuStep extends StatelessWidget {
   final Map<String, int> cart;
   final double total;
   final int totalQty;
-  final bool showNote;
-  final TextEditingController noteCtrl;
+  final TextEditingController searchCtrl;
+  final String query;
+  final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onCategorySelected;
   final ValueChanged<String> onTap;
   final ValueChanged<String> onDecrement;
-  final VoidCallback onToggleNote;
   final VoidCallback? onSubmit;
 
   @override
@@ -1726,6 +2696,27 @@ class _MenuStep extends StatelessWidget {
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+          child: TextField(
+            controller: searchCtrl,
+            onChanged: onSearchChanged,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: AppScope.of(context).strings.searchMenuItems,
+              prefixIcon: Icon(Icons.search_rounded, color: PosColors.muted),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        searchCtrl.clear();
+                        onSearchChanged('');
+                      },
+                      icon: Icon(Icons.close_rounded, color: PosColors.muted),
+                    ),
+            ),
+          ),
+        ),
         _CategoryChips(
           categories: categories,
           selected: selectedCategory,
@@ -1745,9 +2736,6 @@ class _MenuStep extends StatelessWidget {
           total: total,
           totalQty: totalQty,
           currency: currency,
-          showNote: showNote,
-          noteCtrl: noteCtrl,
-          onToggleNote: onToggleNote,
           onSubmit: onSubmit,
         ),
       ],
@@ -1768,34 +2756,24 @@ class _CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final allLabel = AppScope.of(context).strings.categoryAll;
     return SizedBox(
-      height: 40,
+      height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.fromLTRB(14, 8, 14, 0),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
         itemCount: categories.length,
-        separatorBuilder: (_, _) => SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
           final cat = categories[i];
           final sel = cat == selected;
-          return GestureDetector(
+          // 'All' is a synthetic display label — localise it here only.
+          final label = cat == 'All' ? allLabel : cat;
+          return TfChip(
+            label: label,
+            active: sel,
+            small: true,
             onTap: () => onSelected(cat),
-            child: AnimatedContainer(
-              duration: Duration(milliseconds: 150),
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                color: sel ? PosColors.slate : PosColors.surface,
-                borderRadius: BorderRadius.circular(PosRadii.pill),
-              ),
-              child: Text(
-                cat,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                  color: sel ? Colors.white : PosColors.muted,
-                ),
-              ),
-            ),
           );
         },
       ),
@@ -2045,9 +3023,6 @@ class _CartFooter extends StatelessWidget {
     required this.total,
     required this.totalQty,
     required this.currency,
-    required this.showNote,
-    required this.noteCtrl,
-    required this.onToggleNote,
     required this.onSubmit,
   });
 
@@ -2056,229 +3031,90 @@ class _CartFooter extends StatelessWidget {
   final double total;
   final int totalQty;
   final NumberFormat currency;
-  final bool showNote;
-  final TextEditingController noteCtrl;
-  final VoidCallback onToggleNote;
   final VoidCallback? onSubmit;
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
     final hasItems = cart.isNotEmpty;
     return AnimatedContainer(
-      duration: Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        border: Border(top: BorderSide(color: PosColors.line)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 16,
-            offset: Offset(0, -4),
-          ),
-        ],
-      ),
+      duration: const Duration(milliseconds: 200),
+      decoration: const BoxDecoration(color: PosColors.primaryDark),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
-          14,
-          10,
-          14,
-          MediaQuery.of(context).padding.bottom + 10,
+          16,
+          12,
+          16,
+          MediaQuery.of(context).padding.bottom + 12,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
             if (hasItems) ...[
-              for (final entry in cart.entries)
-                Builder(
-                  builder: (context) {
-                    final item = menuItems.firstWhere(
-                      (m) => m.id == entry.key,
-                      orElse: () => menuItems.first,
-                    );
-                    return Padding(
-                      padding: EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: PosColors.slate,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${entry.value}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item.name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            currency.format(item.price * entry.value),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+              // Amber cart badge with item count, matches the JSX hero pill.
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: PosColors.primary,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              Divider(height: 12, color: PosColors.line),
-            ],
-            if (showNote)
-              Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: TextField(
-                  controller: noteCtrl,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    hintText: AppScope.of(context).strings.orderNote,
-                    hintStyle: TextStyle(fontSize: 12),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(PosRadii.md),
-                      borderSide: BorderSide(color: PosColors.line),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(PosRadii.md),
-                      borderSide: BorderSide(color: PosColors.line),
-                    ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$totalQty',
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.primaryDark,
                   ),
-                  autofocus: true,
                 ),
               ),
-            Row(
-              children: [
-                if (hasItems) ...[
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$totalQty item${totalQty == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: PosColors.muted,
-                        ),
-                      ),
-                      Text(
-                        currency.format(total),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                          color: PosColors.slate,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(width: 10),
-                  _IconBtn(
-                    icon: showNote ? Icons.notes_rounded : Icons.notes_outlined,
-                    color: showNote ? PosColors.slate : PosColors.muted,
-                    onTap: onToggleNote,
-                    tooltip: AppScope.of(context).strings.addNote,
-                  ),
-                  SizedBox(width: 8),
-                ] else
-                  Expanded(
-                    child: Text(
-                      AppScope.of(context).strings.tapItemsToAdd,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TfText(
+                      text.orderItemsLine(totalQty, cart.length),
                       style: TextStyle(
-                        color: PosColors.muted,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.68),
                       ),
                     ),
-                  ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: onSubmit,
-                    child: Container(
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: onSubmit != null
-                            ? PosColors.slate
-                            : PosColors.line,
-                        borderRadius: BorderRadius.circular(PosRadii.md + 2),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.print_rounded,
-                            size: 18,
-                            color: onSubmit != null
-                                ? Colors.white
-                                : PosColors.muted,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Create & Print',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 15,
-                              color: onSubmit != null
-                                  ? Colors.white
-                                  : PosColors.muted,
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 2),
+                    Text(
+                      currency.format(total),
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 20,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ] else
+              Expanded(
+                child: TfText(
+                  text.tapItemsToAdd,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 13,
                   ),
                 ),
-              ],
+              ),
+            const SizedBox(width: 12),
+            TfButton(
+              label: text.reviewAction,
+              trailingIcon: TfNavIcon.arrow,
+              size: TfButtonSize.md,
+              fullWidth: false,
+              onPressed: onSubmit,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  const _IconBtn({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    required this.tooltip,
-  });
-
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  final String tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: SizedBox.square(
-          dimension: 36,
-          child: Icon(icon, color: color, size: 20),
         ),
       ),
     );

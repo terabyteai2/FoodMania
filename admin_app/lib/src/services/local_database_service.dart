@@ -13,6 +13,8 @@ import '../models/inventory_item.dart';
 import '../models/menu_item.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
+import '../models/order_payment_method.dart';
+import '../models/order_service_type.dart';
 import '../models/order_source.dart';
 import '../models/order_status.dart';
 import '../models/pos_notification.dart';
@@ -87,7 +89,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 6,
+      version: 8,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -321,6 +323,9 @@ class LocalDatabaseService {
     String? customerName,
     String? tableNo,
     String? note,
+    OrderServiceType? serviceType,
+    int? covers,
+    OrderPaymentMethod? paymentMethod,
     OrderSource source = OrderSource.cloud,
     String? createdByAccountId,
     String? createdByRole,
@@ -343,7 +348,7 @@ class LocalDatabaseService {
       final now = DateTime.now();
       final orderId = requestedId ?? _uuid.v4();
       final orderItems = <OrderItem>[];
-      var total = 0.0;
+      var subtotal = 0.0;
 
       for (final requestItem in requestedItems) {
         if (requestItem.qty <= 0) {
@@ -372,7 +377,7 @@ class LocalDatabaseService {
         }
 
         final lineTotal = menuItem.price * requestItem.qty;
-        total += lineTotal;
+        subtotal += lineTotal;
         orderItems.add(
           OrderItem(
             id: _uuid.v4(),
@@ -386,6 +391,11 @@ class LocalDatabaseService {
         );
       }
 
+      const vatRatePercent = 5.0;
+      final roundedSubtotal = _roundMoney(subtotal);
+      final vatAmount = _roundMoney(roundedSubtotal * vatRatePercent / 100);
+      final total = _roundMoney(roundedSubtotal + vatAmount);
+
       final model = OrderModel(
         id: orderId,
         orderNo: _buildOrderNumber(now),
@@ -395,8 +405,14 @@ class LocalDatabaseService {
         note: _cleanNullable(note),
         createdByAccountId: _cleanNullable(createdByAccountId),
         createdByRole: _cleanNullable(createdByRole),
+        serviceType: serviceType,
+        covers: covers?.clamp(1, 999).toInt(),
+        paymentMethod: paymentMethod,
         source: source,
         status: initialStatus,
+        subtotal: roundedSubtotal,
+        vatRatePercent: vatRatePercent,
+        vatAmount: vatAmount,
         total: total,
         items: orderItems,
         syncStatus: createSyncEvent ? SyncStatus.pending : SyncStatus.synced,
@@ -759,8 +775,14 @@ class LocalDatabaseService {
       CREATE TABLE menu_items (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        nameEn TEXT NOT NULL DEFAULT '',
+        nameBn TEXT NOT NULL DEFAULT '',
         description TEXT NOT NULL,
+        descriptionEn TEXT NOT NULL DEFAULT '',
+        descriptionBn TEXT NOT NULL DEFAULT '',
         category TEXT NOT NULL,
+        categoryEn TEXT NOT NULL DEFAULT '',
+        categoryBn TEXT NOT NULL DEFAULT '',
         price REAL NOT NULL,
         imageUrl TEXT,
         isAvailable INTEGER NOT NULL,
@@ -784,6 +806,12 @@ class LocalDatabaseService {
         note TEXT,
         createdByAccountId TEXT,
         createdByRole TEXT,
+        serviceType TEXT,
+        covers INTEGER,
+        paymentMethod TEXT,
+        subtotal REAL,
+        vatRatePercent REAL,
+        vatAmount REAL,
         status TEXT NOT NULL,
         total REAL NOT NULL,
         syncStatus TEXT NOT NULL DEFAULT 'synced',
@@ -891,6 +919,51 @@ class LocalDatabaseService {
     if (oldVersion < 6) {
       await _migrateInventoryV6(db);
     }
+    if (oldVersion < 7) {
+      await _migrateMenuBilingualV7(db);
+    }
+    if (oldVersion < 8) {
+      await _migrateOrdersV8(db);
+    }
+  }
+
+  Future<void> _migrateMenuBilingualV7(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'menu_items',
+      'nameEn',
+      "nameEn TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'menu_items',
+      'nameBn',
+      "nameBn TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'menu_items',
+      'descriptionEn',
+      "descriptionEn TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'menu_items',
+      'descriptionBn',
+      "descriptionBn TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'menu_items',
+      'categoryEn',
+      "categoryEn TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'menu_items',
+      'categoryBn',
+      "categoryBn TEXT NOT NULL DEFAULT ''",
+    );
   }
 
   Future<void> _migrateInventoryV6(Database db) async {
@@ -916,6 +989,32 @@ class LocalDatabaseService {
     );
   }
 
+  Future<void> _migrateOrdersV8(Database db) async {
+    await _addColumnIfMissing(db, 'orders', 'serviceType', 'serviceType TEXT');
+    await _addColumnIfMissing(db, 'orders', 'covers', 'covers INTEGER');
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'paymentMethod',
+      'paymentMethod TEXT',
+    );
+    await _addColumnIfMissing(db, 'orders', 'subtotal', 'subtotal REAL');
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'vatRatePercent',
+      'vatRatePercent REAL',
+    );
+    await _addColumnIfMissing(db, 'orders', 'vatAmount', 'vatAmount REAL');
+    await db.execute(
+      'UPDATE orders SET subtotal = total WHERE subtotal IS NULL',
+    );
+    await db.execute(
+      'UPDATE orders SET vatRatePercent = 0 WHERE vatRatePercent IS NULL',
+    );
+    await db.execute('UPDATE orders SET vatAmount = 0 WHERE vatAmount IS NULL');
+  }
+
   Future<void> _ensureSchema(Database db) async {
     await _addColumnIfMissing(
       db,
@@ -930,6 +1029,7 @@ class LocalDatabaseService {
       'version INTEGER NOT NULL DEFAULT 1',
     );
     await _addColumnIfMissing(db, 'menu_items', 'deletedAt', 'deletedAt TEXT');
+    await _migrateMenuBilingualV7(db);
     await _addColumnIfMissing(
       db,
       'orders',
@@ -962,6 +1062,7 @@ class LocalDatabaseService {
       'createdByRole TEXT',
     );
     await _backfillOrderSequences(db);
+    await _migrateOrdersV8(db);
     await _createSyncTable(db);
     await _createInventoryTables(db);
     await _migrateInventoryV6(db);
@@ -1193,6 +1294,8 @@ class LocalDatabaseService {
     return trimmed;
   }
 
+  double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
+
   // ── Inventory ─────────────────────────────────────────────────────────────
 
   Future<List<InventoryItem>> getInventoryItems() async {
@@ -1376,10 +1479,7 @@ class LocalDatabaseService {
       }
       final current = InventoryItem.fromMap(rows.first);
       final clamped = quantity.clamp(0.0, double.infinity);
-      updated = current.copyWith(
-        quantity: clamped,
-        updatedAt: DateTime.now(),
-      );
+      updated = current.copyWith(quantity: clamped, updatedAt: DateTime.now());
       await txn.update(
         'inventory_items',
         updated.toMap(),
@@ -1393,9 +1493,7 @@ class LocalDatabaseService {
         limit: 1,
       );
       final row = DailyStockCount(
-        id: existing.isEmpty
-            ? _uuid.v4()
-            : existing.first['id'] as String,
+        id: existing.isEmpty ? _uuid.v4() : existing.first['id'] as String,
         inventoryItemId: inventoryItemId,
         countDate: countDate,
         quantity: clamped,

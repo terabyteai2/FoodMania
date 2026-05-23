@@ -34,9 +34,7 @@ void showNotificationCenter(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
             child: Material(
               type: MaterialType.transparency,
-              child: _NotificationShade(
-                onNavigateToOrders: onNavigateToOrders,
-              ),
+              child: _NotificationShade(onNavigateToOrders: onNavigateToOrders),
             ),
           ),
         ),
@@ -80,18 +78,18 @@ class _NotificationShade extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: PosColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: PosColors.lineStrong),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PosColors.lineStrong, width: 0.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 24,
-              offset: const Offset(0, 8),
+              offset: const Offset(0, 10),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -102,7 +100,7 @@ class _NotificationShade extends StatelessWidget {
                     Icon(
                       Icons.notifications_active_rounded,
                       size: 18,
-                      color: PosColors.primary,
+                      color: PosColors.primaryDark,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -205,9 +203,7 @@ class _NotificationBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: isRead
-          ? PosColors.background
-          : PosColors.primary.withValues(alpha: 0.10),
+      color: isRead ? PosColors.background : PosColors.primarySoft,
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -353,12 +349,12 @@ class _TopToastCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.lineStrong, width: 1),
+        border: Border.all(color: PosColors.lineStrong, width: 0.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -412,7 +408,10 @@ class _TopToastCard extends StatelessWidget {
               ),
               child: Text(
                 openLabel,
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                ),
               ),
             ),
           IconButton(
@@ -439,15 +438,15 @@ class HeaderNotificationBell extends StatelessWidget {
     final app = AppScope.of(context);
     final unread = app.unreadNotificationCount;
     return SizedBox(
-      height: 36,
-      width: 36,
+      height: 38,
+      width: 38,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
           Material(
             color: PosColors.surface,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(10),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: () => showNotificationCenter(
@@ -456,8 +455,8 @@ class HeaderNotificationBell extends StatelessWidget {
               ),
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: PosColors.line, width: 1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: PosColors.line, width: 0.5),
                 ),
                 child: Icon(
                   unread > 0
@@ -474,10 +473,7 @@ class HeaderNotificationBell extends StatelessWidget {
               right: -3,
               top: -3,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 1,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: PosColors.danger,
                   borderRadius: BorderRadius.circular(8),
@@ -581,20 +577,19 @@ class HeaderLanguageButton extends StatelessWidget {
     final isBn = app.language == AppLanguage.bn;
     final label = isBn ? 'বাং' : 'EN';
     return SizedBox(
-      height: 36,
-      width: 36,
+      height: 38,
+      width: 38,
       child: Material(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(10),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => app.updateLanguage(
-            isBn ? AppLanguage.en : AppLanguage.bn,
-          ),
+          onTap: () =>
+              app.updateLanguage(isBn ? AppLanguage.en : AppLanguage.bn),
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: PosColors.line, width: 1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: PosColors.line, width: 0.5),
             ),
             alignment: Alignment.center,
             child: Text(

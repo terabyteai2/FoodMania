@@ -1,9 +1,6 @@
 import asyncio
 import json
 import logging
-import os
-import tempfile
-import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,8 +12,8 @@ from schemas import MenuScanCandidate
 
 
 LLM_TIMEOUT_SECONDS = 90.0
-_ocr_engine: Any | None = None
-_ocr_lock = threading.Lock()
+OCR_TIMEOUT_SECONDS = 90.0
+PROVIDER_ERROR_DETAIL_LIMIT = 800
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +39,13 @@ class _Provider:
 
 def _providers() -> list[_Provider]:
     return [
+        _Provider(
+            name="groq",
+            api_key=settings.GROQ_API_KEY.strip(),
+            model=settings.MENU_SCAN_GROQ_MODEL.strip(),
+            url="https://api.groq.com/openai/v1/chat/completions",
+            supports_schema=False,
+        ),
         _Provider(
             name="xai",
             api_key=settings.XAI_API_KEY.strip(),
@@ -71,22 +75,43 @@ def _menu_scan_schema() -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "name": {
+            "nameEn": {
                 "type": "string",
-                "description": "Item name in English and Bangla, formatted as English / Bangla.",
+                "description": "Item name in English.",
             },
-            "description": {
+            "nameBn": {
                 "type": "string",
-                "description": "Short item description in English and Bangla, formatted as English / Bangla.",
+                "description": "Item name in Bangla.",
             },
-            "category": {
+            "descriptionEn": {
                 "type": "string",
-                "description": "Menu category in English and Bangla, formatted as English / Bangla.",
+                "description": "Appetizing item description in English, about 40 words.",
+            },
+            "descriptionBn": {
+                "type": "string",
+                "description": "Appetizing item description in Bangla, about 40 words.",
+            },
+            "categoryEn": {
+                "type": "string",
+                "description": "Menu category in English.",
+            },
+            "categoryBn": {
+                "type": "string",
+                "description": "Menu category in Bangla.",
             },
             "price": {"type": "number", "description": "Positive numeric menu price only."},
             "isAvailable": {"type": "boolean"},
         },
-        "required": ["name", "description", "category", "price", "isAvailable"],
+        "required": [
+            "nameEn",
+            "nameBn",
+            "descriptionEn",
+            "descriptionBn",
+            "categoryEn",
+            "categoryBn",
+            "price",
+            "isAvailable",
+        ],
     }
     return {
         "type": "object",
@@ -96,39 +121,45 @@ def _menu_scan_schema() -> dict[str, Any]:
     }
 
 
+def _menu_scan_instructions() -> str:
+    return (
+        "Return JSON only. Extract restaurant menu items into the provided schema. "
+        "The input contains OCR.space JSON for menu page photos. Read OCR text from "
+        "ParsedResults[].ParsedText and use OCR JSON details only as supporting "
+        "evidence. Menu pages may contain Bangla, English, restaurant names, logos, "
+        "slogans, "
+        "addresses, phone numbers, opening hours, social media, Wi-Fi text, VAT, "
+        "tax, service charge, delivery notes, table text, and decorative copy; "
+        "ignore anything that is not a sellable menu item with a price. Do not turn "
+        "the restaurant name or section decorations into items. Each item must have "
+        "a positive numeric price without currency symbols. Return English and "
+        "Bangla in separate fields: nameEn, nameBn, descriptionEn, descriptionBn, "
+        "categoryEn, and categoryBn. If one language is missing from the menu, "
+        "translate or transliterate the missing side. If a category is missing, "
+        "infer a useful category in both languages; use General and সাধারণ only "
+        "when no better category is clear. If an item description is missing, "
+        "write a polished, restaurant-salesy description in both languages, around "
+        "40 words per language, based on the visible item name/category/price. "
+        "Use isAvailable true."
+    )
+
+
 def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
     pages = "\n\n".join(
-        f"--- MENU PAGE {index + 1} ---\n{text.strip()}"
+        f"--- OCR.SPACE MENU PAGE {index + 1} JSON ---\n{text.strip()}"
         for index, text in enumerate(page_texts)
         if text.strip()
     )
     return [
         {
             "role": "system",
-            "content": (
-                "Return JSON only. Extract restaurant menu items from OCR text "
-                "into the provided schema. OCR may contain Bangla, English, "
-                "restaurant names, logos, slogans, addresses, phone numbers, "
-                "opening hours, social media, Wi-Fi text, VAT, tax, service "
-                "charge, delivery notes, table text, and decorative copy; ignore "
-                "anything that is not a sellable menu item with a price. Do not "
-                "turn the restaurant name or section decorations into items. "
-                "Each item must have a positive numeric price without currency "
-                "symbols. For name, category, and description, include both "
-                "English and Bangla in one string using this exact style: "
-                "English / Bangla. If one language is missing from OCR, translate "
-                "or transliterate the missing side. If a category is missing, "
-                "infer a useful category in both languages; use General / সাধারণ "
-                "only when no better category is clear. If an item description is "
-                "missing, write a short appetizing description in both languages. "
-                "Use isAvailable true."
-            ),
+            "content": _menu_scan_instructions(),
         },
         {
             "role": "user",
             "content": (
-                "Parse these OCR menu pages into JSON with an items array. "
-                "Do not invent items that are not visible in OCR text. Preserve "
+                "Parse these OCR.space JSON menu pages into JSON with an items array. "
+                "Do not invent items that are not visible in the OCR result. Preserve "
                 "the page order when practical and merge duplicate sightings of "
                 "the same item.\n\n"
                 f"{pages}"
@@ -137,7 +168,7 @@ def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
     ]
 
 
-def _request_payload(provider: _Provider, page_texts: list[str]) -> dict[str, Any]:
+def _response_format(provider: _Provider) -> dict[str, Any]:
     response_format: dict[str, Any]
     if provider.supports_schema:
         response_format = {
@@ -150,12 +181,24 @@ def _request_payload(provider: _Provider, page_texts: list[str]) -> dict[str, An
         }
     else:
         response_format = {"type": "json_object"}
-    return {
+    return response_format
+
+
+def _request_payload(provider: _Provider, page_texts: list[str]) -> dict[str, Any]:
+    payload = {
         "model": provider.model,
         "temperature": 0,
         "messages": _prompt(page_texts),
-        "response_format": response_format,
+        "response_format": _response_format(provider),
     }
+    if provider.name == "groq":
+        payload.update(
+            {
+                "reasoning_format": "hidden",
+                "reasoning_effort": "low",
+            }
+        )
+    return payload
 
 
 def _message_content(payload: dict[str, Any]) -> str:
@@ -175,6 +218,19 @@ def _message_content(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _provider_error_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        raw_detail = response.text
+    else:
+        raw_detail = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    detail = " ".join(raw_detail.split())
+    if len(detail) <= PROVIDER_ERROR_DETAIL_LIMIT:
+        return detail
+    return f"{detail[:PROVIDER_ERROR_DETAIL_LIMIT]}..."
+
+
 def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
     if not raw_content.strip():
         raise MenuScanError("The LLM returned an empty response.")
@@ -190,11 +246,28 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
     for raw in raw_items:
         if not isinstance(raw, dict):
             continue
+        legacy_name_en, legacy_name_bn = _split_bilingual(raw.get("name"))
+        legacy_description_en, legacy_description_bn = _split_bilingual(
+            raw.get("description")
+        )
+        legacy_category_en, legacy_category_bn = _split_bilingual(raw.get("category"))
         normalized = {
-            "name": str(raw.get("name") or "").strip(),
-            "description": str(raw.get("description") or "").strip(),
-            "category": str(raw.get("category") or "General / সাধারণ").strip()
-            or "General / সাধারণ",
+            "nameEn": str(raw.get("nameEn") or legacy_name_en).strip(),
+            "nameBn": str(raw.get("nameBn") or legacy_name_bn).strip(),
+            "descriptionEn": str(
+                raw.get("descriptionEn") or legacy_description_en
+            ).strip(),
+            "descriptionBn": str(
+                raw.get("descriptionBn") or legacy_description_bn
+            ).strip(),
+            "categoryEn": str(
+                raw.get("categoryEn") or legacy_category_en or "General"
+            ).strip()
+            or "General",
+            "categoryBn": str(
+                raw.get("categoryBn") or legacy_category_bn or "সাধারণ"
+            ).strip()
+            or "সাধারণ",
             "price": raw.get("price"),
             "isAvailable": raw.get("isAvailable", True),
         }
@@ -205,6 +278,16 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
     if not items:
         raise MenuScanError("The LLM returned no valid priced menu items.")
     return items
+
+
+def _split_bilingual(value: Any) -> tuple[str, str]:
+    text = str(value or "").strip()
+    if not text:
+        return "", ""
+    if "/" not in text:
+        return text, ""
+    left, right = text.split("/", 1)
+    return left.strip(), right.strip()
 
 
 async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
@@ -247,6 +330,19 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
                     provider=provider.name,
                     warnings=warnings,
                 )
+            except httpx.HTTPStatusError as error:
+                logger.warning(
+                    "menu scan llm provider rejected provider=%s status=%s detail=%s",
+                    provider.name,
+                    error.response.status_code,
+                    _provider_error_detail(error.response),
+                )
+                logger.warning(
+                    "menu scan llm provider failed provider=%s error=%s",
+                    provider.name,
+                    error,
+                )
+                warnings.append(f"{provider.name}: {error}")
             except (httpx.HTTPError, ValueError, MenuScanError) as error:
                 logger.warning(
                     "menu scan llm provider failed provider=%s error=%s",
@@ -258,70 +354,6 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
     raise MenuScanError("All configured menu scan AI providers failed.")
 
 
-def _get_ocr_engine() -> Any:
-    global _ocr_engine
-    with _ocr_lock:
-        if _ocr_engine is not None:
-            return _ocr_engine
-        try:
-            from paddleocr import PaddleOCR
-        except ImportError as error:
-            logger.exception("PaddleOCR import failed")
-            raise MenuScanError("PaddleOCR is unavailable on the backend.") from error
-        _ocr_engine = PaddleOCR(
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
-        )
-        return _ocr_engine
-
-
-def _run_ocr(path: str) -> Any:
-    engine = _get_ocr_engine()
-    if hasattr(engine, "predict"):
-        try:
-            return engine.predict(input=path)
-        except TypeError:
-            return engine.predict(path)
-    return engine.ocr(path, cls=False)
-
-
-def _collect_text(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if hasattr(value, "json"):
-        try:
-            return _collect_text(value.json)
-        except Exception:
-            pass
-    if isinstance(value, dict):
-        for key in ("rec_texts", "texts"):
-            raw = value.get(key)
-            if isinstance(raw, list):
-                return [str(item).strip() for item in raw if str(item).strip()]
-        for key in ("rec_text", "text"):
-            raw = value.get(key)
-            if isinstance(raw, str) and raw.strip():
-                return [raw.strip()]
-        collected: list[str] = []
-        for nested in value.values():
-            collected.extend(_collect_text(nested))
-        return collected
-    if isinstance(value, (list, tuple)):
-        if (
-            len(value) >= 2
-            and isinstance(value[1], (list, tuple))
-            and value[1]
-            and isinstance(value[1][0], str)
-        ):
-            return [value[1][0].strip()] if value[1][0].strip() else []
-        collected: list[str] = []
-        for nested in value:
-            collected.extend(_collect_text(nested))
-        return collected
-    return []
-
-
 def _suffix_for_content_type(content_type: str) -> str:
     if "png" in content_type:
         return ".png"
@@ -330,24 +362,90 @@ def _suffix_for_content_type(content_type: str) -> str:
     return ".jpg"
 
 
-def _extract_page_text(image_bytes: bytes, content_type: str) -> str:
-    handle = tempfile.NamedTemporaryFile(delete=False, suffix=_suffix_for_content_type(content_type))
+def _ocr_space_file_name(content_type: str) -> str:
+    return f"menu-page{_suffix_for_content_type(content_type)}"
+
+
+def _ocr_space_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise MenuScanError("OCR.space returned invalid JSON.")
+    if payload.get("IsErroredOnProcessing"):
+        details = payload.get("ErrorMessage") or payload.get("ErrorDetails")
+        raise MenuScanError(
+            f"OCR.space could not read a menu page: {details or 'processing failed'}."
+        )
+    results = payload.get("ParsedResults")
+    if not isinstance(results, list) or not results:
+        raise MenuScanError("OCR.space returned no menu page results.")
+    if not any(
+        isinstance(result, dict)
+        and str(result.get("FileParseExitCode")) == "1"
+        and isinstance(result.get("ParsedText"), str)
+        and result["ParsedText"].strip()
+        for result in results
+    ):
+        details = next(
+            (
+                result.get("ErrorMessage") or result.get("ErrorDetails")
+                for result in results
+                if isinstance(result, dict)
+                and (result.get("ErrorMessage") or result.get("ErrorDetails"))
+            ),
+            None,
+        )
+        raise MenuScanError(
+            f"OCR.space found no readable menu text: {details or 'page parse failed'}."
+        )
+    return payload
+
+
+async def _extract_page_ocr_json(
+    client: httpx.AsyncClient,
+    image_bytes: bytes,
+    content_type: str,
+) -> str:
+    api_key = settings.OCR_SPACE_API_KEY.strip()
+    if not api_key:
+        raise MenuScanError("OCR.space API key is not configured on the backend.")
     try:
-        with handle:
-            handle.write(image_bytes)
-        texts = _collect_text(_run_ocr(handle.name))
-        return "\n".join(texts).strip()
-    finally:
-        try:
-            os.unlink(handle.name)
-        except FileNotFoundError:
-            pass
+        response = await client.post(
+            settings.OCR_SPACE_API_URL.strip(),
+            headers={"apikey": api_key},
+            data={
+                "language": settings.OCR_SPACE_LANGUAGE.strip() or "auto",
+                "OCREngine": settings.OCR_SPACE_ENGINE.strip() or "3",
+                "detectOrientation": "true",
+                "isTable": "true",
+                "scale": "true",
+                "isOverlayRequired": "false",
+            },
+            files={
+                "file": (
+                    _ocr_space_file_name(content_type),
+                    image_bytes,
+                    content_type,
+                )
+            },
+        )
+        response.raise_for_status()
+        payload = _ocr_space_payload(response.json())
+    except httpx.HTTPError as error:
+        logger.warning(
+            "OCR.space request failed content_type=%s error=%s",
+            content_type,
+            error,
+        )
+        raise MenuScanError("OCR.space request failed while reading a menu page.") from error
+    except ValueError as error:
+        raise MenuScanError("OCR.space did not return valid JSON.") from error
+    return json.dumps(payload, ensure_ascii=False)
 
 
 async def extract_menu_page_texts(pages: list[tuple[bytes, str]]) -> list[str]:
-    return await asyncio.gather(
-        *[
-            asyncio.to_thread(_extract_page_text, image_bytes, content_type)
-            for image_bytes, content_type in pages
-        ]
-    )
+    async with httpx.AsyncClient(timeout=OCR_TIMEOUT_SECONDS) as client:
+        return await asyncio.gather(
+            *[
+                _extract_page_ocr_json(client, image_bytes, content_type)
+                for image_bytes, content_type in pages
+            ]
+        )

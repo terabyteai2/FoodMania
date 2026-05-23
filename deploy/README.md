@@ -74,7 +74,7 @@ This only rsyncs the new code, runs `pip install -r requirements.txt`, and resta
 
 ## Backend env sync
 
-Keep backend secrets in local `backend/.env` and the VPS env file, never in Git. After rotating the Scan Menu provider keys, set `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, and any `MENU_SCAN_*_MODEL` overrides locally, then merge the VPS-safe values and restart the service with:
+Keep backend secrets in local `backend/.env` and the VPS env file, never in Git. After rotating Scan Menu keys, set `OCR_SPACE_API_KEY`, `GROQ_API_KEY`, any backup provider keys, and any OCR or `MENU_SCAN_*_MODEL` overrides locally, then merge the VPS-safe values and restart the service with:
 
 ```bash
 bash deploy/push-backend-env.sh

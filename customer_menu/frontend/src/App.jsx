@@ -149,6 +149,13 @@ const DEMO_ITEMS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getOutletId() {
+  const host = window.location.hostname.toLowerCase()
+  const rootDomain = 'quickbytes.buzz'
+  if (host.endsWith(`.${rootDomain}`)) {
+    const subdomain = host.slice(0, -rootDomain.length - 1).split('.')[0]
+    if (subdomain && subdomain !== 'www') return subdomain
+  }
+
   const p = new URLSearchParams(window.location.search)
   if (p.get('demo') === '1') return '__demo__'
   if (p.get('outlet')) return p.get('outlet')

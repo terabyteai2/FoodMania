@@ -24,7 +24,5 @@ numpy<2.3
 pandas<3
 # ujson 5.11+ falls back to a source build on the current VPS baseline.
 ujson<5.11
-paddleocr>=3.0
-paddlepaddle>=3.0
 pytest>=8.0
 pytest-asyncio>=0.24

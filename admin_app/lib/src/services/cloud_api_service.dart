@@ -9,8 +9,13 @@ import '../core/constants/cloud_defaults.dart';
 import '../models/bkash_payment_session.dart';
 import '../models/payment_gateway_config.dart';
 import '../models/account_role.dart';
+import '../models/app_update_info.dart';
+import '../models/daily_report.dart';
+import '../models/dashboard_summary.dart';
 import '../models/inventory_item.dart';
+import '../models/inventory_summary.dart';
 import '../models/menu_item.dart';
+import '../models/receipt_scan.dart';
 import '../models/stock_adjustment.dart';
 import '../models/order_model.dart';
 import '../models/order_status.dart';
@@ -196,6 +201,8 @@ class AdminLoginResult {
     required this.outletName,
     required this.deviceToken,
     required this.tableCount,
+    this.publicSlug,
+    this.customerMenuUrl,
     this.publicApiBaseUrl,
     this.hasAppAccess = false,
   });
@@ -212,6 +219,8 @@ class AdminLoginResult {
   final String outletName;
   final String deviceToken;
   final int tableCount;
+  final String? publicSlug;
+  final String? customerMenuUrl;
   final String? publicApiBaseUrl;
   final bool hasAppAccess;
 
@@ -234,6 +243,8 @@ class AdminLoginResult {
       outletName: TenantBootstrapResult._required(data, 'outletName'),
       deviceToken: TenantBootstrapResult._required(data, 'deviceToken'),
       tableCount: TenantBootstrapResult._tableCount(data['tableCount']),
+      publicSlug: TenantBootstrapResult._optional(data['publicSlug']),
+      customerMenuUrl: TenantBootstrapResult._optional(data['customerMenuUrl']),
       publicApiBaseUrl: TenantBootstrapResult._optional(
         data['publicApiBaseUrl'],
       ),
@@ -263,41 +274,78 @@ class MenuScanPageUpload {
 
 class MenuScanCandidate {
   const MenuScanCandidate({
-    required this.name,
-    required this.description,
-    required this.category,
+    required this.nameEn,
+    required this.nameBn,
+    required this.descriptionEn,
+    required this.descriptionBn,
+    required this.categoryEn,
+    required this.categoryBn,
     required this.price,
     required this.isAvailable,
   });
 
-  final String name;
-  final String description;
-  final String category;
+  final String nameEn;
+  final String nameBn;
+  final String descriptionEn;
+  final String descriptionBn;
+  final String categoryEn;
+  final String categoryBn;
   final double price;
   final bool isAvailable;
 
   static MenuScanCandidate? fromJson(Object? value) {
     if (value is! Map) return null;
     final json = Map<String, Object?>.from(value);
-    final name = json['name']?.toString().trim() ?? '';
-    final description = json['description']?.toString().trim() ?? '';
-    final category = json['category']?.toString().trim() ?? '';
+    final (legacyNameEn, legacyNameBn) = _splitBilingual(json['name']);
+    final (legacyDescriptionEn, legacyDescriptionBn) = _splitBilingual(
+      json['description'],
+    );
+    final (legacyCategoryEn, legacyCategoryBn) = _splitBilingual(
+      json['category'],
+    );
+    final nameEn = _text(json['nameEn']) ?? legacyNameEn;
+    final nameBn = _text(json['nameBn']) ?? legacyNameBn;
+    final descriptionEn = _text(json['descriptionEn']) ?? legacyDescriptionEn;
+    final descriptionBn = _text(json['descriptionBn']) ?? legacyDescriptionBn;
+    final categoryEn = _text(json['categoryEn']) ?? legacyCategoryEn;
+    final categoryBn = _text(json['categoryBn']) ?? legacyCategoryBn;
     final rawPrice = json['price'];
     final price = rawPrice is num
         ? rawPrice.toDouble()
         : double.tryParse(rawPrice?.toString() ?? '');
-    if (name.isEmpty || description.isEmpty || price == null || price <= 0) {
+    if (nameEn.isEmpty ||
+        nameBn.isEmpty ||
+        descriptionEn.isEmpty ||
+        descriptionBn.isEmpty ||
+        price == null ||
+        price <= 0) {
       return null;
     }
     return MenuScanCandidate(
-      name: name,
-      description: description,
-      category: category.isEmpty ? 'General / সাধারণ' : category,
+      nameEn: nameEn,
+      nameBn: nameBn,
+      descriptionEn: descriptionEn,
+      descriptionBn: descriptionBn,
+      categoryEn: categoryEn.isEmpty ? 'General' : categoryEn,
+      categoryBn: categoryBn.isEmpty ? 'সাধারণ' : categoryBn,
       price: price,
       isAvailable: json['isAvailable'] is bool
           ? json['isAvailable'] as bool
           : true,
     );
+  }
+
+  static String? _text(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  static (String, String) _splitBilingual(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty) return ('', '');
+    if (!text.contains('/')) return (text, '');
+    final parts = text.split('/');
+    return (parts.first.trim(), parts.skip(1).join('/').trim());
   }
 }
 
@@ -338,6 +386,43 @@ class MenuScanResult {
       pageCount: (parsedPageCount ?? 0).clamp(0, 999),
       warnings: rawWarnings is List
           ? rawWarnings.map((item) => item.toString()).toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+class OrderHistoryImportResult {
+  const OrderHistoryImportResult({
+    required this.importedOrders,
+    required this.duplicateOrders,
+    required this.skippedRows,
+    required this.rowCount,
+    required this.errors,
+  });
+
+  final int importedOrders;
+  final int duplicateOrders;
+  final int skippedRows;
+  final int rowCount;
+  final List<String> errors;
+
+  factory OrderHistoryImportResult.fromJson(Map<String, Object?> json) {
+    final data = json['data'] is Map
+        ? Map<String, Object?>.from(json['data'] as Map)
+        : json;
+    int readCount(String key) {
+      final value = data[key];
+      return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+    }
+
+    final rawErrors = data['errors'];
+    return OrderHistoryImportResult(
+      importedOrders: readCount('importedOrders'),
+      duplicateOrders: readCount('duplicateOrders'),
+      skippedRows: readCount('skippedRows'),
+      rowCount: readCount('rowCount'),
+      errors: rawErrors is List
+          ? rawErrors.map((error) => error.toString()).toList(growable: false)
           : const [],
     );
   }
@@ -708,6 +793,33 @@ class CloudApiService {
     return AppAccessResult.fromJson(response);
   }
 
+  Future<AppUpdateInfo> fetchAppUpdate() async {
+    final uri = _uri('/admin/app-update');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson('GET', uri);
+    return AppUpdateInfo.fromJson(response);
+  }
+
+  Future<Map<String, Object?>> updatePublicUrl({
+    required String publicSlug,
+  }) async {
+    final uri = _uri('/admin/public-url');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'PATCH',
+      uri,
+      body: {'publicSlug': publicSlug.trim()},
+    );
+    final data = response['data'] is Map
+        ? Map<String, Object?>.from(response['data'] as Map)
+        : response;
+    return data;
+  }
+
   Future<Map<String, Object?>> createAdminAccount({
     required String outletId,
     required String email,
@@ -1044,6 +1156,56 @@ class CloudApiService {
     return result;
   }
 
+  Future<OrderHistoryImportResult> importOrderHistoryCsv(
+    List<int> bytes,
+    String fileName,
+  ) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/orders/history/import');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    if (bytes.isEmpty) {
+      throw CloudApiException('Choose a non-empty CSV export.');
+    }
+
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Accept'] = 'application/json'
+      ..headers.addAll(CloudDefaults.ngrokBrowserBypassHeaders(uri))
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: fileName.trim().isEmpty ? 'order-history.csv' : fileName,
+          contentType: MediaType('text', 'csv'),
+        ),
+      );
+    if (_cloudConfig.deviceToken.trim().isNotEmpty) {
+      request.headers['Authorization'] =
+          'Bearer ${_cloudConfig.deviceToken.trim()}';
+    }
+
+    final streamed = await request.send().timeout(const Duration(seconds: 180));
+    final body = await streamed.stream.bytesToString();
+    final decoded = _decodeCloudJsonBody(body, uri);
+    final payload = decoded is Map
+        ? Map<String, Object?>.from(decoded)
+        : <String, Object?>{'data': decoded};
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      final detail = payload['detail'];
+      final message =
+          payload['error']?.toString() ??
+          (detail is String
+              ? detail
+              : detail is Map
+              ? detail['message']?.toString()
+              : null) ??
+          'Order history import failed: HTTP ${streamed.statusCode}';
+      throw CloudApiException(message);
+    }
+    return OrderHistoryImportResult.fromJson(payload);
+  }
+
   Future<List<String>> uploadOutletImage(String dataUrl) async {
     final config = _requireServerConfig();
     final uri = _uri('/outlets/${config.outletId}/images');
@@ -1146,6 +1308,12 @@ class CloudApiService {
       'notes': order.note,
       'createdByAccountId': order.createdByAccountId,
       'createdByRole': order.createdByRole,
+      'serviceType': order.serviceType?.value,
+      'covers': order.covers,
+      'paymentMethod': order.paymentMethod?.value,
+      'subtotal': order.subtotal,
+      'vatRatePercent': order.vatRatePercent,
+      'vatAmount': order.vatAmount,
       'createdAt': order.createdAt.toUtc().toIso8601String(),
       'updatedAt': order.updatedAt.toUtc().toIso8601String(),
     };
@@ -1256,6 +1424,121 @@ class CloudApiService {
       body: adjustment.toMap(),
       idempotencyKey: 'inventory-adj-${adjustment.id}',
     );
+  }
+
+  Future<DashboardSummary> fetchDashboardSummary({DateTime? asOf}) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/dashboard/summary',
+      queryParameters: asOf == null
+          ? null
+          : {'as_of': asOf.toUtc().toIso8601String()},
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Dashboard summary response was malformed.');
+    }
+    return DashboardSummary.fromJson(Map<String, Object?>.from(data));
+  }
+
+  Future<InventorySummary> fetchInventorySummary({DateTime? asOf}) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/inventory/summary',
+      queryParameters: asOf == null
+          ? null
+          : {'as_of': asOf.toUtc().toIso8601String()},
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Inventory summary response was malformed.');
+    }
+    return InventorySummary.fromJson(Map<String, Object?>.from(data));
+  }
+
+  Future<DailyReport> fetchInventoryDailyReport({DateTime? date}) async {
+    final config = _requireServerConfig();
+    final isoDate = date == null
+        ? null
+        : '${date.year.toString().padLeft(4, '0')}-'
+              '${date.month.toString().padLeft(2, '0')}-'
+              '${date.day.toString().padLeft(2, '0')}';
+    final uri = _uri(
+      '/outlets/${config.outletId}/inventory/daily-report',
+      queryParameters: isoDate == null ? null : {'date': isoDate},
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Daily report response was malformed.');
+    }
+    return DailyReport.fromJson(Map<String, Object?>.from(data));
+  }
+
+  Future<ReceiptScanResult> scanInventoryReceipt(
+    List<MenuScanPageUpload> pages,
+  ) async {
+    final config = _requireServerConfig();
+    if (pages.isEmpty) {
+      throw CloudApiException('Select at least one receipt image.');
+    }
+    final uri = _uri('/outlets/${config.outletId}/inventory/receipt/scan');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Accept'] = 'application/json'
+      ..headers.addAll(CloudDefaults.ngrokBrowserBypassHeaders(uri));
+    if (_cloudConfig.deviceToken.trim().isNotEmpty) {
+      request.headers['Authorization'] =
+          'Bearer ${_cloudConfig.deviceToken.trim()}';
+    }
+    for (final page in pages) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'files',
+          page.bytes,
+          filename: page.fileName,
+          contentType: MediaType.parse(page.mimeType),
+        ),
+      );
+    }
+
+    final streamed = await request.send().timeout(const Duration(seconds: 180));
+    final body = await streamed.stream.bytesToString();
+    final decoded = _decodeCloudJsonBody(body, uri);
+    final payload = decoded is Map
+        ? Map<String, Object?>.from(decoded)
+        : <String, Object?>{'data': decoded};
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      final detail = payload['detail'];
+      final message =
+          payload['error']?.toString() ??
+          (detail is String
+              ? detail
+              : detail is Map
+              ? detail['message']?.toString()
+              : null) ??
+          'Receipt scan failed: HTTP ${streamed.statusCode}';
+      throw CloudApiException(message);
+    }
+    final data = payload['data'];
+    if (data is! Map) {
+      throw CloudApiException('Receipt scan response was malformed.');
+    }
+    return ReceiptScanResult.fromJson(Map<String, Object?>.from(data));
   }
 
   Future<Map<String, Object?>> _sendJson(

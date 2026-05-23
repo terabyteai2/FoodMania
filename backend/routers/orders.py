@@ -1,14 +1,16 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import get_current_outlet_id
+from auth import get_current_device_payload, get_current_outlet_id
 from database import get_db
 from models import Order
 from routers.ws import manager
 from schemas import OrderPayload, OrderStatusUpdate, ok
+from routers.menu import _require_manager_scan_access
+from services.order_history_import import OrderHistoryCsvError, parse_order_history_csv
 
 router = APIRouter()
 
@@ -29,6 +31,12 @@ def _order_to_dict(order: Order) -> dict:
         "source": order.source,
         "status": order.status,
         "totalAmount": float(order.total_amount),
+        "subtotal": float(order.subtotal or order.total_amount or 0),
+        "vatRatePercent": float(order.vat_rate_percent or 0),
+        "vatAmount": float(order.vat_amount or 0),
+        "serviceType": order.service_type,
+        "covers": order.covers,
+        "paymentMethod": order.payment_method,
         "items": order.items,
         "notes": order.notes,
         "createdByAccountId": order.created_by_account_id,
@@ -107,6 +115,12 @@ async def push_order(
         source=body.source,
         status=status_value,
         total_amount=body.totalAmount,
+        subtotal=body.subtotal if body.subtotal is not None else body.totalAmount,
+        vat_rate_percent=body.vatRatePercent if body.vatRatePercent is not None else 0,
+        vat_amount=body.vatAmount if body.vatAmount is not None else 0,
+        service_type=body.serviceType,
+        covers=body.covers,
+        payment_method=body.paymentMethod,
         items=body.items,
         notes=body.notes,
         created_by_account_id=body.createdByAccountId,
@@ -120,6 +134,89 @@ async def push_order(
 
     await manager.broadcast(outlet_id, {"type": "order_created", "data": _order_to_dict(order)})
     return ok(_order_to_dict(order))
+
+
+@router.post("/outlets/{outlet_id}/orders/history/import")
+async def import_order_history_csv(
+    outlet_id: str,
+    file: UploadFile = File(...),
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_manager_scan_access(outlet_id, payload, db)
+    filename = (file.filename or "").strip().lower()
+    if not filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload a CSV export from the older POS.",
+        )
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Order history CSV must be 10 MB or smaller.",
+        )
+    try:
+        parsed = parse_order_history_csv(contents, outlet_id=outlet_id)
+    except OrderHistoryCsvError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
+    if not parsed.orders:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CSV did not contain importable dated orders.",
+        )
+
+    existing_ids = set(
+        (
+            await db.execute(
+                select(Order.id).where(
+                    Order.outlet_id == outlet_id,
+                    Order.id.in_([order.id for order in parsed.orders]),
+                )
+            )
+        ).scalars()
+    )
+    updated_at = datetime.now(timezone.utc)
+    imported = 0
+    for legacy in parsed.orders:
+        if legacy.id in existing_ids:
+            continue
+        db.add(
+            Order(
+                id=legacy.id,
+                outlet_id=outlet_id,
+                # Local order numbers are unique per current app database;
+                # old POS invoice numbers can repeat and live ticket sequences
+                # may already use them. Keep the original in notes instead.
+                serial_number=0,
+                source="manual",
+                status="served",
+                total_amount=legacy.total_amount,
+                subtotal=legacy.total_amount,
+                vat_rate_percent=0,
+                vat_amount=0,
+                items=legacy.items,
+                notes=legacy.notes,
+                created_by_role="legacy_import",
+                created_at=legacy.created_at,
+                updated_at=updated_at,
+            )
+        )
+        imported += 1
+    await db.commit()
+    return ok(
+        {
+            "importedOrders": imported,
+            "duplicateOrders": len(parsed.orders) - imported,
+            "skippedRows": parsed.skipped_rows,
+            "rowCount": parsed.row_count,
+            "columns": parsed.columns,
+            "errors": parsed.errors,
+        }
+    )
 
 
 @router.patch("/outlets/{outlet_id}/orders/{order_id}/status")

@@ -17,7 +17,7 @@ def err(message: str) -> dict:
 class BootstrapRequest(BaseModel):
     serverId: str
     restaurantName: str
-    outletName: str
+    outletName: str | None = None
     restaurantId: str | None = None
     outletId: str | None = None
     tableCount: int | None = Field(default=None, ge=1, le=200)
@@ -76,7 +76,7 @@ class PhoneVerifyOtpRequest(BaseModel):
 class PhoneCompleteManagerSignupRequest(BaseModel):
     signupToken: str
     restaurantName: str
-    outletName: str | None = "Main Outlet"
+    outletName: str | None = None
     serverId: str | None = None
     outletId: str | None = None
     tableCount: int | None = Field(default=None, ge=1, le=200)
@@ -97,6 +97,10 @@ class StaffInviteRequest(BaseModel):
 class StaffUpdateRequest(BaseModel):
     isActive: bool | None = None
     displayName: str | None = None
+
+
+class PublicSlugUpdateRequest(BaseModel):
+    publicSlug: str
 
 
 class StaffDevBypassLoginRequest(BaseModel):
@@ -123,9 +127,15 @@ class DeviceRegisterRequest(BaseModel):
 class MenuItemPayload(BaseModel):
     id: str
     name: str
+    nameEn: str | None = None
+    nameBn: str | None = None
     description: str | None = None
+    descriptionEn: str | None = None
+    descriptionBn: str | None = None
     price: float
     category: str | None = None
+    categoryEn: str | None = None
+    categoryBn: str | None = None
     isAvailable: bool = True
     imageUrl: str | None = None
     version: int = 1
@@ -137,11 +147,23 @@ class ImageUploadRequest(BaseModel):
 
 
 class MenuScanCandidate(BaseModel):
-    name: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    category: str = Field(default="General / সাধারণ", min_length=1)
+    nameEn: str = Field(min_length=1)
+    nameBn: str = Field(min_length=1)
+    descriptionEn: str = Field(min_length=1)
+    descriptionBn: str = Field(min_length=1)
+    categoryEn: str = Field(default="General", min_length=1)
+    categoryBn: str = Field(default="সাধারণ", min_length=1)
     price: float = Field(gt=0)
     isAvailable: bool = True
+
+
+class ReceiptScanCandidate(BaseModel):
+    nameEn: str = Field(min_length=1)
+    nameBn: str = Field(min_length=1)
+    qty: float = Field(gt=0)
+    unit: str = Field(default="pcs", min_length=1)
+    unitPriceBdt: float = Field(ge=0)
+    totalBdt: float = Field(gt=0)
 
 
 # ── Inventory ─────────────────────────────────────────────────────────────────
@@ -185,6 +207,12 @@ class OrderPayload(BaseModel):
     source: str = "pos"
     status: str = "pending"
     totalAmount: float = 0
+    subtotal: float | None = None
+    vatRatePercent: float | None = None
+    vatAmount: float | None = None
+    serviceType: str | None = None
+    covers: int | None = None
+    paymentMethod: str | None = None
     items: list[Any] = []
     notes: str | None = None
     createdByAccountId: str | None = None
@@ -254,6 +282,15 @@ class PlatformSubscriptionRequest(BaseModel):
 class PlatformPaymentStatusPatchRequest(BaseModel):
     status: str
     activateSubscription: bool = True
+
+
+class PlatformAppUpdateRequest(BaseModel):
+    versionName: str
+    versionCode: int = Field(..., ge=1)
+    apkUrl: str
+    releaseNotes: str | None = None
+    required: bool = False
+    enabled: bool = True
 
 
 class PlatformAdminCreateRequest(BaseModel):
