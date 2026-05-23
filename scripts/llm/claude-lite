@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COMPONENT="${1:-root}"
+
+case "$COMPONENT" in
+  root)
+    WORKDIR="$ROOT"
+    shift || true
+    ;;
+  backend)
+    WORKDIR="$ROOT/backend"
+    shift
+    ;;
+  admin|admin_app)
+    WORKDIR="$ROOT/admin_app"
+    shift
+    ;;
+  customer|customer_menu)
+    WORKDIR="$ROOT/customer_menu/frontend"
+    shift
+    ;;
+  platform|platform_admin)
+    WORKDIR="$ROOT/platform_admin"
+    shift
+    ;;
+  deploy)
+    WORKDIR="$ROOT/deploy"
+    shift
+    ;;
+  *)
+    WORKDIR="$ROOT"
+    ;;
+esac
+
+MODEL="${CLAUDE_MODEL:-sonnet}"
+EFFORT="${CLAUDE_EFFORT:-low}"
+
+cd "$WORKDIR"
+
+if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ "${CLAUDE_FORCE_BARE:-0}" = "1" ]; then
+  exec claude \
+    --bare \
+    --model "$MODEL" \
+    --effort "$EFFORT" \
+    --add-dir "$WORKDIR" \
+    "$@"
+fi
+
+exec claude \
+  --model "$MODEL" \
+  --effort "$EFFORT" \
+  --exclude-dynamic-system-prompt-sections \
+  --setting-sources user \
+  --disable-slash-commands \
+  --no-chrome \
+  "$@"
