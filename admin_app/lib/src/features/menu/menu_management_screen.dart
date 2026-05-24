@@ -235,7 +235,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       context: context,
       backgroundColor: PosColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.lg)),
       ),
       builder: (sheetContext) {
         return SafeArea(
@@ -286,7 +286,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     BuildContext context,
   ) async {
     final pages = <PickedMenuScanPage>[];
-    while (true) {
+    while (pages.length < MenuImageService.maxScanPages) {
       final page = await _scanImageService.captureMenuScanPage(
         pageNumber: pages.length + 1,
       );
@@ -324,6 +324,18 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         },
       );
       if (addAnother != true) break;
+    }
+    if (pages.length >= MenuImageService.maxScanPages && context.mounted) {
+      final text = AppScope.of(context).strings;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(
+            text.isBn
+                ? 'একবারে ${MenuImageService.maxScanPages}টি মেনু ছবি স্ক্যান করা যাবে।'
+                : 'You can scan up to ${MenuImageService.maxScanPages} menu photos at a time.',
+          ),
+        ),
+      );
     }
     return pages;
   }

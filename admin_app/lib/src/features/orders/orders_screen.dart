@@ -1452,11 +1452,9 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   OrderModel? _createdOrder;
   bool _creating = false;
   bool _printingReceipt = false;
-  Timer? _successCloseTimer;
 
   @override
   void dispose() {
-    _successCloseTimer?.cancel();
     _pageCtrl.dispose();
     _searchCtrl.dispose();
     _noteCtrl.dispose();
@@ -1582,7 +1580,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _creating = false;
       });
       _goToStep(3);
-      _scheduleSuccessClose();
     } catch (error) {
       if (!mounted) return;
       setState(() => _creating = false);
@@ -1594,14 +1591,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         ),
       );
     }
-  }
-
-  void _scheduleSuccessClose() {
-    _successCloseTimer?.cancel();
-    _successCloseTimer = Timer(const Duration(seconds: 2), () {
-      if (!mounted || _step != 3) return;
-      Navigator.pop(context, true);
-    });
   }
 
   Future<void> _printCreatedReceipt() async {
@@ -2119,11 +2108,13 @@ class _ReviewStep extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
                       child: Row(
                         children: [
-                          TfSectionHeader(
-                            label: text.sourceLabel,
-                            padding: EdgeInsets.zero,
+                          Expanded(
+                            child: TfSectionHeader(
+                              label: text.sourceLabel,
+                              padding: EdgeInsets.zero,
+                            ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 12),
                           TfText(
                             sourceLabel,
                             style: const TextStyle(
@@ -2361,7 +2352,7 @@ class _OrderCreatedStep extends StatelessWidget {
         ? orderNo
         : 'terafoods://order/${order!.id}?no=$orderNo';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       child: Column(
         children: [
           Expanded(
@@ -2369,35 +2360,35 @@ class _OrderCreatedStep extends StatelessWidget {
               child: Column(
                 children: [
                   Container(
-                    width: 70,
-                    height: 70,
+                    width: 58,
+                    height: 58,
                     decoration: BoxDecoration(
                       color: PosColors.successSoft,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.circular(PosRadii.pill),
                     ),
                     child: const Icon(
                       Icons.check_rounded,
-                      size: 38,
+                      size: 32,
                       color: PosColors.success,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   TfText(
                     text.orderCreatedTitle,
                     style: const TextStyle(
                       color: PosColors.slate,
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   TfText(
                     orderNo,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: PosColors.primaryDark,
-                      fontSize: 68,
+                      fontSize: 54,
                       fontWeight: FontWeight.w500,
                       height: 0.95,
                       letterSpacing: 0,
@@ -2411,18 +2402,25 @@ class _OrderCreatedStep extends StatelessWidget {
                       fontSize: 13,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
+                  _CreatedOrderBillCard(
+                    order: order,
+                    fallbackOrderNo: orderNo,
+                    source: source,
+                    fallbackTotal: total,
+                  ),
+                  const SizedBox(height: 14),
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(PosRadii.lg),
                       border: Border.all(color: PosColors.line, width: 0.5),
                     ),
                     child: QrImageView(
                       data: qrData,
                       version: QrVersions.auto,
-                      size: 210,
+                      size: 156,
                       backgroundColor: Colors.white,
                       eyeStyle: const QrEyeStyle(
                         eyeShape: QrEyeShape.square,
@@ -2432,36 +2430,6 @@ class _OrderCreatedStep extends StatelessWidget {
                         dataModuleShape: QrDataModuleShape.square,
                         color: PosColors.primaryDark,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TfCard(
-                    child: Column(
-                      children: [
-                        _AmountLine(label: text.orderLabel, value: orderNo),
-                        const SizedBox(height: 8),
-                        _AmountLine(label: text.sourceLabel, value: source),
-                        if (order != null && order!.subtotal > 0 && order!.vatAmount > 0) ...[
-                          const SizedBox(height: 8),
-                          _AmountLine(
-                            label: text.subtotalLabel,
-                            value: tfFormatCurrency(context, order!.subtotal),
-                          ),
-                          const SizedBox(height: 8),
-                          _AmountLine(
-                            label: text.vatLabelWithPercent(order!.vatRatePercent),
-                            value: tfFormatCurrency(context, order!.vatAmount),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        _AmountLine(
-                          label: text.totalLabel,
-                          value: tfFormatCurrency(
-                            context,
-                            order?.total ?? total,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
@@ -2475,6 +2443,100 @@ class _OrderCreatedStep extends StatelessWidget {
             variant: TfButtonVariant.dark,
             size: TfButtonSize.lg,
             onPressed: printingReceipt ? null : onPrintReceipt,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CreatedOrderBillCard extends StatelessWidget {
+  const _CreatedOrderBillCard({
+    required this.order,
+    required this.fallbackOrderNo,
+    required this.source,
+    required this.fallbackTotal,
+  });
+
+  final OrderModel? order;
+  final String fallbackOrderNo;
+  final String source;
+  final double fallbackTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final orderNo = order?.displaySequence ?? fallbackOrderNo;
+    final items = order?.items ?? const <OrderItem>[];
+    final total = order?.total ?? fallbackTotal;
+
+    return TfCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _AmountLine(label: text.orderLabel, value: orderNo),
+          const SizedBox(height: 8),
+          _AmountLine(label: text.sourceLabel, value: source),
+          if (items.isNotEmpty) ...[
+            const Divider(height: 20, color: PosColors.line),
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 34,
+                      child: TfText(
+                        '${tfFormatNumber(context, item.qty)}×',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: PosColors.slate,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: TfText(
+                        item.localizedName(app.language),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: PosColors.slate,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TfText(
+                      tfFormatCurrency(context, item.lineTotal),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: PosColors.slate,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          const Divider(height: 20, color: PosColors.line),
+          if (order != null && order!.subtotal > 0 && order!.vatAmount > 0) ...[
+            _AmountLine(
+              label: text.subtotalLabel,
+              value: tfFormatCurrency(context, order!.subtotal),
+            ),
+            const SizedBox(height: 8),
+            _AmountLine(
+              label: text.vatLabelWithPercent(order!.vatRatePercent),
+              value: tfFormatCurrency(context, order!.vatAmount),
+            ),
+            const SizedBox(height: 8),
+          ],
+          _AmountLine(
+            label: text.totalLabel,
+            value: tfFormatCurrency(context, total),
           ),
         ],
       ),

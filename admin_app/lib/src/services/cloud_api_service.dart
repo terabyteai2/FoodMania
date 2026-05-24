@@ -375,7 +375,9 @@ class MenuScanCandidate {
       final m = Map<String, Object?>.from(entry);
       final nameEn = _text(m['nameEn']) ?? '';
       if (nameEn.isEmpty) continue;
-      out.add(MenuScanSubItem(nameEn: nameEn, nameBn: _text(m['nameBn']) ?? ''));
+      out.add(
+        MenuScanSubItem(nameEn: nameEn, nameBn: _text(m['nameBn']) ?? ''),
+      );
     }
     return out;
   }
@@ -392,7 +394,7 @@ class MenuScanCandidate {
       final price = rawPrice is num
           ? rawPrice.toDouble()
           : double.tryParse(rawPrice?.toString() ?? '') ?? 0;
-      if (price < 0) continue;
+      if (price <= 0) continue;
       out.add(
         MenuScanAddOn(
           nameEn: nameEn,

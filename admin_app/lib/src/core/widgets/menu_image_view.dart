@@ -90,7 +90,11 @@ class MenuIconStyle {
 /// The colors are intentionally distinct so a busy counter can tell items apart
 /// at a glance.
 MenuIconStyle menuIconStyleFor(String? key) {
-  final normalized = (key ?? '').toLowerCase().trim();
+  final normalized = (key ?? '')
+      .toLowerCase()
+      .trim()
+      .replaceAll('-', '_')
+      .replaceAll(' ', '_');
   const tomato = Color(0xFFE65A3C);
   const cheese = Color(0xFFF0A51C);
   const curry = Color(0xFFE28714);
@@ -113,6 +117,8 @@ MenuIconStyle menuIconStyleFor(String? key) {
     case 'pizza':
       return s(Icons.local_pizza_outlined, tomato);
     case 'burger':
+    case 'sandwich':
+    case 'sandwitch':
       return s(Icons.lunch_dining_outlined, cheese);
     case 'biryani':
       return s(Icons.rice_bowl_outlined, curry);
@@ -122,10 +128,15 @@ MenuIconStyle menuIconStyleFor(String? key) {
       return s(Icons.ramen_dining_outlined, curry);
     case 'soup':
       return s(Icons.ramen_dining_outlined, tomato);
+    case 'dal':
+    case 'daal':
+      return s(Icons.ramen_dining_outlined, tea);
     case 'salad':
     case 'vegetable':
       return s(Icons.eco_outlined, herb);
     case 'noodle':
+    case 'noodles':
+    case 'pasta':
       return s(Icons.ramen_dining_outlined, berry);
     case 'bread':
       return s(Icons.bakery_dining_outlined, cocoa);
@@ -134,16 +145,30 @@ MenuIconStyle menuIconStyleFor(String? key) {
     case 'fish':
       return s(Icons.set_meal_outlined, sky);
     case 'beef':
+    case 'mutton':
       return s(Icons.set_meal_outlined, cocoa);
+    case 'kebab':
+    case 'grill':
+      return s(Icons.dinner_dining_outlined, curry);
+    case 'appetizer':
+    case 'starter':
+    case 'starters':
+    case 'fuchka':
     case 'snack':
       return s(Icons.fastfood_outlined, cheese);
     case 'fruit':
+    case 'juice':
       return s(Icons.apple_outlined, berry);
     case 'dessert':
+    case 'desserts':
+    case 'sweets':
       return s(Icons.icecream_outlined, berry);
     case 'drink':
+    case 'beverages':
+    case 'soft_drink':
       return s(Icons.local_drink_outlined, mint);
     case 'coffee':
+    case 'tea_coffee':
       return s(Icons.coffee_outlined, cocoa);
     case 'tea':
       return s(Icons.emoji_food_beverage_outlined, tea);
@@ -169,8 +194,8 @@ String inferMenuIconKey({required String name, String? category}) {
   final text = '${name.toLowerCase()} ${(category ?? '').toLowerCase()}';
   bool has(Iterable<String> words) => words.any(text.contains);
 
-  if (has(['pizza'])) return 'pizza';
-  if (has(['burger', 'sandwich'])) return 'burger';
+  if (has(['burger'])) return 'burger';
+  if (has(['sandwich', 'sandwitch'])) return 'sandwich';
   if (has([
     'biryani',
     'biriyani',
@@ -182,32 +207,37 @@ String inferMenuIconKey({required String name, String? category}) {
   ])) {
     return 'biryani';
   }
-  if (has(['rice', 'fried rice', 'ভাত'])) return 'rice';
-  if (has(['curry', 'masala', 'korma', 'bhuna', 'ভুনা', 'কারি'])) {
-    return 'curry';
-  }
+  if (has(['rice', 'fried rice', 'ভাত'])) return 'biryani';
+  if (has(['dal', 'daal', 'lentil', 'ডাল'])) return 'dal';
+  if (has(['grill', 'grilled', 'bbq', 'barbecue'])) return 'grill';
+  if (has(['kebab', 'kabab', 'কাবাব'])) return 'kebab';
   if (has(['soup'])) return 'soup';
   if (has(['salad', 'veg', 'vegetable', 'সবজি'])) return 'vegetable';
-  if (has(['noodle', 'chowmein', 'chow mein'])) return 'noodle';
-  if (has(['bread', 'naan', 'paratha', 'রুটি', 'পরোটা'])) return 'bread';
+  if (has(['noodle', 'chowmein', 'chow mein'])) return 'noodles';
+  if (has(['pasta', 'spaghetti', 'macaroni'])) return 'pasta';
+  if (has(['bread', 'naan', 'paratha', 'রুটি', 'পরোটা'])) return 'appetizer';
   if (has(['chicken', 'চিকেন', 'মুরগি'])) return 'chicken';
   if (has(['fish', 'prawn', 'shrimp', 'rui', 'ilish', 'মাছ'])) return 'fish';
-  if (has(['beef', 'mutton', 'kebab', 'kabab', 'গরু', 'খাসি'])) return 'beef';
+  if (has(['mutton', 'খাসি'])) return 'mutton';
+  if (has(['beef', 'গরু'])) return 'beef';
   if (has(['snack', 'samosa', 'roll', 'fries', 'singara', 'সমুচা'])) {
-    return 'snack';
+    return 'appetizer';
   }
-  if (has(['fruit', 'juice'])) return 'fruit';
+  if (has(['fuchka', 'ফুচকা'])) return 'fuchka';
+  if (has(['juice'])) return 'juice';
   if (has(['dessert', 'sweet', 'cake', 'firni', 'ice cream', 'মিষ্টি'])) {
-    return 'dessert';
+    return 'sweets';
   }
+  if (has(['water', 'পানি'])) return 'water';
+  if (has(['soft drink', 'softdrink', 'soda', 'cola'])) return 'soft_drink';
   if (has(['drink', 'soda', 'lassi', 'borhani', 'beverage', 'পানীয়'])) {
-    return 'drink';
+    return 'beverages';
   }
-  if (has(['coffee'])) return 'coffee';
-  if (has(['tea', 'cha', 'চা'])) return 'tea';
+  if (has(['coffee'])) return 'tea_coffee';
+  if (has(['tea', 'cha', 'চা'])) return 'tea_coffee';
   if (has(['breakfast', 'omelet', 'omelette'])) return 'breakfast';
   if (has(['set meal', 'set_menu', 'combo', 'platter', 'থালি'])) {
-    return 'set_meal';
+    return 'biryani';
   }
   return 'general';
 }

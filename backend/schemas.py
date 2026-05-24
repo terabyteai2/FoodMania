@@ -159,7 +159,7 @@ class MenuSubItem(BaseModel):
 class MenuAddOnCandidate(BaseModel):
     nameEn: str = Field(min_length=1)
     nameBn: str = ""
-    price: float = Field(ge=0)
+    price: float = Field(gt=0)
 
 
 class MenuScanCandidate(BaseModel):

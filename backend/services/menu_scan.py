@@ -139,7 +139,7 @@ def _menu_scan_schema() -> dict[str, Any]:
                     "properties": {
                         "nameEn": {"type": "string"},
                         "nameBn": {"type": "string"},
-                        "price": {"type": "number"},
+                        "price": {"type": "number", "exclusiveMinimum": 0},
                     },
                     "required": ["nameEn", "nameBn", "price"],
                 },
@@ -193,8 +193,10 @@ def _menu_scan_instructions() -> str:
         "Pick the key that best matches the item's main ingredient or category "
         "(e.g. 'beef' for steaks, 'chicken' for grilled/fried chicken, 'fish' for "
         "seafood, 'biryani' for rice platters, 'sweets' for desserts, "
-        "'tea_coffee' for hot drinks, 'beverages' for juices/lassi, "
-        "'soft_drink' for sodas, 'water' for bottled water). Use 'general' only "
+        "'tea_coffee' for hot drinks, 'juice' for fruit juices, 'beverages' for lassi, "
+        "'soft_drink' for sodas, 'dal' for lentils, 'grill' for grilled platters, "
+        "'pasta' for pasta, 'sandwich' for sandwiches, 'appetizer' for starters, "
+        "'water' for bottled water). Use 'general' only "
         "as a last resort. "
         "For combo platters that 'come with' or 'are served with' other items, "
         "fill subItems with each included item ({nameEn, nameBn}); otherwise "
@@ -388,7 +390,7 @@ def _normalize_add_ons(raw: Any) -> list[dict[str, Any]]:
             price = float(entry.get("price") or 0)
         except (TypeError, ValueError):
             continue
-        if price < 0:
+        if price <= 0:
             continue
         out.append(
             {

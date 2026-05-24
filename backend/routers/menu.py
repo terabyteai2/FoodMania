@@ -21,6 +21,8 @@ from services.menu_scan import MenuScanError, extract_menu_page_texts, parse_men
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+MAX_MENU_SCAN_PAGES = 6
+MAX_MENU_SCAN_PAGE_BYTES = 1200 * 1024
 
 
 def _decode_tags(raw: str | None) -> list[str]:
@@ -285,6 +287,11 @@ async def scan_menu_pages(
     await _require_manager_scan_access(outlet_id, payload, db)
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one menu image.")
+    if len(files) > MAX_MENU_SCAN_PAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Select up to {MAX_MENU_SCAN_PAGES} menu images at a time.",
+        )
 
     pages: list[tuple[bytes, str]] = []
     for file in files:
@@ -299,6 +306,14 @@ async def scan_menu_pages(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{file.filename or 'Uploaded file'} is empty.",
+            )
+        if len(image_bytes) > MAX_MENU_SCAN_PAGE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"{file.filename or 'Uploaded file'} is too large. "
+                    "Choose a compressed menu photo."
+                ),
             )
         pages.append((image_bytes, content_type))
 

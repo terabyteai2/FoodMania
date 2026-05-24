@@ -16,6 +16,9 @@ class _FakeRequest:
 def test_known_icon_key_maps_to_first_file_for_index_zero():
     assert placeholder_relative_path("chicken", 0) == "menu_placeholders/chicken-1.png"
     assert placeholder_relative_path("beef", 0) == "menu_placeholders/beef-1.png"
+    assert placeholder_relative_path("dal", 0) == "menu_placeholders/dal-1.png"
+    assert placeholder_relative_path("sandwich", 0) == "menu_placeholders/sandwitch.png"
+    assert placeholder_relative_path("appetizer", 0) == "menu_placeholders/appetizer.png"
 
 
 def test_round_robin_within_bucket():
@@ -36,6 +39,9 @@ def test_alias_mapping():
     assert normalize_icon_key("Tea") == "tea_coffee"
     assert normalize_icon_key("dessert") == "sweets"
     assert normalize_icon_key("snack") == "fuchka"
+    assert normalize_icon_key("sandwitch") == "sandwich"
+    assert normalize_icon_key("daal") == "dal"
+    assert normalize_icon_key("starter") == "appetizer"
 
 
 def test_resolve_url_builds_against_request_base():

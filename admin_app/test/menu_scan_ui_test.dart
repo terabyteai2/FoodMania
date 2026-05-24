@@ -42,13 +42,14 @@ void main() {
   test('menu icon inference picks related placeholder keys', () {
     expect(
       inferMenuIconKey(name: 'Margherita Pizza', category: 'Mains'),
-      'pizza',
+      'general',
     );
     expect(
       inferMenuIconKey(name: 'Mutton Kacchi Biryani', category: 'Biryani'),
       'biryani',
     );
-    expect(inferMenuIconKey(name: 'Borhani', category: 'Drinks'), 'drink');
+    expect(inferMenuIconKey(name: 'Borhani', category: 'Drinks'), 'beverages');
+    expect(inferMenuIconKey(name: 'Dal Fry', category: 'Curry'), 'dal');
   });
 
   test('notification target resolver maps related pages', () {
@@ -101,6 +102,16 @@ void main() {
             'categoryBn': 'স্ন্যাকস',
             'price': 180,
             'isAvailable': true,
+            'iconKey': 'chicken',
+            'imageUrl':
+                'https://api.example.com/uploads/menu_placeholders/chicken-1.png',
+            'subItems': [
+              {'nameEn': 'Sauce', 'nameBn': 'সস'},
+            ],
+            'addOns': [
+              {'nameEn': 'Cheese', 'nameBn': 'চিজ', 'price': 30},
+              {'nameEn': 'Free salad', 'nameBn': 'সালাদ', 'price': 0},
+            ],
           },
           {
             'nameEn': 'Broken price',
@@ -129,6 +140,9 @@ void main() {
     expect(result.provider, 'xai');
     expect(result.pageCount, 2);
     expect(result.items.map((item) => item.nameEn), ['Chicken Roll']);
+    expect(result.items.single.iconKey, 'chicken');
+    expect(result.items.single.subItems.single.nameEn, 'Sauce');
+    expect(result.items.single.addOns.single.nameEn, 'Cheese');
     expect(tenant.tableCount, 42);
   });
 

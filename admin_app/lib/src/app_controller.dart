@@ -2089,6 +2089,7 @@ class PosAppController extends ChangeNotifier {
     int? preparationTimeMinutes,
     List<String> tags = const [],
     DateTime? createdAt,
+    bool syncAfterSave = true,
   }) async {
     final now = DateTime.now();
     final item = MenuItem(
@@ -2113,7 +2114,9 @@ class PosAppController extends ChangeNotifier {
       updatedAt: now,
     );
     await database.upsertMenuItem(item);
-    await _syncWithFreshTenantToken();
+    if (syncAfterSave) {
+      await _syncWithFreshTenantToken();
+    }
   }
 
   Future<MenuScanImportResult> scanAndImportMenu(
@@ -2174,8 +2177,12 @@ class PosAppController extends ChangeNotifier {
         imageUrl: candidate.imageUrl,
         isAvailable: candidate.isAvailable,
         tags: tags,
+        syncAfterSave: false,
       );
       created += 1;
+    }
+    if (created > 0) {
+      await _syncWithFreshTenantToken();
     }
     await reloadData();
     if (kDebugMode) {

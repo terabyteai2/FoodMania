@@ -24,6 +24,7 @@ class StockInScreen extends StatefulWidget {
 
 class _StockInScreenState extends State<StockInScreen> {
   final List<_StockInLine> _lines = [];
+  final TextEditingController _inventorySearchCtrl = TextEditingController();
   final DateTime _date = DateTime.now();
   bool _scanning = false;
   bool _saving = false;
@@ -54,6 +55,7 @@ class _StockInScreenState extends State<StockInScreen> {
 
   @override
   void dispose() {
+    _inventorySearchCtrl.dispose();
     for (final line in _lines) {
       line.dispose();
     }
@@ -90,6 +92,12 @@ class _StockInScreenState extends State<StockInScreen> {
       _lines.remove(line);
       line.dispose();
     });
+  }
+
+  void _addInventoryItem(InventoryItem item) {
+    final alreadyAdded = _lines.any((line) => line.linkedItemId == item.id);
+    if (alreadyAdded) return;
+    setState(() => _lines.add(_StockInLine.fromItem(item)));
   }
 
   Future<void> _pickAndScan({required bool fromCamera}) async {
@@ -220,7 +228,8 @@ class _StockInScreenState extends State<StockInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final app = AppScope.of(context);
+    final text = app.strings;
     final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final total = _lines.fold<double>(
       0,
@@ -272,6 +281,18 @@ class _StockInScreenState extends State<StockInScreen> {
               onCapture: () => _pickAndScan(fromCamera: true),
             ),
             const SizedBox(height: 16),
+            _InventoryInlinePicker(
+              items: app.inventoryItems,
+              existingIds: _lines
+                  .map((line) => line.linkedItemId)
+                  .whereType<String>()
+                  .toSet(),
+              controller: _inventorySearchCtrl,
+              text: text,
+              onQueryChanged: (_) => setState(() {}),
+              onAdd: _addInventoryItem,
+            ),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -296,6 +317,9 @@ class _StockInScreenState extends State<StockInScreen> {
             ),
             for (final line in _lines)
               _LineCard(
+                key: ValueKey(
+                  'stock-in-line-${line.linkedItemId ?? line.hashCode}',
+                ),
                 line: line,
                 text: text,
                 onRemove: () => _removeLine(line),
@@ -367,6 +391,188 @@ class _StockInScreenState extends State<StockInScreen> {
 }
 
 // ── Sub-widgets ──────────────────────────────────────────────────────────────
+
+class _InventoryInlinePicker extends StatelessWidget {
+  const _InventoryInlinePicker({
+    required this.items,
+    required this.existingIds,
+    required this.controller,
+    required this.text,
+    required this.onQueryChanged,
+    required this.onAdd,
+  });
+
+  final List<InventoryItem> items;
+  final Set<String> existingIds;
+  final TextEditingController controller;
+  final AppStrings text;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<InventoryItem> onAdd;
+
+  static const int _visibleLimit = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = controller.text.trim().toLowerCase();
+    final filtered =
+        items
+            .where((item) {
+              if (query.isEmpty) return true;
+              return item.name.toLowerCase().contains(query) ||
+                  item.category.toLowerCase().contains(query);
+            })
+            .toList(growable: false)
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+    final visible = filtered.take(_visibleLimit).toList(growable: false);
+
+    return TfCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.inventory_2_outlined,
+                color: PosColors.primaryDark,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TfText(
+                  text.stockInInventoryTitle,
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: controller,
+            onChanged: onQueryChanged,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: text.stockInInventoryHint,
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: TfText(
+                text.stockInNoSavedItems,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: PosColors.muted, fontSize: 13),
+              ),
+            )
+          else if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: TfText(
+                text.stockInNoMatches,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: PosColors.muted, fontSize: 13),
+              ),
+            )
+          else
+            for (final item in visible)
+              _InventoryPickRow(
+                item: item,
+                text: text,
+                alreadyAdded: existingIds.contains(item.id),
+                onAdd: () => onAdd(item),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InventoryPickRow extends StatelessWidget {
+  const _InventoryPickRow({
+    required this.item,
+    required this.text,
+    required this.alreadyAdded,
+    required this.onAdd,
+  });
+
+  final InventoryItem item;
+  final AppStrings text;
+  final bool alreadyAdded;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
+    final qtyText = InventoryUnits.formatQuantity(
+      item.quantity,
+      item.unit,
+      isBn: text.isBn,
+    );
+    final price = item.costPerUnit > 0
+        ? '৳${_StockInLine._formatNumber(item.costPerUnit)} / $unit'
+        : text.noSavedPrice;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: PosColors.line, width: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TfText(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                TfText(
+                  '$qtyText · $price',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: PosColors.muted,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          TfButton(
+            key: ValueKey('stock-in-add-${item.id}'),
+            label: alreadyAdded ? text.stockInAlreadyAdded : text.addItem,
+            icon: alreadyAdded ? TfNavIcon.check : Icons.add_rounded,
+            size: TfButtonSize.sm,
+            variant: alreadyAdded
+                ? TfButtonVariant.paper
+                : TfButtonVariant.dark,
+            fullWidth: false,
+            onPressed: alreadyAdded ? null : onAdd,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _DateRow extends StatelessWidget {
   const _DateRow({required this.date, required this.text});
@@ -547,6 +753,7 @@ class _LineCard extends StatelessWidget {
     required this.text,
     required this.onRemove,
     required this.onChanged,
+    super.key,
   });
 
   final _StockInLine line;
@@ -623,7 +830,7 @@ class _LineCard extends StatelessWidget {
                 Expanded(
                   child: _NumberField(
                     controller: line.totalCtrl,
-                    label: text.newStockLabel,
+                    label: text.stockInTotalCostLabel,
                     onChanged: (_) {
                       line.recomputeUnitPriceFromTotal();
                       onChanged();
@@ -829,7 +1036,8 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TfText(                      text.isBn ? 'আইটেম বেছে নিন' : 'Pick an item',
+                    child: TfText(
+                      text.isBn ? 'আইটেম বেছে নিন' : 'Pick an item',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w500,
@@ -871,7 +1079,8 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
               child: filtered.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.all(32),
-                      child: TfText(                        widget.items.isEmpty
+                      child: TfText(
+                        widget.items.isEmpty
                             ? (text.isBn
                                   ? 'কোনো সংরক্ষিত আইটেম নেই'
                                   : 'No saved items yet')
@@ -896,9 +1105,7 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                         );
                         final priceText = item.costPerUnit > 0
                             ? '${fmt.format(item.costPerUnit)} / $unit'
-                            : (text.isBn
-                                  ? 'দাম সংরক্ষিত নেই'
-                                  : 'No saved price');
+                            : text.noSavedPrice;
                         return ListTile(
                           enabled: !alreadyAdded,
                           leading: Container(
@@ -910,7 +1117,8 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                               border: Border.all(color: PosColors.line),
                             ),
                             alignment: Alignment.center,
-                            child: TfText(                              item.name.isEmpty
+                            child: TfText(
+                              item.name.isEmpty
                                   ? '?'
                                   : item.name.characters.first.toUpperCase(),
                               style: const TextStyle(
@@ -919,13 +1127,15 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                               ),
                             ),
                           ),
-                          title: TfText(                            item.name,
+                          title: TfText(
+                            item.name,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
                             ),
                           ),
-                          subtitle: TfText(                            priceText,
+                          subtitle: TfText(
+                            priceText,
                             style: TextStyle(
                               fontSize: 12,
                               color: PosColors.muted,
@@ -933,7 +1143,8 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                             ),
                           ),
                           trailing: alreadyAdded
-                              ? TfText(                                  text.isBn ? 'যুক্ত' : 'Added',
+                              ? TfText(
+                                  text.isBn ? 'যুক্ত' : 'Added',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,

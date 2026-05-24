@@ -650,6 +650,7 @@ class AppStrings {
         ? '$vatLabel (${_bnDigits(formatted)}%)'
         : '$vatLabel ($formatted%)';
   }
+
   String get paymentLabel => isBn ? 'পেমেন্ট' : 'Payment';
   String get orderCreatedTitle => isBn ? 'অর্ডার তৈরি হয়েছে' : 'Order created';
   String get sentToKitchenTitle => orderCreatedTitle;
@@ -1008,11 +1009,22 @@ class AppStrings {
       isBn ? 'AI আইটেম, পরিমাণ এবং দাম পড়ে' : 'AI reads items, qty, prices';
   String get addManually => isBn ? 'হাতে যোগ করুন' : 'add manually';
   String get addItem => isBn ? 'আইটেম যোগ করুন' : 'Add Item';
+  String get stockInInventoryTitle =>
+      isBn ? 'ইনভেন্টরি থেকে যোগ করুন' : 'Add from inventory';
+  String get stockInInventoryHint =>
+      isBn ? 'আইটেম খুঁজুন' : 'Search inventory items';
+  String get stockInAlreadyAdded => isBn ? 'যোগ হয়েছে' : 'Added';
+  String get stockInNoSavedItems =>
+      isBn ? 'কোনো সংরক্ষিত আইটেম নেই' : 'No saved inventory items';
+  String get stockInNoMatches =>
+      isBn ? 'মিল পাওয়া যায়নি' : 'No matching inventory items';
+  String get noSavedPrice => isBn ? 'দাম সেভ নেই' : 'No saved price';
   String get saveAndAddToStock =>
       isBn ? 'সেভ করুন ও স্টকে যোগ করুন' : 'Save & add to stock';
   String get qtyLabel => isBn ? 'পরিমাণ' : 'QTY';
   String pricePerUnit(String unit) => isBn ? 'মূল্য / $unit' : 'PRICE / $unit';
   String get newStockLabel => isBn ? 'নতুন স্টক' : 'NEW STOCK';
+  String get stockInTotalCostLabel => isBn ? 'মোট খরচ' : 'TOTAL COST';
   String get scanningReceipt =>
       isBn ? 'রিসিট স্ক্যান হচ্ছে…' : 'Scanning receipt…';
   String get receiptScanFailed =>

@@ -74,6 +74,42 @@ def test_menu_scan_validation_defaults_unknown_icon_key_to_general():
     assert items[0].iconKey == "general"
 
 
+def test_menu_scan_validation_keeps_only_positive_add_ons():
+    items = menu_scan._validated_items(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "nameEn": "Chicken Platter",
+                        "nameBn": "চিকেন প্ল্যাটার",
+                        "descriptionEn": "Grilled chicken platter.",
+                        "descriptionBn": "গ্রিলড চিকেন প্ল্যাটার।",
+                        "categoryEn": "Grill",
+                        "categoryBn": "গ্রিল",
+                        "price": 450,
+                        "isAvailable": True,
+                        "iconKey": "grill",
+                        "subItems": [
+                            {"nameEn": "Rice", "nameBn": "ভাত"},
+                        ],
+                        "addOns": [
+                            {"nameEn": "Extra naan", "nameBn": "অতিরিক্ত নান", "price": 20},
+                            {"nameEn": "Free salad", "nameBn": "সালাদ", "price": 0},
+                            {"nameEn": "Bad price", "nameBn": "খারাপ দাম", "price": -5},
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+
+    assert items[0].iconKey == "grill"
+    assert [sub.nameEn for sub in items[0].subItems] == ["Rice"]
+    assert [(addon.nameEn, addon.price) for addon in items[0].addOns] == [
+        ("Extra naan", 20)
+    ]
+
+
 def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
     messages = menu_scan._prompt(
         [
@@ -92,6 +128,8 @@ def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
     assert "iconKey" in joined
     assert "subItems" in joined
     assert "addOns" in joined
+    assert "dal" in joined
+    assert "sandwich" in joined
 
 
 def test_menu_scan_uses_json_object_mode_for_groq():
@@ -355,3 +393,73 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
     assert seen_texts == ["first page OCR", "second page OCR"]
     assert response.json()["data"]["items"][0]["nameEn"] == "Tea"
     assert response.json()["data"]["items"][0]["nameBn"] == "চা"
+
+
+@pytest.mark.asyncio
+async def test_menu_scan_route_rejects_too_many_images(monkeypatch):
+    async def fake_manager_access(outlet_id, payload, db):
+        return None
+
+    async def fake_db():
+        yield object()
+
+    app.dependency_overrides[get_current_device_payload] = lambda: {
+        "sub": "outlet-1",
+        "account_id": "manager-1",
+    }
+    app.dependency_overrides[get_db] = fake_db
+    monkeypatch.setattr(menu, "_require_manager_scan_access", fake_manager_access)
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/outlets/outlet-1/menu/scan",
+                files=[
+                    ("files", (f"page-{i}.png", b"image", "image/png"))
+                    for i in range(menu.MAX_MENU_SCAN_PAGES + 1)
+                ],
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert f"up to {menu.MAX_MENU_SCAN_PAGES}" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_menu_scan_route_rejects_oversized_image(monkeypatch):
+    async def fake_manager_access(outlet_id, payload, db):
+        return None
+
+    async def fake_db():
+        yield object()
+
+    app.dependency_overrides[get_current_device_payload] = lambda: {
+        "sub": "outlet-1",
+        "account_id": "manager-1",
+    }
+    app.dependency_overrides[get_db] = fake_db
+    monkeypatch.setattr(menu, "_require_manager_scan_access", fake_manager_access)
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/outlets/outlet-1/menu/scan",
+                files=[
+                    (
+                        "files",
+                        (
+                            "large-page.png",
+                            b"x" * (menu.MAX_MENU_SCAN_PAGE_BYTES + 1),
+                            "image/png",
+                        ),
+                    )
+                ],
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 413
+    assert "too large" in response.json()["detail"]
