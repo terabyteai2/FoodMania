@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'tf_design_system.dart';
 
 class DashboardCard extends StatefulWidget {
   const DashboardCard({
@@ -48,17 +49,10 @@ class _DashboardCardState extends State<DashboardCard> {
               ),
               child: Material(
                 color: Colors.transparent,
-                child: Card(
-                  color: PosColors.background,
-                  surfaceTintColor: Colors.transparent,
-                  clipBehavior: Clip.antiAlias,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(PosRadii.lg),
-                    side: BorderSide(
-                      color: PosColors.lineStrong.withValues(alpha: 0.36),
-                    ),
-                  ),
+                child: TfCard(
+                  color: PosColors.surface,
+                  padded: false,
+                  clip: true,
                   child: InkWell(
                     onTap: widget.onTap,
                     onHighlightChanged: (v) => setState(() => _pressed = v),
@@ -89,7 +83,7 @@ class _DashboardCardState extends State<DashboardCard> {
                             ],
                           ),
                           SizedBox(height: compact ? 6 : 8),
-                          Text(
+                          TfText(
                             widget.value,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -97,7 +91,7 @@ class _DashboardCardState extends State<DashboardCard> {
                                 (compact
                                         ? TextStyle(
                                             fontSize: 18,
-                                            fontWeight: FontWeight.w900,
+                                            fontWeight: FontWeight.w500,
                                             color: PosColors.slate,
                                             letterSpacing: 0,
                                           )
@@ -106,32 +100,32 @@ class _DashboardCardState extends State<DashboardCard> {
                                           ).textTheme.headlineMedium)
                                     ?.copyWith(
                                       fontSize: compact ? 16 : 20,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w500,
                                       letterSpacing: 0,
                                     ),
                           ),
                           SizedBox(height: 3),
-                          Text(
+                          TfText(
                             widget.title,
                             maxLines: compact ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: compact
                                 ? TextStyle(
                                     fontSize: 10.6,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w500,
                                     color: PosColors.slate,
                                     height: 1.1,
                                   )
                                 : TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w500,
                                     color: PosColors.slate,
                                     height: 1.1,
                                   ),
                           ),
                           if (widget.caption != null && !compact) ...[
                             SizedBox(height: 4),
-                            Text(
+                            TfText(
                               widget.caption!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,

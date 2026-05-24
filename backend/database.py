@@ -126,6 +126,7 @@ async def _ensure_menu_columns(conn) -> None:
         ("description_bn", "TEXT"),
         ("category_en", "TEXT"),
         ("category_bn", "TEXT"),
+        ("tags_json", "TEXT"),
     ]
     if dialect == "sqlite":
         for column, column_type in columns:

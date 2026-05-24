@@ -6,6 +6,7 @@ import 'package:sms_autofill/sms_autofill.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 
 /// Extracts a 6-digit OTP from SMS text or platform autofill payloads.
 final RegExp _otpSixDigits = RegExp(r'\d{6}');
@@ -207,181 +208,149 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: const Color(0xFFFFFDF5),
+      backgroundColor: PosColors.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(24, 12, 24, 12 + bottomInset),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 24),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 24,
+                ),
                 child: AutofillGroup(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                        SizedBox(height: compact ? 8 : 32),
-                        const _BrandMark(),
-                        SizedBox(height: compact ? 16 : 28),
-                        Text(
-                          _otpSent ? 'Enter verification code' : 'Welcome',
-                          style: TextStyle(
-                            fontSize: compact ? 26 : 30,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF14110E),
-                          ),
+                      SizedBox(height: compact ? 8 : 32),
+                      const _BrandMark(),
+                      SizedBox(height: compact ? 16 : 28),
+                      TfText(
+                        _otpSent ? 'Enter verification code' : 'Welcome',
+                        style: TextStyle(
+                          fontSize: compact ? 26 : 30,
+                          fontWeight: FontWeight.w500,
+                          color: PosColors.slate,
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _otpSent
-                              ? (app.showDevOtpHint
+                      ),
+                      const SizedBox(height: 10),
+                      TfText(
+                        _otpSent
+                            ? (app.showDevOtpHint
                                   ? 'SMS was not sent (dev mode).\nEnter code ${app.devOtpCodeHint} or tap Verify.'
                                   : 'We sent a code to your phone.\nIt may fill in automatically, or enter it and tap Verify.')
-                              : 'Sign in with your Bangladesh\nmobile number.',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 14.5,
-                            height: 1.4,
-                            color: Color(0xFF5A5450),
-                          ),
+                            : 'Sign in with your Bangladesh\nmobile number.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          height: 1.4,
+                          color: PosColors.muted,
                         ),
-                        SizedBox(height: compact ? 16 : 32),
-                        if (!_otpSent) ...[
-                          TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.done,
-                            autofillHints: const [AutofillHints.telephoneNumber],
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'[0-9+\s-]'),
-                              ),
-                              LengthLimitingTextInputFormatter(14),
-                            ],
-                            decoration: const InputDecoration(
-                              labelText: 'Mobile number',
-                              hintText: '01XXXXXXXXX',
-                              prefixIcon: Icon(Icons.phone_android_rounded),
+                      ),
+                      SizedBox(height: compact ? 16 : 32),
+                      if (!_otpSent) ...[
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.telephoneNumber],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9+\s-]'),
                             ),
-                            onSubmitted: (_) => _busy ? null : _sendOtp(),
+                            LengthLimitingTextInputFormatter(14),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Mobile number',
+                            hintText: '01XXXXXXXXX',
+                            prefixIcon: Icon(Icons.phone_android_rounded),
                           ),
-                        ] else ...[
-                          TextFieldPinAutoFill(
-                            key: ValueKey('otp-${_otpSent ? 'sent' : 'idle'}'),
-                            focusNode: _otpFocusNode,
-                            currentCode: _otpCode,
-                            codeLength: 6,
-                            autoFocus: true,
-                            smsCodeRegexPattern: _otpListenPattern,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            decoration: const InputDecoration(
-                              labelText: '6-digit code',
-                              prefixIcon: Icon(Icons.sms_outlined),
-                            ),
-                            onCodeSubmitted: _applyOtpCode,
-                            onCodeChanged: _onOtpChanged,
+                          onSubmitted: (_) => _busy ? null : _sendOtp(),
+                        ),
+                      ] else ...[
+                        TextFieldPinAutoFill(
+                          key: ValueKey('otp-${_otpSent ? 'sent' : 'idle'}'),
+                          focusNode: _otpFocusNode,
+                          currentCode: _otpCode,
+                          codeLength: 6,
+                          autoFocus: true,
+                          smsCodeRegexPattern: _otpListenPattern,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: '6-digit code',
+                            prefixIcon: Icon(Icons.sms_outlined),
                           ),
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _otpSent = false;
-                                        _otpCode = '';
-                                        _error = null;
-                                        _autoVerifyScheduled = false;
-                                      });
-                                    },
-                              child: const Text('Change phone number'),
-                            ),
-                          ),
-                        ],
-                        if (_error != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFDECEA),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE5B4B0)),
-                            ),
-                            child: Text(
-                              _error!,
-                              style: const TextStyle(
-                                color: Color(0xFF8A2A1F),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (app.demoManagerLoginEnabled && !_otpSent) ...[
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: OutlinedButton(
-                              onPressed: _busy ? null : _demoLogin,
-                              child: const Text(
-                                'Try demo restaurant',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ),
-                        ],
-                        SizedBox(height: compact ? 20 : 40),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: PosColors.primary,
-                              foregroundColor: const Color(0xFF14110E),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
+                          onCodeSubmitted: _applyOtpCode,
+                          onCodeChanged: _onOtpChanged,
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TfButton(
+                            label: 'Change phone number',
+                            variant: TfButtonVariant.ghost,
+                            size: TfButtonSize.sm,
+                            fullWidth: false,
                             onPressed: _busy
                                 ? null
-                                : (_otpSent
-                                    ? () {
-                                        _autoVerifyScheduled = false;
-                                        unawaited(_verifyOtp());
-                                      }
-                                    : _sendOtp),
-                            child: _busy
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF14110E),
-                                    ),
-                                  )
-                                : Text(
-                                    _otpSent ? 'Verify' : 'Send code',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 15,
-                                    ),
-                                  ),
+                                : () {
+                                    setState(() {
+                                      _otpSent = false;
+                                      _otpCode = '';
+                                      _error = null;
+                                      _autoVerifyScheduled = false;
+                                    });
+                                  },
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'By continuing, you agree to\nTerms & Privacy Policy',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF9A9388),
-                            height: 1.4,
+                      ],
+                      if (_error != null) ...[
+                        const SizedBox(height: 12),
+                        TfCard(
+                          padding: const EdgeInsets.all(12),
+                          color: PosColors.dangerSoft,
+                          child: TfText(
+                            _error!,
+                            style: const TextStyle(
+                              color: PosColors.danger,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
+                      ],
+                      if (app.demoManagerLoginEnabled && !_otpSent) ...[
+                        const SizedBox(height: 12),
+                        TfButton(
+                          label: 'Try demo restaurant',
+                          onPressed: _busy ? null : _demoLogin,
+                          variant: TfButtonVariant.paper,
+                        ),
+                      ],
+                      SizedBox(height: compact ? 20 : 40),
+                      TfButton(
+                        label: _otpSent ? 'Verify' : 'Send code',
+                        busy: _busy,
+                        size: TfButtonSize.lg,
+                        onPressed: _otpSent
+                            ? () {
+                                _autoVerifyScheduled = false;
+                                unawaited(_verifyOtp());
+                              }
+                            : _sendOtp,
+                      ),
+                      const SizedBox(height: 16),
+                      const TfText(
+                        'By continuing, you agree to\nTerms & Privacy Policy',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: PosColors.muted,
+                          height: 1.4,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -403,14 +372,14 @@ class _BrandMark extends StatelessWidget {
       width: 72,
       height: 72,
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7DA),
+        color: PosColors.primarySoft,
         shape: BoxShape.circle,
         border: Border.all(color: PosColors.primary, width: 2),
       ),
       child: const Center(
         child: Icon(
           Icons.restaurant_rounded,
-          color: Color(0xFFF2C744),
+          color: PosColors.primaryDark,
           size: 34,
         ),
       ),

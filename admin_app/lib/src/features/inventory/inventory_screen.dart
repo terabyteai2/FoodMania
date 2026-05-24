@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/notification_center.dart';
-import '../../core/widgets/pos_compact_ui.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
@@ -60,7 +59,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: _Header(text: text, summary: summary),
               ),
               SliverToBoxAdapter(
-                child: _StockValueCard(text: text, summary: summary),
+                child: _InventorySummaryBand(text: text, summary: summary),
               ),
               if (summary != null && summary.categories.isNotEmpty)
                 SliverToBoxAdapter(
@@ -116,34 +115,34 @@ class _Header extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TfText(
                   text.inventory,
                   style: TextStyle(
                     fontSize: 26,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: PosColors.slate,
                     height: 1.05,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                TfText(
                   '${text.isBn ? 'ইনভেন্টরি' : 'Inventory'} · ${text.alertsCount(alerts)}',
                   style: TextStyle(
                     fontSize: 12.5,
                     color: PosColors.muted,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
             ),
           ),
-          CompactIconButton(
+          TfIconButton(
             icon: Icons.search_rounded,
             tooltip: text.searchInventory,
             onPressed: () {},
           ),
           const SizedBox(width: 6),
-          CompactIconButton(
+          TfIconButton(
             icon: Icons.more_horiz_rounded,
             tooltip: text.dailyReport,
             onPressed: () => _showMoreMenu(context, text),
@@ -223,112 +222,388 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
 
 // ── Stock value card ──────────────────────────────────────────────────────────
 
-class _StockValueCard extends StatelessWidget {
-  const _StockValueCard({required this.text, required this.summary});
+class _InventorySummaryBand extends StatelessWidget {
+  const _InventorySummaryBand({required this.text, required this.summary});
 
   final AppStrings text;
   final InventorySummary? summary;
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
-    final stockValue = summary?.stockValueBdt ?? 0;
-    final variance = summary?.varianceTodayBdt ?? 0;
-    final varCount = summary?.varianceItemCount ?? 0;
-    final isDown = variance < 0;
+    final hasAlerts =
+        summary?.items.any(
+          (item) =>
+              item.varianceStatus == 'low' || item.varianceStatus == 'out',
+        ) ??
+        false;
+    if (summary == null || hasAlerts) {
+      return Column(
+        children: [
+          _StockValueCard(text: text, summary: summary),
+          if (summary != null)
+            _LowStockAlertCard(text: text, summary: summary!),
+        ],
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-      child: CompactSurface(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 12,
+            child: _StockValueCard(
+              text: text,
+              summary: summary,
+              outerPadding: EdgeInsets.zero,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 9,
+            child: _StockStatusOkCard(
+              text: text,
+              summary: summary!,
+              outerPadding: EdgeInsets.zero,
+              compact: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StockValueCard extends StatelessWidget {
+  const _StockValueCard({
+    required this.text,
+    required this.summary,
+    this.outerPadding = const EdgeInsets.fromLTRB(14, 6, 14, 12),
+  });
+
+  final AppStrings text;
+  final InventorySummary? summary;
+  final EdgeInsetsGeometry outerPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final stockValue = summary?.stockValueBdt ?? 0;
+    return Padding(
+      padding: outerPadding,
+      child: TfCard(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        color: PosColors.surface,
-        borderColor: PosColors.line,
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    text.stockValueNow.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                      color: PosColors.muted,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    fmt.format(stockValue),
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: PosColors.slate,
-                      height: 1.05,
-                    ),
-                  ),
-                ],
-              ),
+            TfSectionHeader(
+              label: text.stockValueNow,
+              padding: EdgeInsets.zero,
             ),
-            Container(
-              width: 1,
-              height: 48,
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              color: PosColors.line,
-            ),
-            Expanded(
-              flex: 5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    text.varianceToday.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                      color: PosColors.muted,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    variance == 0
-                        ? '৳0'
-                        : '${isDown ? '−' : '+'}${fmt.format(variance.abs())}',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: isDown ? PosColors.danger : PosColors.slate,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (varCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: PosColors.danger.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        text.varianceItems(varCount),
-                        style: TextStyle(
-                          color: PosColors.danger,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                ],
+            const SizedBox(height: 6),
+            TfText(              tfFormatCurrency(context, stockValue),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w500,
+                color: PosColors.slate,
+                height: 1.05,
+                letterSpacing: -0.4,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Low stock alert ───────────────────────────────────────────────────────────
+
+class _LowStockAlertCard extends StatelessWidget {
+  const _LowStockAlertCard({required this.text, required this.summary});
+
+  final AppStrings text;
+  final InventorySummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts =
+        summary.items
+            .where(
+              (item) =>
+                  item.varianceStatus == 'low' || item.varianceStatus == 'out',
+            )
+            .toList(growable: false)
+          ..sort((a, b) {
+            if (a.varianceStatus == b.varianceStatus) return 0;
+            return a.varianceStatus == 'out' ? -1 : 1;
+          });
+    if (alerts.isEmpty) {
+      return _StockStatusOkCard(text: text, summary: summary);
+    }
+
+    final isBn = text.isBn;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: PosColors.dangerSoft,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PosColors.danger.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: PosColors.danger,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TfSectionHeader(
+                    label: text.lowStockAlerts,
+                    color: PosColors.danger,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: PosColors.danger,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: TfText(                    tfFormatNumber(context, alerts.length),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final item in alerts.take(4))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: item.varianceStatus == 'out'
+                            ? PosColors.danger
+                            : PosColors.warning,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TfText(                        isBn && item.nameBn.trim().isNotEmpty
+                            ? item.nameBn
+                            : (item.nameEn.trim().isNotEmpty
+                                  ? item.nameEn
+                                  : item.nameBn),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: PosColors.slate,
+                        ),
+                      ),
+                    ),
+                    TfText(                      '${_formatQty(context, item.onHand)} ${InventoryUnits.displayLabel(item.unit, isBn: isBn)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: item.varianceStatus == 'out'
+                            ? PosColors.danger.withValues(alpha: 0.18)
+                            : PosColors.warning.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: TfText(                        item.varianceStatus == 'out'
+                            ? text.statusOut
+                            : text.statusLow,
+                        style: TextStyle(
+                          color: item.varianceStatus == 'out'
+                              ? PosColors.danger
+                              : PosColors.warning,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (alerts.length > 4)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, left: 14),
+                child: TfText(                  isBn
+                      ? '+ আরও ${tfFormatNumber(context, alerts.length - 4)} টি আইটেম'
+                      : '+ ${tfFormatNumber(context, alerts.length - 4)} more',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: PosColors.danger,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatQty(BuildContext context, double value) {
+    if (value == value.roundToDouble()) return tfFormatNumber(context, value);
+    return tfFormatNumber(context, value, decimalDigits: 1);
+  }
+}
+
+class _StockStatusOkCard extends StatelessWidget {
+  const _StockStatusOkCard({
+    required this.text,
+    required this.summary,
+    this.outerPadding = const EdgeInsets.fromLTRB(14, 0, 14, 12),
+    this.compact = false,
+  });
+
+  final AppStrings text;
+  final InventorySummary summary;
+  final EdgeInsetsGeometry outerPadding;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = text.isBn;
+    final tracked = summary.items.length;
+    final healthy = summary.items
+        .where((i) => i.varianceStatus != 'low' && i.varianceStatus != 'out')
+        .length;
+    return Padding(
+      padding: outerPadding,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: PosColors.success.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PosColors.success.withValues(alpha: 0.35)),
+        ),
+        child: compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: PosColors.success,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: TfText(
+                          isBn ? 'স্টক ঠিক আছে' : 'Stock healthy',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: PosColors.success,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TfText(
+                    '${tfFormatNumber(context, healthy)}/${tfFormatNumber(context, tracked)} ${isBn ? 'ঠিক' : 'ok'}',
+                    style: const TextStyle(
+                      color: PosColors.muted,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: PosColors.success,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TfText(
+                          isBn ? 'স্টক ঠিক আছে' : 'Stock is healthy',
+                          style: TextStyle(
+                            color: PosColors.success,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        TfText(
+                          isBn
+                              ? '${tfFormatNumber(context, healthy)}/${tfFormatNumber(context, tracked)} আইটেম থ্রেশহোল্ডের উপরে'
+                              : '${tfFormatNumber(context, healthy)} of ${tfFormatNumber(context, tracked)} items above threshold',
+                          style: TextStyle(
+                            color: PosColors.muted,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.success,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: TfText(
+                      isBn ? 'সব ঠিক' : 'ALL OK',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -369,33 +644,34 @@ class _CategoryChips extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: isSelected ? PosColors.primary : PosColors.surface,
-                      borderRadius: BorderRadius.circular(99),
+                      color: isSelected
+                          ? PosColors.primaryDark
+                          : PosColors.surface,
+                      borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: isSelected ? PosColors.primary : PosColors.line,
+                        color: isSelected
+                            ? PosColors.primaryDark
+                            : PosColors.line,
+                        width: 0.5,
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          label,
+                        TfText(                          label,
                           style: TextStyle(
-                            color: isSelected
-                                ? PosColors.primaryDark
-                                : PosColors.slate,
-                            fontWeight: FontWeight.w800,
+                            color: isSelected ? Colors.white : PosColors.slate,
+                            fontWeight: FontWeight.w500,
                             fontSize: 13,
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          '${bucket.count}',
+                        TfText(                          tfFormatNumber(context, bucket.count),
                           style: TextStyle(
                             color: isSelected
-                                ? PosColors.primaryDark.withValues(alpha: 0.7)
+                                ? Colors.white.withValues(alpha: 0.7)
                                 : PosColors.muted,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             fontSize: 12,
                           ),
                         ),
@@ -422,7 +698,7 @@ class _ColumnHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = TextStyle(
       fontSize: 10,
-      fontWeight: FontWeight.w900,
+      fontWeight: FontWeight.w500,
       letterSpacing: 1,
       color: PosColors.muted,
     );
@@ -430,18 +706,14 @@ class _ColumnHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 18, 6),
       child: Row(
         children: [
-          Expanded(flex: 30, child: Text(text.colItem, style: style)),
+          Expanded(flex: 40, child: Text(text.colItem, style: style)),
           Expanded(
-            flex: 22,
+            flex: 26,
             child: Text(text.colOnHand, style: style, textAlign: TextAlign.end),
           ),
           Expanded(
-            flex: 28,
+            flex: 34,
             child: Text(text.colInOut, style: style, textAlign: TextAlign.end),
-          ),
-          Expanded(
-            flex: 20,
-            child: Text(text.colVar, style: style, textAlign: TextAlign.end),
           ),
         ],
       ),
@@ -471,7 +743,7 @@ class _ItemSliverList extends StatelessWidget {
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 32),
-          child: EmptyCompactState(
+          child: TfEmptyState(
             icon: Icons.inventory_2_outlined,
             title: text.noMatchingItems,
             message: text.tryDifferentFilter,
@@ -495,12 +767,10 @@ class _InventoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inOutText = _formatInOut(item, text);
     final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
     final primaryName = text.isBn && item.nameBn.trim().isNotEmpty
         ? item.nameBn
         : (item.nameEn.trim().isNotEmpty ? item.nameEn : item.nameBn);
-    final secondaryName = text.isBn ? item.nameEn : item.nameBn;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: Material(
@@ -514,7 +784,7 @@ class _InventoryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  flex: 30,
+                  flex: 40,
                   child: Row(
                     children: [
                       Container(
@@ -522,16 +792,15 @@ class _InventoryRow extends StatelessWidget {
                         height: 36,
                         decoration: BoxDecoration(
                           color: PosColors.surfaceWarm,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: PosColors.line),
                         ),
                         alignment: Alignment.center,
-                        child: Text(
-                          primaryName.isEmpty
+                        child: TfText(                          primaryName.isEmpty
                               ? '?'
                               : primaryName.characters.first.toUpperCase(),
                           style: TextStyle(
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w500,
                             color: PosColors.slate,
                           ),
                         ),
@@ -542,27 +811,26 @@ class _InventoryRow extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              primaryName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: PosColors.slate,
-                              ),
-                            ),
-                            if (secondaryName.trim().isNotEmpty)
-                              Text(
-                                secondaryName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: PosColors.muted,
-                                  fontWeight: FontWeight.w600,
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: TfText(                                    primaryName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: PosColors.slate,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                if (item.varianceStatus == 'low' ||
+                                    item.varianceStatus == 'out') ...[
+                                  const SizedBox(width: 6),
+                                  _LowOutBadge(item: item, text: text),
+                                ],
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -570,46 +838,52 @@ class _InventoryRow extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  flex: 22,
+                  flex: 26,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        _formatQty(item.onHand),
+                      TfText(                        _formatQty(context, item.onHand),
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                           color: PosColors.slate,
                         ),
                       ),
-                      Text(
-                        unit,
+                      TfText(                        unit,
                         style: TextStyle(
                           fontSize: 11,
                           color: PosColors.muted,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
                 Expanded(
-                  flex: 28,
-                  child: Text(
-                    inOutText,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: PosColors.muted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 20,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: _StatusPill(item: item, text: text),
+                  flex: 34,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TfText(                        '+${_formatQty(context, item.todayIn)} $unit',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: item.todayIn > 0
+                              ? PosColors.success
+                              : PosColors.muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      TfText(                        '−${_formatQty(context, item.todayOut)} $unit',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: item.todayOut > 0
+                              ? PosColors.danger
+                              : PosColors.muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -645,60 +919,37 @@ class _InventoryRow extends StatelessWidget {
     ).then((_) => app.refreshInventorySummary());
   }
 
-  String _formatQty(double value) {
+  String _formatQty(BuildContext context, double value) {
     if (value == value.roundToDouble()) {
-      return value.toInt().toString();
+      return tfFormatNumber(context, value);
     }
-    return value.toStringAsFixed(1);
-  }
-
-  String _formatInOut(InventorySummaryItem item, AppStrings text) {
-    final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
-    final inText = '+${_formatQty(item.todayIn)} $unit';
-    final outText = '−${_formatQty(item.todayOut)} $unit';
-    return '$inText / $outText';
+    return tfFormatNumber(context, value, decimalDigits: 1);
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.item, required this.text});
+class _LowOutBadge extends StatelessWidget {
+  const _LowOutBadge({required this.item, required this.text});
 
   final InventorySummaryItem item;
   final AppStrings text;
 
   @override
   Widget build(BuildContext context) {
-    String label;
-    Color bg;
-    Color fg;
-    switch (item.varianceStatus) {
-      case 'out':
-        label = text.statusOut;
-        bg = PosColors.danger.withValues(alpha: 0.18);
-        fg = PosColors.danger;
-      case 'low':
-        label = text.statusLow;
-        bg = PosColors.warning.withValues(alpha: 0.18);
-        fg = PosColors.warning;
-      case 'variance':
-        final signed = item.varianceQty;
-        label = '${signed > 0 ? '+' : ''}${signed.toStringAsFixed(1)}';
-        bg = PosColors.danger.withValues(alpha: 0.18);
-        fg = PosColors.danger;
-      default:
-        label = text.statusOk;
-        bg = PosColors.success.withValues(alpha: 0.16);
-        fg = PosColors.success;
-    }
+    final isOut = item.varianceStatus == 'out';
+    final fg = isOut ? PosColors.danger : PosColors.warning;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(99),
+        color: fg.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        style: TextStyle(color: fg, fontWeight: FontWeight.w900, fontSize: 11),
+      child: TfText(        isOut ? text.statusOut : text.statusLow,
+        style: TextStyle(
+          color: fg,
+          fontWeight: FontWeight.w500,
+          fontSize: 10,
+          letterSpacing: 0.4,
+        ),
       ),
     );
   }
@@ -718,7 +969,7 @@ class _InventoryActionBar extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: PosColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: PosColors.line, width: 0.5),
           boxShadow: PosShadows.glow,
         ),
@@ -783,20 +1034,12 @@ class _InventoryActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 132, minHeight: 46),
-      child: FilledButton.icon(
+      child: TfButton(
         onPressed: onPressed,
-        icon: Icon(icon, size: 18),
-        label: Text(label),
-        style: FilledButton.styleFrom(
-          backgroundColor: primary ? PosColors.primary : PosColors.primaryDark,
-          foregroundColor: primary ? PosColors.primaryDark : Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-          elevation: 0,
-        ),
+        icon: icon,
+        label: label,
+        variant: primary ? TfButtonVariant.primary : TfButtonVariant.dark,
+        fullWidth: false,
       ),
     );
   }
@@ -823,7 +1066,7 @@ class _SheetShell extends StatelessWidget {
         constraints: BoxConstraints(maxHeight: maxHeight),
         decoration: BoxDecoration(
           color: PosColors.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -834,7 +1077,7 @@ class _SheetShell extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(
                 color: PosColors.lineStrong,
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
             Padding(
@@ -842,11 +1085,10 @@ class _SheetShell extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      title,
+                    child: TfText(                      title,
                       style: const TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -939,7 +1181,7 @@ class _QuickCountSheetState extends State<_QuickCountSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_yesterday != null)
-            Text(
+            TfText(
               '${text.yesterdayLeft}: ${InventoryUnits.formatQuantity(_yesterday!, widget.item.unit, isBn: text.isBn)}',
               style: TextStyle(color: PosColors.muted, fontSize: 13),
             ),
@@ -954,14 +1196,11 @@ class _QuickCountSheetState extends State<_QuickCountSheet> {
             decoration: InputDecoration(labelText: '${text.leftNow} ($unit)'),
           ),
           const SizedBox(height: 20),
-          FilledButton(
+          TfButton(
+            label: text.saveCount,
             onPressed: _busy ? null : _save,
-            style: FilledButton.styleFrom(
-              backgroundColor: PosColors.primary,
-              foregroundColor: PosColors.primaryDark,
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: Text(text.saveCount),
+            busy: _busy,
+            size: TfButtonSize.lg,
           ),
         ],
       ),
@@ -1108,8 +1347,7 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            text.countAllItems,
+          TfText(            text.countAllItems,
             style: TextStyle(fontSize: 13, color: PosColors.muted),
           ),
           const SizedBox(height: 14),
@@ -1132,8 +1370,7 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        text.aiScanCount,
+                      child: TfText(                        text.aiScanCount,
                         style: const TextStyle(
                           color: PosColors.primaryDark,
                           fontSize: 14,
@@ -1141,27 +1378,20 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
                         ),
                       ),
                     ),
-                    FilledButton.icon(
+                    TfButton(
+                      label: 'Scan',
+                      labelBn: 'স্ক্যান',
+                      icon: Icons.photo_camera_rounded,
+                      variant: TfButtonVariant.dark,
+                      size: TfButtonSize.sm,
+                      fullWidth: false,
+                      busy: _scanning,
                       onPressed: _scanning ? null : _scanCounts,
-                      icon: _scanning
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.photo_camera_rounded, size: 16),
-                      label: Text(text.isBn ? 'স্ক্যান' : 'Scan'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: PosColors.primaryDark,
-                        foregroundColor: Colors.white,
-                        visualDensity: VisualDensity.compact,
-                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  text.aiScanCountHint,
+                TfText(                  text.aiScanCountHint,
                   style: TextStyle(
                     color: PosColors.primaryDark.withValues(alpha: 0.70),
                     fontSize: 12,
@@ -1170,8 +1400,7 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
                 ),
                 if (_scanError != null) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    _scanProvider == null
+                  TfText(                    _scanProvider == null
                         ? _scanError!
                         : '${_scanError!} · $_scanProvider',
                     style: TextStyle(
@@ -1206,14 +1435,11 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
               ),
             );
           }),
-          FilledButton(
+          TfButton(
+            label: text.saveCount,
+            size: TfButtonSize.lg,
+            busy: _busy,
             onPressed: _busy ? null : _saveAll,
-            style: FilledButton.styleFrom(
-              backgroundColor: PosColors.primary,
-              foregroundColor: PosColors.primaryDark,
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: Text(text.saveCount),
           ),
         ],
       ),
@@ -1315,11 +1541,11 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
             decoration: InputDecoration(labelText: text.itemCategory),
           ),
           const SizedBox(height: 12),
-          Text(
+          TfText(
             text.unit,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               color: PosColors.slate,
             ),
           ),
@@ -1330,12 +1556,11 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
             children: InventoryUnits.all
                 .map((u) {
                   final selected = _unit == u;
-                  return ChoiceChip(
-                    label: Text(
-                      InventoryUnits.displayLabel(u, isBn: text.isBn),
-                    ),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _unit = u),
+                  return TfChip(
+                    label: InventoryUnits.displayLabel(u, isBn: text.isBn),
+                    active: selected,
+                    small: true,
+                    onTap: () => setState(() => _unit = u),
                   );
                 })
                 .toList(growable: false),
@@ -1374,14 +1599,10 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
             ),
           ),
           const SizedBox(height: 20),
-          FilledButton(
+          TfButton(
+            label: isEdit ? text.save : text.addInventoryItem,
             onPressed: _submit,
-            style: FilledButton.styleFrom(
-              backgroundColor: PosColors.primary,
-              foregroundColor: PosColors.primaryDark,
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: Text(isEdit ? text.save : text.addInventoryItem),
+            size: TfButtonSize.lg,
           ),
         ],
       ),

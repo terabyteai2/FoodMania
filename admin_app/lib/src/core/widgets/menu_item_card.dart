@@ -5,6 +5,7 @@ import '../../models/menu_item.dart';
 import '../theme/app_theme.dart';
 import 'menu_image_view.dart';
 import 'status_badge.dart';
+import 'tf_design_system.dart';
 
 class MenuItemCard extends StatefulWidget {
   const MenuItemCard({
@@ -38,27 +39,12 @@ class _MenuItemCardState extends State<MenuItemCard> {
         duration: Duration(milliseconds: 180),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(PosRadii.lg),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: _hovering ? 0.12 : 0.07),
-              blurRadius: _hovering ? 16 : 12,
-              offset: Offset(0, _hovering ? 7 : 5),
-            ),
-          ],
+          boxShadow: _hovering ? PosShadows.glow : PosShadows.card,
         ),
-        child: Card(
-          color: PosColors.background,
-          elevation: 0,
-          surfaceTintColor: Colors.transparent,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(PosRadii.lg),
-            side: BorderSide(
-              color: _hovering
-                  ? PosColors.primaryDark.withValues(alpha: 0.42)
-                  : PosColors.lineStrong.withValues(alpha: 0.36),
-            ),
-          ),
+        child: TfCard(
+          color: PosColors.surface,
+          padded: false,
+          clip: true,
           child: Padding(
             padding: EdgeInsets.all(7),
             child: Column(
@@ -119,28 +105,22 @@ class _MenuItemCardState extends State<MenuItemCard> {
                           top: 7,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.96),
+                              color: PosColors.surface,
                               borderRadius: BorderRadius.circular(
                                 PosRadii.pill,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0x1A0F2A1F),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
+                              border: Border.all(color: PosColors.line),
                             ),
                             child: Padding(
                               padding: EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
                               ),
-                              child: Text(
+                              child: TfText(
                                 currency.format(widget.item.price),
                                 style: TextStyle(
                                   color: PosColors.primaryDark,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w500,
                                   fontSize: 10.8,
                                   letterSpacing: 0,
                                 ),
@@ -153,11 +133,11 @@ class _MenuItemCardState extends State<MenuItemCard> {
                   ),
                 ),
                 SizedBox(height: 6),
-                Text(
+                TfText(
                   widget.item.name,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontSize: 12.8,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: 0,
                     height: 1,
                   ),
@@ -165,13 +145,13 @@ class _MenuItemCardState extends State<MenuItemCard> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 SizedBox(height: 2),
-                Text(
+                TfText(
                   widget.item.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontSize: 10.8,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w400,
                     height: 1.1,
                   ),
                 ),
@@ -203,12 +183,12 @@ class _MenuItemCardState extends State<MenuItemCard> {
                             ),
                           ),
                           Expanded(
-                            child: Text(
+                            child: TfText(
                               widget.item.isAvailable ? 'Active' : 'Paused',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w500,
                                 color: widget.item.isAvailable
                                     ? PosColors.success
                                     : PosColors.muted,
@@ -300,11 +280,11 @@ class _SmallPill extends StatelessWidget {
         children: [
           Icon(icon, size: 11, color: PosColors.muted),
           SizedBox(width: 4),
-          Text(
+          TfText(
             label,
             style: TextStyle(
               color: PosColors.slateSoft,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               fontSize: 10,
             ),
           ),

@@ -282,6 +282,7 @@ class MenuScanCandidate {
     required this.categoryBn,
     required this.price,
     required this.isAvailable,
+    this.iconKey = 'general',
   });
 
   final String nameEn;
@@ -292,6 +293,7 @@ class MenuScanCandidate {
   final String categoryBn;
   final double price;
   final bool isAvailable;
+  final String iconKey;
 
   static MenuScanCandidate? fromJson(Object? value) {
     if (value is! Map) return null;
@@ -321,6 +323,7 @@ class MenuScanCandidate {
         price <= 0) {
       return null;
     }
+    final rawIcon = _text(json['iconKey'])?.toLowerCase() ?? 'general';
     return MenuScanCandidate(
       nameEn: nameEn,
       nameBn: nameBn,
@@ -332,6 +335,7 @@ class MenuScanCandidate {
       isAvailable: json['isAvailable'] is bool
           ? json['isAvailable'] as bool
           : true,
+      iconKey: rawIcon.isEmpty ? 'general' : rawIcon,
     );
   }
 
@@ -1308,15 +1312,21 @@ class CloudApiService {
       'notes': order.note,
       'createdByAccountId': order.createdByAccountId,
       'createdByRole': order.createdByRole,
-      'serviceType': order.serviceType?.value,
-      'covers': order.covers,
-      'paymentMethod': order.paymentMethod?.value,
       'subtotal': order.subtotal,
       'vatRatePercent': order.vatRatePercent,
       'vatAmount': order.vatAmount,
       'createdAt': order.createdAt.toUtc().toIso8601String(),
       'updatedAt': order.updatedAt.toUtc().toIso8601String(),
     };
+    if (order.serviceType != null) {
+      payload['serviceType'] = order.serviceType!.value;
+    }
+    if (order.covers != null) {
+      payload['covers'] = order.covers;
+    }
+    if (order.paymentMethod != null) {
+      payload['paymentMethod'] = order.paymentMethod!.value;
+    }
     return _sendJson(
       'POST',
       uri,

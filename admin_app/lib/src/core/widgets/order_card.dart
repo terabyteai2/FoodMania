@@ -5,6 +5,7 @@ import '../../models/order_model.dart';
 import '../../models/order_status.dart';
 import '../theme/app_theme.dart';
 import 'status_badge.dart';
+import 'tf_design_system.dart';
 
 const _adminOrderStatusOptions = <OrderStatus>[
   OrderStatus.pending,
@@ -31,16 +32,10 @@ class OrderCard extends StatelessWidget {
     final createdTime = DateFormat('MMM d, h:mm a').format(order.createdAt);
     final accent = _accentForStatus(order.status);
 
-    return Card(
-      color: PosColors.background,
-      elevation: 2,
-      shadowColor: Colors.black.withValues(alpha: 0.12),
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(PosRadii.lg),
-        side: BorderSide(color: PosColors.lineStrong.withValues(alpha: 0.36)),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return TfCard(
+      color: PosColors.surface,
+      padded: false,
+      clip: true,
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -83,7 +78,7 @@ class OrderCard extends StatelessWidget {
                                   _SequencePill(label: order.displaySequence),
                                   SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
+                                    child: TfText(
                                       order.orderNo,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -168,24 +163,24 @@ class OrderCard extends StatelessWidget {
                                             decoration: BoxDecoration(
                                               color: PosColors.background,
                                               borderRadius:
-                                                  BorderRadius.circular(11),
+                                                  BorderRadius.circular(12),
                                               border: Border.all(
                                                 color: PosColors.lineStrong
                                                     .withValues(alpha: 0.36),
                                               ),
                                             ),
-                                            child: Text(
+                                            child: TfText(
                                               '${item.qty}×',
                                               style: TextStyle(
-                                                color: PosColors.primary,
-                                                fontWeight: FontWeight.w900,
+                                                color: PosColors.primaryDark,
+                                                fontWeight: FontWeight.w500,
                                                 fontSize: 12.5,
                                               ),
                                             ),
                                           ),
                                           SizedBox(width: 10),
                                           Expanded(
-                                            child: Text(
+                                            child: TfText(
                                               item.name,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -195,11 +190,11 @@ class OrderCard extends StatelessWidget {
                                             ),
                                           ),
                                           SizedBox(width: 8),
-                                          Text(
+                                          TfText(
                                             currency.format(item.lineTotal),
                                             style: TextStyle(
                                               color: PosColors.slate,
-                                              fontWeight: FontWeight.w900,
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ],
@@ -231,11 +226,11 @@ class OrderCard extends StatelessWidget {
                                 ),
                                 SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(
+                                  child: TfText(
                                     order.note!,
                                     style: TextStyle(
                                       color: PosColors.slateSoft,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.w500,
                                       height: 1.4,
                                     ),
                                   ),
@@ -268,22 +263,22 @@ class OrderCard extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
+                                  TfText(
                                     'TOTAL',
                                     style: TextStyle(
                                       color: PosColors.muted,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w500,
                                       fontSize: 10.6,
-                                      letterSpacing: 1.4,
+                                      letterSpacing: 0,
                                     ),
                                   ),
                                   SizedBox(height: 2),
-                                  Text(
+                                  TfText(
                                     currency.format(order.total),
                                     style: TextStyle(
                                       color: PosColors.primaryDark,
                                       fontSize: 22,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w500,
                                       letterSpacing: 0,
                                     ),
                                   ),
@@ -295,10 +290,12 @@ class OrderCard extends StatelessWidget {
                               runSpacing: 8,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                OutlinedButton.icon(
+                                TfButton(
                                   onPressed: onPrintTicket,
-                                  icon: Icon(Icons.print_outlined, size: 18),
-                                  label: Text('Print Ticket'),
+                                  icon: Icons.print_outlined,
+                                  label: 'Print Ticket',
+                                  variant: TfButtonVariant.paper,
+                                  fullWidth: false,
                                 ),
                                 Container(
                                   padding: EdgeInsets.symmetric(horizontal: 14),
@@ -312,15 +309,6 @@ class OrderCard extends StatelessWidget {
                                         alpha: 0.36,
                                       ),
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.06,
-                                        ),
-                                        blurRadius: 10,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<OrderStatus>(
@@ -334,7 +322,7 @@ class OrderCard extends StatelessWidget {
                                       ),
                                       style: TextStyle(
                                         color: PosColors.slate,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w500,
                                         fontSize: 13,
                                       ),
                                       items: _adminOrderStatusOptions
@@ -417,11 +405,11 @@ class _SequencePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(PosRadii.pill),
         border: Border.all(color: PosColors.primaryDark.withValues(alpha: 0.2)),
       ),
-      child: Text(
+      child: TfText(
         label,
         style: TextStyle(
           color: PosColors.slate,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           fontSize: 12,
           letterSpacing: 0,
         ),
@@ -449,23 +437,13 @@ class _OrderMark extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: 0.20),
-            color.withValues(alpha: 0.08),
-          ],
-        ),
+        color: color == PosColors.danger
+            ? PosColors.dangerSoft
+            : color == PosColors.success
+            ? PosColors.successSoft
+            : PosColors.primarySoft,
         borderRadius: BorderRadius.circular(PosRadii.md),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.14),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: PosColors.line),
       ),
       child: Icon(Icons.receipt_long_outlined, color: color, size: 22),
     );
@@ -492,11 +470,11 @@ class _MetaPill extends StatelessWidget {
         children: [
           Icon(icon, size: 12.5, color: PosColors.muted),
           SizedBox(width: 5),
-          Text(
+          TfText(
             label,
             style: TextStyle(
               color: PosColors.slateSoft,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               fontSize: 11,
             ),
           ),

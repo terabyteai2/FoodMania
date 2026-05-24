@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import 'tf_design_system.dart';
 
 class CopyableTextCard extends StatelessWidget {
   const CopyableTextCard({
@@ -18,46 +19,33 @@ class CopyableTextCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canCopy = value.trim().isNotEmpty && !value.contains('Unavailable');
-    return Container(
+    return TfCard(
       padding: EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceTinted,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-        border: Border.all(color: PosColors.line),
-      ),
+      color: PosColors.surfaceTinted,
       child: Row(
         children: [
           Container(
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  PosColors.primary.withValues(alpha: 0.18),
-                  PosColors.primary.withValues(alpha: 0.06),
-                ],
-              ),
+              color: PosColors.primarySoft,
               borderRadius: BorderRadius.circular(PosRadii.sm),
-              border: Border.all(
-                color: PosColors.primary.withValues(alpha: 0.22),
-              ),
+              border: Border.all(color: PosColors.line),
             ),
-            child: Icon(icon, color: PosColors.primary, size: 19),
+            child: Icon(icon, color: PosColors.primaryDark, size: 19),
           ),
           SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TfText(
                   label.toUpperCase(),
                   style: TextStyle(
                     color: PosColors.muted,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     fontSize: 10.6,
-                    letterSpacing: 1.2,
+                    letterSpacing: 0,
                   ),
                 ),
                 SizedBox(height: 4),
@@ -66,7 +54,7 @@ class CopyableTextCard extends StatelessWidget {
                   maxLines: 2,
                   style: TextStyle(
                     color: PosColors.slate,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     fontSize: 13.4,
                     height: 1.3,
                   ),
@@ -97,7 +85,7 @@ class CopyableTextCard extends StatelessWidget {
                 child: Icon(
                   Icons.copy_rounded,
                   size: 17,
-                  color: canCopy ? PosColors.primary : PosColors.muted,
+                  color: canCopy ? PosColors.primaryDark : PosColors.muted,
                 ),
               ),
             ),

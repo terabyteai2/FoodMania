@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/daily_report.dart';
 import 'stock_in_screen.dart';
 
@@ -47,8 +48,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     Clipboard.setData(ClipboardData(text: lines.toString()));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          text.isBn
+        content: TfText(          text.isBn
               ? 'রিপোর্ট ক্লিপবোর্ডে কপি হয়েছে'
               : 'Report copied to clipboard',
         ),
@@ -72,19 +72,19 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            TfText(
               text.dailyReport,
               style: TextStyle(
                 color: PosColors.slate,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            Text(
+            TfText(
               '${text.isBn ? 'শেয়ার রিপোর্ট' : 'Share report'} · ${dateFmt.format(_date)}',
               style: TextStyle(
                 color: PosColors.muted,
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -95,14 +95,20 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
               future: _future,
               builder: (context, snap) {
                 final report = snap.data;
-                return TextButton.icon(
-                  onPressed: report == null
-                      ? null
-                      : () => _share(report, text),
-                  icon: const Icon(Icons.ios_share_rounded, size: 18),
-                  label: Text(text.share),
-                  style: TextButton.styleFrom(
-                    foregroundColor: PosColors.slate,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  child: TfButton(
+                    label: text.share,
+                    icon: Icons.ios_share_rounded,
+                    variant: TfButtonVariant.ghost,
+                    size: TfButtonSize.sm,
+                    fullWidth: false,
+                    onPressed: report == null
+                        ? null
+                        : () => _share(report, text),
                   ),
                 );
               },
@@ -119,7 +125,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
             return Padding(
               padding: const EdgeInsets.all(24),
               child: Center(
-                child: Text(
+                child: TfText(
                   snapshot.error.toString(),
                   style: TextStyle(color: PosColors.danger),
                 ),
@@ -136,20 +142,15 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
               children: [
                 _AlertCard(report: report, text: text),
                 const SizedBox(height: 18),
-                Text(
-                  text.varianceBreakdown.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w900,
-                    color: PosColors.muted,
-                  ),
+                TfSectionHeader(
+                  label: text.varianceBreakdown,
+                  padding: EdgeInsets.zero,
                 ),
                 const SizedBox(height: 8),
                 if (report.breakdown.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
+                    child: TfText(
                       text.isBn
                           ? 'কোনো ভ্যারিয়েন্স নেই।'
                           : 'No variance — everything balances.',
@@ -185,53 +186,49 @@ class _AlertCard extends StatelessWidget {
     final isDown = variance < 0;
     final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final color = isDown ? PosColors.danger : PosColors.success;
-    return Container(
+    return TfCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
+      color: isDown ? PosColors.dangerSoft : PosColors.successSoft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          TfText(
             '${text.unexplainedVariance.toUpperCase()} · ${text.isBn ? 'আজ' : 'TODAY'}',
             style: TextStyle(
               color: color,
               fontSize: 10,
-              letterSpacing: 1,
-              fontWeight: FontWeight.w900,
+              letterSpacing: 0,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 6),
-          Text(
+          TfText(
             variance == 0
                 ? '৳0'
                 : '${isDown ? '−' : '+'}${fmt.format(variance.abs())}',
             style: TextStyle(
               fontSize: 28,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               color: color,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          TfText(
             text.acrossItems(report.varianceItemCount),
             style: TextStyle(
               color: color.withValues(alpha: 0.8),
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w400,
             ),
           ),
           if (report.headlineEn.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
+            TfText(
               report.headlineEn,
               style: TextStyle(
                 fontSize: 13,
                 color: PosColors.slate,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 height: 1.4,
               ),
             ),
@@ -253,108 +250,102 @@ class _BreakdownCard extends StatelessWidget {
     final variance = row.varianceQty;
     final isDown = variance < 0;
     final color = isDown ? PosColors.danger : PosColors.success;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: PosColors.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      row.nameEn,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: PosColors.slate,
-                      ),
-                    ),
-                    if (row.nameBn.isNotEmpty)
-                      Text(
-                        row.nameBn,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: PosColors.muted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  '${variance > 0 ? '+' : ''}${variance.toStringAsFixed(1)} ${row.unit}',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${text.expectedCountedLabel}: '
-            '${row.expectedQty.toStringAsFixed(1)} ${row.unit} · '
-            '${row.actualQty.toStringAsFixed(1)} ${row.unit}',
-            style: TextStyle(color: PosColors.muted, fontSize: 12),
-          ),
-          if (row.recurringWeeks >= 2) ...[
-            const SizedBox(height: 6),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TfCard(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: PosColors.warning.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: Text(
-                    text.recurringWeeks(row.recurringWeeks),
-                    style: TextStyle(
-                      color: PosColors.warning,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TfText(
+                        row.nameEn,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: PosColors.slate,
+                        ),
+                      ),
+                      if (row.nameBn.isNotEmpty)
+                        TfText(
+                          row.nameBn,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: PosColors.muted,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (row.noteEn.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      row.noteEn,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: TfText(
+                    '${variance > 0 ? '+' : ''}${variance.toStringAsFixed(1)} ${row.unit}',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TfText(
+              '${text.expectedCountedLabel}: '
+              '${row.expectedQty.toStringAsFixed(1)} ${row.unit} · '
+              '${row.actualQty.toStringAsFixed(1)} ${row.unit}',
+              style: TextStyle(color: PosColors.muted, fontSize: 12),
+            ),
+            if (row.recurringWeeks >= 2) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.warning.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: TfText(
+                      text.recurringWeeks(row.recurringWeeks),
                       style: TextStyle(
-                        color: PosColors.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        color: PosColors.warning,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
+                  if (row.noteEn.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TfText(
+                        row.noteEn,
+                        style: TextStyle(
+                          color: PosColors.muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -381,34 +372,27 @@ class _ReorderCta extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             color: PosColors.primary,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             boxShadow: PosShadows.glow,
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.local_shipping_outlined,
-                color: PosColors.primaryDark,
-              ),
+              Icon(Icons.local_shipping_outlined, color: PosColors.primaryDark),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      text.reorderSuggestion.toUpperCase(),
-                      style: TextStyle(
-                        color: PosColors.primaryDark.withValues(alpha: 0.7),
-                        fontSize: 10,
-                        letterSpacing: 1,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    TfSectionHeader(
+                      label: text.reorderSuggestion,
+                      color: PosColors.primaryDark.withValues(alpha: 0.7),
+                      padding: EdgeInsets.zero,
                     ),
-                    Text(
+                    TfText(
                       suggestion.ctaEn,
                       style: TextStyle(
                         color: PosColors.primaryDark,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],

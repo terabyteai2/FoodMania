@@ -9,6 +9,7 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/widgets/sync_event_tile.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/sync_event.dart';
 import '../../models/sync_status.dart';
 import '../../services/sync_service.dart';
@@ -112,66 +113,38 @@ class _SyncSummaryGrid extends StatelessWidget {
           childAspectRatio: constraints.maxWidth >= 860 ? 2.2 : 1.55,
           children: values
               .map(
-                (value) => Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
+                (value) => TfCard(
+                  clip: true,
+                  color: PosColors.surface,
+                  padding: EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: PosGradients.cardTint(value.color),
-                          ),
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: value.color == PosColors.danger
+                              ? PosColors.dangerSoft
+                              : value.color == PosColors.success
+                              ? PosColors.successSoft
+                              : PosColors.warningSoft,
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          border: Border.all(color: PosColors.line),
                         ),
+                        child: Icon(value.icon, color: value.color, size: 19),
                       ),
-                      Padding(
-                        padding: EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    value.color.withValues(alpha: 0.22),
-                                    value.color.withValues(alpha: 0.08),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(
-                                  PosRadii.md,
-                                ),
-                                border: Border.all(
-                                  color: value.color.withValues(alpha: 0.22),
-                                ),
-                              ),
-                              child: Icon(
-                                value.icon,
-                                color: value.color,
-                                size: 19,
-                              ),
-                            ),
-                            Spacer(),
-                            Text(
-                              value.value,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            SizedBox(height: 3),
-                            Text(
-                              value.label.toUpperCase(),
-                              style: TextStyle(
-                                color: PosColors.muted,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 10.4,
-                                letterSpacing: 1.1,
-                              ),
-                            ),
-                          ],
-                        ),
+                      Spacer(),
+                      TfText(
+                        value.value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      SizedBox(height: 3),
+                      TfSectionHeader(
+                        label: value.label,
+                        padding: EdgeInsets.zero,
                       ),
                     ],
                   ),
@@ -191,54 +164,52 @@ class _SyncActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(14),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            PrimaryButton(
-              label: 'Sync Now',
-              icon: Icons.sync,
-              busy: app.syncState.isSyncing,
-              onPressed: app.busy
-                  ? null
-                  : () async {
-                      final ok = await app.syncNow();
-                      if (!context.mounted) return;
-                      _snack(context, ok ? 'Sync completed' : 'Sync failed');
-                    },
-            ),
-            PrimaryButton(
-              label: 'Retry Failed',
-              icon: Icons.restart_alt,
-              secondary: true,
-              onPressed: app.busy
-                  ? null
-                  : () async {
-                      final ok = await app.retryFailedSync();
-                      if (!context.mounted) return;
-                      _snack(context, ok ? 'Retry queued' : 'Retry failed');
-                    },
-            ),
-            PrimaryButton(
-              label: 'Test Cloud',
-              icon: Icons.health_and_safety_outlined,
-              secondary: true,
-              onPressed: app.busy
-                  ? null
-                  : () async {
-                      final ok = await app.testCloud();
-                      if (!context.mounted) return;
-                      _snack(
-                        context,
-                        ok ? 'Cloud API reachable' : 'Cloud API failed',
-                      );
-                    },
-            ),
-          ],
-        ),
+    return TfCard(
+      padding: EdgeInsets.all(14),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          PrimaryButton(
+            label: 'Sync Now',
+            icon: Icons.sync,
+            busy: app.syncState.isSyncing,
+            onPressed: app.busy
+                ? null
+                : () async {
+                    final ok = await app.syncNow();
+                    if (!context.mounted) return;
+                    _snack(context, ok ? 'Sync completed' : 'Sync failed');
+                  },
+          ),
+          PrimaryButton(
+            label: 'Retry Failed',
+            icon: Icons.restart_alt,
+            secondary: true,
+            onPressed: app.busy
+                ? null
+                : () async {
+                    final ok = await app.retryFailedSync();
+                    if (!context.mounted) return;
+                    _snack(context, ok ? 'Retry queued' : 'Retry failed');
+                  },
+          ),
+          PrimaryButton(
+            label: 'Test Cloud',
+            icon: Icons.health_and_safety_outlined,
+            secondary: true,
+            onPressed: app.busy
+                ? null
+                : () async {
+                    final ok = await app.testCloud();
+                    if (!context.mounted) return;
+                    _snack(
+                      context,
+                      ok ? 'Cloud API reachable' : 'Cloud API failed',
+                    );
+                  },
+          ),
+        ],
       ),
     );
   }
@@ -257,50 +228,48 @@ class _SyncLogs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Sync logs', style: Theme.of(context).textTheme.titleLarge),
-            SizedBox(height: 10),
-            if (logs.isEmpty)
-              Text(
-                'No sync logs yet.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              ...logs
-                  .take(6)
-                  .map(
-                    (log) => Padding(
-                      padding: EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            log.isError
-                                ? Icons.error_outline
-                                : Icons.check_circle_outline,
-                            color: log.isError
-                                ? PosColors.danger
-                                : PosColors.success,
-                            size: 18,
+    return TfCard(
+      padding: EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TfText('Sync logs', style: Theme.of(context).textTheme.titleLarge),
+          SizedBox(height: 10),
+          if (logs.isEmpty)
+            TfText(
+              'No sync logs yet.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else
+            ...logs
+                .take(6)
+                .map(
+                  (log) => Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          log.isError
+                              ? Icons.error_outline
+                              : Icons.check_circle_outline,
+                          color: log.isError
+                              ? PosColors.danger
+                              : PosColors.success,
+                          size: 18,
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: TfText(
+                            log.message,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              log.message,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-          ],
-        ),
+                ),
+        ],
       ),
     );
   }
@@ -322,7 +291,7 @@ class _EventsList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sync events', style: Theme.of(context).textTheme.titleLarge),
+        TfText('Sync events', style: Theme.of(context).textTheme.titleLarge),
         SizedBox(height: 10),
         ListView.separated(
           itemCount: visibleEvents.length,

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/notification_center.dart';
-import '../../core/widgets/pos_compact_ui.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
 import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
@@ -62,46 +61,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     return Scaffold(
       backgroundColor: PosColors.background,
       floatingActionButton: app.isManager
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'add-menu-item',
-                  onPressed: () => _openMenuForm(context),
-                  backgroundColor: PosColors.surface,
-                  foregroundColor: PosColors.slate,
-                  tooltip: text.addMenuItem,
-                  icon: Icon(Icons.add_rounded, size: 22),
-                  label: Text(
-                    text.addMenuItem,
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                  ),
-                ),
-                SizedBox(height: 10),
-                FloatingActionButton.extended(
-                  heroTag: 'scan-menu',
-                  onPressed: _scanBusy ? null : () => _scanMenu(context),
-                  backgroundColor: PosColors.primary,
-                  foregroundColor: PosColors.primaryDark,
-                  tooltip: text.menuScan,
-                  icon: _scanBusy
-                      ? SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(
-                            color: PosColors.primaryDark,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Icon(Icons.document_scanner_rounded, size: 22),
-                  label: Text(
-                    _scanBusy ? text.menuScanning : text.menuScan,
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
-                  ),
-                ),
-              ],
+          ? _MenuActionBar(
+              scanBusy: _scanBusy,
+              onAddItem: () => _openMenuForm(context),
+              onScan: _scanBusy ? null : () => _scanMenu(context),
+              text: text,
             )
           : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
         child: CustomScrollView(
           physics: BouncingScrollPhysics(),
@@ -112,13 +79,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CompactHeader(
+                    TfAppBar(
                       title: text.menu,
                       subtitle: text.menuItemsSubtitle(
                         app.menuItems.length,
                         paused,
                       ),
-                      actions: [
+                      trailing: [
                         HeaderLanguageButton(),
                         HeaderNotificationBell(
                           onNavigateToOrders:
@@ -127,7 +94,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                       ],
                     ),
                     SizedBox(height: 14),
-                    CompactSearchField(
+                    TfSearchField(
                       controller: _searchController,
                       hintText: text.menuSearchHint,
                       onChanged: (_) => setState(() {}),
@@ -151,18 +118,18 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     ],
                     SizedBox(height: 10),
                     if (app.menuItems.isEmpty)
-                      EmptyCompactState(
+                      TfEmptyState(
                         title: text.menuEmptyTitle,
                         message: text.menuEmptyMessage,
                         icon: Icons.restaurant_menu_rounded,
                       )
                     else if (items.isEmpty)
-                      EmptyCompactState(
+                      TfEmptyState(
                         title: text.menuNoResultsTitle,
                         message: text.menuNoResultsMessage,
                         icon: Icons.search_off_rounded,
                       )
-                    else
+                    else ...[
                       _MenuList(
                         items: items,
                         language: language,
@@ -176,7 +143,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                           if (!app.isManager) return;
                           await app.toggleMenuAvailability(item.id, value);
                         },
+                        onAddImage: app.isManager
+                            ? (item) => _addImageToItem(context, item)
+                            : (_) {},
                       ),
+                      // Reserve space so the floating action bar never covers
+                      // the last menu row.
+                      if (app.isManager) const SizedBox(height: 92),
+                    ],
                   ],
                 ),
               ),
@@ -223,8 +197,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            text.menuScanImported(
+          content: TfText(            text.menuScanImported(
               result.createdCount,
               result.skippedDuplicateCount,
             ),
@@ -238,7 +211,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('${text.menuScanFailed}: $error')));
+      ).showSnackBar(SnackBar(content: TfText('${text.menuScanFailed}: $error')));
     } finally {
       if (mounted) setState(() => _scanBusy = false);
     }
@@ -272,17 +245,20 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         builder: (context) {
           final text = AppScope.of(context).strings;
           return AlertDialog(
-            title: Text(text.menuScanAddAnotherTitle),
-            content: Text(text.menuScanAddAnotherMessage(pages.length)),
+            title: TfText(text.menuScanAddAnotherTitle),
+            content: TfText(text.menuScanAddAnotherMessage(pages.length)),
             actions: [
-              TextButton(
+              TfButton(
+                label: text.menuScanUsePhotos,
+                variant: TfButtonVariant.paper,
+                fullWidth: false,
                 onPressed: () => Navigator.pop(context, false),
-                child: Text(text.menuScanUsePhotos),
               ),
-              FilledButton.icon(
+              TfButton(
+                label: text.menuScanAddPage,
+                icon: Icons.add_a_photo_rounded,
+                fullWidth: false,
                 onPressed: () => Navigator.pop(context, true),
-                icon: Icon(Icons.add_a_photo_rounded),
-                label: Text(text.menuScanAddPage),
               ),
             ],
           );
@@ -330,34 +306,164 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 
+  Future<void> _addImageToItem(BuildContext context, MenuItem item) async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    try {
+      final picked = await _scanImageService.pickRawMenuImageBytes();
+      if (picked == null || !context.mounted) return;
+      final cropped = await Navigator.of(context).push<Uint8List>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => SquareImageCropperPage(imageBytes: picked.bytes),
+        ),
+      );
+      if (cropped == null || !context.mounted) return;
+      final dataUrl = _scanImageService.encodeDataUrl(
+        cropped,
+        mimeType: 'image/png',
+      );
+      var imageUrl = dataUrl;
+      var uploadWarning = false;
+      try {
+        imageUrl = await app.uploadMenuImageDataUrl(dataUrl);
+      } catch (_) {
+        uploadWarning = true;
+      }
+      await app.saveMenuItem(
+        id: item.id,
+        name: item.name,
+        nameEn: item.nameEn,
+        nameBn: item.nameBn,
+        description: item.description,
+        descriptionEn: item.descriptionEn,
+        descriptionBn: item.descriptionBn,
+        category: item.category,
+        categoryEn: item.categoryEn,
+        categoryBn: item.categoryBn,
+        price: item.price,
+        imageUrl: imageUrl,
+        isAvailable: item.isAvailable,
+        preparationTimeMinutes: item.preparationTimeMinutes,
+        tags: item.tags,
+        createdAt: item.createdAt,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(            uploadWarning
+                ? text.menuImageUploadWarning
+                : text.menuImageUploaded,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
   Future<void> _confirmDelete(BuildContext context, MenuItem item) async {
     final app = AppScope.of(context);
     final text = app.strings;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(text.menuDeleteTitle),
-        content: Text(
+    TfConfirmSheet.show(
+      context,
+      title: text.menuDeleteTitle,
+      description:
           '${item.name} will be removed from the admin app and future API responses.',
+      confirmLabel: text.deleteAction,
+      isDanger: true,
+      onConfirm: () async {
+        await app.deleteMenuItem(item.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: TfText(text.menuDeleted)));
+      },
+    );
+  }
+}
+
+class _MenuActionBar extends StatelessWidget {
+  const _MenuActionBar({
+    required this.scanBusy,
+    required this.onAddItem,
+    required this.onScan,
+    required this.text,
+  });
+
+  final bool scanBusy;
+  final VoidCallback onAddItem;
+  final VoidCallback? onScan;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PosColors.line, width: 0.5),
+          boxShadow: PosShadows.glow,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(text.cancel),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MenuActionButton(
+                label: text.addMenuItem,
+                icon: Icons.add_rounded,
+                onPressed: onAddItem,
+              ),
+              const SizedBox(width: 8),
+              _MenuActionButton(
+                label: scanBusy ? text.menuScanning : text.menuScan,
+                icon: Icons.auto_awesome_rounded,
+                primary: true,
+                busy: scanBusy,
+                onPressed: onScan,
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(text.deleteAction),
-          ),
-        ],
+        ),
       ),
     );
-    if (confirmed != true) return;
-    await app.deleteMenuItem(item.id);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(text.menuDeleted)));
+  }
+}
+
+class _MenuActionButton extends StatelessWidget {
+  const _MenuActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.primary = false,
+    this.busy = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool primary;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 132, minHeight: 46),
+      child: TfButton(
+        onPressed: onPressed,
+        icon: icon,
+        label: label,
+        busy: busy,
+        variant: primary ? TfButtonVariant.primary : TfButtonVariant.dark,
+        fullWidth: false,
+      ),
+    );
   }
 }
 
@@ -397,14 +503,14 @@ class _CategoryStrip extends StatelessWidget {
                 height: 30,
                 padding: EdgeInsets.symmetric(horizontal: 11),
                 alignment: Alignment.center,
-                child: Text(
+                child: TfText(
                   AppScope.of(context).strings.categoryCountLabel(
                     category == allLabel ? 'All' : category,
                     countOf(category),
                   ),
                   style: TextStyle(
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: selected ? PosColors.primaryDark : PosColors.muted,
                   ),
                 ),
@@ -424,6 +530,7 @@ class _MenuList extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onAvailabilityChanged,
+    required this.onAddImage,
   });
 
   final List<MenuItem> items;
@@ -431,6 +538,7 @@ class _MenuList extends StatelessWidget {
   final ValueChanged<MenuItem> onEdit;
   final ValueChanged<MenuItem> onDelete;
   final void Function(MenuItem item, bool value) onAvailabilityChanged;
+  final ValueChanged<MenuItem> onAddImage;
 
   @override
   Widget build(BuildContext context) {
@@ -454,18 +562,16 @@ class _MenuList extends StatelessWidget {
               2,
               7,
             ),
-            child: Text(
-              category,
+            child: TfText(              category,
               style: TextStyle(
                 color: PosColors.slate,
                 fontSize: 13,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          CompactSurface(
+          TfCard(
             padding: EdgeInsets.zero,
-            radius: 10,
             child: ListView.separated(
               itemCount: grouped[category]!.length,
               shrinkWrap: true,
@@ -481,6 +587,7 @@ class _MenuList extends StatelessWidget {
                   onDelete: () => onDelete(item),
                   onAvailabilityChanged: (value) =>
                       onAvailabilityChanged(item, value),
+                  onAddImage: () => onAddImage(item),
                 );
               },
             ),
@@ -498,6 +605,7 @@ class _MenuRow extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onAvailabilityChanged,
+    required this.onAddImage,
   });
 
   final MenuItem item;
@@ -505,13 +613,19 @@ class _MenuRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final ValueChanged<bool> onAvailabilityChanged;
+  final VoidCallback onAddImage;
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(
-      symbol: '৳',
-      decimalDigits: item.price == item.price.roundToDouble() ? 0 : 2,
-    );
+    final text = AppScope.of(context).strings;
+    final priceDecimals = item.price == item.price.roundToDouble() ? 0 : 2;
+    final extras = item.extras;
+    final discounted = extras.discountedPrice(item.price);
+    final showDiscount = extras.hasDiscount && discounted < item.price;
+    final hasImage = (item.imageUrl ?? '').trim().isNotEmpty;
+    final discountLabel = text.isBn
+        ? tfToBnNumbers(extras.discountBadgeLabel())
+        : extras.discountBadgeLabel();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -521,12 +635,48 @@ class _MenuRow extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(10, 9, 8, 9),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: MenuImageView(imageUrl: item.imageUrl),
+              Tooltip(
+                message: hasImage ? text.editMenuItem : text.menuChooseGallery,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: hasImage ? onEdit : onAddImage,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 38,
+                      height: 38,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          MenuImageView(
+                            imageUrl: item.imageUrl,
+                            iconKey: extras.iconKey,
+                          ),
+                          if (!hasImage)
+                            Align(
+                              alignment: Alignment.bottomRight,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: PosColors.surface,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: PosColors.line,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  size: 11,
+                                  color: PosColors.primaryDark,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
               SizedBox(width: 10),
@@ -534,20 +684,33 @@ class _MenuRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.localizedName(language),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: PosColors.slate,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        height: 1.1,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: TfText(                            item.localizedName(language),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: PosColors.slate,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                        if (extras.includes.isNotEmpty ||
+                            extras.addOns.isNotEmpty) ...[
+                          SizedBox(width: 6),
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 12,
+                            color: PosColors.muted,
+                          ),
+                        ],
+                      ],
                     ),
                     SizedBox(height: 3),
-                    Text(
-                      item.localizedDescription(language).trim().isEmpty
+                    TfText(                      item.localizedDescription(language).trim().isEmpty
                           ? item.localizedCategory(language)
                           : item.localizedDescription(language),
                       maxLines: 1,
@@ -555,21 +718,46 @@ class _MenuRow extends StatelessWidget {
                       style: TextStyle(
                         color: PosColors.muted,
                         fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     SizedBox(height: 3),
-                    Text(
-                      item.isAvailable ? 'Available' : 'Paused',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: item.isAvailable
-                            ? PosColors.success
-                            : PosColors.danger,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    Row(
+                      children: [
+                        TfText(                          item.isAvailable
+                              ? (text.isBn ? 'উপলব্ধ' : 'Available')
+                              : (text.isBn ? 'বিরতি' : 'Paused'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: item.isAvailable
+                                ? PosColors.success
+                                : PosColors.danger,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (showDiscount) ...[
+                          SizedBox(width: 6),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: PosColors.danger.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: TfText(                              discountLabel,
+                              style: TextStyle(
+                                color: PosColors.danger,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -578,14 +766,42 @@ class _MenuRow extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    currency.format(item.price),
-                    style: TextStyle(
-                      color: PosColors.slate,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
+                  if (showDiscount) ...[
+                    TfText(                      tfFormatCurrency(
+                        context,
+                        item.price,
+                        decimalDigits: priceDecimals,
+                      ),
+                      style: TextStyle(
+                        color: PosColors.muted,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.lineThrough,
+                      ),
                     ),
-                  ),
+                    TfText(                      tfFormatCurrency(
+                        context,
+                        discounted,
+                        decimalDigits: priceDecimals,
+                      ),
+                      style: TextStyle(
+                        color: PosColors.danger,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ] else
+                    TfText(                      tfFormatCurrency(
+                        context,
+                        item.price,
+                        decimalDigits: priceDecimals,
+                      ),
+                      style: TextStyle(
+                        color: PosColors.slate,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   SizedBox(height: 3),
                   Transform.scale(
                     scale: 0.76,
@@ -624,9 +840,13 @@ class _MenuItemFormState extends State<_MenuItemForm> {
   late final TextEditingController _priceController;
   late final TextEditingController _imageController;
   late final TextEditingController _prepController;
+  late final TextEditingController _discountController;
+  late final TextEditingController _includesController;
+  late final TextEditingController _addOnsController;
   final MenuImageService _imageService = MenuImageService();
   late bool _isAvailable;
-  late Set<String> _tags;
+  late MenuItemExtras _initialExtras;
+  late _DiscountMode _discountMode;
   bool _imageBusy = false;
 
   @override
@@ -646,7 +866,33 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       text: item?.preparationTimeMinutes?.toString() ?? '',
     );
     _isAvailable = item?.isAvailable ?? true;
-    _tags = {...?item?.tags};
+    _initialExtras = item == null ? const MenuItemExtras() : item.extras;
+    _discountMode =
+        _initialExtras.discountPercent != null &&
+            _initialExtras.discountPercent! > 0
+        ? _DiscountMode.percent
+        : (_initialExtras.discountFlat != null &&
+                  _initialExtras.discountFlat! > 0
+              ? _DiscountMode.flat
+              : _DiscountMode.none);
+    final initialDiscount =
+        _initialExtras.discountPercent ?? _initialExtras.discountFlat;
+    _discountController = TextEditingController(
+      text: initialDiscount == null || initialDiscount == 0
+          ? ''
+          : _formatNumber(initialDiscount),
+    );
+    _includesController = TextEditingController(
+      text: _initialExtras.includes.join('\n'),
+    );
+    _addOnsController = TextEditingController(
+      text: _initialExtras.addOns
+          .map(
+            (a) =>
+                '${a.name} : ${a.price == a.price.roundToDouble() ? a.price.toInt() : a.price}',
+          )
+          .join('\n'),
+    );
   }
 
   @override
@@ -657,7 +903,15 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     _priceController.dispose();
     _imageController.dispose();
     _prepController.dispose();
+    _discountController.dispose();
+    _includesController.dispose();
+    _addOnsController.dispose();
     super.dispose();
+  }
+
+  static String _formatNumber(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(2);
   }
 
   @override
@@ -696,8 +950,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            widget.initialItem == null
+                          child: TfText(                            widget.initialItem == null
                                 ? text.addMenuItem
                                 : text.editMenuItem,
                             style: Theme.of(context).textTheme.titleLarge,
@@ -802,35 +1055,80 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                     if (_imageController.text.trim().isNotEmpty) ...[
                       SizedBox(height: 10),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(12),
                         child: AspectRatio(
                           aspectRatio: 1,
                           child: MenuImageView(
                             imageUrl: _imageController.text.trim(),
+                            iconKey: _initialExtras.iconKey,
                           ),
                         ),
                       ),
+                    ] else if (_initialExtras.iconKey != null) ...[
+                      SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: PosColors.line),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: MenuImageView(
+                              imageUrl: null,
+                              iconKey: _initialExtras.iconKey,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: TfText(                              text.isBn
+                                  ? 'AI স্ক্যান প্লেসহোল্ডার ব্যবহৃত হচ্ছে'
+                                  : 'AI scan placeholder in use',
+                              style: TextStyle(
+                                color: PosColors.muted,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
+                    SizedBox(height: 14),
+                    _OptionalMenuOptions(
+                      text: text,
+                      discountMode: _discountMode,
+                      discountController: _discountController,
+                      includesController: _includesController,
+                      addOnsController: _addOnsController,
+                      initiallyExpanded:
+                          _discountMode != _DiscountMode.none ||
+                          _initialExtras.includes.isNotEmpty,
+                      onDiscountModeChanged: (m) => setState(() {
+                        _discountMode = m;
+                        if (m == _DiscountMode.none) {
+                          _discountController.clear();
+                        }
+                      }),
+                    ),
                     SizedBox(height: 10),
                     SwitchListTile.adaptive(
                       value: _isAvailable,
                       onChanged: (value) =>
                           setState(() => _isAvailable = value),
                       contentPadding: EdgeInsets.zero,
-                      title: Text(text.menuAvailableForOrder),
+                      title: TfText(text.menuAvailableForOrder),
                     ),
                     SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _submit,
-                        icon: Icon(Icons.save_outlined),
-                        label: Text(
-                          widget.initialItem == null
-                              ? text.menuCreateItem
-                              : text.menuSaveItem,
-                        ),
-                      ),
+                    TfButton(
+                      onPressed: _submit,
+                      icon: Icons.save_outlined,
+                      label: widget.initialItem == null
+                          ? text.menuCreateItem
+                          : text.menuSaveItem,
+                      size: TfButtonSize.lg,
                     ),
                   ],
                 ),
@@ -927,8 +1225,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       final uploaded = !imageUrl.startsWith('data:image/');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            uploadWarning
+          content: TfText(            uploadWarning
                 ? text.menuImageUploadWarning
                 : uploaded
                 ? text.menuImageUploaded
@@ -948,6 +1245,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    final extras = _buildExtras();
     Navigator.pop(
       context,
       _MenuFormResult(
@@ -958,8 +1256,190 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         imageUrl: _imageController.text,
         isAvailable: _isAvailable,
         preparationTimeMinutes: int.tryParse(_prepController.text),
-        tags: _tags.toList(growable: false)..sort(),
+        tags: extras.toTags(),
       ),
+    );
+  }
+
+  MenuItemExtras _buildExtras() {
+    final raw = _discountController.text.trim();
+    final discountValue = double.tryParse(raw);
+    double? percent;
+    double? flat;
+    if (_discountMode == _DiscountMode.percent &&
+        discountValue != null &&
+        discountValue > 0) {
+      percent = discountValue.clamp(0, 100).toDouble();
+    } else if (_discountMode == _DiscountMode.flat &&
+        discountValue != null &&
+        discountValue > 0) {
+      flat = discountValue;
+    }
+    final includes = _includesController.text
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+    final addOns = <MenuAddOn>[];
+    for (final line in _addOnsController.text.split(RegExp(r'\r?\n'))) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final i = trimmed.lastIndexOf(':');
+      if (i <= 0 || i >= trimmed.length - 1) {
+        addOns.add(MenuAddOn(name: trimmed, price: 0));
+        continue;
+      }
+      final name = trimmed.substring(0, i).trim();
+      final price = double.tryParse(trimmed.substring(i + 1).trim()) ?? 0;
+      if (name.isNotEmpty) addOns.add(MenuAddOn(name: name, price: price));
+    }
+    return _initialExtras.copyWith(
+      clearDiscount: percent == null && flat == null,
+      discountPercent: percent,
+      discountFlat: flat,
+      includes: includes,
+      addOns: addOns,
+    );
+  }
+}
+
+enum _DiscountMode { none, percent, flat }
+
+class _OptionalMenuOptions extends StatelessWidget {
+  const _OptionalMenuOptions({
+    required this.text,
+    required this.discountMode,
+    required this.discountController,
+    required this.includesController,
+    required this.addOnsController,
+    required this.initiallyExpanded,
+    required this.onDiscountModeChanged,
+  });
+
+  final AppStrings text;
+  final _DiscountMode discountMode;
+  final TextEditingController discountController;
+  final TextEditingController includesController;
+  final TextEditingController addOnsController;
+  final bool initiallyExpanded;
+  final ValueChanged<_DiscountMode> onDiscountModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TfCard(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          leading: const Icon(Icons.tune_rounded, color: PosColors.muted),
+          title: TfText(
+            text.menuOptionsTitle,
+            style: const TextStyle(
+              color: PosColors.slate,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          subtitle: TfText(
+            text.menuOptionsSubtitle,
+            style: const TextStyle(
+              color: PosColors.muted,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          children: [
+            _DiscountSection(
+              text: text,
+              mode: discountMode,
+              controller: discountController,
+              onModeChanged: onDiscountModeChanged,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: includesController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: text.menuIncludesTitle,
+                hintText: text.menuIncludesHint,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: addOnsController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: text.menuAddOnsTitle,
+                hintText: text.menuAddOnsHint,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DiscountSection extends StatelessWidget {
+  const _DiscountSection({
+    required this.text,
+    required this.mode,
+    required this.controller,
+    required this.onModeChanged,
+  });
+
+  final AppStrings text;
+  final _DiscountMode mode;
+  final TextEditingController controller;
+  final ValueChanged<_DiscountMode> onModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TfText(          text.menuDiscountTitle,
+          style: TextStyle(
+            fontSize: 13,
+            color: PosColors.slate,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final entry in <(_DiscountMode, String)>[
+              (_DiscountMode.none, text.menuDiscountNone),
+              (_DiscountMode.percent, text.menuDiscountPercent),
+              (_DiscountMode.flat, text.menuDiscountFlat),
+            ])
+              TfChip(
+                label: entry.$2,
+                active: mode == entry.$1,
+                small: true,
+                onTap: () => onModeChanged(entry.$1),
+              ),
+          ],
+        ),
+        if (mode != _DiscountMode.none) ...[
+          SizedBox(height: 8),
+          TextFormField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+            ],
+            decoration: InputDecoration(
+              labelText: text.menuDiscountValue,
+              suffixText: mode == _DiscountMode.percent ? '%' : '৳',
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -987,20 +1467,22 @@ class _ImagePickerField extends StatelessWidget {
       spacing: 10,
       runSpacing: 8,
       children: [
-        OutlinedButton.icon(
+        TfButton(
+          label: chooseLabel,
+          icon: Icons.photo_library_outlined,
+          variant: TfButtonVariant.paper,
+          size: TfButtonSize.sm,
+          fullWidth: false,
+          busy: busy,
           onPressed: busy ? null : onPick,
-          icon: busy
-              ? SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(Icons.photo_library_outlined),
-          label: Text(chooseLabel),
         ),
-        OutlinedButton.icon(
+        TfButton(
+          label: clearLabel,
+          icon: Icons.clear,
+          variant: TfButtonVariant.paper,
+          size: TfButtonSize.sm,
+          fullWidth: false,
           onPressed: hasImage && !busy ? onClear : null,
-          icon: Icon(Icons.clear),
-          label: Text(clearLabel),
         ),
       ],
     );

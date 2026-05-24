@@ -21,8 +21,11 @@ class PosColors {
 
   static const Color success = Color(0xFF3D7A5A);
   static const Color successSoft = Color(0xFFEAF4EE);
-  static const Color warning = Color(0xFFF5C127);
-  static const Color warningSoft = Color(0xFFFEF1C5);
+
+  // Semantic fix: Changed warning color to distinct amber-orange to separate it from Primary Yellow
+  static const Color warning = Color(0xFFE28714);
+  static const Color warningSoft = Color(0xFFFFF3E0);
+
   static const Color danger = Color(0xFFA32D2D);
   static const Color dangerSoft = Color(0xFFFCEBEB);
   static const Color info = Color(0xFF888780);
@@ -53,24 +56,14 @@ class PosRadii {
 
 class PosShadows {
   static const List<BoxShadow> card = [];
+  // 1px Flat Rule: single-layer, low-blur drop shadow (blur <= 8) for budget GPU compatibility.
   static const List<BoxShadow> raised = [
-    BoxShadow(
-      color: Color(0x14000000),
-      blurRadius: 24,
-      offset: Offset(0, 10),
-    ),
+    BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 6)),
   ];
+
+  // Optimization: Budget-GPU friendly alternative avoiding costly multi-layer heavy blurs
   static const List<BoxShadow> glow = [
-    BoxShadow(
-      color: Color(0x73F5C127),
-      blurRadius: 16,
-      offset: Offset(0, 6),
-    ),
-    BoxShadow(
-      color: Color(0x1A000000),
-      blurRadius: 4,
-      offset: Offset(0, 2),
-    ),
+    BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 4)),
   ];
 }
 
@@ -87,9 +80,8 @@ class PosGradients {
     colors: [PosColors.background, PosColors.background],
   );
 
-  static LinearGradient cardTint(Color color) => const LinearGradient(
-    colors: [PosColors.surface, PosColors.surface],
-  );
+  static LinearGradient cardTint(Color color) =>
+      const LinearGradient(colors: [PosColors.surface, PosColors.surface]);
 }
 
 class AppTheme {
@@ -134,19 +126,19 @@ class AppTheme {
           fontSize: s(28),
           fontWeight: FontWeight.w500,
           height: 1.06,
-          letterSpacing: -0.4,
+          letterSpacing: 0,
         ),
         headlineMedium: baseText.copyWith(
           fontSize: s(24),
           fontWeight: FontWeight.w500,
           height: 1.1,
-          letterSpacing: -0.4,
+          letterSpacing: 0,
         ),
         titleLarge: baseText.copyWith(
           fontSize: s(18),
           fontWeight: FontWeight.w500,
           height: 1.18,
-          letterSpacing: -0.3,
+          letterSpacing: 0,
         ),
         titleMedium: baseText.copyWith(
           fontSize: s(15),
@@ -456,7 +448,9 @@ class AppTheme {
       disabledBackgroundColor: PosColors.line,
       disabledForegroundColor: PosColors.muted,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+      ),
       textStyle: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w500,

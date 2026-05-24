@@ -27,6 +27,7 @@ def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_pric
                         "categoryBn": "বার্গার",
                         "price": 320,
                         "isAvailable": True,
+                        "iconKey": "burger",
                     },
                     {
                         "nameEn": "Free Water",
@@ -37,6 +38,7 @@ def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_pric
                         "categoryBn": "ড্রিংকস",
                         "price": 0,
                         "isAvailable": True,
+                        "iconKey": "drink",
                     },
                 ]
             }
@@ -46,6 +48,30 @@ def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_pric
     assert [item.nameEn for item in items] == ["Beef Burger"]
     assert items[0].nameBn == "বিফ বার্গার"
     assert items[0].descriptionEn == "Juicy grilled beef burger."
+    assert items[0].iconKey == "burger"
+
+
+def test_menu_scan_validation_defaults_unknown_icon_key_to_general():
+    items = menu_scan._validated_items(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "nameEn": "Mystery Wrap",
+                        "nameBn": "মিস্ট্রি র‍্যাপ",
+                        "descriptionEn": "Surprise wrap of the day.",
+                        "descriptionBn": "দিনের চমক র‍্যাপ।",
+                        "categoryEn": "Wraps",
+                        "categoryBn": "র‍্যাপ",
+                        "price": 180,
+                        "isAvailable": True,
+                    }
+                ]
+            }
+        )
+    )
+
+    assert items[0].iconKey == "general"
 
 
 def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
@@ -63,6 +89,8 @@ def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
     assert "restaurant names" in joined
     assert "VAT" in joined
     assert "not a sellable menu item" in joined
+    assert "iconKey" in joined
+    assert "set_meal" in joined
 
 
 def test_menu_scan_uses_json_object_mode_for_groq():

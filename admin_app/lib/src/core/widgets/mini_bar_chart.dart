@@ -105,7 +105,7 @@ class _Bar extends StatelessWidget {
                             maxLines: 1,
                             style: TextStyle(
                               color: barColor,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w500,
                               fontSize: 9.6,
                             ),
                           ),
@@ -140,7 +140,7 @@ class _Bar extends StatelessWidget {
                                   barColor.withValues(alpha: 0.55),
                                 ],
                               ),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
                               boxShadow: highlight
                                   ? [
                                       BoxShadow(
@@ -168,7 +168,7 @@ class _Bar extends StatelessWidget {
                     maxLines: 1,
                     style: TextStyle(
                       color: highlight ? PosColors.slate : PosColors.muted,
-                      fontWeight: highlight ? FontWeight.w900 : FontWeight.w700,
+                      fontWeight: highlight ? FontWeight.w500 : FontWeight.w500,
                       fontSize: 9.5,
                       letterSpacing: 0.2,
                     ),

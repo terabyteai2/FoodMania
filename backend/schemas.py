@@ -138,6 +138,7 @@ class MenuItemPayload(BaseModel):
     categoryBn: str | None = None
     isAvailable: bool = True
     imageUrl: str | None = None
+    tags: list[str] | None = None
     version: int = 1
 
 
@@ -155,6 +156,7 @@ class MenuScanCandidate(BaseModel):
     categoryBn: str = Field(default="সাধারণ", min_length=1)
     price: float = Field(gt=0)
     isAvailable: bool = True
+    iconKey: str = Field(default="general", min_length=1)
 
 
 class ReceiptScanCandidate(BaseModel):

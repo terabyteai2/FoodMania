@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/receipt_scan.dart';
@@ -59,8 +60,29 @@ class _StockInScreenState extends State<StockInScreen> {
     super.dispose();
   }
 
-  void _addBlankLine() {
-    setState(() => _lines.add(_StockInLine.blank()));
+  Future<void> _addItemFromPicker() async {
+    final app = AppScope.of(context);
+    final result = await showModalBottomSheet<_PickerResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ItemPickerSheet(
+        items: app.inventoryItems,
+        existingIds: _lines
+            .map((l) => l.linkedItemId)
+            .whereType<String>()
+            .toSet(),
+        text: app.strings,
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      if (result.createNew) {
+        _lines.add(_StockInLine.blank());
+      } else if (result.item != null) {
+        _lines.add(_StockInLine.fromItem(result.item!));
+      }
+    });
   }
 
   void _removeLine(_StockInLine line) {
@@ -129,8 +151,25 @@ class _StockInScreenState extends State<StockInScreen> {
       for (final line in valid) {
         final qty = line.parsedQty!;
         final total = line.parsedTotal ?? 0;
-        final matchedId = _matchExistingItem(app.inventoryItems, line);
+        final matchedId =
+            line.linkedItemId ?? _matchExistingItem(app.inventoryItems, line);
         if (matchedId != null) {
+          // Keep the saved unit price in sync if the user edited it.
+          final unitPrice = line.parsedUnitPrice;
+          if (unitPrice != null && unitPrice > 0) {
+            final existing = app.inventoryItems
+                .where((i) => i.id == matchedId)
+                .firstOrNull;
+            if (existing != null &&
+                (existing.costPerUnit - unitPrice).abs() > 0.001) {
+              await app.saveInventoryItem(
+                existing.copyWith(
+                  costPerUnit: unitPrice,
+                  updatedAt: DateTime.now(),
+                ),
+              );
+            }
+          }
           await app.recordInventoryPurchase(
             inventoryItemId: matchedId,
             quantity: qty,
@@ -166,10 +205,7 @@ class _StockInScreenState extends State<StockInScreen> {
     }
   }
 
-  String? _matchExistingItem(
-    List<InventoryItem> items,
-    _StockInLine line,
-  ) {
+  String? _matchExistingItem(List<InventoryItem> items, _StockInLine line) {
     final name = line.nameCtrl.text.trim().toLowerCase();
     if (name.isEmpty) return null;
     for (final item in items) {
@@ -202,19 +238,19 @@ class _StockInScreenState extends State<StockInScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            TfText(
               text.stockInTitle,
               style: TextStyle(
                 color: PosColors.slate,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            Text(
+            TfText(
               text.stepXofY(1, 2),
               style: TextStyle(
                 fontSize: 11,
                 color: PosColors.muted,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -237,21 +273,24 @@ class _StockInScreenState extends State<StockInScreen> {
             ),
             const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${text.isBn ? 'আইটেম' : 'ITEMS'} · ${_lines.length}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w900,
-                    color: PosColors.muted,
+                Expanded(
+                  child: TfText(
+                    '${text.isBn ? 'আইটেম' : 'ITEMS'} · ${_lines.length}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 0,
+                      fontWeight: FontWeight.w500,
+                      color: PosColors.muted,
+                    ),
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _addBlankLine,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text('+ ${text.addManually}'),
+                TfButton(
+                  onPressed: _addItemFromPicker,
+                  icon: Icons.add_rounded,
+                  label: text.addItem,
+                  size: TfButtonSize.sm,
+                  fullWidth: false,
                 ),
               ],
             ),
@@ -265,7 +304,7 @@ class _StockInScreenState extends State<StockInScreen> {
             if (_lines.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text(
+                child: TfText(
                   text.isBn
                       ? 'রিসিট স্ক্যান করুন বা হাতে যোগ করুন।'
                       : 'Scan a receipt or add items manually.',
@@ -290,52 +329,29 @@ class _StockInScreenState extends State<StockInScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    text.totalPaid.toUpperCase(),
-                    style: TextStyle(
-                      color: PosColors.muted,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  TfSectionHeader(
+                    label: text.totalPaid,
+                    padding: EdgeInsets.zero,
                   ),
-                  Text(
+                  TfText(
                     fmt.format(total),
                     style: TextStyle(
-                      color: PosColors.slate,
+                      color: Colors.white,
                       fontSize: 20,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
               const Spacer(),
-              FilledButton(
+              TfButton(
+                label: text.saveAndAddToStock,
+                busy: _saving,
                 onPressed: _saving || _lines.where((l) => l.canSave).isEmpty
                     ? null
                     : _saveAll,
-                style: FilledButton.styleFrom(
-                  backgroundColor: PosColors.primary,
-                  foregroundColor: PosColors.primaryDark,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                  ),
-                ),
-                child: _saving
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(text.saveAndAddToStock),
+                size: TfButtonSize.lg,
+                fullWidth: false,
               ),
             ],
           ),
@@ -371,20 +387,14 @@ class _DateRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                text.dateLabel.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  letterSpacing: 1,
-                  color: PosColors.muted,
-                  fontWeight: FontWeight.w900,
-                ),
+              TfSectionHeader(
+                label: text.dateLabel,
+                padding: EdgeInsets.zero,
               ),
-              Text(
-                fmt.format(date),
+              TfText(                fmt.format(date),
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   color: PosColors.slate,
                 ),
               ),
@@ -415,12 +425,8 @@ class _ScanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: PosColors.primary,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: PosShadows.glow,
-      ),
+    return TfCard(
+      color: PosColors.primarySoft,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -433,52 +439,44 @@ class _ScanCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
+                child: TfText(
                   text.scanSupplierBill,
                   style: TextStyle(
                     color: PosColors.primaryDark,
                     fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
+          TfText(
             text.aiReadsItemsQtyPrices,
             style: TextStyle(
               color: PosColors.primaryDark.withValues(alpha: 0.7),
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w400,
             ),
           ),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: FilledButton.icon(
+                child: TfButton(
                   onPressed: busy ? null : onCapture,
-                  icon: const Icon(Icons.photo_camera_rounded, size: 18),
-                  label: Text(text.isBn ? 'ক্যামেরা' : 'Camera'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: PosColors.primaryDark,
-                    foregroundColor: PosColors.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+                  icon: Icons.photo_camera_rounded,
+                  label: text.isBn ? 'ক্যামেরা' : 'Camera',
+                  variant: TfButtonVariant.dark,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: OutlinedButton.icon(
+                child: TfButton(
                   onPressed: busy ? null : onPickGallery,
-                  icon: const Icon(Icons.photo_library_outlined, size: 18),
-                  label: Text(text.isBn ? 'গ্যালারি' : 'Gallery'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: PosColors.primaryDark,
-                    side: BorderSide(color: PosColors.primaryDark),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+                  icon: Icons.photo_library_outlined,
+                  label: text.isBn ? 'গ্যালারি' : 'Gallery',
+                  variant: TfButtonVariant.paper,
                 ),
               ),
             ],
@@ -493,11 +491,11 @@ class _ScanCard extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 const SizedBox(width: 8),
-                Text(
+                TfText(
                   text.scanningReceipt,
                   style: TextStyle(
                     color: PosColors.primaryDark,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -505,24 +503,24 @@ class _ScanCard extends StatelessWidget {
           ],
           if (error != null && !busy) ...[
             const SizedBox(height: 10),
-            Text(
+            TfText(
               error!,
               style: TextStyle(
                 color: PosColors.primaryDark,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
           if (provider != null && error == null && !busy) ...[
             const SizedBox(height: 6),
-            Text(
+            TfText(
               text.isBn
                   ? 'AI ($provider) সফলভাবে পড়েছে'
                   : 'AI ($provider) read it',
               style: TextStyle(
                 color: PosColors.primaryDark.withValues(alpha: 0.7),
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
@@ -548,86 +546,83 @@ class _LineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 12),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: PosColors.line),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: line.nameCtrl,
-                  onChanged: (_) => onChanged(),
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    hintText: 'Item name',
-                  ),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: TfCard(
+        padding: const EdgeInsets.fromLTRB(14, 10, 6, 12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: line.nameCtrl,
+                    onChanged: (_) => onChanged(),
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      hintText: 'Item name',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-              Text(
-                fmt.format(line.parsedTotal ?? 0),
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: PosColors.slate,
+                TfText(
+                  fmt.format(line.parsedTotal ?? 0),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.slate,
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                color: PosColors.muted,
-                onPressed: onRemove,
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: _NumberField(
-                  controller: line.qtyCtrl,
-                  label: '${text.qtyLabel} (${line.unit})',
-                  onChanged: (_) {
-                    line.recomputeTotalFromUnitPrice();
-                    onChanged();
-                  },
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  color: PosColors.muted,
+                  onPressed: onRemove,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _NumberField(
-                  controller: line.unitPriceCtrl,
-                  label: text.pricePerUnit(line.unit),
-                  onChanged: (_) {
-                    line.recomputeTotalFromUnitPrice();
-                    onChanged();
-                  },
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: _NumberField(
+                    controller: line.qtyCtrl,
+                    label: '${text.qtyLabel} (${line.unit})',
+                    onChanged: (_) {
+                      line.recomputeTotalFromUnitPrice();
+                      onChanged();
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _NumberField(
-                  controller: line.totalCtrl,
-                  label: text.newStockLabel,
-                  onChanged: (_) {
-                    line.recomputeUnitPriceFromTotal();
-                    onChanged();
-                  },
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NumberField(
+                    controller: line.unitPriceCtrl,
+                    label: text.pricePerUnit(line.unit),
+                    onChanged: (_) {
+                      line.recomputeTotalFromUnitPrice();
+                      onChanged();
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _NumberField(
+                    controller: line.totalCtrl,
+                    label: text.newStockLabel,
+                    onChanged: (_) {
+                      line.recomputeUnitPriceFromTotal();
+                      onChanged();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -649,31 +644,26 @@ class _NumberField extends StatelessWidget {
     return TextField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
       onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 8,
-          horizontal: 0,
-        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
         labelStyle: TextStyle(fontSize: 11, color: PosColors.muted),
       ),
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
     );
   }
 }
 
 class _StockInLine {
-  _StockInLine({String? unit})
-      : nameCtrl = TextEditingController(),
-        qtyCtrl = TextEditingController(),
-        unitPriceCtrl = TextEditingController(),
-        totalCtrl = TextEditingController(),
-        unit = unit ?? 'kg';
+  _StockInLine({String? unit, this.linkedItemId})
+    : nameCtrl = TextEditingController(),
+      qtyCtrl = TextEditingController(),
+      unitPriceCtrl = TextEditingController(),
+      totalCtrl = TextEditingController(),
+      unit = unit ?? 'kg';
 
   factory _StockInLine.blank() => _StockInLine();
 
@@ -687,9 +677,11 @@ class _StockInLine {
   }
 
   factory _StockInLine.fromItem(InventoryItem item) {
-    final entry = _StockInLine(unit: item.unit);
+    final entry = _StockInLine(unit: item.unit, linkedItemId: item.id);
     entry.nameCtrl.text = item.name;
-    entry.unitPriceCtrl.text = _formatNumber(item.costPerUnit);
+    if (item.costPerUnit > 0) {
+      entry.unitPriceCtrl.text = _formatNumber(item.costPerUnit);
+    }
     return entry;
   }
 
@@ -698,6 +690,7 @@ class _StockInLine {
   final TextEditingController unitPriceCtrl;
   final TextEditingController totalCtrl;
   final String unit;
+  final String? linkedItemId;
 
   double? get parsedQty => double.tryParse(qtyCtrl.text.trim());
   double? get parsedUnitPrice => double.tryParse(unitPriceCtrl.text.trim());
@@ -742,5 +735,218 @@ class _StockInLine {
       return value.toInt().toString();
     }
     return value.toStringAsFixed(2);
+  }
+}
+
+// ── Picker sheet ─────────────────────────────────────────────────────────────
+
+class _PickerResult {
+  const _PickerResult.existing(InventoryItem this.item) : createNew = false;
+  const _PickerResult.createNew() : item = null, createNew = true;
+  final InventoryItem? item;
+  final bool createNew;
+}
+
+class _ItemPickerSheet extends StatefulWidget {
+  const _ItemPickerSheet({
+    required this.items,
+    required this.existingIds,
+    required this.text,
+  });
+
+  final List<InventoryItem> items;
+  final Set<String> existingIds;
+  final AppStrings text;
+
+  @override
+  State<_ItemPickerSheet> createState() => _ItemPickerSheetState();
+}
+
+class _ItemPickerSheetState extends State<_ItemPickerSheet> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.text;
+    final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    final q = _query.trim().toLowerCase();
+    final filtered =
+        widget.items
+            .where((item) {
+              if (q.isEmpty) return true;
+              return item.name.toLowerCase().contains(q);
+            })
+            .toList(growable: false)
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        decoration: const BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: PosColors.lineStrong,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TfText(                      text.isBn ? 'আইটেম বেছে নিন' : 'Pick an item',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: false,
+                onChanged: (v) => setState(() => _query = v),
+                decoration: InputDecoration(
+                  hintText: text.searchInventory,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  isDense: true,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: TfButton(
+                label: 'Add new item',
+                labelBn: 'নতুন আইটেম',
+                icon: Icons.add_rounded,
+                onPressed: () =>
+                    Navigator.pop(context, const _PickerResult.createNew()),
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: filtered.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: TfText(                        widget.items.isEmpty
+                            ? (text.isBn
+                                  ? 'কোনো সংরক্ষিত আইটেম নেই'
+                                  : 'No saved items yet')
+                            : text.noMatchingItems,
+                        style: TextStyle(color: PosColors.muted),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 0.5, indent: 16, endIndent: 16),
+                      itemBuilder: (_, i) {
+                        final item = filtered[i];
+                        final unit = InventoryUnits.displayLabel(
+                          item.unit,
+                          isBn: text.isBn,
+                        );
+                        final alreadyAdded = widget.existingIds.contains(
+                          item.id,
+                        );
+                        final priceText = item.costPerUnit > 0
+                            ? '${fmt.format(item.costPerUnit)} / $unit'
+                            : (text.isBn
+                                  ? 'দাম সংরক্ষিত নেই'
+                                  : 'No saved price');
+                        return ListTile(
+                          enabled: !alreadyAdded,
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: PosColors.surfaceWarm,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: PosColors.line),
+                            ),
+                            alignment: Alignment.center,
+                            child: TfText(                              item.name.isEmpty
+                                  ? '?'
+                                  : item.name.characters.first.toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: PosColors.slate,
+                              ),
+                            ),
+                          ),
+                          title: TfText(                            item.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: TfText(                            priceText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: PosColors.muted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          trailing: alreadyAdded
+                              ? TfText(                                  text.isBn ? 'যুক্ত' : 'Added',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: PosColors.muted,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: PosColors.muted,
+                                ),
+                          onTap: alreadyAdded
+                              ? null
+                              : () => Navigator.pop(
+                                  context,
+                                  _PickerResult.existing(item),
+                                ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 }

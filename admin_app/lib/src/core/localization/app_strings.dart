@@ -39,6 +39,19 @@ class AppStrings {
 
   bool get isBn => language == AppLanguage.bn;
 
+  String _n(num value) => isBn ? _bnDigits(value.toString()) : value.toString();
+  String _digits(String value) => isBn ? _bnDigits(value) : value;
+
+  static String _bnDigits(String input) {
+    const en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const bn = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    var out = input;
+    for (var i = 0; i < en.length; i++) {
+      out = out.replaceAll(en[i], bn[i]);
+    }
+    return out;
+  }
+
   String get appTitle => 'Terafoods';
   String get cloudSuite => isBn ? 'রেস্টুরেন্ট POS' : 'Restaurant POS';
   String get cloudRestaurantSuite => isBn ? 'টেরাফুডস POS' : 'Terafoods POS';
@@ -85,7 +98,8 @@ class AppStrings {
   String get displaySizeSubtitle => isBn
       ? 'কাউন্টার, ট্যাবলেট বা বড় লেখার জন্য পুরো অ্যাপ ছোট-বড় করুন।'
       : 'Adjust the whole app for compact counters, tablets, or large text comfort.';
-  String scaleLabel(String label, int percent) => '$label - $percent%';
+  String scaleLabel(String label, int percent) =>
+      isBn ? '$label - ${_n(percent)}%' : '$label - $percent%';
 
   String get restaurantSection => isBn ? 'রেস্টুরেন্ট' : 'Restaurant';
   String get restaurantSubtitle =>
@@ -112,7 +126,7 @@ class AppStrings {
   String get numberOfTables => isBn ? 'টেবিলের সংখ্যা' : 'Number of Tables';
   String get generateQrPdf => isBn ? 'PDF তৈরি করুন' : 'Generate PDF';
   String get scanToOrder => isBn ? 'অর্ডার করতে স্ক্যান করুন' : 'Scan to Order';
-  String tableLabel(int n) => isBn ? 'টেবিল $n' : 'Table $n';
+  String tableLabel(int n) => isBn ? 'টেবিল ${_n(n)}' : 'Table $n';
 
   String get cloudSync => isBn ? 'ক্লাউড সিঙ্ক' : 'Cloud Sync';
   String get cloudSyncSubtitle => isBn
@@ -174,15 +188,16 @@ class AppStrings {
   String get printerNotConnectedHint => isBn
       ? 'প্রিন্টার কানেক্ট নেই — Settings থেকে পেয়ার করুন।'
       : 'Printer not connected — go to Settings to pair one.';
-  String ticketPrinted(String seq) =>
-      isBn ? '$seq-এর টিকেট প্রিন্ট হয়েছে' : 'Ticket printed for $seq';
+  String ticketPrinted(String seq) => isBn
+      ? '${_digits(seq)}-এর টিকেট প্রিন্ট হয়েছে'
+      : 'Ticket printed for $seq';
   String billPrinted(String seq) =>
-      isBn ? '$seq-এর বিল প্রিন্ট হয়েছে' : 'Bill printed for $seq';
+      isBn ? '${_digits(seq)}-এর বিল প্রিন্ট হয়েছে' : 'Bill printed for $seq';
   String get noPairedPrintersFound => isBn
       ? 'কাছে কোনো Bluetooth ডিভাইস পাওয়া যায়নি'
       : 'No Bluetooth devices found nearby';
   String pairedPrinterFound(int count) =>
-      isBn ? '$count টি ডিভাইস পাওয়া গেছে' : '$count device(s) found';
+      isBn ? '${_n(count)} টি ডিভাইস পাওয়া গেছে' : '$count device(s) found';
   String connectedTo(String name) =>
       isBn ? '$name কানেক্টেড হয়েছে' : 'Connected to $name';
   String get printerConnectionFailed =>
@@ -267,7 +282,7 @@ class AppStrings {
   String get appUpdateAvailableTitle =>
       isBn ? 'অ্যাপ আপডেট প্রস্তুত' : 'App update ready';
   String appUpdateAvailableMessage(String version) => isBn
-      ? 'Terafoods $version ইনস্টল করার জন্য প্রস্তুত।'
+      ? 'Terafoods ${_digits(version)} ইনস্টল করার জন্য প্রস্তুত।'
       : 'Terafoods $version is ready to install.';
   String get appUpdateRequired =>
       isBn ? 'প্রয়োজনীয় আপডেট' : 'Required update';
@@ -296,31 +311,31 @@ class AppStrings {
       ? 'এখনো অর্ডার নেই — প্রথম অর্ডার নিন'
       : 'No orders yet — take your first one';
   String pendingSubtitle(int pending, int accepted) => isBn
-      ? '$pending পেন্ডিং · $accepted রান্নাঘরে'
+      ? '${_n(pending)} পেন্ডিং · ${_n(accepted)} রান্নাঘরে'
       : '$pending pending · $accepted in kitchen';
   String ordersFilteredSubtitle(int pending, int accepted, int total) => isBn
-      ? '$pending পেন্ডিং · $accepted রান্নাঘরে · $total মোট (ফিল্টার)'
+      ? '${_n(pending)} পেন্ডিং · ${_n(accepted)} রান্নাঘরে · ${_n(total)} মোট (ফিল্টার)'
       : '$pending pending · $accepted in kitchen · $total filtered';
   String get rejectOrderAction => isBn ? 'রিজেক্ট' : 'Reject';
-  String get acceptAndSendToKitchen =>
-      isBn ? 'অ্যাকসেপ্ট · রান্নাঘরে পাঠান' : 'Accept · send to kitchen';
+  String get acceptAndSendToKitchen => isBn ? 'অ্যাকসেপ্ট' : 'Accept';
   String get reprintAction => isBn ? 'রিপ্রিন্ট' : 'Reprint';
   String get printBillAction => isBn ? 'বিল প্রিন্ট' : 'Print bill';
   String get servedAction => isBn ? 'পরিবেশিত' : 'Served';
   String get orderStatusPending => isBn ? 'পেন্ডিং' : 'Pending';
   String get orderStatusInKitchen => isBn ? 'রান্নাঘরে' : 'In kitchen';
   String orderStatusLate(int minutes) =>
-      isBn ? 'দেরি · $minutes মিনিট' : 'Late · $minutes min';
-  String orderItemsCount(int count) => isBn ? '$count আইটেম' : '$count items';
+      isBn ? 'দেরি · ${_n(minutes)} মিনিট' : 'Late · $minutes min';
+  String orderItemsCount(int count) =>
+      isBn ? '${_n(count)} আইটেম' : '$count items';
   String orderPlacedAgo(String time, String ago) =>
-      isBn ? '$time · $ago আগে' : 'placed $time · $ago';
+      isBn ? '${_digits(time)} · ${_digits(ago)} আগে' : 'placed $time · $ago';
   String orderInKitchenForMinutes(int minutes) =>
-      isBn ? '$minutes মিনিট ধরে রান্নাঘরে' : '$minutes min in kitchen';
+      isBn ? '${_n(minutes)} মিনিট ধরে রান্নাঘরে' : '$minutes min in kitchen';
   String agoMinutes(int minutes) {
     if (minutes < 1) return isBn ? 'এখনই' : 'now';
-    if (minutes < 60) return isBn ? '$minutes মিনিট' : '$minutes min';
+    if (minutes < 60) return isBn ? '${_n(minutes)} মিনিট' : '$minutes min';
     final hours = (minutes / 60).floor();
-    return isBn ? '$hours ঘণ্টা' : '$hours hr';
+    return isBn ? '${_n(hours)} ঘণ্টা' : '$hours hr';
   }
 
   String get applyFilters => isBn ? 'প্রয়োগ করুন' : 'Apply';
@@ -394,7 +409,7 @@ class AppStrings {
   String get bkashDemoPayment =>
       isBn ? 'bKash Demo Payment' : 'bKash Demo Payment';
   String planLine(String plan, String amount) =>
-      isBn ? '$plan প্ল্যান $amount' : '$plan plan $amount';
+      isBn ? '$plan প্ল্যান ${_digits(amount)}' : '$plan plan $amount';
   String get wallet => isBn ? 'Wallet' : 'Wallet';
   String get otp => isBn ? 'OTP' : 'OTP';
   String get pin => isBn ? 'PIN' : 'PIN';
@@ -457,13 +472,13 @@ class AppStrings {
   String get stockAlerts => isBn ? 'স্টক সতর্কতা' : 'Stock alerts';
   String get allCategories => isBn ? 'সব' : 'All';
   String lowStockCount(int count) =>
-      isBn ? '$count টি কম স্টক' : '$count low stock';
+      isBn ? '${_n(count)} টি কম স্টক' : '$count low stock';
 
   String get tables => isBn ? 'টেবিল' : 'Tables';
   String get tablesSubtitle => isBn
       ? 'রেস্টুরেন্টের টেবিলের সংখ্যা সেট করুন।'
       : 'Set the number of tables in your restaurant.';
-  String tableCountLabel(int n) => isBn ? '$n টি টেবিল' : '$n tables';
+  String tableCountLabel(int n) => isBn ? '${_n(n)} টি টেবিল' : '$n tables';
 
   String get createRestaurantCloud =>
       isBn ? 'রেস্টুরেন্ট ক্লাউড তৈরি করুন' : 'Create Restaurant Cloud';
@@ -522,7 +537,7 @@ class AppStrings {
   String get noSalesMixToday =>
       isBn ? 'আজকের জন্য কোনো বিক্রয় মিক্স নেই।' : 'No sales mix for today.';
   String tablesLabel(int active, int total) =>
-      isBn ? '$active/$total টেবিল' : '$active/$total tables';
+      isBn ? '${_n(active)}/${_n(total)} টেবিল' : '$active/$total tables';
   String get newTickets => isBn
       ? 'নতুন টিকেট এখানে স্বয়ংক্রিয়ভাবে আসবে।'
       : 'New tickets will appear here automatically.';
@@ -543,7 +558,7 @@ class AppStrings {
   String get howManyPeople => isBn ? 'কতজন অতিথি?' : 'How many people?';
   String get continueAction => isBn ? 'চালিয়ে যান' : 'Continue';
   String get reviewAction => isBn ? 'রিভিউ' : 'Review';
-  String get sendToKitchen => isBn ? 'রান্নাঘরে পাঠান' : 'Send to kitchen';
+  String get sendToKitchen => isBn ? 'অর্ডার তৈরি করুন' : 'Create order';
   String get printOnly => isBn ? 'শুধু প্রিন্ট' : 'Print only';
   String get kitchenNote => isBn ? 'রান্নাঘরের নোট' : 'Kitchen note';
   String get kitchenNoteOptional => isBn ? 'ঐচ্ছিক' : '(optional)';
@@ -554,14 +569,13 @@ class AppStrings {
   String get vatLabel => isBn ? 'ভ্যাট' : 'VAT';
   String get paymentLabel => isBn ? 'পেমেন্ট' : 'Payment';
   String get orderCreatedTitle => isBn ? 'অর্ডার তৈরি হয়েছে' : 'Order created';
-  String get sentToKitchenTitle =>
-      isBn ? 'রান্নাঘরে পাঠানো হয়েছে' : 'Sent to kitchen';
+  String get sentToKitchenTitle => orderCreatedTitle;
   String get editItemsAction => isBn ? 'আইটেম সম্পাদনা' : 'Edit items';
   String get searchMenuItems => isBn ? 'আইটেম খুঁজুন' : 'Search menu items…';
   String get categoryAll => isBn ? 'সব' : 'All';
   String get tableBusyBadge => isBn ? 'বসা' : 'Busy';
   String get tableFreeBadge => isBn ? 'খালি' : 'Free';
-  String tableNumberLabel(int n) => isBn ? 'T$n' : 'T$n';
+  String tableNumberLabel(int n) => isBn ? 'T${_n(n)}' : 'T$n';
   String get takeAnotherOrder =>
       isBn ? 'আরেকটি অর্ডার নিন' : 'Take another order';
   String get backToOrders => isBn ? 'অর্ডারে ফিরুন' : 'Back to Orders';
@@ -570,7 +584,9 @@ class AppStrings {
   String orderItemsLine(int qty, int lines) {
     final itemWord = isBn ? 'আইটেম' : (qty == 1 ? 'item' : 'items');
     final lineWord = isBn ? 'লাইন' : (lines == 1 ? 'line' : 'lines');
-    return '$qty $itemWord · $lines $lineWord';
+    return isBn
+        ? '${_n(qty)} $itemWord · ${_n(lines)} $lineWord'
+        : '$qty $itemWord · $lines $lineWord';
   }
 
   String get noItemsInCategory =>
@@ -585,7 +601,7 @@ class AppStrings {
   String get serviceMix => isBn ? 'সেবার মিক্স' : 'Service mix';
   String get today => isBn ? 'আজকে' : 'today';
   String get dineIn => isBn ? 'ডাইন ইন' : 'Dine-in';
-  String get takeaway => isBn ? 'টেকওয়ে' : 'Takeaway';
+  String get takeaway => isBn ? 'পার্সেল' : 'Parcel';
   String get operations => isBn ? 'অপারেশন' : 'Operations';
   String get pendingOrders => isBn ? 'পেন্ডিং অর্ডার' : 'Pending orders';
   String get inPreparation => isBn ? 'প্রস্তুত হচ্ছে' : 'In preparation';
@@ -627,10 +643,27 @@ class AppStrings {
       isBn ? 'এখনো কোনো নোটিফিকেশন নেই।' : 'No notifications yet.';
   String get openAction => isBn ? 'খুলুন' : 'Open';
   String get dismiss => isBn ? 'বন্ধ' : 'Dismiss';
+  String get viewAction => isBn ? 'দেখুন' : 'View';
+  String get acceptAction => isBn ? 'গ্রহণ' : 'Accept';
+  String get laterAction => isBn ? 'পরে' : 'Later';
+  String get notifTabAll => isBn ? 'সব' : 'All';
+  String get notifTabOrders => isBn ? 'অর্ডার' : 'Orders';
+  String get notifTabStock => isBn ? 'স্টক' : 'Stock';
+  String get notifTabOnline => isBn ? 'অনলাইন' : 'Online';
+  String get notifTabStaff => isBn ? 'স্টাফ' : 'Staff';
+  String get notifSectionToday => isBn ? 'আজ' : 'TODAY';
+  String get notifSectionEarlier => isBn ? 'আগের' : 'EARLIER';
+  String unreadCountLabel(int n) => isBn ? '${_n(n)} অপঠিত' : '$n unread';
+  String pendingOrdersGroupTitle(int n) =>
+      isBn ? '${_n(n)} টি পেন্ডিং অর্ডার' : 'You have $n pending orders';
+  String get pendingOrdersGroupBody => isBn
+      ? 'গ্রহণ করার অপেক্ষায়। ট্যাপ করে অর্ডার তালিকা খুলুন।'
+      : 'Awaiting acceptance. Tap to open the orders list.';
 
   // ── Menu management ────────────────────────────────────────────────────────
-  String menuItemsSubtitle(int total, int pausedOut) =>
-      isBn ? '$total আইটেম · $pausedOut বন্ধ' : '$total items · $pausedOut out';
+  String menuItemsSubtitle(int total, int pausedOut) => isBn
+      ? '${_n(total)} আইটেম · ${_n(pausedOut)} বন্ধ'
+      : '$total items · $pausedOut out';
   String get menuSearchHint => isBn ? 'আইটেম খুঁজুন' : 'Search items';
   String get menuEmptyTitle => isBn ? 'মেনু খালি' : 'Your menu is empty';
   String get menuEmptyMessage =>
@@ -641,7 +674,7 @@ class AppStrings {
       ? 'অন্য সার্চ বা ক্যাটাগরি চেষ্টা করুন।'
       : 'Try another search or category.';
   String get menuNewButton => isBn ? 'আইটেম যোগ' : 'Add Item';
-  String get menuScan => isBn ? 'মেনু স্ক্যান' : 'Scan Menu';
+  String get menuScan => isBn ? 'AI স্ক্যান' : 'AI scan';
   String get menuScanning => isBn ? 'স্ক্যান হচ্ছে...' : 'Scanning...';
   String get menuScanPickPages => isBn
       ? 'এক বা একাধিক মেনু পেজ বেছে নিন।'
@@ -659,7 +692,7 @@ class AppStrings {
   String get menuScanAddAnotherTitle =>
       isBn ? 'আরেকটি পেজ তুলবেন?' : 'Add another page?';
   String menuScanAddAnotherMessage(int count) => isBn
-      ? '$count টি পেজ নেওয়া হয়েছে। আরেকটি পেজ যোগ করবেন?'
+      ? '${_n(count)} টি পেজ নেওয়া হয়েছে। আরেকটি পেজ যোগ করবেন?'
       : '$count page${count == 1 ? '' : 's'} captured. Add another page?';
   String get menuScanUsePhotos =>
       isBn ? 'এই ছবিগুলো ব্যবহার করুন' : 'Use these photos';
@@ -667,11 +700,11 @@ class AppStrings {
   String get menuScanFailed =>
       isBn ? 'মেনু স্ক্যান করা যায়নি' : 'Could not scan menu';
   String menuScanImported(int created, int skipped) => isBn
-      ? '$created টি আইটেম যোগ হয়েছে, $skipped টি ডুপ্লিকেট বাদ গেছে।'
+      ? '${_n(created)} টি আইটেম যোগ হয়েছে, ${_n(skipped)} টি ডুপ্লিকেট বাদ গেছে।'
       : '$created items added, $skipped duplicates skipped.';
   String categoryCountLabel(String category, int count) {
     final label = category == 'All' ? allCategories : category;
-    return '$label $count';
+    return '$label ${_n(count)}';
   }
 
   String get addMenuItem => isBn ? 'মেনু আইটেম যোগ করুন' : 'Add Menu Item';
@@ -703,6 +736,26 @@ class AppStrings {
   String get menuChooseGallery =>
       isBn ? 'গ্যালারি থেকে বেছে নিন' : 'Choose from gallery';
   String get menuClearImage => isBn ? 'ছবি সরান' : 'Clear image';
+  String get menuDiscountTitle =>
+      isBn ? 'ডিসকাউন্ট (ঐচ্ছিক)' : 'Discount (optional)';
+  String get menuDiscountNone => isBn ? 'কোনো ছাড় নেই' : 'No discount';
+  String get menuDiscountPercent => isBn ? 'শতকরা ছাড়' : 'Percent off';
+  String get menuDiscountFlat =>
+      isBn ? 'নির্দিষ্ট টাকা ছাড়' : 'Flat amount off';
+  String get menuDiscountValue => isBn ? 'মান' : 'Value';
+  String get menuOptionsTitle => isBn ? 'অপশন' : 'Options';
+  String get menuOptionsSubtitle => isBn
+      ? 'ডিসকাউন্ট, সেট-মিল এবং অ্যাড-অন'
+      : 'Discount, set meal, and add-ons';
+  String get menuIncludesTitle =>
+      isBn ? 'সেট-মিল আইটেম (ঐচ্ছিক)' : 'Included items (set meal)';
+  String get menuIncludesHint =>
+      isBn ? 'প্রতি লাইনে একটি আইটেম' : 'One item per line';
+  String get menuAddOnsTitle =>
+      isBn ? 'অ্যাড-অন (ঐচ্ছিক)' : 'Add-ons (optional)';
+  String get menuAddOnsHint =>
+      isBn ? 'প্রতি লাইন: নাম : দাম' : 'One per line: name : price';
+  String get menuDiscountSummary => isBn ? 'ছাড়' : 'Discount';
   String get menuImageUploadWarning => isBn
       ? 'ছবি লোকালি রাখা হয়েছে। ইন্টারনেটে আপলোডের জন্য সংযোগ দরকার।'
       : 'Image kept locally. Cloud upload needs internet.';
@@ -779,7 +832,8 @@ class AppStrings {
       ? 'অন্য সার্চ বা ফিল্টার চেষ্টা করুন।'
       : 'Try a different search or filter.';
   String get stockValueShort => isBn ? 'স্টক মূল্য' : 'Stock value';
-  String itemsWithCount(int count) => isBn ? '$count টি আইটেম' : '$count items';
+  String itemsWithCount(int count) =>
+      isBn ? '${_n(count)} টি আইটেম' : '$count items';
   String get lastUpdated => isBn ? 'শেষ আপডেট' : 'Last updated';
   String get reorderSoon => isBn ? 'শীঘ্রই কিনুন' : 'reorder soon';
   String get outOfStockNow => isBn ? 'এখনই কিনুন' : 'buy now';
@@ -800,7 +854,7 @@ class AppStrings {
   String get tablesSeated => isBn ? 'টেবিল বসা' : 'Tables seated';
   String get ordersInKitchen => isBn ? 'কিচেনে অর্ডার' : 'Orders in kitchen';
   String lateOverMinutes(int minutes) =>
-      isBn ? '$minutes মিনিটের বেশি দেরি' : 'Late over $minutes min';
+      isBn ? '${_n(minutes)} মিনিটের বেশি দেরি' : 'Late over $minutes min';
   String get needsYourEye => isBn ? 'আপনার দৃষ্টি দরকার' : 'Needs your eye';
   String get qaNewOrder => isBn ? 'নতুন অর্ডার' : 'New order';
   String get qaPrintBill => isBn ? 'বিল প্রিন্ট' : 'Print bill';
@@ -815,8 +869,10 @@ class AppStrings {
   // Inventory home
   String get stockValueNow => isBn ? 'বর্তমান স্টক মূল্য' : 'Stock value now';
   String get varianceToday => isBn ? 'আজকের ভ্যারিয়েন্স' : 'Variance today';
-  String varianceItems(int count) => isBn ? '$count টি আইটেম' : '$count items';
-  String alertsCount(int count) => isBn ? '$count টি সতর্কতা' : '$count alerts';
+  String varianceItems(int count) =>
+      isBn ? '${_n(count)} টি আইটেম' : '$count items';
+  String alertsCount(int count) =>
+      isBn ? '${_n(count)} টি সতর্কতা' : '$count alerts';
   String get categoryRaw => isBn ? 'কাঁচা' : 'Raw';
   String get categoryDry => isBn ? 'শুকনা' : 'Dry';
   String get categoryPackaged => isBn ? 'প্যাকেট' : 'Packaged';
@@ -842,13 +898,14 @@ class AppStrings {
   // Stock in flow
   String get stockInTitle => isBn ? 'স্টক ইন' : 'Stock in';
   String stepXofY(int step, int total) =>
-      isBn ? 'ধাপ $step এর $total' : 'Step $step of $total';
+      isBn ? 'ধাপ ${_n(step)} এর ${_n(total)}' : 'Step $step of $total';
   String get dateLabel => isBn ? 'তারিখ' : 'Date';
   String get scanSupplierBill =>
       isBn ? 'সরবরাহকারীর বিল স্ক্যান করুন' : 'Scan supplier bill';
   String get aiReadsItemsQtyPrices =>
       isBn ? 'AI আইটেম, পরিমাণ এবং দাম পড়ে' : 'AI reads items, qty, prices';
   String get addManually => isBn ? 'হাতে যোগ করুন' : 'add manually';
+  String get addItem => isBn ? 'আইটেম যোগ করুন' : 'Add Item';
   String get saveAndAddToStock =>
       isBn ? 'সেভ করুন ও স্টকে যোগ করুন' : 'Save & add to stock';
   String get qtyLabel => isBn ? 'পরিমাণ' : 'QTY';
@@ -865,9 +922,9 @@ class AppStrings {
   String get varianceBreakdown =>
       isBn ? 'ভ্যারিয়েন্স বিশ্লেষণ' : 'Variance breakdown';
   String acrossItems(int count) =>
-      isBn ? '$count টি আইটেমে' : 'across $count items';
+      isBn ? '${_n(count)} টি আইটেমে' : 'across $count items';
   String recurringWeeks(int weeks) =>
-      isBn ? '$weeks সপ্তাহ ধরে' : '$weeks wks in a row';
+      isBn ? '${_n(weeks)} সপ্তাহ ধরে' : '$weeks wks in a row';
   String get expectedCountedLabel =>
       isBn ? 'প্রত্যাশিত vs গণনাকৃত' : 'expected vs counted';
   String get reorderSuggestion => isBn ? 'অর্ডার সাজেশন' : 'Reorder suggestion';

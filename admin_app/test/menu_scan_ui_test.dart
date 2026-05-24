@@ -65,17 +65,23 @@ void main() {
   });
 
   testWidgets('scan menu floating action is manager only', (tester) async {
-    final manager = PosAppController();
+    final manager = PosAppController()..language = AppLanguage.en;
     await tester.pumpWidget(_scoped(manager, const MenuManagementScreen()));
-    expect(find.byType(FloatingActionButton), findsNWidgets(2));
+    // The menu screen surfaces two floating buttons (Add item + AI scan) for
+    // managers — they live inside a floating _MenuActionBar action row.
+    expect(find.text('Add Menu Item'), findsOneWidget);
+    expect(find.text('AI scan'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     manager.dispose();
 
-    final staff = PosAppController()..accountRole = AccountRole.staff;
+    final staff = PosAppController()
+      ..language = AppLanguage.en
+      ..accountRole = AccountRole.staff;
     await tester.pumpWidget(_scoped(staff, const MenuManagementScreen()));
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Add Menu Item'), findsNothing);
+    expect(find.text('AI scan'), findsNothing);
 
     staff.dispose();
   });

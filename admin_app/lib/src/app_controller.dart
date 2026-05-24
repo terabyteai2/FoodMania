@@ -2060,6 +2060,9 @@ class PosAppController extends ChangeNotifier {
         categoryBn: candidate.categoryBn,
         price: candidate.price,
         isAvailable: candidate.isAvailable,
+        tags: candidate.iconKey.trim().isEmpty
+            ? const <String>[]
+            : ['icon:${candidate.iconKey.trim()}'],
       );
       created += 1;
     }
@@ -2733,6 +2736,29 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  String _localizedNotificationOrderBody(OrderModel order) {
+    final itemCount = language == AppLanguage.bn
+        ? '${_toBnDigits(order.items.length.toString())} আইটেম'
+        : '${order.items.length} items';
+    final total = language == AppLanguage.bn
+        ? '৳${_toBnDigits(order.total.toStringAsFixed(0))}'
+        : '৳${order.total.toStringAsFixed(0)}';
+    final sequence = language == AppLanguage.bn
+        ? _toBnDigits(order.displaySequence)
+        : order.displaySequence;
+    return '$sequence · $itemCount · $total';
+  }
+
+  static String _toBnDigits(String input) {
+    const en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const bn = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    var output = input;
+    for (var i = 0; i < en.length; i++) {
+      output = output.replaceAll(en[i], bn[i]);
+    }
+    return output;
+  }
+
   static bool _isInfrastructurePrintError(String? message) {
     if (message == null || message.trim().isEmpty) return false;
     const known = <String>{
@@ -2776,6 +2802,7 @@ class PosAppController extends ChangeNotifier {
       final status = order.status.adminStatus;
       if (status == OrderStatus.accepted || status == OrderStatus.served) {
         _alertedPrintOrderIds.add(order.id);
+        _autoPrintGiveUpOrderIds.add(order.id);
       }
     }
   }
@@ -2808,9 +2835,8 @@ class PosAppController extends ChangeNotifier {
           _alertedPendingOrderIds.add(id);
           await addNotification(
             type: PosNotificationType.pendingOrder,
-            title: 'New pending order',
-            body:
-                '${order.displaySequence} · ${order.items.length} items · ৳${order.total.toStringAsFixed(0)}',
+            title: strings.isBn ? 'নতুন পেন্ডিং অর্ডার' : 'New pending order',
+            body: _localizedNotificationOrderBody(order),
             orderId: id,
             actionTarget: 'pending_orders',
           );
@@ -2828,9 +2854,8 @@ class PosAppController extends ChangeNotifier {
           _alertedAcceptedOrderIds.add(id);
           await addNotification(
             type: PosNotificationType.acceptedOrder,
-            title: 'Order accepted',
-            body:
-                '${order.displaySequence} · ${order.items.length} items · ৳${order.total.toStringAsFixed(0)}',
+            title: strings.isBn ? 'অর্ডার অ্যাকসেপ্ট হয়েছে' : 'Order accepted',
+            body: _localizedNotificationOrderBody(order),
             orderId: id,
             actionTarget: 'orders',
           );

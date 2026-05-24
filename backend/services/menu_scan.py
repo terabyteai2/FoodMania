@@ -70,6 +70,32 @@ def _providers() -> list[_Provider]:
     ]
 
 
+ICON_KEY_VOCAB = [
+    "pizza",
+    "burger",
+    "biryani",
+    "rice",
+    "curry",
+    "soup",
+    "salad",
+    "noodle",
+    "bread",
+    "chicken",
+    "fish",
+    "beef",
+    "vegetable",
+    "snack",
+    "fruit",
+    "dessert",
+    "drink",
+    "coffee",
+    "tea",
+    "breakfast",
+    "set_meal",
+    "general",
+]
+
+
 def _menu_scan_schema() -> dict[str, Any]:
     item = {
         "type": "object",
@@ -101,6 +127,15 @@ def _menu_scan_schema() -> dict[str, Any]:
             },
             "price": {"type": "number", "description": "Positive numeric menu price only."},
             "isAvailable": {"type": "boolean"},
+            "iconKey": {
+                "type": "string",
+                "enum": ICON_KEY_VOCAB,
+                "description": (
+                    "Single visual category key for a placeholder icon when no photo "
+                    "is uploaded. Pick the closest match from the enum based on the "
+                    "item name and category. Use 'general' if nothing fits."
+                ),
+            },
         },
         "required": [
             "nameEn",
@@ -111,6 +146,7 @@ def _menu_scan_schema() -> dict[str, Any]:
             "categoryBn",
             "price",
             "isAvailable",
+            "iconKey",
         ],
     }
     return {
@@ -122,6 +158,7 @@ def _menu_scan_schema() -> dict[str, Any]:
 
 
 def _menu_scan_instructions() -> str:
+    vocab = ", ".join(ICON_KEY_VOCAB)
     return (
         "Return JSON only. Extract restaurant menu items into the provided schema. "
         "The input contains OCR.space JSON for menu page photos. Read OCR text from "
@@ -140,7 +177,11 @@ def _menu_scan_instructions() -> str:
         "when no better category is clear. If an item description is missing, "
         "write a polished, restaurant-salesy description in both languages, around "
         "40 words per language, based on the visible item name/category/price. "
-        "Use isAvailable true."
+        "Use isAvailable true. "
+        "Also pick exactly one iconKey from this fixed enum so the admin app can "
+        f"show a default placeholder visual when no photo is uploaded: {vocab}. "
+        "Use 'set_meal' for combo platters with multiple items, 'general' only as "
+        "a last resort."
     )
 
 
@@ -251,6 +292,8 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
             raw.get("description")
         )
         legacy_category_en, legacy_category_bn = _split_bilingual(raw.get("category"))
+        raw_icon = str(raw.get("iconKey") or "").strip().lower()
+        icon_key = raw_icon if raw_icon in ICON_KEY_VOCAB else "general"
         normalized = {
             "nameEn": str(raw.get("nameEn") or legacy_name_en).strip(),
             "nameBn": str(raw.get("nameBn") or legacy_name_bn).strip(),
@@ -270,6 +313,7 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
             or "সাধারণ",
             "price": raw.get("price"),
             "isAvailable": raw.get("isAvailable", True),
+            "iconKey": icon_key,
         }
         try:
             items.append(MenuScanCandidate.model_validate(normalized))

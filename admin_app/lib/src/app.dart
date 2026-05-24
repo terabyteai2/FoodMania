@@ -6,6 +6,7 @@ import 'app_scope.dart';
 import 'core/localization/app_strings.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/notification_center.dart';
+import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/inventory/inventory_screen.dart';
@@ -334,10 +335,10 @@ class _MainShellState extends State<MainShell> {
                 decoration: BoxDecoration(
                   color: PosColors.surface,
                   border: Border(right: BorderSide(color: PosColors.line)),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
-                      color: Color(0x55000000),
-                      blurRadius: 22,
+                      color: Color(0x14000000),
+                      blurRadius: 8,
                       offset: Offset(2, 0),
                     ),
                   ],
@@ -478,7 +479,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               style: TextStyle(
                 color: PosColors.slate,
                 fontSize: 18,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 0,
               ),
             ),
@@ -494,7 +495,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
             style: TextStyle(
               color: PosColors.slate,
               fontSize: 13.5,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               height: 1.35,
             ),
           ),
@@ -509,7 +510,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               style: TextStyle(
                 color: PosColors.muted,
                 fontSize: 11,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
                 letterSpacing: 0.2,
               ),
             ),
@@ -529,7 +530,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
             style: TextStyle(
               color: PosColors.muted,
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               height: 1.35,
             ),
           ),
@@ -540,7 +541,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               style: TextStyle(
                 color: PosColors.primaryDark,
                 fontSize: 12.5,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -551,7 +552,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               style: TextStyle(
                 color: PosColors.danger,
                 fontSize: 12.5,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -620,7 +621,7 @@ class _UpdateBadge extends StatelessWidget {
         style: TextStyle(
           color: PosColors.primaryDark,
           fontSize: 11,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -650,13 +651,7 @@ class _RailLogo extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: PosGradients.brand,
         borderRadius: BorderRadius.circular(PosRadii.md),
-        boxShadow: [
-          BoxShadow(
-            color: PosColors.primary.withValues(alpha: 0.36),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
+        boxShadow: PosShadows.glow,
       ),
       child: Icon(Icons.whatshot_rounded, color: PosColors.slate, size: 24),
     );
@@ -673,7 +668,7 @@ class _RailLogo extends StatelessWidget {
               text.appTitle,
               style: TextStyle(
                 color: PosColors.slate,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
                 fontSize: 16.5,
                 letterSpacing: 0,
               ),
@@ -683,7 +678,7 @@ class _RailLogo extends StatelessWidget {
               text.cloudSuite,
               style: TextStyle(
                 color: PosColors.muted,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
                 fontSize: 11,
                 letterSpacing: 0.2,
               ),
@@ -708,116 +703,19 @@ class _FloatingBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      minimum: EdgeInsets.zero,
-      child: Container(
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          border: Border(top: BorderSide(color: PosColors.line, width: 0.5)),
-        ),
-        child: SizedBox(
-          height: 70,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 8, 6, 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < destinations.length; i++)
-                  Expanded(
-                    child: _BottomNavItem(
-                      destination: destinations[i],
-                      selected: i == selectedIndex,
-                      onTap: () => onChanged(i),
-                    ),
-                  ),
-              ],
+    return TfBottomNav(
+      activeIndex: selectedIndex,
+      onChanged: onChanged,
+      items: destinations
+          .map(
+            (destination) => TfBottomNavItem(
+              icon: destination.icon,
+              selectedIcon: destination.selectedIcon,
+              label: destination.label,
+              labelBn: destination.bnLabel,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomNavItem extends StatelessWidget {
-  const _BottomNavItem({
-    required this.destination,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _Destination destination;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = selected
-        ? const Color(0xFF1C1A17)
-        : const Color(0xFF888780);
-    final icon = destination.icon; // outline icon — design uses outline only.
-
-    return Tooltip(
-      message: destination.label,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: destination.label,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: foreground, size: 22),
-                  const SizedBox(height: 4),
-                  Text(
-                    destination.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: foreground,
-                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-                      fontSize: 11,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    destination.bnLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: foreground,
-                      fontFamily: 'Hind Siliguri',
-                      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-                      fontSize: 10,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    width: selected ? 18 : 0,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5C127),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+          )
+          .toList(growable: false),
     );
   }
 }
@@ -876,7 +774,7 @@ class _RailFooter extends StatelessWidget {
                   text.secureTenant,
                   style: TextStyle(
                     color: PosColors.primaryDark,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     fontSize: 12.5,
                   ),
                 ),
@@ -885,7 +783,7 @@ class _RailFooter extends StatelessWidget {
                   text.tokenVerified,
                   style: TextStyle(
                     color: PosColors.muted,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     fontSize: 10.5,
                   ),
                 ),

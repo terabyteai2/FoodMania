@@ -649,6 +649,10 @@ class PrinterService {
     } catch (error) {
       return _friendlyError(error);
     }
+    final connected = await _readConnectionStatus();
+    if (!connected) {
+      return 'Printer is not connected.';
+    }
     return null;
   }
 

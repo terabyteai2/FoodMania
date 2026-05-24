@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,18 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _decode_tags(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if isinstance(value, list):
+        return [str(entry) for entry in value if isinstance(entry, (str, int, float))]
+    return []
+
+
 def _item_to_dict(item: MenuItem) -> dict:
     return {
         "id": item.id,
@@ -37,6 +50,7 @@ def _item_to_dict(item: MenuItem) -> dict:
         "categoryBn": item.category_bn or "",
         "isAvailable": item.is_available,
         "imageUrl": item.image_url,
+        "tags": _decode_tags(item.tags_json),
         "version": item.version,
         "updatedAt": item.updated_at.isoformat(),
         "deletedAt": item.deleted_at.isoformat() if item.deleted_at else None,
@@ -72,6 +86,9 @@ def _apply_menu_payload(
     item.category_bn = category_bn
     item.is_available = body.isAvailable
     item.image_url = image_url
+    if body.tags is not None:
+        cleaned_tags = [tag.strip() for tag in body.tags if isinstance(tag, str) and tag.strip()]
+        item.tags_json = json.dumps(cleaned_tags, ensure_ascii=False) if cleaned_tags else None
     item.version = max(item.version, body.version)
     item.updated_at = datetime.now(timezone.utc)
     item.deleted_at = None

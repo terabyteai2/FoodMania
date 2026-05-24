@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'tf_design_system.dart';
 
 class AppScaffold extends StatelessWidget {
   const AppScaffold({
@@ -25,6 +26,7 @@ class AppScaffold extends StatelessWidget {
   final bool showDatePill;
   final bool showBackButton;
   final bool pinHeader;
+
   /// When [pinHeader] is true, place [child] in a bounded [Expanded] instead of
   /// a [CustomScrollView]. Required for tabbed pages (e.g. Stock).
   final bool fillBody;
@@ -191,18 +193,18 @@ class _Header extends StatelessWidget {
               _DatePill(label: dateLabel),
               SizedBox(height: 12),
             ],
-            Text(
+            TfText(
               title,
               textAlign: centerHeader ? TextAlign.center : TextAlign.start,
               style: textTheme.headlineMedium,
             ),
             if (subtitle != null) ...[
               SizedBox(height: 6),
-              Text(
+              TfText(
                 subtitle!,
                 textAlign: centerHeader ? TextAlign.center : TextAlign.start,
                 style: textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -303,13 +305,7 @@ class _DatePill extends StatelessWidget {
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(PosRadii.pill),
         border: Border.all(color: PosColors.line),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x4A000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
+        boxShadow: PosShadows.card,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -320,23 +316,16 @@ class _DatePill extends StatelessWidget {
             decoration: BoxDecoration(
               color: PosColors.primary,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x88FFC107),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ],
             ),
           ),
           SizedBox(width: 8),
-          Text(
+          TfText(
             label,
             style: TextStyle(
               color: PosColors.slate,
               fontSize: 11.5,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.3,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0,
             ),
           ),
         ],

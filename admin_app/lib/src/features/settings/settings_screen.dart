@@ -13,7 +13,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/notification_center.dart';
-import '../../core/widgets/pos_compact_ui.dart';
+import '../../core/widgets/tf_design_system.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/menu_image_service.dart';
@@ -264,10 +264,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CompactHeader(
+                    TfAppBar(
                       title: text.settings,
                       subtitle: 'সেটিংস · v2.2.1',
-                      actions: [
+                      trailing: [
                         HeaderLanguageButton(),
                         HeaderNotificationBell(
                           onNavigateToOrders:
@@ -276,21 +276,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     SizedBox(height: 14),
-                    CompactSearchField(
+                    TfSearchField(
                       controller: _settingsSearchController,
                       hintText: 'Search settings · সেটিংস খুঁজুন',
                       onChanged: (_) => setState(() {}),
                     ),
                     SizedBox(height: 12),
                     if (visibleGroups.isEmpty)
-                      EmptyCompactState(
+                      TfEmptyState(
                         icon: Icons.search_off_rounded,
                         title: 'No settings found',
                         message: 'Try a different search.',
                       )
                     else
                       for (var i = 0; i < visibleGroups.length; i++) ...[
-                        CompactSectionLabel(label: visibleGroups[i].label),
+                        TfSectionHeader(label: visibleGroups[i].label),
                         SizedBox(height: 7),
                         _SettingsGroupCard(items: visibleGroups[i].items),
                         if (i < visibleGroups.length - 1) SizedBox(height: 14),
@@ -487,8 +487,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final detail = result.errors.isEmpty ? '' : ' ${result.errors.first}';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${result.importedOrders} historical orders imported'
+          content: TfText(            '${result.importedOrders} historical orders imported'
             '${skipped > 0 ? ', $skipped skipped.' : '.'}$detail',
           ),
         ),
@@ -496,7 +495,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order history import failed: $error')),
+        SnackBar(content: TfText('Order history import failed: $error')),
       );
     } finally {
       if (mounted) setState(() => _importingOrderHistory = false);
@@ -540,25 +539,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _confirmLogout() async {
     final text = AppScope.of(context).strings;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(text.logOut),
-        content: Text(text.logOutSubtitle),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(text.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(text.logOut),
-          ),
-        ],
-      ),
+    TfConfirmSheet.show(
+      context,
+      title: text.logOut,
+      description: text.logOutSubtitle,
+      confirmLabel: text.logOut,
+      onConfirm: () async {
+        if (!mounted) return;
+        await AppScope.of(context).logOut();
+      },
     );
-    if (confirmed != true || !mounted) return;
-    await AppScope.of(context).logOut();
   }
 
   Future<void> _openYourRestaurantInfo() async {
@@ -683,13 +673,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _pushRestaurantInfo,
-                          icon: Icon(Icons.cloud_upload_outlined),
-                          label: Text(t.pushToCloud),
-                        ),
+                      TfButton(
+                        label: t.pushToCloud,
+                        icon: Icons.cloud_upload_outlined,
+                        onPressed: _pushRestaurantInfo,
                       ),
                     ],
                   ),
@@ -762,8 +749,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
+        content: TfText(          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
         ),
       ),
     );
@@ -775,7 +761,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final slug = _publicSlugController.text.trim().toLowerCase();
     if (slug.length < 3) {
       messenger.showSnackBar(
-        SnackBar(content: Text('URL name must be at least 3 characters.')),
+        SnackBar(content: TfText('URL name must be at least 3 characters.')),
       );
       return;
     }
@@ -784,8 +770,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _publicSlugController.text = app.serverConfig.publicSlug;
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          ok
+        content: TfText(          ok
               ? 'Customer URL saved: https://${app.serverConfig.publicSlug}.quickbytes.buzz'
               : app.lastError ?? 'Could not save customer URL.',
         ),
@@ -829,8 +814,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          ok
+        content: TfText(          ok
               ? text.connectedTo(printer.label)
               : app.printerState.lastError ?? text.printerConnectionFailed,
         ),
@@ -857,8 +841,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          ok
+        content: TfText(          ok
               ? text.testTicketSent
               : app.printerState.lastError ?? text.testFailed,
         ),
@@ -874,23 +857,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-Card _settingsCard({
+Widget _settingsCard({
   required Widget child,
   Clip clipBehavior = Clip.none,
   EdgeInsetsGeometry? margin,
 }) {
-  return Card(
-    margin: margin,
-    color: PosColors.background,
-    surfaceTintColor: Colors.transparent,
-    elevation: 2,
-    shadowColor: Colors.black.withValues(alpha: 0.12),
-    clipBehavior: clipBehavior,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(PosRadii.lg),
-      side: BorderSide(color: PosColors.lineStrong.withValues(alpha: 0.48)),
+  return Padding(
+    padding: margin ?? EdgeInsets.zero,
+    child: TfCard(
+      color: PosColors.surface,
+      padded: false,
+      clip: clipBehavior != Clip.none,
+      child: child,
     ),
-    child: child,
   );
 }
 
@@ -941,9 +920,8 @@ class _SettingsGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CompactSurface(
+    return TfCard(
       padding: EdgeInsets.zero,
-      radius: 10,
       child: Column(
         children: [
           for (var i = 0; i < items.length; i++) ...[
@@ -983,26 +961,24 @@ class _SettingsActionTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.title,
+                TfText(                  item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: item.danger ? PosColors.danger : PosColors.slate,
                     fontSize: 12,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     height: 1.1,
                   ),
                 ),
                 SizedBox(height: 2),
-                Text(
-                  item.subtitle,
+                TfText(                  item.subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: PosColors.muted,
                     fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -1013,15 +989,14 @@ class _SettingsActionTile extends StatelessWidget {
             if (item.trailing != null)
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: 104),
-                child: Text(
-                  item.trailing!,
+                child: TfText(                  item.trailing!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     color: PosColors.muted,
                     fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -1081,11 +1056,10 @@ class _ReadOnlyInfoTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
+              TfText(                label,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: PosColors.muted,
                   letterSpacing: 0.3,
                 ),
@@ -1095,7 +1069,7 @@ class _ReadOnlyInfoTile extends StatelessWidget {
                 value,
                 style: TextStyle(
                   fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   color: PosColors.slate,
                   fontFamily: monospace ? 'monospace' : null,
                   letterSpacing: monospace ? 0.5 : 0,
@@ -1149,14 +1123,12 @@ class _SectionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
+                      TfText(                        title,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       if (subtitle != null) ...[
                         SizedBox(height: 3),
-                        Text(
-                          subtitle!,
+                        TfText(                          subtitle!,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -1223,13 +1195,11 @@ class _DisplaySizeCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        text.displaySize,
+                      TfText(                        text.displaySize,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       SizedBox(height: 3),
-                      Text(
-                        text.displaySizeSubtitle,
+                      TfText(                        text.displaySizeSubtitle,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -1311,12 +1281,12 @@ class _LanguageCard extends StatelessWidget {
             ButtonSegment<AppLanguage>(
               value: AppLanguage.bn,
               label: Text(text.bangla),
-              icon: Text('অ'),
+              icon: TfText('অ'),
             ),
             ButtonSegment<AppLanguage>(
               value: AppLanguage.en,
               label: Text(text.english),
-              icon: Text('A'),
+              icon: TfText('A'),
             ),
           ],
           selected: {selected},
@@ -1362,11 +1332,10 @@ class _ScalePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(PosRadii.pill),
         border: Border.all(color: PosColors.lineStrong),
       ),
-      child: Text(
-        '$label - $percent%',
+      child: TfText(        '$label - $percent%',
         style: TextStyle(
           color: PosColors.slate,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           fontSize: 11.4,
           letterSpacing: 0,
         ),
@@ -1388,17 +1357,11 @@ class _PresetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      avatar: selected
-          ? Icon(Icons.check_rounded, size: 16, color: PosColors.slate)
-          : null,
-      labelStyle: TextStyle(
-        color: PosColors.slate,
-        fontWeight: FontWeight.w900,
-      ),
+    return TfChip(
+      label: label,
+      active: selected,
+      leading: selected ? const Icon(Icons.check_rounded) : null,
+      onTap: onTap,
     );
   }
 }
@@ -1468,7 +1431,7 @@ class _PrinterSettingsCard extends StatelessWidget {
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: PosColors.background,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: state.connected
                   ? PosColors.success.withValues(alpha: 0.24)
@@ -1488,15 +1451,13 @@ class _PrinterSettingsCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      state.hasSelectedPrinter
+                    TfText(                      state.hasSelectedPrinter
                           ? state.selectedPrinterLabel
                           : text.noPrinterSelected,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     SizedBox(height: 2),
-                    Text(
-                      state.connected
+                    TfText(                      state.connected
                           ? text.printerConnectedAuto
                           : text.pairPrinterInstruction,
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -1524,23 +1485,32 @@ class _PrinterSettingsCard extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            OutlinedButton.icon(
+            TfButton(
+              label: text.refreshPairedPrinters,
+              icon: Icons.bluetooth_searching_rounded,
+              variant: TfButtonVariant.paper,
+              size: TfButtonSize.sm,
+              fullWidth: false,
               onPressed: state.busy ? null : onRefresh,
-              icon: Icon(Icons.bluetooth_searching_rounded),
-              label: Text(text.refreshPairedPrinters),
             ),
-            OutlinedButton.icon(
+            TfButton(
+              label: text.testPrint,
+              icon: Icons.receipt_long_outlined,
+              variant: TfButtonVariant.paper,
+              size: TfButtonSize.sm,
+              fullWidth: false,
               onPressed: state.busy || !state.hasSelectedPrinter
                   ? null
                   : onTestPrint,
-              icon: Icon(Icons.receipt_long_outlined),
-              label: Text(text.testPrint),
             ),
             if (state.connected)
-              OutlinedButton.icon(
+              TfButton(
+                label: text.disconnect,
+                icon: Icons.link_off_rounded,
+                variant: TfButtonVariant.paper,
+                size: TfButtonSize.sm,
+                fullWidth: false,
                 onPressed: state.busy ? null : onDisconnect,
-                icon: Icon(Icons.link_off_rounded),
-                label: Text(text.disconnect),
               ),
           ],
         ),
@@ -1583,7 +1553,7 @@ class _PrinterDeviceTile extends StatelessWidget {
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: PosColors.background,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: selected
               ? PosColors.primary.withValues(alpha: 0.24)
@@ -1601,21 +1571,21 @@ class _PrinterDeviceTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  printer.label,
+                TfText(                  printer.label,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 SizedBox(height: 2),
-                Text(
-                  printer.address,
+                TfText(                  printer.address,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
             ),
           ),
-          FilledButton.tonal(
+          TfButton(
+            label: selected ? text.reconnect : text.connect,
+            size: TfButtonSize.sm,
+            fullWidth: false,
             onPressed: busy ? null : onConnect,
-            child: Text(selected ? text.reconnect : text.connect),
           ),
         ],
       ),
@@ -1635,7 +1605,7 @@ class _PrinterErrorBanner extends StatelessWidget {
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: PosColors.danger.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PosColors.danger.withValues(alpha: 0.22)),
       ),
       child: Row(
@@ -1763,41 +1733,33 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   }
 
   Future<void> _deleteImage(int index) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final text = AppScope.of(ctx).strings;
-        return AlertDialog(
-          title: Text(text.heroRemoveImageTitle),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(text.cancel),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(text.remove),
-            ),
-          ],
-        );
+    final text = AppScope.of(context).strings;
+    TfConfirmSheet.show(
+      context,
+      title: text.heroRemoveImageTitle,
+      description: text.remove,
+      confirmLabel: text.remove,
+      isDanger: true,
+      onConfirm: () async {
+        try {
+          setState(() => _saving = true);
+          final updated =
+              await widget.cloudApiService.deleteOutletImage(index)
+                  as List<String>;
+          if (!mounted) return;
+          setState(() {
+            _gallery = updated;
+            _saving = false;
+          });
+        } catch (e) {
+          if (!mounted) return;
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(e.toString())));
+        }
       },
     );
-    if (confirmed != true) return;
-    try {
-      setState(() => _saving = true);
-      final updated =
-          await widget.cloudApiService.deleteOutletImage(index) as List<String>;
-      setState(() {
-        _gallery = updated;
-        _saving = false;
-      });
-    } catch (e) {
-      setState(() => _saving = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
   }
 
   Future<void> _pickAndUploadVideo() async {
@@ -1861,7 +1823,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return Scaffold(
-      appBar: AppBar(title: Text(text.heroMediaTitle), centerTitle: false),
+      appBar: AppBar(title: TfText(text.heroMediaTitle), centerTitle: false),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -1869,9 +1831,13 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error!, textAlign: TextAlign.center),
+                  TfText(_error!, textAlign: TextAlign.center),
                   SizedBox(height: 12),
-                  FilledButton(onPressed: _fetchInfo, child: Text(text.retry)),
+                  TfButton(
+                    label: text.retry,
+                    onPressed: _fetchInfo,
+                    fullWidth: false,
+                  ),
                 ],
               ),
             )
@@ -1880,12 +1846,12 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  TfText(
                     text.heroPhotosTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
-                  Text(
+                  TfText(
                     text.heroPhotosSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -1930,7 +1896,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
                                       padding: const EdgeInsets.all(4),
                                       decoration: BoxDecoration(
                                         color: Colors.black54,
-                                        borderRadius: BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Icon(
                                         Icons.close,
@@ -1976,13 +1942,11 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
                     ),
                   ),
                   const SizedBox(height: 28),
-                  Text(
-                    text.heroVideoTitle,
+                  TfText(                    text.heroVideoTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    text.heroVideoSubtitle,
+                  TfText(                    text.heroVideoSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 14),
@@ -2000,38 +1964,30 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
                           const Icon(Icons.videocam_rounded),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              text.heroVideoSet,
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                            child: TfText(                              text.heroVideoSet,
+                              style: TextStyle(fontWeight: FontWeight.w500),
                             ),
                           ),
-                          OutlinedButton.icon(
+                          TfButton(
+                            label: text.remove,
+                            icon: Icons.delete_outline,
+                            variant: TfButtonVariant.paper,
+                            size: TfButtonSize.sm,
+                            fullWidth: false,
                             onPressed: _saving ? null : _clearVideo,
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            label: Text(text.remove),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 10),
                   ],
-                  FilledButton.icon(
+                  TfButton(
+                    label: _currentVideoUrl != null
+                        ? text.heroReplaceVideo
+                        : text.heroPickVideo,
+                    icon: Icons.video_library_outlined,
+                    busy: _saving,
                     onPressed: _saving ? null : _pickAndUploadVideo,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.video_library_outlined),
-                    label: Text(
-                      _currentVideoUrl != null
-                          ? text.heroReplaceVideo
-                          : text.heroPickVideo,
-                    ),
                   ),
                 ],
               ),
@@ -2094,7 +2050,7 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
         subtitle: 'Tunnel URL, outlet ID, and customer menu link',
         icon: Icons.link_rounded,
         children: [
-          Text('Server URL', style: Theme.of(context).textTheme.titleSmall),
+          TfText('Server URL', style: Theme.of(context).textTheme.titleSmall),
           SizedBox(height: 6),
           TextField(
             controller: widget.urlController,
@@ -2106,7 +2062,7 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             ),
           ),
           SizedBox(height: 16),
-          Text('Outlet ID', style: Theme.of(context).textTheme.titleSmall),
+          TfText('Outlet ID', style: Theme.of(context).textTheme.titleSmall),
           SizedBox(height: 6),
           TextField(
             controller: widget.outletIdController,
@@ -2119,8 +2075,7 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             ),
           ),
           SizedBox(height: 20),
-          Text(
-            'Customer Menu URL',
+          TfText(            'Customer Menu URL',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           SizedBox(height: 6),
@@ -2141,15 +2096,14 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    menuUrl.isEmpty
+                  child: TfText(                    menuUrl.isEmpty
                         ? 'Set server URL and outlet ID above'
                         : menuUrl,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: menuUrl.isEmpty
                           ? PosColors.muted
                           : PosColors.primaryDark,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -2168,7 +2122,7 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: menuUrl));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Menu URL copied')),
+                        SnackBar(content: TfText('Menu URL copied')),
                       );
                     },
                   ),
@@ -2177,8 +2131,7 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             ),
           ),
           SizedBox(height: 10),
-          Text(
-            'Share this link with customers to let them view your menu.',
+          TfText(            'Share this link with customers to let them view your menu.',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
@@ -2229,14 +2182,17 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
     final text = widget.text;
     return Scaffold(
       appBar: AppBar(
-        title: Text(text.tables),
+        title: TfText(text.tables),
         centerTitle: false,
         actions: [
-          TextButton(
-            onPressed: _save,
-            child: Text(
-              text.save,
-              style: TextStyle(fontWeight: FontWeight.w800),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: TfButton(
+              label: text.save,
+              variant: TfButtonVariant.ghost,
+              size: TfButtonSize.sm,
+              fullWidth: false,
+              onPressed: _save,
             ),
           ),
         ],
@@ -2247,8 +2203,7 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                text.tablesSubtitle,
+              TfText(                text.tablesSubtitle,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               SizedBox(height: 32),
@@ -2265,19 +2220,17 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
                   Expanded(
                     child: Column(
                       children: [
-                        Text(
-                          '$_count',
+                        TfText(                          '$_count',
                           style: TextStyle(
                             fontSize: 48,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        Text(
-                          text.tables,
+                        TfText(                          text.tables,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: Theme.of(
                               context,
                             ).colorScheme.onSurfaceVariant,
@@ -2315,10 +2268,11 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
                     40,
                     50,
                   ])
-                    ChoiceChip(
-                      label: Text('$preset'),
-                      selected: _count == preset,
-                      onSelected: (_) => setState(() => _count = preset),
+                    TfChip(
+                      label: '$preset',
+                      active: _count == preset,
+                      small: true,
+                      onTap: () => setState(() => _count = preset),
                     ),
                 ],
               ),
@@ -2360,127 +2314,121 @@ class _StaffAccountsCardState extends State<_StaffAccountsCard> {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: text.staffPhoneNumber,
-                hintText: '01XXXXXXXXX',
-                prefixIcon: Icon(Icons.phone_android_rounded),
-              ),
+    return TfCard(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: text.staffPhoneNumber,
+              hintText: '01XXXXXXXXX',
+              prefixIcon: Icon(Icons.phone_android_rounded),
             ),
-            SizedBox(height: 10),
-            TextField(
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: text.nameOptional,
-                prefixIcon: Icon(Icons.badge_outlined),
-              ),
+          ),
+          SizedBox(height: 10),
+          TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              labelText: text.nameOptional,
+              prefixIcon: Icon(Icons.badge_outlined),
             ),
-            SizedBox(height: 12),
-            PrimaryButton(
-              label: text.addStaffPhone,
-              icon: Icons.person_add_alt_1_rounded,
-              busy: widget.app.busy,
-              onPressed: widget.app.busy ? null : _add,
-            ),
-            SizedBox(height: 18),
-            FutureBuilder<List<Map<String, Object?>>>(
-              future: _future,
-              builder: (context, snapshot) {
-                final staff = snapshot.data ?? const <Map<String, Object?>>[];
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (staff.isEmpty) {
-                  return Padding(
-                    padding: EdgeInsets.symmetric(vertical: 18),
-                    child: Center(child: Text(text.noStaffYet)),
-                  );
-                }
-                return Column(
-                  children: staff
-                      .map((account) {
-                        final staffId = account['id']?.toString() ?? '';
-                        final isActive = account['isActive'] != false;
-                        final inviteStatus =
-                            account['inviteStatus']?.toString() ?? '';
-                        final statusLabel = inviteStatus == 'pending'
-                            ? text.inviteStatusPending
-                            : inviteStatus == 'declined'
-                            ? text.inviteStatusDeclined
-                            : isActive
-                            ? text.activeStatus
-                            : text.disabledStatus;
-                        final statusColor = inviteStatus == 'pending'
-                            ? PosColors.warning
-                            : inviteStatus == 'declined' || !isActive
-                            ? PosColors.muted
-                            : PosColors.success;
-                        final phone =
-                            account['phone']?.toString() ??
-                            account['email']?.toString() ??
-                            '';
-                        return ListTile(
-                          leading: Icon(Icons.badge_rounded),
-                          title: Text(
-                            account['displayName']?.toString().isNotEmpty ==
-                                    true
-                                ? account['displayName'].toString()
-                                : phone,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            phone,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                statusLabel,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              SizedBox(width: 4),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: PosColors.danger,
-                                  size: 20,
-                                ),
-                                tooltip: text.deleteStaff,
-                                onPressed: widget.app.busy
-                                    ? null
-                                    : () => _confirmDelete(
-                                        context,
-                                        staffId,
-                                        account['phone']?.toString() ??
-                                            account['email']?.toString() ??
-                                            '',
-                                      ),
-                              ),
-                            ],
-                          ),
-                        );
-                      })
-                      .toList(growable: false),
+          ),
+          SizedBox(height: 12),
+          PrimaryButton(
+            label: text.addStaffPhone,
+            icon: Icons.person_add_alt_1_rounded,
+            busy: widget.app.busy,
+            onPressed: widget.app.busy ? null : _add,
+          ),
+          SizedBox(height: 18),
+          FutureBuilder<List<Map<String, Object?>>>(
+            future: _future,
+            builder: (context, snapshot) {
+              final staff = snapshot.data ?? const <Map<String, Object?>>[];
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              }
+              if (staff.isEmpty) {
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Center(child: TfText(text.noStaffYet)),
                 );
-              },
-            ),
-          ],
-        ),
+              }
+              return Column(
+                children: staff
+                    .map((account) {
+                      final staffId = account['id']?.toString() ?? '';
+                      final isActive = account['isActive'] != false;
+                      final inviteStatus =
+                          account['inviteStatus']?.toString() ?? '';
+                      final statusLabel = inviteStatus == 'pending'
+                          ? text.inviteStatusPending
+                          : inviteStatus == 'declined'
+                          ? text.inviteStatusDeclined
+                          : isActive
+                          ? text.activeStatus
+                          : text.disabledStatus;
+                      final statusColor = inviteStatus == 'pending'
+                          ? PosColors.warning
+                          : inviteStatus == 'declined' || !isActive
+                          ? PosColors.muted
+                          : PosColors.success;
+                      final phone =
+                          account['phone']?.toString() ??
+                          account['email']?.toString() ??
+                          '';
+                      return ListTile(
+                        leading: Icon(Icons.badge_rounded),
+                        title: TfText(                          account['displayName']?.toString().isNotEmpty == true
+                              ? account['displayName'].toString()
+                              : phone,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: TfText(                          phone,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TfText(                              statusLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(
+                                Icons.delete_outline_rounded,
+                                color: PosColors.danger,
+                                size: 20,
+                              ),
+                              tooltip: text.deleteStaff,
+                              onPressed: widget.app.busy
+                                  ? null
+                                  : () => _confirmDelete(
+                                      context,
+                                      staffId,
+                                      account['phone']?.toString() ??
+                                          account['email']?.toString() ??
+                                          '',
+                                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    })
+                    .toList(growable: false),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -2501,8 +2449,7 @@ class _StaffAccountsCardState extends State<_StaffAccountsCard> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          ok ? text.staffAdded : widget.app.lastError ?? 'Could not add staff.',
+        content: TfText(          ok ? text.staffAdded : widget.app.lastError ?? 'Could not add staff.',
         ),
       ),
     );
@@ -2514,37 +2461,28 @@ class _StaffAccountsCardState extends State<_StaffAccountsCard> {
     String email,
   ) async {
     final text = AppScope.of(context).strings;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(text.deleteStaff),
-        content: Text('${text.deleteStaffConfirm}\n\n$email'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(text.cancel),
+    TfConfirmSheet.show(
+      context,
+      title: text.deleteStaff,
+      description: '${text.deleteStaffConfirm}\n\n$email',
+      confirmLabel: text.deleteStaff,
+      isDanger: true,
+      onConfirm: () async {
+        if (!mounted) return;
+        final ok = await widget.app.removeStaffAccount(staffId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: TfText(
+              ok
+                  ? text.staffRemoved
+                  : widget.app.lastError ?? 'Could not remove staff.',
+            ),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: PosColors.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(text.deleteStaff),
-          ),
-        ],
-      ),
+        );
+        if (ok) setState(() => _future = widget.app.loadStaffAccounts());
+      },
     );
-    if (confirmed != true || !mounted) return;
-    final ok = await widget.app.removeStaffAccount(staffId);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? text.staffRemoved
-              : widget.app.lastError ?? 'Could not remove staff.',
-        ),
-      ),
-    );
-    if (ok) setState(() => _future = widget.app.loadStaffAccounts());
   }
 }
 
@@ -2577,7 +2515,7 @@ class _AboutUsPage extends StatelessWidget {
                         height: 56,
                         decoration: BoxDecoration(
                           color: PosColors.primarySoft,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: PosColors.primary.withValues(alpha: 0.3),
                           ),
@@ -2593,15 +2531,13 @@ class _AboutUsPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Rastarant POS',
+                            TfText(                              'Rastarant POS',
                               style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 3),
-                            Text(
-                              'Version 2.2.1 · by Terabyte AI',
+                            TfText(                              'Version 2.2.1 · by Terabyte AI',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: PosColors.muted,
                               ),
@@ -2614,8 +2550,7 @@ class _AboutUsPage extends StatelessWidget {
                   const SizedBox(height: 14),
                   const Divider(height: 1),
                   const SizedBox(height: 14),
-                  Text(
-                    'Rastarant POS is a modern, offline-first point-of-sale system '
+                  TfText(                    'Rastarant POS is a modern, offline-first point-of-sale system '
                     'designed for Bangladeshi restaurants of every size. It combines '
                     'the reliability of local storage with the power of real-time cloud '
                     'sync, giving your team a single, fast control center for every '
@@ -2821,8 +2756,7 @@ class _AboutUsPage extends StatelessWidget {
           // ── Legal ───────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            child: Text(
-              '© 2024–2026 Terabyte AI. All rights reserved.\n'
+            child: TfText(              '© 2024–2026 Terabyte AI. All rights reserved.\n'
               'Rastarant POS is a proprietary software product. '
               'Unauthorized copying, redistribution, or reverse-engineering is prohibited.',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -2846,13 +2780,8 @@ class _AboutUsPage extends StatelessWidget {
         children: [
           Icon(icon, size: 15, color: PosColors.muted),
           const SizedBox(width: 6),
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: PosColors.muted,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.8,
-            ),
+          Expanded(
+            child: TfSectionHeader(label: label, padding: EdgeInsets.zero),
           ),
         ],
       ),
@@ -2876,7 +2805,7 @@ class _AboutUsPage extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 18),
           ),
@@ -2885,15 +2814,13 @@ class _AboutUsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
+                TfText(                  title,
                   style: Theme.of(
                     context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  subtitle,
+                TfText(                  subtitle,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.muted,
                     height: 1.5,
@@ -2924,11 +2851,10 @@ class _AboutUsPage extends StatelessWidget {
             color: PosColors.primary,
             shape: BoxShape.circle,
           ),
-          child: Text(
-            step,
+          child: TfText(            step,
             style: const TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
               fontSize: 12,
             ),
           ),
@@ -2938,15 +2864,13 @@ class _AboutUsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
+              TfText(                title,
                 style: Theme.of(
                   context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 3),
-              Text(
-                body,
+              TfText(                body,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: PosColors.muted,
                   height: 1.5,
@@ -2964,14 +2888,13 @@ class _AboutUsPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: PosColors.primarySoft,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PosColors.primary.withValues(alpha: 0.25)),
       ),
-      child: Text(
-        label,
+      child: TfText(        label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: PosColors.primary,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -2986,17 +2909,15 @@ class _AboutUsPage extends StatelessWidget {
     return ListTile(
       dense: true,
       leading: Icon(icon, size: 20, color: PosColors.muted),
-      title: Text(
-        label,
+      title: TfText(        label,
         style: Theme.of(
           context,
         ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
       ),
-      subtitle: Text(
-        value,
+      subtitle: TfText(        value,
         style: Theme.of(
           context,
-        ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -3031,7 +2952,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
                         height: 44,
                         decoration: BoxDecoration(
                           color: PosColors.success.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(11),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           Icons.privacy_tip_rounded,
@@ -3044,15 +2965,13 @@ class _PrivacyPolicyPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Privacy Policy',
+                            TfText(                              'Privacy Policy',
                               style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              'Last updated: January 1, 2026',
+                            TfText(                              'Last updated: January 1, 2026',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: PosColors.muted,
                               ),
@@ -3065,8 +2984,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   const SizedBox(height: 14),
                   const Divider(height: 1),
                   const SizedBox(height: 14),
-                  Text(
-                    'Terabyte AI ("we", "us", or "our") built the Rastarant POS app. '
+                  TfText(                    'Terabyte AI ("we", "us", or "our") built the Rastarant POS app. '
                     'This Privacy Policy explains how we collect, use, store, and protect '
                     'information when you use this application. By using the app, you agree '
                     'to the practices described in this policy.',
@@ -3340,8 +3258,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
           // ── Footer ──────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              'This Privacy Policy is effective as of January 1, 2026 and was last reviewed on May 20, 2026.',
+            child: TfText(              'This Privacy Policy is effective as of January 1, 2026 and was last reviewed on May 20, 2026.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: PosColors.muted,
                 height: 1.6,
@@ -3357,10 +3274,9 @@ class _PrivacyPolicyPage extends StatelessWidget {
   Widget _sectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 2),
-      child: Text(
-        title,
+      child: TfText(        title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
           color: PosColors.slate,
         ),
       ),
@@ -3368,18 +3284,16 @@ class _PrivacyPolicyPage extends StatelessWidget {
   }
 
   Widget _policySubheading(BuildContext context, String text) {
-    return Text(
-      text,
+    return TfText(      text,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w500,
         color: PosColors.slate,
       ),
     );
   }
 
   Widget _policyBody(BuildContext context, String text) {
-    return Text(
-      text,
+    return TfText(      text,
       style: Theme.of(
         context,
       ).textTheme.bodyMedium?.copyWith(color: PosColors.muted, height: 1.6),
@@ -3409,8 +3323,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              text,
+            child: TfText(              text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 height: 1.5,
                 color: PosColors.muted,
@@ -3439,15 +3352,13 @@ class _PrivacyPolicyPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
+                TfText(                  name,
                   style: Theme.of(
                     context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  description,
+                TfText(                  description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.muted,
                     height: 1.5,
@@ -3466,11 +3377,10 @@ class _PrivacyPolicyPage extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: PosColors.muted),
         const SizedBox(width: 8),
-        Text(
-          value,
+        TfText(          value,
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
         ),
       ],
     );

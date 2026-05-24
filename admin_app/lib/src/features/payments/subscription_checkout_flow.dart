@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../app_scope.dart';
 import '../../core/constants/payment_defaults.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/bkash_payment_session.dart';
 import '../../models/payment_gateway_config.dart';
 
@@ -47,19 +48,22 @@ class SubscriptionCheckoutFlow {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Demo payment'),
-        content: Text(
+        title: const TfText('Demo payment'),
+        content: TfText(
           'Sandbox bypass for $plan (৳${amount.toStringAsFixed(0)}).\n'
           'Tap Complete to continue without UddoktaPay.',
         ),
         actions: [
-          TextButton(
+          TfButton(
+            label: 'Cancel',
+            variant: TfButtonVariant.paper,
+            fullWidth: false,
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
           ),
-          FilledButton(
+          TfButton(
+            label: 'Complete',
+            fullWidth: false,
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Complete'),
           ),
         ],
       ),
@@ -309,19 +313,19 @@ class _UddoktaCheckoutPageState extends State<_UddoktaCheckoutPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFDF5),
+      backgroundColor: PosColors.background,
       appBar: AppBar(
-        title: Text(
+        title: TfText(
           _checkoutTitle,
           style: const TextStyle(
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w500,
             fontSize: 16,
-            color: Color(0xFF14110E),
+            color: PosColors.slate,
           ),
         ),
-        backgroundColor: const Color(0xFFFFFDF5),
+        backgroundColor: PosColors.background,
         elevation: 0,
-        foregroundColor: const Color(0xFF14110E),
+        foregroundColor: PosColors.slate,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
           onPressed: _completing ? null : () => Navigator.pop(context, false),
@@ -337,17 +341,18 @@ class _UddoktaCheckoutPageState extends State<_UddoktaCheckoutPage> {
                 children: [
                   Icon(Icons.error_outline, color: PosColors.danger, size: 48),
                   const SizedBox(height: 16),
-                  Text(
+                  TfText(
                     _error!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: PosColors.danger,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                       height: 1.35,
                     ),
                   ),
                   const SizedBox(height: 20),
-                  FilledButton(
+                  TfButton(
+                    label: 'Retry',
                     onPressed: () {
                       setState(() {
                         _error = null;
@@ -357,13 +362,13 @@ class _UddoktaCheckoutPageState extends State<_UddoktaCheckoutPage> {
                       });
                       _startCheckout();
                     },
-                    child: const Text('Retry'),
                   ),
                   if (_gatewayPageError && _sandboxMode) ...[
                     const SizedBox(height: 12),
-                    OutlinedButton(
+                    TfButton(
+                      label: 'Use demo payment (dev)',
+                      variant: TfButtonVariant.paper,
                       onPressed: _useDemoPayment,
-                      child: const Text('Use demo payment (dev)'),
                     ),
                   ],
                 ],

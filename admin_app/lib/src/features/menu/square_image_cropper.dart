@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/tf_design_system.dart';
 import 'package:image/image.dart' as img;
 
 /// Returns a centered square PNG for menu thumbnails.
@@ -48,16 +50,18 @@ class _SquareImageCropperPageState extends State<SquareImageCropperPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crop menu photo'),
+        title: const TfText('Crop menu photo'),
         actions: [
-          TextButton(
-            onPressed: _busy ? null : _useSquareCrop,
-            child: _busy
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Use'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: TfButton(
+              label: 'Use',
+              variant: TfButtonVariant.ghost,
+              size: TfButtonSize.sm,
+              fullWidth: false,
+              busy: _busy,
+              onPressed: _busy ? null : _useSquareCrop,
+            ),
           ),
         ],
       ),
@@ -68,7 +72,7 @@ class _SquareImageCropperPageState extends State<SquareImageCropperPage> {
             child: AspectRatio(
               aspectRatio: 1,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(12),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -77,7 +81,7 @@ class _SquareImageCropperPageState extends State<SquareImageCropperPage> {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.white, width: 2),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                     ),

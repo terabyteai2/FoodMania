@@ -19,7 +19,7 @@ enum OrderServiceType {
       case OrderServiceType.dineIn:
         return 'Dine-in';
       case OrderServiceType.takeaway:
-        return 'Takeaway';
+        return 'Parcel';
       case OrderServiceType.delivery:
         return 'Delivery';
     }
@@ -30,7 +30,7 @@ enum OrderServiceType {
       case OrderServiceType.dineIn:
         return 'ডাইন ইন';
       case OrderServiceType.takeaway:
-        return 'টেকওয়ে';
+        return 'পার্সেল';
       case OrderServiceType.delivery:
         return 'ডেলিভারি';
     }

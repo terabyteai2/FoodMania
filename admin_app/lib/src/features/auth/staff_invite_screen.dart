@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 
 class StaffInviteScreen extends StatefulWidget {
   const StaffInviteScreen({required this.onFinished, super.key});
@@ -48,7 +49,7 @@ class _StaffInviteScreenState extends State<StaffInviteScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFDF5),
+      backgroundColor: PosColors.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -59,79 +60,57 @@ class _StaffInviteScreenState extends State<StaffInviteScreen> {
               const Icon(
                 Icons.storefront_rounded,
                 size: 56,
-                color: Color(0xFFF2C744),
+                color: PosColors.primaryDark,
               ),
               const SizedBox(height: 24),
-              Text(
+              TfText(
                 '${invite.restaurantName} wants to add you as staff',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF14110E),
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.slate,
                   height: 1.2,
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
+              TfText(
                 'Outlet: ${invite.outletName}\nPhone: ${invite.phone}',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 14,
-                  color: Color(0xFF5A5450),
+                  color: PosColors.muted,
                   height: 1.4,
                 ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 20),
-                Container(
+                TfCard(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDECEA),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE5B4B0)),
-                  ),
-                  child: Text(
+                  color: PosColors.dangerSoft,
+                  child: TfText(
                     _error!,
                     style: const TextStyle(
-                      color: Color(0xFF8A2A1F),
+                      color: PosColors.danger,
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ],
               const Spacer(flex: 3),
-              SizedBox(
-                height: 52,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: PosColors.primary,
-                    foregroundColor: const Color(0xFF14110E),
-                  ),
-                  onPressed: _busy ? null : () => _respond(accept: true),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text(
-                          'Accept',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                ),
+              TfButton(
+                label: 'Accept',
+                busy: _busy,
+                size: TfButtonSize.lg,
+                onPressed: () => _respond(accept: true),
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: _busy ? null : () => _respond(accept: false),
-                  child: const Text(
-                    'Decline',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
+              TfButton(
+                label: 'Decline',
+                variant: TfButtonVariant.paper,
+                size: TfButtonSize.lg,
+                onPressed: _busy ? null : () => _respond(accept: false),
               ),
               const Spacer(flex: 1),
             ],

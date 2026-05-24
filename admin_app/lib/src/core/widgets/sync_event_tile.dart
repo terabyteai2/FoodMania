@@ -5,6 +5,7 @@ import '../../models/sync_event.dart';
 import '../../models/sync_status.dart';
 import '../theme/app_theme.dart';
 import 'status_badge.dart';
+import 'tf_design_system.dart';
 
 class SyncEventTile extends StatelessWidget {
   const SyncEventTile({required this.event, super.key});
@@ -18,20 +19,8 @@ class SyncEventTile extends StatelessWidget {
       SyncStatus.pending => PosColors.warning,
       SyncStatus.failed => PosColors.danger,
     };
-    return Container(
+    return TfCard(
       padding: EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: PosColors.background,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-        border: Border.all(color: PosColors.lineStrong.withValues(alpha: 0.48)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -39,16 +28,13 @@ class SyncEventTile extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  accent.withValues(alpha: 0.20),
-                  accent.withValues(alpha: 0.08),
-                ],
-              ),
+              color: event.status == SyncStatus.failed
+                  ? PosColors.dangerSoft
+                  : event.status == SyncStatus.synced
+                  ? PosColors.successSoft
+                  : PosColors.warningSoft,
               borderRadius: BorderRadius.circular(PosRadii.md),
-              border: Border.all(color: accent.withValues(alpha: 0.25)),
+              border: Border.all(color: PosColors.line),
             ),
             child: Icon(Icons.sync_alt, color: accent, size: 20),
           ),
@@ -62,7 +48,7 @@ class SyncEventTile extends StatelessWidget {
                   runSpacing: 6,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text(
+                    TfText(
                       '${event.entityType} / ${event.action}',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
@@ -70,7 +56,7 @@ class SyncEventTile extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: 5),
-                Text(
+                TfText(
                   event.entityId,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -82,14 +68,14 @@ class SyncEventTile extends StatelessWidget {
                 ),
                 if (event.lastError != null) ...[
                   SizedBox(height: 6),
-                  Text(
+                  TfText(
                     event.lastError!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: PosColors.danger,
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -100,11 +86,11 @@ class SyncEventTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
+              TfText(
                 DateFormat('h:mm a').format(event.updatedAt),
                 style: TextStyle(
                   color: PosColors.slateSoft,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                   fontSize: 12,
                 ),
               ),
@@ -116,11 +102,11 @@ class SyncEventTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(PosRadii.pill),
                   border: Border.all(color: PosColors.lineStrong),
                 ),
-                child: Text(
+                child: TfText(
                   'Retry ${event.retryCount}',
                   style: TextStyle(
                     color: PosColors.slate,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     fontSize: 10.5,
                   ),
                 ),

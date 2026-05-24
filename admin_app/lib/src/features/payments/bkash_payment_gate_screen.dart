@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../app_scope.dart';
 import '../../core/constants/payment_defaults.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/bkash_payment_session.dart';
 
 class BkashPaymentGateScreen extends StatefulWidget {
@@ -35,7 +36,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: PosColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -60,25 +61,25 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
                     ],
                   ),
                   SizedBox(height: 30),
-                  Text(
+                  TfText(
                     PaymentDefaults.useUddoktaPay
                         ? 'Pay with UddoktaPay'
                         : text.payWithBkash,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontSize: 20,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                       color: PosColors.slate,
                     ),
                   ),
                   if (PaymentDefaults.useUddoktaPay) ...[
                     SizedBox(height: 6),
-                    Text(
+                    TfText(
                       'bKash, Nagad, cards & more',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: PosColors.muted,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w400,
                         fontSize: 13,
                       ),
                     ),
@@ -275,7 +276,7 @@ class _BkashCheckoutPopup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF8F5F0),
+      backgroundColor: PosColors.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -287,15 +288,10 @@ class _BkashCheckoutPopup extends StatelessWidget {
                 height: constraints.maxHeight - (verticalMargin * 2),
                 constraints: BoxConstraints(maxWidth: 520, maxHeight: 760),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.16),
-                      blurRadius: 30,
-                      offset: Offset(0, 18),
-                    ),
-                  ],
+                  color: PosColors.surface,
+                  borderRadius: BorderRadius.circular(PosRadii.lg),
+                  border: Border.all(color: PosColors.line),
+                  boxShadow: PosShadows.raised,
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: WebViewWidget(controller: controller),
@@ -337,15 +333,9 @@ class _DemoBkashPaymentDialog extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: 390),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 32,
-                offset: Offset(0, 18),
-              ),
-            ],
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.lg),
+            border: Border.all(color: PosColors.line),
           ),
           child: Padding(
             padding: EdgeInsets.fromLTRB(22, 22, 22, 18),
@@ -354,21 +344,21 @@ class _DemoBkashPaymentDialog extends StatelessWidget {
               children: [
                 _BrandAssetLogo(assetPath: 'assets/brand/bkash.png', size: 74),
                 SizedBox(height: 16),
-                Text(
+                TfText(
                   text.bkashDemoPayment,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     color: PosColors.slate,
                   ),
                 ),
                 SizedBox(height: 6),
-                Text(
+                TfText(
                   text.planLine(planTitle, plan.displayAmount),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFFE2136E),
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                     fontSize: 15,
                   ),
                 ),
@@ -386,28 +376,15 @@ class _DemoBkashPaymentDialog extends StatelessWidget {
                   value: PaymentDefaults.bkashSandboxPin,
                 ),
                 SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Color(0xFFE2136E),
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: Text(
-                      text.completeDemoPayment,
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
+                TfButton(
+                  label: text.completeDemoPayment,
+                  onPressed: () => Navigator.pop(context, true),
                 ),
                 SizedBox(height: 8),
-                TextButton(
+                TfButton(
+                  label: text.cancel,
+                  variant: TfButtonVariant.ghost,
                   onPressed: () => Navigator.pop(context, false),
-                  child: Text(text.cancel),
                 ),
               ],
             ),
@@ -431,28 +408,28 @@ class _DemoValueRow extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: PosColors.mutedSoft,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PosColors.line),
       ),
       child: Row(
         children: [
           SizedBox(
             width: 72,
-            child: Text(
+            child: TfText(
               label,
               style: TextStyle(
                 color: PosColors.muted,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
           Expanded(
-            child: Text(
+            child: TfText(
               value,
               textAlign: TextAlign.right,
               style: TextStyle(
                 color: PosColors.slate,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w500,
                 fontSize: 15,
               ),
             ),
@@ -482,22 +459,22 @@ class _PlanButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Color(0xFFE2136E),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: disabled ? null : onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           width: double.infinity,
           padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           child: Row(
             children: [
               Expanded(
-                child: Text(
+                child: TfText(
                   title,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 17,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -511,12 +488,12 @@ class _PlanButton extends StatelessWidget {
                   ),
                 )
               else
-                Text(
+                TfText(
                   amount,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
             ],
@@ -538,16 +515,16 @@ class _PaymentError extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: PosColors.danger.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: PosColors.danger.withValues(alpha: 0.22)),
+        color: PosColors.dangerSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.line),
       ),
-      child: Text(
+      child: TfText(
         message,
         textAlign: TextAlign.center,
         style: TextStyle(
           color: PosColors.danger,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w500,
           fontSize: 12.5,
         ),
       ),
@@ -564,7 +541,7 @@ class _BrandAssetLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: Image.asset(
         assetPath,
         width: size,

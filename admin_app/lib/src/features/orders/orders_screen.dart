@@ -3,19 +3,17 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/notification_center.dart';
-import '../../core/widgets/pos_compact_ui.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
 import '../../models/order_item.dart';
 import '../../models/order_model.dart';
-import '../../models/order_payment_method.dart';
 import '../../models/order_service_type.dart';
 import '../../models/order_source.dart';
 import '../../models/order_status.dart';
@@ -194,18 +192,24 @@ class _OrdersScreenState extends State<OrdersScreen>
     final previousPendingCount = _lastPendingCount;
     _lastPendingCount = pendingCount;
 
-    final shouldShowAccepted =
-        pendingCount == 0 && acceptedCount > 0 && _tabs.index != 1;
-    final hasNewPendingOrder =
-        pendingCount > 0 &&
-        pendingCount > (previousPendingCount ?? pendingCount) &&
-        _tabs.index != 0;
+    // Only auto-switch on actual transitions, not on every rebuild — otherwise
+    // tapping into the pending tab while pendingCount is still 0 bounces the
+    // user straight back to accepted.
+    if (previousPendingCount == null) return;
 
-    if (!shouldShowAccepted && !hasNewPendingOrder) return;
+    final pendingJustDrained =
+        previousPendingCount > 0 &&
+        pendingCount == 0 &&
+        acceptedCount > 0 &&
+        _tabs.index != 1;
+    final hasNewPendingOrder =
+        pendingCount > previousPendingCount && _tabs.index != 0;
+
+    if (!pendingJustDrained && !hasNewPendingOrder) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final targetIndex = shouldShowAccepted ? 1 : 0;
+      final targetIndex = pendingJustDrained ? 1 : 0;
       if (_tabs.index != targetIndex) {
         _tabs.animateTo(targetIndex);
       }
@@ -255,8 +259,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               tableNo: result.tableNo,
               note: result.note,
               serviceType: result.serviceType,
-              covers: result.covers,
-              paymentMethod: result.paymentMethod,
+              paymentMethod: null,
             );
             final shouldPrint =
                 app.isManager &&
@@ -290,8 +293,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          ok
+        content: TfText(          ok
               ? text.billPrinted(order.displaySequence)
               : (app.printerState.lastError ?? text.printFailed),
         ),
@@ -344,19 +346,19 @@ class _TopBar extends StatelessWidget {
     final quietEmpty = totalFiltered == 0 && !filtersActive;
     return Padding(
       padding: EdgeInsets.fromLTRB(12, 14, 12, 7),
-      child: CompactHeader(
+      child: TfAppBar(
         title: text.ordersTitle,
         subtitle: subtitle,
-        actions: [
+        trailing: [
           // Tapping the bell on this screen is a no-op for navigation,
           // since we're already on the Orders tab.
           if (!quietEmpty) HeaderLanguageButton(),
           HeaderNotificationBell(onNavigateToOrders: () {}),
           if (!quietEmpty)
-            CompactIconButton(
+            TfIconButton(
               icon: Icons.tune_rounded,
               tooltip: text.filterOrders,
-              filled: filtersActive,
+              dark: filtersActive,
               onPressed: onFilterPressed,
             ),
         ],
@@ -422,7 +424,7 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       padding: EdgeInsets.fromLTRB(20, 12, 20, 16 + bottom),
       child: SingleChildScrollView(
@@ -441,15 +443,13 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                 ),
               ),
             ),
-            Text(
-              t.filterOrders,
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            TfText(              t.filterOrders,
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
             ),
             SizedBox(height: 16),
-            Text(
-              t.filterByDate,
+            TfText(              t.filterByDate,
               style: TextStyle(
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 fontSize: 12,
                 color: PosColors.muted,
               ),
@@ -460,28 +460,18 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
               runSpacing: 8,
               children: OrderDateRange.values.map((range) {
                 final selected = _dateRange == range;
-                return FilterChip(
-                  label: Text(_dateLabel(range)),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _dateRange = range),
-                  selectedColor: PosColors.primary.withValues(alpha: 0.35),
-                  checkmarkColor: PosColors.primaryDark,
-                  labelStyle: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: selected ? PosColors.primaryDark : PosColors.slate,
-                  ),
-                  side: BorderSide(
-                    color: selected ? PosColors.primary : PosColors.lineStrong,
-                  ),
+                return TfChip(
+                  label: _dateLabel(range),
+                  active: selected,
+                  small: true,
+                  onTap: () => setState(() => _dateRange = range),
                 );
               }).toList(),
             ),
             SizedBox(height: 18),
-            Text(
-              t.filterBySource,
+            TfText(              t.filterBySource,
               style: TextStyle(
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w500,
                 fontSize: 12,
                 color: PosColors.muted,
               ),
@@ -491,44 +481,20 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilterChip(
-                  label: Text(t.allChannels),
-                  selected: _source == null,
-                  onSelected: (_) => setState(() => _source = null),
-                  selectedColor: PosColors.primary.withValues(alpha: 0.35),
-                  checkmarkColor: PosColors.primaryDark,
-                  labelStyle: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: _source == null
-                        ? PosColors.primaryDark
-                        : PosColors.slate,
-                  ),
-                  side: BorderSide(
-                    color: _source == null
-                        ? PosColors.primary
-                        : PosColors.lineStrong,
-                  ),
+                TfChip(
+                  label: t.allChannels,
+                  active: _source == null,
+                  small: true,
+                  onTap: () => setState(() => _source = null),
                 ),
                 ...OrderSource.values.map((source) {
                   final selected = _source == source;
-                  return FilterChip(
-                    label: Text(t.orderSourceLabel(source)),
-                    selected: selected,
-                    onSelected: (_) =>
+                  return TfChip(
+                    label: t.orderSourceLabel(source),
+                    active: selected,
+                    small: true,
+                    onTap: () =>
                         setState(() => _source = selected ? null : source),
-                    selectedColor: PosColors.primary.withValues(alpha: 0.35),
-                    checkmarkColor: PosColors.primaryDark,
-                    labelStyle: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: selected ? PosColors.primaryDark : PosColors.slate,
-                    ),
-                    side: BorderSide(
-                      color: selected
-                          ? PosColors.primary
-                          : PosColors.lineStrong,
-                    ),
                   );
                 }),
               ],
@@ -537,25 +503,22 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: TfButton(
+                    label: t.resetFilters,
+                    variant: TfButtonVariant.paper,
                     onPressed: () {
                       setState(() {
                         _dateRange = OrderDateRange.all;
                         _source = null;
                       });
                     },
-                    child: Text(t.resetFilters),
                   ),
                 ),
                 SizedBox(width: 10),
                 Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: PosColors.primary,
-                      foregroundColor: PosColors.primaryDark,
-                    ),
+                  child: TfButton(
+                    label: t.applyFilters,
                     onPressed: () => Navigator.pop(context, _draft),
-                    child: Text(t.applyFilters),
                   ),
                 ),
               ],
@@ -696,7 +659,7 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                       height: 78,
                       decoration: BoxDecoration(
                         color: PosColors.primarySoft,
-                        borderRadius: BorderRadius.circular(39),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: const Icon(
                         TfNavIcon.orders,
@@ -741,9 +704,11 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                     ],
                     if (shortcut != null) ...[
                       const SizedBox(height: 12),
-                      TextButton(
+                      TfButton(
+                        label: shortcut!.label,
+                        variant: TfButtonVariant.ghost,
+                        fullWidth: false,
                         onPressed: shortcut!.onTap,
-                        child: Text(shortcut!.label),
                       ),
                     ],
                   ],
@@ -788,7 +753,6 @@ class _OrderCard extends StatelessWidget {
     final app = AppScope.of(context);
     final text = app.strings;
     final canPrint = app.isManager;
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final adminStatus = order.status.adminStatus;
     final isPending = adminStatus == OrderStatus.pending;
     final isAccepted = adminStatus == OrderStatus.accepted;
@@ -867,20 +831,19 @@ class _OrderCard extends StatelessWidget {
                               runSpacing: 4,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                Text(
+                                TfText(
                                   order.displaySequence,
-                                  style: const TextStyle(
-                                    fontFamily: 'Inter',
+                                  style: TextStyle(
+                                    fontFamily: tfFontFamily(context),
                                     fontSize: 18,
                                     fontWeight: FontWeight.w500,
                                     color: PosColors.slate,
                                     letterSpacing: -0.2,
                                   ),
                                 ),
-                                Text(
-                                  '· $sourceLabel',
-                                  style: const TextStyle(
-                                    fontFamily: 'Inter',
+                                TfText(                                  '· $sourceLabel',
+                                  style: TextStyle(
+                                    fontFamily: tfFontFamily(context),
                                     fontSize: 14,
                                     color: PosColors.slate,
                                   ),
@@ -894,10 +857,9 @@ class _OrderCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Text(
-                            currency.format(order.total),
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
+                          TfText(                            tfFormatCurrency(context, order.total),
+                            style: TextStyle(
+                              fontFamily: tfFontFamily(context),
                               fontSize: 17,
                               fontWeight: FontWeight.w500,
                               color: PosColors.slate,
@@ -925,7 +887,7 @@ class _OrderCard extends StatelessWidget {
                             (item) => Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
                               child: TfText(
-                                '${item.qty}× ${item.name}',
+                                '${tfFormatNumber(context, item.qty)}× ${item.name}',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   color: PosColors.slate,
@@ -939,8 +901,9 @@ class _OrderCard extends StatelessWidget {
                       if (order.items.length > 3)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            '+${order.items.length - 3} more',
+                          child: TfText(                            text.isBn
+                                ? '+${tfFormatNumber(context, order.items.length - 3)} আরও'
+                                : '+${tfFormatNumber(context, order.items.length - 3)} more',
                             style: const TextStyle(
                               fontSize: 11,
                               color: PosColors.muted,
@@ -979,7 +942,6 @@ class _OrderCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                flex: 2,
                                 child: TfButton(
                                   label: text.acceptAndSendToKitchen,
                                   icon: TfNavIcon.check,
@@ -1012,11 +974,11 @@ class _OrderCard extends StatelessWidget {
   String _sourceLabel(OrderModel order, AppStrings text) {
     final table = (order.tableNo ?? '').trim();
     if (table.isNotEmpty) {
-      return text.isBn ? 'টেবিল $table' : 'Table $table';
+      return text.isBn ? 'টেবিল ${tfToBnNumbers(table)}' : 'Table $table';
     }
     switch (order.serviceType) {
       case OrderServiceType.takeaway:
-        return text.isBn ? 'টেক-অ্যাওয়ে' : 'Takeaway';
+        return text.isBn ? 'পার্সেল' : 'Parcel';
       case OrderServiceType.delivery:
         return text.isBn ? 'ডেলিভারি' : 'Delivery';
       case OrderServiceType.dineIn:
@@ -1051,7 +1013,6 @@ class _OrderCreatedSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     return Container(
       color: PosColors.background,
       child: SafeArea(
@@ -1066,17 +1027,16 @@ class _OrderCreatedSheet extends StatelessWidget {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
-                    color: const Color(0xFF1C1A17),
+                    color: PosColors.slate,
                     tooltip: 'Back to orders',
                     onPressed: () => Navigator.pop(context),
                   ),
                   const Expanded(
-                    child: Text(
-                      'Receipt',
+                    child: TfText(                      'Receipt',
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w500,
                         fontSize: 16,
-                        color: Color(0xFF1C1A17),
+                        color: PosColors.slate,
                       ),
                     ),
                   ),
@@ -1087,8 +1047,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEAF4EE),
-                        borderRadius: BorderRadius.circular(99),
+                        color: PosColors.successSoft,
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1096,14 +1056,13 @@ class _OrderCreatedSheet extends StatelessWidget {
                           const Icon(
                             Icons.print_rounded,
                             size: 12,
-                            color: Color(0xFF3D7A5A),
+                            color: PosColors.success,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            text.ticketSentToPrinter,
+                          TfText(                            text.ticketSentToPrinter,
                             style: const TextStyle(
-                              color: Color(0xFF3D7A5A),
-                              fontWeight: FontWeight.w800,
+                              color: PosColors.success,
+                              fontWeight: FontWeight.w500,
                               fontSize: 10.5,
                             ),
                           ),
@@ -1121,7 +1080,7 @@ class _OrderCreatedSheet extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: PosColors.line, width: 0.5),
                     ),
                     child: Column(
@@ -1130,44 +1089,41 @@ class _OrderCreatedSheet extends StatelessWidget {
                           width: 56,
                           height: 56,
                           decoration: const BoxDecoration(
-                            color: Color(0xFFEAF4EE),
+                            color: PosColors.successSoft,
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
                             Icons.check_rounded,
-                            color: Color(0xFF3D7A5A),
+                            color: PosColors.success,
                             size: 30,
                           ),
                         ),
                         const SizedBox(height: 10),
-                        const Text(
-                          'Order created',
+                        TfText(                          'Order created',
                           style: TextStyle(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w500,
                             fontSize: 13,
-                            color: Color(0xFF888780),
+                            color: PosColors.muted,
                           ),
                         ),
                         const SizedBox(height: 12),
                         // Big order # focus.
-                        Text(
-                          '#${order.displaySequence}',
+                        TfText(                          order.displaySequence,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w500,
                             fontSize: 56,
-                            color: Color(0xFF1C1A17),
+                            color: PosColors.slate,
                             height: 1,
                             letterSpacing: -1.5,
                           ),
                         ),
                         const SizedBox(height: 4),
                         if ((order.tableNo ?? '').isNotEmpty)
-                          Text(
-                            'Table ${order.tableNo}',
+                          TfText(                            'Table ${order.tableNo}',
                             style: const TextStyle(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w500,
                               fontSize: 13,
-                              color: Color(0xFF888780),
+                              color: PosColors.muted,
                             ),
                           ),
                         const SizedBox(height: 16),
@@ -1175,7 +1131,7 @@ class _OrderCreatedSheet extends StatelessWidget {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: PosColors.line,
                               width: 0.5,
@@ -1188,23 +1144,22 @@ class _OrderCreatedSheet extends StatelessWidget {
                             backgroundColor: Colors.white,
                             eyeStyle: const QrEyeStyle(
                               eyeShape: QrEyeShape.square,
-                              color: Color(0xFF1C1A17),
+                              color: PosColors.slate,
                             ),
                             dataModuleStyle: const QrDataModuleStyle(
                               dataModuleShape: QrDataModuleShape.square,
-                              color: Color(0xFF1C1A17),
+                              color: PosColors.slate,
                             ),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Text(
-                          menuUrl != null
+                        TfText(                          menuUrl != null
                               ? 'Scan to view the menu'
                               : order.orderNo,
                           style: const TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF888780),
-                            fontWeight: FontWeight.w700,
+                            color: PosColors.muted,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -1216,18 +1171,17 @@ class _OrderCreatedSheet extends StatelessWidget {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: PosColors.line, width: 0.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'ITEMS',
+                        TfText(                          'ITEMS',
                           style: TextStyle(
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF888780),
+                            fontWeight: FontWeight.w500,
+                            color: PosColors.muted,
                             letterSpacing: 0.8,
                           ),
                         ),
@@ -1239,31 +1193,28 @@ class _OrderCreatedSheet extends StatelessWidget {
                               children: [
                                 SizedBox(
                                   width: 28,
-                                  child: Text(
-                                    '${item.qty}×',
+                                  child: TfText(                                    '${tfFormatNumber(context, item.qty)}×',
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w500,
                                       fontSize: 12.5,
-                                      color: Color(0xFF888780),
+                                      color: PosColors.muted,
                                     ),
                                   ),
                                 ),
                                 Expanded(
-                                  child: Text(
-                                    item.name,
+                                  child: TfText(                                    item.name,
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w500,
                                       fontSize: 13,
-                                      color: Color(0xFF1C1A17),
+                                      color: PosColors.slate,
                                     ),
                                   ),
                                 ),
-                                Text(
-                                  currency.format(item.lineTotal),
+                                TfText(                                  tfFormatCurrency(context, item.lineTotal),
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w500,
                                     fontSize: 13,
-                                    color: Color(0xFF1C1A17),
+                                    color: PosColors.slate,
                                   ),
                                 ),
                               ],
@@ -1272,22 +1223,20 @@ class _OrderCreatedSheet extends StatelessWidget {
                         Divider(color: PosColors.line, height: 22),
                         Row(
                           children: [
-                            const Text(
-                              'TOTAL',
+                            TfText(                              'TOTAL',
                               style: TextStyle(
                                 fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF1C1A17),
+                                fontWeight: FontWeight.w500,
+                                color: PosColors.slate,
                                 letterSpacing: 0.7,
                               ),
                             ),
                             const Spacer(),
-                            Text(
-                              currency.format(order.total),
+                            TfText(                              tfFormatCurrency(context, order.total),
                               style: const TextStyle(
                                 fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF1C1A17),
+                                fontWeight: FontWeight.w500,
+                                color: PosColors.slate,
                               ),
                             ),
                           ],
@@ -1316,49 +1265,20 @@ class _OrderCreatedSheet extends StatelessWidget {
                 children: [
                   if (canPrint)
                     Expanded(
-                      child: SizedBox(
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed: onPrint,
-                          icon: const Icon(Icons.print_rounded, size: 18),
-                          label: const Text(
-                            'Print bill',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 14,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF1C1A17),
-                            side: BorderSide(color: PosColors.line, width: 0.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
+                      child: TfButton(
+                        label: 'Print bill',
+                        icon: Icons.print_rounded,
+                        variant: TfButtonVariant.paper,
+                        size: TfButtonSize.lg,
+                        onPressed: onPrint,
                       ),
                     ),
                   if (canPrint) const SizedBox(width: 10),
                   Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFF5C127),
-                          foregroundColor: const Color(0xFF1C1A17),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text(
-                          'Back to orders',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
+                    child: TfButton(
+                      label: 'Back to orders',
+                      size: TfButtonSize.lg,
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ),
                 ],
@@ -1379,17 +1299,13 @@ class _OrderResult {
   _OrderResult({
     required this.items,
     required this.serviceType,
-    required this.paymentMethod,
     this.tableNo,
-    this.covers,
     this.note,
   });
 
   final List<OrderRequestItem> items;
   final OrderServiceType serviceType;
-  final OrderPaymentMethod paymentMethod;
   final String? tableNo;
-  final int? covers;
   final String? note;
 }
 
@@ -1417,14 +1333,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 
   OrderServiceType? _source;
   String? _selectedTable;
-  int _covers = 2;
 
   final Map<String, int> _cart = {};
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   String _query = '';
-  OrderPaymentMethod _paymentMethod = OrderPaymentMethod.cash;
   OrderModel? _createdOrder;
   bool _creating = false;
 
@@ -1547,9 +1461,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _OrderResult(
           items: items,
           serviceType: _source!,
-          paymentMethod: _paymentMethod,
           tableNo: tableNo,
-          covers: isDineIn ? _covers : null,
           note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         ),
       );
@@ -1564,7 +1476,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
       setState(() => _creating = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Could not create order: $error')));
+      ).showSnackBar(SnackBar(content: TfText('Could not create order: $error')));
     }
   }
 
@@ -1573,13 +1485,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
       _step = 0;
       _source = null;
       _selectedTable = null;
-      _covers = 2;
       _cart.clear();
       _selectedCategory = 'All';
       _query = '';
       _searchCtrl.clear();
       _noteCtrl.clear();
-      _paymentMethod = OrderPaymentMethod.cash;
       _createdOrder = null;
       _creating = false;
     });
@@ -1587,10 +1497,10 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   }
 
   String get _tableLabel {
-    if (_source == OrderServiceType.takeaway) return 'Takeaway';
+    if (_source == OrderServiceType.takeaway) return 'Parcel';
     if (_source == OrderServiceType.delivery) return 'Delivery';
     if (_selectedTable == null) return '';
-    if (_selectedTable!.isEmpty) return 'Takeaway';
+    if (_selectedTable!.isEmpty) return 'Parcel';
     return 'Table $_selectedTable';
   }
 
@@ -1623,8 +1533,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     tableCount: widget.tableCount,
                     selectedTable: _selectedTable,
                     occupiedTables: widget.occupiedTables,
-                    covers: _covers,
-                    onCoversChanged: (value) => setState(() => _covers = value),
                     onSelectTable: _selectTable,
                     onContinue:
                         _source != null &&
@@ -1653,15 +1561,9 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                   _ReviewStep(
                     menuItems: widget.menuItems,
                     cart: _cart,
-                    subtotal: _subtotal,
-                    vatAmount: _vatAmount,
                     total: _total,
-                    totalQty: _totalQty,
                     noteCtrl: _noteCtrl,
                     sourceLabel: _tableLabel.isEmpty ? '—' : _tableLabel,
-                    paymentMethod: _paymentMethod,
-                    onPaymentChanged: (value) =>
-                        setState(() => _paymentMethod = value),
                     onEdit: () => _goToStep(1),
                     onCreate: _submit,
                     creating: _creating,
@@ -1669,7 +1571,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                   _OrderCreatedStep(
                     order: _createdOrder,
                     serviceLabel: _tableLabel,
-                    paymentMethod: _paymentMethod,
                     total: _total,
                     onDone: () => Navigator.pop(context),
                     onNewOrder: _startAnotherOrder,
@@ -1714,7 +1615,7 @@ class _WizardHeader extends StatelessWidget {
             "Where's this order for?",
             'Add items',
             'Review & send',
-            'Sent to kitchen',
+            'Order created',
           ];
     final stepLabel = stepLabels[step.clamp(0, stepLabels.length - 1)];
 
@@ -1813,7 +1714,7 @@ class _StepIndicator extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Source picker (Dine-in / Takeaway / Delivery) — wraps the existing
+// Source picker (Dine-in / Parcel) — wraps the existing
 // table picker so dine-in shows tables directly underneath the source choice.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1824,8 +1725,6 @@ class _SourceAndTableStep extends StatelessWidget {
     required this.tableCount,
     required this.selectedTable,
     required this.occupiedTables,
-    required this.covers,
-    required this.onCoversChanged,
     required this.onSelectTable,
     required this.onContinue,
   });
@@ -1835,8 +1734,6 @@ class _SourceAndTableStep extends StatelessWidget {
   final int tableCount;
   final String? selectedTable;
   final Set<String> occupiedTables;
-  final int covers;
-  final ValueChanged<int> onCoversChanged;
   final ValueChanged<String> onSelectTable;
   final VoidCallback? onContinue;
 
@@ -1856,7 +1753,7 @@ class _SourceAndTableStep extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _SourceTile(
-                        emoji: '🪑',
+                        icon: Icons.table_restaurant_outlined,
                         source: OrderServiceType.dineIn,
                         selected: source == OrderServiceType.dineIn,
                         onTap: () => onSelectSource(OrderServiceType.dineIn),
@@ -1865,19 +1762,10 @@ class _SourceAndTableStep extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _SourceTile(
-                        emoji: '🥡',
+                        icon: Icons.takeout_dining_outlined,
                         source: OrderServiceType.takeaway,
                         selected: source == OrderServiceType.takeaway,
                         onTap: () => onSelectSource(OrderServiceType.takeaway),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _SourceTile(
-                        emoji: '🛵',
-                        source: OrderServiceType.delivery,
-                        selected: source == OrderServiceType.delivery,
-                        onTap: () => onSelectSource(OrderServiceType.delivery),
                       ),
                     ),
                   ],
@@ -1897,8 +1785,8 @@ class _SourceAndTableStep extends StatelessWidget {
                         ),
                       ),
                       TfText(
-                        '$tableCount ${text.isBn ? "টেবিল" : "tables"}'
-                        ' · ${tableCount - occupiedTables.length} ${text.isBn ? "খালি" : "free"}',
+                        '${tfFormatNumber(context, tableCount)} ${text.isBn ? "টেবিল" : "tables"}'
+                        ' · ${tfFormatNumber(context, tableCount - occupiedTables.length)} ${text.isBn ? "খালি" : "free"}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: PosColors.muted,
@@ -1930,17 +1818,6 @@ class _SourceAndTableStep extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 22),
-                  TfText(
-                    text.howManyPeople,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: PosColors.slate,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _CoversRow(value: covers, onChanged: onCoversChanged),
                 ],
               ],
             ),
@@ -1961,13 +1838,13 @@ class _SourceAndTableStep extends StatelessWidget {
 
 class _SourceTile extends StatelessWidget {
   const _SourceTile({
-    required this.emoji,
+    required this.icon,
     required this.source,
     required this.selected,
     required this.onTap,
   });
 
-  final String emoji;
+  final IconData icon;
   final OrderServiceType source;
   final bool selected;
   final VoidCallback onTap;
@@ -1994,7 +1871,11 @@ class _SourceTile extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 28, height: 1)),
+              Icon(
+                icon,
+                size: 28,
+                color: selected ? Colors.white : PosColors.primaryDark,
+              ),
               const SizedBox(height: 10),
               TfText(
                 label,
@@ -2015,104 +1896,17 @@ class _SourceTile extends StatelessWidget {
   }
 }
 
-// Single-row covers picker: 1 / 2 / 3 / 4 / 5 / 6 / 7+. Mirrors the design's
-// chip strip rather than a +/- stepper.
-class _CoversRow extends StatelessWidget {
-  const _CoversRow({required this.value, required this.onChanged});
-
-  final int value;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    const options = [1, 2, 3, 4, 5, 6];
-    return Row(
-      children: [
-        for (var i = 0; i < options.length; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          Expanded(
-            child: _CoverChip(
-              value: options[i],
-              selected: value == options[i],
-              onTap: () => onChanged(options[i]),
-            ),
-          ),
-        ],
-        const SizedBox(width: 6),
-        Expanded(
-          child: _CoverChip(
-            value: 7,
-            selected: value >= 7,
-            label: '7+',
-            onTap: () => onChanged(7),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CoverChip extends StatelessWidget {
-  const _CoverChip({
-    required this.value,
-    required this.selected,
-    required this.onTap,
-    this.label,
-  });
-  final int value;
-  final bool selected;
-  final String? label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? PosColors.primaryDark : PosColors.surface,
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? PosColors.primaryDark : PosColors.line,
-              width: 0.5,
-            ),
-          ),
-          child: Text(
-            label ?? '$value',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-              color: selected ? Colors.white : PosColors.slate,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Review step with VAT, kitchen note, payment method, and create CTA.
+// Review step with VAT, kitchen note, and create CTA.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ReviewStep extends StatelessWidget {
   const _ReviewStep({
     required this.menuItems,
     required this.cart,
-    required this.subtotal,
-    required this.vatAmount,
     required this.total,
-    required this.totalQty,
     required this.noteCtrl,
     required this.sourceLabel,
-    required this.paymentMethod,
-    required this.onPaymentChanged,
     required this.onEdit,
     required this.onCreate,
     required this.creating,
@@ -2120,14 +1914,9 @@ class _ReviewStep extends StatelessWidget {
 
   final List<MenuItem> menuItems;
   final Map<String, int> cart;
-  final double subtotal;
-  final double vatAmount;
   final double total;
-  final int totalQty;
   final TextEditingController noteCtrl;
   final String sourceLabel;
-  final OrderPaymentMethod paymentMethod;
-  final ValueChanged<OrderPaymentMethod> onPaymentChanged;
   final VoidCallback onEdit;
   final Future<void> Function() onCreate;
   final bool creating;
@@ -2135,7 +1924,6 @@ class _ReviewStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     return Column(
       children: [
         Expanded(
@@ -2151,14 +1939,9 @@ class _ReviewStep extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
                       child: Row(
                         children: [
-                          TfText(
-                            text.sourceLabel.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: PosColors.muted,
-                              letterSpacing: 0.5,
-                            ),
+                          TfSectionHeader(
+                            label: text.sourceLabel,
+                            padding: EdgeInsets.zero,
                           ),
                           const Spacer(),
                           TfText(
@@ -2188,10 +1971,10 @@ class _ReviewStep extends StatelessWidget {
                           children: [
                             SizedBox(
                               width: 26,
-                              child: Text(
-                                '${entry.value}×',
-                                style: const TextStyle(
-                                  fontFamily: 'Inter',
+                              child: TfText(
+                                '${tfFormatNumber(context, entry.value)}×',
+                                style: TextStyle(
+                                  fontFamily: tfFontFamily(context),
                                   fontWeight: FontWeight.w500,
                                   fontSize: 14,
                                   color: PosColors.slate,
@@ -2209,10 +1992,12 @@ class _ReviewStep extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            Text(
-                              currency.format(item.price * entry.value),
-                              style: const TextStyle(
-                                fontFamily: 'Inter',
+                            TfText(                              tfFormatCurrency(
+                                context,
+                                item.price * entry.value,
+                              ),
+                              style: TextStyle(
+                                fontFamily: tfFontFamily(context),
                                 fontWeight: FontWeight.w500,
                                 fontSize: 14,
                                 color: PosColors.slate,
@@ -2290,92 +2075,35 @@ class _ReviewStep extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              TfCard(
-                child: Column(
-                  children: [
-                    _AmountLine(
-                      label: text.subtotalLabel,
-                      value: currency.format(subtotal),
-                    ),
-                    const SizedBox(height: 4),
-                    _AmountLine(
-                      label: '${text.vatLabel} 5%',
-                      value: currency.format(vatAmount),
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(
-                      color: PosColors.line,
-                      height: 1,
-                      thickness: 0.5,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TfText(
-                          text.totalLabel,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: PosColors.slate,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          currency.format(total),
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                            color: PosColors.slate,
-                            letterSpacing: -0.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              Padding(
-                padding: const EdgeInsets.only(left: 2, bottom: 6),
-                child: TfText(
-                  text.paymentLabel,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: PosColors.slate,
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  for (
-                    var i = 0;
-                    i < OrderPaymentMethod.values.length;
-                    i++
-                  ) ...[
-                    if (i > 0) const SizedBox(width: 6),
-                    Expanded(
-                      child: _PaymentTile(
-                        method: OrderPaymentMethod.values[i],
-                        selected: paymentMethod == OrderPaymentMethod.values[i],
-                        onTap: () =>
-                            onPaymentChanged(OrderPaymentMethod.values[i]),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
             ],
           ),
         ),
         TfStickyCTA(
-          child: TfButton(
-            label: creating ? '…' : text.sendToKitchen,
-            icon: creating ? null : TfNavIcon.check,
-            size: TfButtonSize.lg,
-            onPressed: creating ? null : () => onCreate(),
+          child: Row(
+            children: [
+              Expanded(
+                child: TfText(
+                  '${text.totalLabel}: ${tfFormatCurrency(context, total)}',
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: TfButton(
+                  label: creating ? '...' : text.sendToKitchen,
+                  icon: creating ? null : TfNavIcon.check,
+                  size: TfButtonSize.lg,
+                  onPressed: creating ? null : () => onCreate(),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -2393,8 +2121,7 @@ class _AmountLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          label,
+        TfText(          label,
           style: TextStyle(
             fontSize: 12.5,
             color: PosColors.muted,
@@ -2402,8 +2129,7 @@ class _AmountLine extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        Text(
-          value,
+        TfText(          value,
           style: TextStyle(
             fontSize: 12.5,
             color: PosColors.slate,
@@ -2415,76 +2141,10 @@ class _AmountLine extends StatelessWidget {
   }
 }
 
-class _PaymentTile extends StatelessWidget {
-  const _PaymentTile({
-    required this.method,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final OrderPaymentMethod method;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = switch (method) {
-      OrderPaymentMethod.cash => Icons.payments_outlined,
-      OrderPaymentMethod.card => Icons.credit_card_outlined,
-      OrderPaymentMethod.bkash => Icons.account_balance_wallet_outlined,
-      OrderPaymentMethod.payLater => Icons.schedule_outlined,
-    };
-    final isBn = tfIsBn(context);
-    final label = isBn ? method.banglaLabel : method.label;
-    return Material(
-      color: selected ? PosColors.primaryDark : PosColors.surface,
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? PosColors.primaryDark : PosColors.line,
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: selected ? Colors.white : PosColors.slate,
-              ),
-              const SizedBox(height: 6),
-              TfText(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: selected ? Colors.white : PosColors.slate,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _OrderCreatedStep extends StatelessWidget {
   const _OrderCreatedStep({
     required this.order,
     required this.serviceLabel,
-    required this.paymentMethod,
     required this.total,
     required this.onDone,
     required this.onNewOrder,
@@ -2492,7 +2152,6 @@ class _OrderCreatedStep extends StatelessWidget {
 
   final OrderModel? order;
   final String serviceLabel;
-  final OrderPaymentMethod paymentMethod;
   final double total;
   final VoidCallback onDone;
   final VoidCallback onNewOrder;
@@ -2501,70 +2160,122 @@ class _OrderCreatedStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final isBn = text.isBn;
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final source = serviceLabel.isEmpty
-        ? (isBn ? 'টেক-অ্যাওয়ে' : 'Takeaway')
+        ? (isBn ? 'পার্সেল' : 'Parcel')
         : serviceLabel;
-    final paymentName = isBn ? paymentMethod.banglaLabel : paymentMethod.label;
+    final orderNo = order?.displaySequence ?? '#order';
+    final qrData = order == null
+        ? orderNo
+        : 'terafoods://order/${order!.id}?no=$orderNo';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 40, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       child: Column(
         children: [
-          Container(
-            width: 92,
-            height: 92,
-            decoration: BoxDecoration(
-              color: PosColors.successSoft,
-              borderRadius: BorderRadius.circular(46),
-            ),
-            child: const Icon(
-              Icons.check_rounded,
-              size: 44,
-              color: PosColors.success,
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: PosColors.successSoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      size: 38,
+                      color: PosColors.success,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TfText(
+                    text.orderCreatedTitle,
+                    style: const TextStyle(
+                      color: PosColors.slate,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TfText(
+                    orderNo,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: PosColors.primaryDark,
+                      fontSize: 68,
+                      fontWeight: FontWeight.w500,
+                      height: 0.95,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TfText(
+                    '$source · ${tfFormatCurrency(context, order?.total ?? total)}',
+                    style: const TextStyle(
+                      color: PosColors.muted,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: PosColors.line, width: 0.5),
+                    ),
+                    child: QrImageView(
+                      data: qrData,
+                      version: QrVersions.auto,
+                      size: 210,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: PosColors.primaryDark,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: PosColors.primaryDark,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TfCard(
+                    child: Column(
+                      children: [
+                        _AmountLine(label: text.orderLabel, value: orderNo),
+                        const SizedBox(height: 8),
+                        _AmountLine(label: text.sourceLabel, value: source),
+                        const SizedBox(height: 8),
+                        _AmountLine(
+                          label: text.totalLabel,
+                          value: tfFormatCurrency(
+                            context,
+                            order?.total ?? total,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 18),
-          TfText(
-            text.sentToKitchenTitle,
-            style: const TextStyle(
-              color: PosColors.slate,
-              fontSize: 24,
-              fontWeight: FontWeight.w500,
-              letterSpacing: -0.4,
-            ),
-          ),
-          const SizedBox(height: 6),
-          TfText(
-            '${order?.displaySequence ?? "#order"} · $source · ${currency.format(order?.total ?? total)}',
-            style: const TextStyle(color: PosColors.muted, fontSize: 13),
-          ),
-          const SizedBox(height: 22),
-          TfCard(
-            child: Column(
-              children: [
-                _AmountLine(
-                  label: text.orderLabel,
-                  value: order?.displaySequence ?? '#order',
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: TfButton(
+                  label: text.takeAnotherOrder,
+                  icon: TfNavIcon.plus,
+                  variant: TfButtonVariant.dark,
+                  size: TfButtonSize.lg,
+                  onPressed: onNewOrder,
                 ),
-                const SizedBox(height: 8),
-                _AmountLine(label: text.sourceLabel, value: source),
-                const SizedBox(height: 8),
-                _AmountLine(label: text.paymentLabel, value: paymentName),
-                const SizedBox(height: 8),
-                _AmountLine(
-                  label: text.totalLabel,
-                  value: currency.format(order?.total ?? total),
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          TfButton(
-            label: text.takeAnotherOrder,
-            icon: TfNavIcon.plus,
-            variant: TfButtonVariant.dark,
-            size: TfButtonSize.lg,
-            onPressed: onNewOrder,
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           TfButton(
@@ -2637,10 +2348,9 @@ class _TableTile extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  '$number',
+                TfText(                  tfFormatNumber(context, number),
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: tfFontFamily(context),
                     fontSize: 20,
                     fontWeight: FontWeight.w500,
                     color: numberColor,
@@ -2693,7 +2403,6 @@ class _MenuStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     return Column(
       children: [
         Padding(
@@ -2735,7 +2444,6 @@ class _MenuStep extends StatelessWidget {
           menuItems: menuItems,
           total: total,
           totalQty: totalQty,
-          currency: currency,
           onSubmit: onSubmit,
         ),
       ],
@@ -2798,8 +2506,7 @@ class _MenuGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return Center(
-        child: Text(
-          AppScope.of(context).strings.noItemsInCategory,
+        child: TfText(          AppScope.of(context).strings.noItemsInCategory,
           style: TextStyle(color: PosColors.muted),
         ),
       );
@@ -2809,7 +2516,7 @@ class _MenuGrid extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(14, 10, 14, 8),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 160,
-        mainAxisExtent: 90,
+        mainAxisExtent: 112,
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
       ),
@@ -2839,9 +2546,11 @@ class _MenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final inCart = qty > 0;
     final hasImage = (item.imageUrl ?? '').isNotEmpty;
+    final extras = item.extras;
+    final hasAddOns = extras.addOns.isNotEmpty;
+    final iconStyle = menuIconStyleFor(extras.iconKey);
 
     return GestureDetector(
       onTap: onTap,
@@ -2861,8 +2570,8 @@ class _MenuTile extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: inCart ? 0.15 : 0.05),
-              blurRadius: inCart ? 12 : 6,
+              color: Colors.black.withValues(alpha: inCart ? 0.12 : 0.05),
+              blurRadius: inCart ? 8 : 6,
               offset: Offset(0, inCart ? 4 : 2),
             ),
           ],
@@ -2898,41 +2607,61 @@ class _MenuTile extends StatelessWidget {
               ),
 
             // ── Text content ──────────────────────────────────────────────
-            Padding(
-              padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                      color: (hasImage || inCart)
-                          ? Colors.white
-                          : PosColors.slate,
-                      height: 1.2,
+            if (hasImage)
+              Padding(
+                padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TfText(                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
                     ),
-                  ),
-                  Text(
-                    currency.format(item.price),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      color: (hasImage || inCart)
-                          ? Colors.white.withValues(alpha: 0.85)
-                          : PosColors.muted,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TfText(                            tfFormatCurrency(context, item.price),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ),
+                        if (hasAddOns) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 13,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ],
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              )
+            else
+              _PlainMenuTileContent(
+                item: item,
+                qty: qty,
+                inCart: inCart,
+                hasAddOns: hasAddOns,
+                iconStyle: iconStyle,
+                onDecrement: onDecrement,
               ),
-            ),
 
             // ── Quantity stepper (top-right) ──────────────────────────────
-            if (inCart)
+            if (hasImage && inCart)
               Positioned(
                 top: 6,
                 right: 6,
@@ -2946,7 +2675,7 @@ class _MenuTile extends StatelessWidget {
                         height: 20,
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.remove_rounded,
@@ -2961,13 +2690,12 @@ class _MenuTile extends StatelessWidget {
                       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
                         color: PosColors.primary,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        '$qty',
+                      child: TfText(                        tfFormatNumber(context, qty),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                           fontSize: 12,
                           color: PosColors.primaryDark,
                         ),
@@ -2978,6 +2706,147 @@ class _MenuTile extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PlainMenuTileContent extends StatelessWidget {
+  const _PlainMenuTileContent({
+    required this.item,
+    required this.qty,
+    required this.inCart,
+    required this.hasAddOns,
+    required this.iconStyle,
+    required this.onDecrement,
+  });
+
+  final MenuItem item;
+  final int qty;
+  final bool inCart;
+  final bool hasAddOns;
+  final MenuIconStyle iconStyle;
+  final VoidCallback onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = inCart ? Colors.white : PosColors.slate;
+    final muted = inCart
+        ? Colors.white.withValues(alpha: 0.78)
+        : PosColors.muted;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: inCart
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : iconStyle.background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  iconStyle.icon,
+                  color: inCart ? PosColors.primary : iconStyle.color,
+                  size: 21,
+                ),
+              ),
+              const Spacer(),
+              if (inCart) ...[
+                GestureDetector(
+                  onTap: onDecrement,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.remove_rounded,
+                      size: 15,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 24),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: PosColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: TfText(                    tfFormatNumber(context, qty),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      color: PosColors.primaryDark,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 7),
+          TfText(            item.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              color: fg,
+              height: 1.16,
+            ),
+          ),
+          const Spacer(),
+          Row(
+            children: [
+              Expanded(
+                child: TfText(                  tfFormatCurrency(context, item.price),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    color: muted,
+                  ),
+                ),
+              ),
+              if (hasAddOns) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: inCart
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : PosColors.surfaceWarm,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: inCart
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : PosColors.line,
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Icon(Icons.tune_rounded, size: 12, color: muted),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -3022,7 +2891,6 @@ class _CartFooter extends StatelessWidget {
     required this.menuItems,
     required this.total,
     required this.totalQty,
-    required this.currency,
     required this.onSubmit,
   });
 
@@ -3030,7 +2898,6 @@ class _CartFooter extends StatelessWidget {
   final List<MenuItem> menuItems;
   final double total;
   final int totalQty;
-  final NumberFormat currency;
   final VoidCallback? onSubmit;
 
   @override
@@ -3056,13 +2923,13 @@ class _CartFooter extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   color: PosColors.primary,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  '$totalQty',
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
+                child: TfText(
+                  tfFormatNumber(context, totalQty),
+                  style: TextStyle(
+                    fontFamily: tfFontFamily(context),
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color: PosColors.primaryDark,
@@ -3083,10 +2950,9 @@ class _CartFooter extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      currency.format(total),
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
+                    TfText(                      tfFormatCurrency(context, total),
+                      style: TextStyle(
+                        fontFamily: tfFontFamily(context),
                         fontWeight: FontWeight.w500,
                         fontSize: 20,
                         color: Colors.white,

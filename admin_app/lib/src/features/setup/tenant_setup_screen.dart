@@ -171,8 +171,7 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
     if (printers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            app.printerState.lastError ?? text.noPairedPrintersFound,
+          content: TfText(            app.printerState.lastError ?? text.noPairedPrintersFound,
           ),
         ),
       );
@@ -188,8 +187,7 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                ok
+              content: TfText(                ok
                     ? text.connectedTo(printer.label)
                     : app.printerState.lastError ??
                           text.printerConnectionFailed,
@@ -435,10 +433,9 @@ class _BasicsStep extends StatelessWidget {
                           color: PosColors.muted,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          identityLine!,
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
+                        TfText(                          identityLine!,
+                          style: TextStyle(
+                            fontFamily: tfFontFamily(context),
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                             color: PosColors.slate,
@@ -563,7 +560,7 @@ class _MenuPitchStep extends StatelessWidget {
                 Container(
                   decoration: BoxDecoration(
                     color: PosColors.primaryDark,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   padding: const EdgeInsets.all(18),
                   child: Column(
@@ -691,7 +688,7 @@ class _MenuPitchStep extends StatelessWidget {
                             height: 40,
                             decoration: BoxDecoration(
                               color: PosColors.background,
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
                               TfNavIcon.plus,
@@ -816,7 +813,7 @@ class _PrinterPitchStep extends StatelessWidget {
                     height: 96,
                     decoration: BoxDecoration(
                       color: PosColors.primarySoft,
-                      borderRadius: BorderRadius.circular(48),
+                      borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Icon(
                       TfNavIcon.printer,
@@ -925,7 +922,7 @@ class _PrinterSearchSheet extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(18, 10, 18, 18 + bottom),
       decoration: const BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -967,8 +964,7 @@ class _PrinterSearchSheet extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            printer.label,
+                          TfText(                            printer.label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -978,8 +974,7 @@ class _PrinterSearchSheet extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            printer.address,
+                          TfText(                            printer.address,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1144,7 +1139,7 @@ class _OnlinePageStep extends StatelessWidget {
                   itemBuilder: (_, _) => Container(
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: PosColors.line,
                         width: 0.5,
@@ -1211,7 +1206,7 @@ class _DoneStep extends StatelessWidget {
                   height: 92,
                   decoration: BoxDecoration(
                     color: PosColors.primary,
-                    borderRadius: BorderRadius.circular(46),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Icon(
                     Icons.check_rounded,
@@ -1308,7 +1303,7 @@ class _SummaryRow extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               color: PosColors.background,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, size: 18, color: PosColors.slate),
           ),

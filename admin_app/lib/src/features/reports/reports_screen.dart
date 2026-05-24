@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/tf_design_system.dart';
 import '../../models/sales_report.dart';
 import '../../services/report_pdf_service.dart';
 
@@ -92,7 +93,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('PDF export failed: $error')));
+      ).showSnackBar(SnackBar(content: TfText('PDF export failed: $error')));
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -110,7 +111,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Print failed: $error')));
+      ).showSnackBar(SnackBar(content: TfText('Print failed: $error')));
     } finally {
       if (mounted) setState(() => _printing = false);
     }
@@ -125,37 +126,34 @@ class _PeriodSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: EdgeInsets.all(6),
-        child: SegmentedButton<int>(
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            textStyle: WidgetStatePropertyAll(
-              TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
+    return TfCard(
+      padding: EdgeInsets.all(6),
+      child: SegmentedButton<int>(
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          textStyle: WidgetStatePropertyAll(
+            TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
           ),
-          segments: [
-            ButtonSegment(
-              value: 1,
-              label: Text('1 Day'),
-              icon: Icon(Icons.today_outlined, size: 15),
-            ),
-            ButtonSegment(
-              value: 7,
-              label: Text('7 Days'),
-              icon: Icon(Icons.date_range_outlined, size: 15),
-            ),
-            ButtonSegment(
-              value: 30,
-              label: Text('30 Days'),
-              icon: Icon(Icons.calendar_month_outlined, size: 15),
-            ),
-          ],
-          selected: {value},
-          onSelectionChanged: (values) => onChanged(values.first),
         ),
+        segments: [
+          ButtonSegment(
+            value: 1,
+            label: TfText('1 Day'),
+            icon: Icon(Icons.today_outlined, size: 15),
+          ),
+          ButtonSegment(
+            value: 7,
+            label: TfText('7 Days'),
+            icon: Icon(Icons.date_range_outlined, size: 15),
+          ),
+          ButtonSegment(
+            value: 30,
+            label: TfText('30 Days'),
+            icon: Icon(Icons.calendar_month_outlined, size: 15),
+          ),
+        ],
+        selected: {value},
+        onSelectionChanged: (values) => onChanged(values.first),
       ),
     );
   }
@@ -234,54 +232,48 @@ class _ReportTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: PosColors.surface,
-                borderRadius: BorderRadius.circular(PosRadii.md),
-                border: Border.all(color: PosColors.slate),
-              ),
-              child: Icon(icon, color: PosColors.slate, size: 16),
+    return TfCard(
+      clip: true,
+      padding: EdgeInsets.all(8),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: PosColors.surface,
+              borderRadius: BorderRadius.circular(PosRadii.md),
+              border: Border.all(color: PosColors.slate),
             ),
-            SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label.toUpperCase(),
-                    style: TextStyle(
-                      color: PosColors.slate,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 8.7,
-                      letterSpacing: 0.2,
-                    ),
+            child: Icon(icon, color: PosColors.slate, size: 16),
+          ),
+          SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TfSectionHeader(
+                  label: label,
+                  color: PosColors.slate,
+                  padding: EdgeInsets.zero,
+                ),
+                SizedBox(height: 3),
+                TfText(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w500,
+                    height: 1,
                   ),
-                  SizedBox(height: 3),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: PosColors.slate,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w900,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -329,7 +321,7 @@ class _TopItems extends StatelessWidget {
       title: 'Top selling items',
       icon: Icons.emoji_events_outlined,
       child: report.topItems.isEmpty
-          ? Text(
+          ? TfText(
               'No item sales yet.',
               style: Theme.of(context).textTheme.bodyMedium,
             )
@@ -360,31 +352,29 @@ class _ReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: PosColors.primary, size: 17),
-                SizedBox(width: 7),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: PosColors.slate,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  ),
+    return TfCard(
+      padding: EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: PosColors.primary, size: 17),
+              SizedBox(width: 7),
+              TfText(
+                title,
+                style: TextStyle(
+                  color: PosColors.slate,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
                 ),
-              ],
-            ),
-            SizedBox(height: 8),
-            child,
-          ],
-        ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          child,
+        ],
       ),
     );
   }
@@ -411,34 +401,34 @@ class _LineRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TfText(
                   title,
                   style: TextStyle(
                     color: PosColors.slate,
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     height: 1,
                   ),
                 ),
                 SizedBox(height: 2),
-                Text(
+                TfText(
                   subtitle,
                   style: TextStyle(
                     color: PosColors.muted,
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w400,
                     height: 1,
                   ),
                 ),
               ],
             ),
           ),
-          Text(
+          TfText(
             trailing,
             style: TextStyle(
               color: PosColors.slate,
               fontSize: 12,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

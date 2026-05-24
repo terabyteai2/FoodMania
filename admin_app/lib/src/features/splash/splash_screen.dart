@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({
     required this.bootFuture,
@@ -24,18 +27,18 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFDF5),
+      backgroundColor: PosColors.background,
       body: SizedBox.expand(
         child: Image.asset(
           'assets/brand/splash.jpeg',
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => const Center(
-            child: Text(
+            child: TfText(
               'QuickBites',
               style: TextStyle(
                 fontSize: 36,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFFF2C744),
+                fontWeight: FontWeight.w500,
+                color: PosColors.primaryDark,
               ),
             ),
           ),

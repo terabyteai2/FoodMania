@@ -5,7 +5,6 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/notification_center.dart';
-import '../../core/widgets/pos_compact_ui.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/dashboard_summary.dart';
 
@@ -138,10 +137,10 @@ class _SectionHeader extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: en.toUpperCase(),
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
+                    style: TextStyle(
+                      fontFamily: tfFontFamily(context),
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                       color: PosColors.slate,
                       letterSpacing: 0.7,
                     ),
@@ -152,8 +151,8 @@ class _SectionHeader extends StatelessWidget {
                   ),
                   TextSpan(
                     text: bn,
-                    style: const TextStyle(
-                      fontFamily: 'Hind Siliguri',
+                    style: TextStyle(
+                      fontFamily: tfFontFamily(context),
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
                       color: PosColors.muted,
@@ -183,10 +182,10 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('EEE h:mm a');
     final timePart = dateFmt.format(DateTime.now());
-    return CompactHeader(
+    return TfAppBar(
       title: text.dashboard,
       subtitle: text.isBn ? 'এই মুহূর্তে · $timePart' : 'Right now · $timePart',
-      actions: [
+      trailing: [
         const HeaderLanguageButton(),
         HeaderNotificationBell(onNavigateToOrders: onNavigateToOrders),
       ],
@@ -272,7 +271,7 @@ class _StatusTile extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
         color: tint,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: border, width: 0.5),
       ),
       child: Stack(
@@ -286,7 +285,7 @@ class _StatusTile extends StatelessWidget {
                     TextSpan(
                       text: value,
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: tfFontFamily(context),
                         fontSize: 26,
                         fontWeight: FontWeight.w500,
                         color: valueColor,
@@ -298,7 +297,7 @@ class _StatusTile extends StatelessWidget {
                       TextSpan(
                         text: valueSuffix,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: tfFontFamily(context),
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
                           color: valueColor.withValues(alpha: 0.6),
@@ -370,14 +369,14 @@ class _EarnedTodayCard extends StatelessWidget {
             children: [
               Expanded(
                 child: RichText(
-                  text: const TextSpan(
+                  text: TextSpan(
                     children: [
                       TextSpan(
                         text: 'EARNED TODAY',
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: tfFontFamily(context),
                           fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: PosColors.slate,
                           letterSpacing: 0.7,
                         ),
@@ -389,7 +388,7 @@ class _EarnedTodayCard extends StatelessWidget {
                       TextSpan(
                         text: 'আজকের আয়',
                         style: TextStyle(
-                          fontFamily: 'Hind Siliguri',
+                          fontFamily: tfFontFamily(context),
                           fontSize: 11,
                           fontWeight: FontWeight.w400,
                           color: PosColors.muted,
@@ -409,7 +408,7 @@ class _EarnedTodayCard extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: PosColors.primary,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -442,10 +441,9 @@ class _EarnedTodayCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            fmt.format(money.earnedToday),
-            style: const TextStyle(
-              fontFamily: 'Inter',
+          TfText(            fmt.format(money.earnedToday),
+            style: TextStyle(
+              fontFamily: tfFontFamily(context),
               fontSize: 38,
               fontWeight: FontWeight.w500,
               color: PosColors.slate,
@@ -594,20 +592,11 @@ class _InlineSplitCell extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TfText(
-          label.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: PosColors.muted,
-            letterSpacing: 0.4,
-          ),
-        ),
+        TfSectionHeader(label: label, padding: EdgeInsets.zero),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontFamily: 'Inter',
+        TfText(          value,
+          style: TextStyle(
+            fontFamily: tfFontFamily(context),
             fontSize: 16,
             fontWeight: FontWeight.w500,
             color: PosColors.slate,
@@ -677,16 +666,15 @@ class _KpiTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PosColors.line, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            value,
+          TfText(            value,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: tfFontFamily(context),
               fontSize: 18,
               fontWeight: FontWeight.w500,
               color: dim ? PosColors.muted : PosColors.slate,
@@ -748,10 +736,9 @@ class _NeedsYourEye extends StatelessWidget {
                     color: PosColors.coral,
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: Text(
-                    '${items.length}',
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
+                  child: TfText(                    '${items.length}',
+                    style: TextStyle(
+                      fontFamily: tfFontFamily(context),
                       color: Colors.white,
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -830,7 +817,7 @@ class _AttentionRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                     color: PosColors.slate,
                     height: 1.25,
                   ),
@@ -881,13 +868,12 @@ class _Pill extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label.toUpperCase(),
+      child: TfText(        label.toUpperCase(),
         style: TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: tfFontFamily(context),
           color: fg,
           fontSize: 10,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
           letterSpacing: 0.5,
         ),
       ),
@@ -972,14 +958,14 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: PosColors.surface,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: action.onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: PosColors.line, width: 0.5),
           ),
           child: Column(
@@ -1087,15 +1073,14 @@ class _TopMoverRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PosColors.line, width: 0.5),
       ),
       child: Row(
         children: [
           SizedBox(
             width: 22,
-            child: Text(
-              '#$rank',
+            child: TfText(              '#$rank',
               style: const TextStyle(
                 fontFamily: 'JetBrains Mono',
                 fontSize: 12,
@@ -1136,11 +1121,10 @@ class _TopMoverRow extends StatelessWidget {
           const SizedBox(width: 10),
           SizedBox(
             width: 36,
-            child: Text(
-              '×${mover.qty}',
+            child: TfText(              '×${mover.qty}',
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontFamily: 'Inter',
+              style: TextStyle(
+                fontFamily: tfFontFamily(context),
                 fontSize: 11,
                 color: PosColors.muted,
               ),
@@ -1149,11 +1133,10 @@ class _TopMoverRow extends StatelessWidget {
           const SizedBox(width: 8),
           SizedBox(
             width: 62,
-            child: Text(
-              currency.format(mover.salesBdt),
+            child: TfText(              currency.format(mover.salesBdt),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontFamily: 'Inter',
+              style: TextStyle(
+                fontFamily: tfFontFamily(context),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: PosColors.slate,
@@ -1194,14 +1177,10 @@ class _CloseTodayCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TfText(
-                      text.readyWhenYouAre.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xAAFFFFFF),
-                        letterSpacing: 0.5,
-                      ),
+                    TfSectionHeader(
+                      label: text.readyWhenYouAre,
+                      color: const Color(0xAAFFFFFF),
+                      padding: EdgeInsets.zero,
                     ),
                     const SizedBox(height: 4),
                     TfText(

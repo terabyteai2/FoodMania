@@ -251,4 +251,161 @@ class MenuItem {
     }
     return [];
   }
+
+  MenuItemExtras get extras => MenuItemExtras.fromTags(tags);
+}
+
+/// Lightweight metadata sidecar parsed out of the [MenuItem.tags] list. Tags
+/// use prefixes so we don't need a backend schema change:
+///   `icon:<key>`           – placeholder icon hint, e.g. `icon:pizza`
+///   `discount:percent:<n>` – percent-off discount
+///   `discount:flat:<n>`    – flat-amount discount
+///   `inc:<text>`           – set-meal included item line
+///   `addon:<price>:<name>` – add-on entry
+class MenuItemExtras {
+  const MenuItemExtras({
+    this.iconKey,
+    this.discountPercent,
+    this.discountFlat,
+    this.includes = const [],
+    this.addOns = const [],
+    this.passthrough = const [],
+  });
+
+  final String? iconKey;
+  final double? discountPercent;
+  final double? discountFlat;
+  final List<String> includes;
+  final List<MenuAddOn> addOns;
+
+  /// Tags we didn't recognise — kept so toTags() round-trips cleanly.
+  final List<String> passthrough;
+
+  bool get hasDiscount =>
+      (discountPercent != null && discountPercent! > 0) ||
+      (discountFlat != null && discountFlat! > 0);
+
+  String discountBadgeLabel() {
+    if (discountPercent != null && discountPercent! > 0) {
+      final n = discountPercent!;
+      if (n == n.roundToDouble()) return '-${n.toInt()}%';
+      return '-${n.toStringAsFixed(1)}%';
+    }
+    if (discountFlat != null && discountFlat! > 0) {
+      final n = discountFlat!;
+      if (n == n.roundToDouble()) return '-৳${n.toInt()}';
+      return '-৳${n.toStringAsFixed(2)}';
+    }
+    return '';
+  }
+
+  double discountedPrice(double basePrice) {
+    if (discountPercent != null && discountPercent! > 0) {
+      final off = basePrice * (discountPercent!.clamp(0, 100) / 100.0);
+      final v = basePrice - off;
+      return v < 0 ? 0 : v;
+    }
+    if (discountFlat != null && discountFlat! > 0) {
+      final v = basePrice - discountFlat!;
+      return v < 0 ? 0 : v;
+    }
+    return basePrice;
+  }
+
+  factory MenuItemExtras.fromTags(List<String> tags) {
+    String? iconKey;
+    double? discountPercent;
+    double? discountFlat;
+    final includes = <String>[];
+    final addOns = <MenuAddOn>[];
+    final passthrough = <String>[];
+    for (final raw in tags) {
+      final tag = raw.trim();
+      if (tag.isEmpty) continue;
+      if (tag.startsWith('icon:')) {
+        final v = tag.substring(5).trim();
+        if (v.isNotEmpty) iconKey = v;
+      } else if (tag.startsWith('discount:percent:')) {
+        discountPercent = double.tryParse(tag.substring(17).trim());
+      } else if (tag.startsWith('discount:flat:')) {
+        discountFlat = double.tryParse(tag.substring(14).trim());
+      } else if (tag.startsWith('inc:')) {
+        final v = tag.substring(4).trim();
+        if (v.isNotEmpty) includes.add(v);
+      } else if (tag.startsWith('addon:')) {
+        final body = tag.substring(6);
+        final i = body.indexOf(':');
+        if (i > 0) {
+          final price = double.tryParse(body.substring(0, i).trim()) ?? 0;
+          final name = body.substring(i + 1).trim();
+          if (name.isNotEmpty) addOns.add(MenuAddOn(name: name, price: price));
+        }
+      } else {
+        passthrough.add(tag);
+      }
+    }
+    return MenuItemExtras(
+      iconKey: iconKey,
+      discountPercent: discountPercent,
+      discountFlat: discountFlat,
+      includes: includes,
+      addOns: addOns,
+      passthrough: passthrough,
+    );
+  }
+
+  List<String> toTags() {
+    final out = <String>[];
+    if (iconKey != null && iconKey!.isNotEmpty) {
+      out.add('icon:$iconKey');
+    }
+    if (discountPercent != null && discountPercent! > 0) {
+      out.add('discount:percent:${_fmt(discountPercent!)}');
+    } else if (discountFlat != null && discountFlat! > 0) {
+      out.add('discount:flat:${_fmt(discountFlat!)}');
+    }
+    for (final inc in includes) {
+      final v = inc.trim();
+      if (v.isNotEmpty) out.add('inc:$v');
+    }
+    for (final addon in addOns) {
+      final name = addon.name.trim();
+      if (name.isEmpty) continue;
+      out.add('addon:${_fmt(addon.price)}:$name');
+    }
+    out.addAll(passthrough);
+    return out;
+  }
+
+  MenuItemExtras copyWith({
+    String? iconKey,
+    double? discountPercent,
+    double? discountFlat,
+    bool clearDiscount = false,
+    List<String>? includes,
+    List<MenuAddOn>? addOns,
+    List<String>? passthrough,
+  }) {
+    return MenuItemExtras(
+      iconKey: iconKey ?? this.iconKey,
+      discountPercent:
+          clearDiscount ? null : (discountPercent ?? this.discountPercent),
+      discountFlat:
+          clearDiscount ? null : (discountFlat ?? this.discountFlat),
+      includes: includes ?? this.includes,
+      addOns: addOns ?? this.addOns,
+      passthrough: passthrough ?? this.passthrough,
+    );
+  }
+
+  static String _fmt(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(2);
+  }
+}
+
+class MenuAddOn {
+  const MenuAddOn({required this.name, required this.price});
+  final String name;
+  final double price;
 }

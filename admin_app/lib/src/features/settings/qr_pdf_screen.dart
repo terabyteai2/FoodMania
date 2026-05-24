@@ -10,6 +10,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../app_scope.dart';
 import '../../core/constants/cloud_defaults.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tf_design_system.dart';
 
 class QrPdfScreen extends StatefulWidget {
   const QrPdfScreen({super.key});
@@ -45,8 +46,7 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
     super.dispose();
   }
 
-  String get _qrUrl =>
-      _urlCtrl.text.trim().replaceAll(RegExp(r'/+$'), '');
+  String get _qrUrl => _urlCtrl.text.trim().replaceAll(RegExp(r'/+$'), '');
 
   Future<Uint8List> _qrBytes(String data) async {
     final painter = QrPainter(
@@ -95,8 +95,7 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
             decoration: pw.BoxDecoration(
               color: PdfColors.white,
               border: pw.Border.all(color: line, width: 2),
-              borderRadius:
-                  const pw.BorderRadius.all(pw.Radius.circular(20)),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(20)),
             ),
             padding: const pw.EdgeInsets.symmetric(
               horizontal: 32,
@@ -111,8 +110,9 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
                   height: 56,
                   decoration: pw.BoxDecoration(
                     color: gold,
-                    borderRadius:
-                        const pw.BorderRadius.all(pw.Radius.circular(14)),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(14),
+                    ),
                   ),
                   child: pw.Center(
                     child: pw.Text(
@@ -153,8 +153,9 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
                   ),
                   decoration: pw.BoxDecoration(
                     color: bg,
-                    borderRadius:
-                        const pw.BorderRadius.all(pw.Radius.circular(10)),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(10),
+                    ),
                     border: pw.Border.all(color: gold, width: 1.5),
                   ),
                   child: pw.Text(
@@ -172,8 +173,9 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
                   padding: const pw.EdgeInsets.all(16),
                   decoration: pw.BoxDecoration(
                     color: PdfColors.white,
-                    borderRadius:
-                        const pw.BorderRadius.all(pw.Radius.circular(12)),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(12),
+                    ),
                     border: pw.Border.all(color: line, width: 1.5),
                   ),
                   child: pw.Image(
@@ -251,10 +253,10 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
         backgroundColor: PosColors.surface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: Text(
+        title: TfText(
           text.tableQrCodes,
           style: TextStyle(
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w500,
             fontSize: 17,
             color: PosColors.slate,
           ),
@@ -277,10 +279,7 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
                 const SizedBox(height: 24),
 
                 // ── Full-width live QR preview ───────────────────────────────
-                _QrPreviewCard(
-                  url: _qrUrl,
-                  restaurantName: restaurantName,
-                ),
+                _QrPreviewCard(url: _qrUrl, restaurantName: restaurantName),
                 const SizedBox(height: 28),
 
                 // ── Action buttons ───────────────────────────────────────────
@@ -329,20 +328,15 @@ class _UrlField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    return Container(
+    return TfCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: PosColors.line),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          TfText(
             text.orderingUrl,
             style: TextStyle(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               fontSize: 12.5,
               color: PosColors.slate,
             ),
@@ -353,7 +347,7 @@ class _UrlField extends StatelessWidget {
             keyboardType: TextInputType.url,
             textInputAction: TextInputAction.done,
             style: TextStyle(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               fontSize: 13.5,
               color: PosColors.slate,
             ),
@@ -383,117 +377,110 @@ class _QrPreviewCard extends StatelessWidget {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final qrSize = (screenWidth - 80).clamp(200.0, 400.0);
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: PosColors.line, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Restaurant name
-          Text(
-            restaurantName,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-              color: PosColors.slate,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // "Scan to Order" pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: PosColors.primarySoft,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: PosColors.primary, width: 1.5),
-            ),
-            child: Text(
-              'স্ক্যান করে অর্ডার করুন  ·  Scan to Order',
+      child: TfCard(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        child: Column(
+          children: [
+            // Restaurant name
+            TfText(
+              restaurantName,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                color: PosColors.primaryDark,
+                fontWeight: FontWeight.w500,
+                fontSize: 20,
+                color: PosColors.slate,
+                letterSpacing: 0,
               ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-          // QR code — live, large
-          if (url.isEmpty)
-            SizedBox(
-              width: qrSize,
-              height: qrSize,
-              child: Center(
-                child: Icon(
-                  Icons.qr_code_2_rounded,
-                  size: qrSize * 0.5,
-                  color: PosColors.line,
-                ),
-              ),
-            )
-          else
+            // "Scan to Order" pill
             Container(
-              width: qrSize,
-              height: qrSize,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: PosColors.line, width: 1.5),
+                color: PosColors.primarySoft,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: PosColors.primary, width: 1.5),
               ),
-              child: QrImageView(
-                data: url,
-                version: QrVersions.auto,
-                gapless: true,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: Color(0xFF1A1A2E),
-                ),
-                dataModuleStyle: const QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-            ),
-          const SizedBox(height: 14),
-
-          // URL chip below QR
-          if (url.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: PosColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: PosColors.line),
-              ),
-              child: Text(
-                url,
+              child: TfText(
+                'স্ক্যান করে অর্ডার করুন  ·  Scan to Order',
                 textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: PosColors.muted,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.primaryDark,
                 ),
               ),
             ),
-        ],
+            const SizedBox(height: 20),
+
+            // QR code — live, large
+            if (url.isEmpty)
+              SizedBox(
+                width: qrSize,
+                height: qrSize,
+                child: Center(
+                  child: Icon(
+                    Icons.qr_code_2_rounded,
+                    size: qrSize * 0.5,
+                    color: PosColors.line,
+                  ),
+                ),
+              )
+            else
+              Container(
+                width: qrSize,
+                height: qrSize,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: PosColors.line, width: 1.5),
+                ),
+                child: QrImageView(
+                  data: url,
+                  version: QrVersions.auto,
+                  gapless: true,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: PosColors.slate,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: PosColors.slate,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 14),
+
+            // URL chip below QR
+            if (url.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: PosColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: PosColors.line),
+                ),
+                child: TfText(
+                  url,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w400,
+                    color: PosColors.muted,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -520,65 +507,13 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = 52.0;
-    if (outlined) {
-      return SizedBox(
-        height: height,
-        child: OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(
-              color: enabled ? PosColors.primary : PosColors.line,
-              width: 1.5,
-            ),
-            foregroundColor: PosColors.primaryDark,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          onPressed: enabled ? onPressed : null,
-          icon: busy
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: PosColors.primaryDark,
-                  ),
-                )
-              : Icon(icon, size: 18),
-          label: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-          ),
-        ),
-      );
-    }
-    return SizedBox(
-      height: height,
-      child: FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: PosColors.primary,
-          foregroundColor: const Color(0xFF14110E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-        onPressed: enabled ? onPressed : null,
-        icon: busy
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF14110E),
-                ),
-              )
-            : Icon(icon, size: 18),
-        label: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-        ),
-      ),
+    return TfButton(
+      label: label,
+      icon: icon,
+      busy: busy,
+      onPressed: enabled ? onPressed : null,
+      variant: outlined ? TfButtonVariant.paper : TfButtonVariant.primary,
+      size: TfButtonSize.lg,
     );
   }
 }

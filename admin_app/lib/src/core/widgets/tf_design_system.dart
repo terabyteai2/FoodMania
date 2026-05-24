@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 
 // ---------------------------------------------------------------------------
@@ -10,23 +10,62 @@ import '../theme/app_theme.dart';
 bool tfIsBn(BuildContext context) =>
     Localizations.localeOf(context).languageCode.toLowerCase() == 'bn';
 
+String tfLocaleTag(BuildContext context) => tfIsBn(context) ? 'bn_BD' : 'en_US';
+
+String tfFormatNumber(
+  BuildContext context,
+  num value, {
+  int? decimalDigits,
+}) {
+  final formatter = decimalDigits == null
+      ? NumberFormat.decimalPattern(tfLocaleTag(context))
+      : NumberFormat.decimalPatternDigits(
+          locale: tfLocaleTag(context),
+          decimalDigits: decimalDigits,
+        );
+  final formatted = formatter.format(value);
+  return tfIsBn(context) ? tfToBnNumbers(formatted) : formatted;
+}
+
+String tfFormatCurrency(
+  BuildContext context,
+  num amount, {
+  String symbol = '৳',
+  int decimalDigits = 0,
+}) {
+  final formatted = NumberFormat.currency(
+    locale: tfLocaleTag(context),
+    symbol: symbol,
+    decimalDigits: decimalDigits,
+  ).format(amount);
+  return tfIsBn(context) ? tfToBnNumbers(formatted) : formatted;
+}
+
 /// Picks the locale-appropriate string: returns [bn] when the active locale
-/// is Bangla and [bn] is non-empty, otherwise [en]. Use this so screens stay
-/// single-language; never render both at once.
+/// is Bangla and [bn] is non-empty, otherwise [en].
 String tfPick(BuildContext context, {required String en, String? bn}) {
   if (bn == null || bn.isEmpty) return en;
   return tfIsBn(context) ? bn : en;
 }
 
-/// Picks Hind Siliguri when the active locale is Bangla, Inter otherwise.
-/// Pass to widgets that already set a TextStyle without `fontFamily`.
+/// Dynamic Font Family utility ensuring baseline synchronization.
 String tfFontFamily(BuildContext context) =>
     tfIsBn(context) ? 'Hind Siliguri' : 'Inter';
 
-// ---------------------------------------------------------------------------
-// TfText — a Text that auto-picks the Bangla font when locale is Bangla.
-// ---------------------------------------------------------------------------
+/// Internal utility to parse Western Arabic numbers into localized Eastern Bengali digits.
+String tfToBnNumbers(String input) {
+  const english = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const bangla = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+  String output = input;
+  for (int i = 0; i < english.length; i++) {
+    output = output.replaceAll(english[i], bangla[i]);
+  }
+  return output;
+}
 
+// ---------------------------------------------------------------------------
+// TfText — Text that automatically handles localization and tracking safety.
+// ---------------------------------------------------------------------------
 class TfText extends StatelessWidget {
   const TfText(
     this.text, {
@@ -45,11 +84,20 @@ class TfText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isBn = tfIsBn(context);
     final base = style ?? const TextStyle();
     final family = base.fontFamily ?? tfFontFamily(context);
+
+    // Safety check: Avoid dangerous text tracking configurations breaking nested Bangla glyph structures
+    final double? tracking = isBn
+        ? (base.letterSpacing != null && base.letterSpacing! < 0
+              ? 0.0
+              : base.letterSpacing)
+        : base.letterSpacing;
+
     return Text(
-      text,
-      style: base.copyWith(fontFamily: family),
+      isBn ? tfToBnNumbers(text) : text,
+      style: base.copyWith(fontFamily: family, letterSpacing: tracking),
       maxLines: maxLines,
       overflow: overflow,
       textAlign: textAlign,
@@ -58,14 +106,61 @@ class TfText extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfTextPair — locale-aware single-string renderer.
-//
-// NOTE: kept for source compat with existing call sites that pass `en` + `bn`.
-// It NO LONGER stacks both languages on screen. It picks one based on locale.
-// The `axis`/`align`/`gap` params are retained but ignored. New code should
-// just use [TfText] with a pre-localised string.
+// TfMoney — Native Taka component featuring dynamic structural translation.
 // ---------------------------------------------------------------------------
+class TfMoney extends StatelessWidget {
+  const TfMoney(this.amount, {this.style, this.showSymbol = true, super.key});
 
+  final double amount;
+  final TextStyle? style;
+  final bool showSymbol;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = tfIsBn(context);
+
+    // Formats numbers cleanly into standard comma grouped structures (e.g. 15,300.00)
+    final parts = amount.toStringAsFixed(2).split('.');
+    final RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    String matchFunc(Match match) => '${match[1]},';
+    final String formattedInteger = parts[0].replaceAllMapped(reg, matchFunc);
+    final String cleanValue = parts[1] == '00'
+        ? formattedInteger
+        : '$formattedInteger.${parts[1]}';
+
+    final baseStyle =
+        style ??
+        TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: PosColors.slate,
+          fontFamily: tfFontFamily(context),
+        );
+
+    if (isBn) {
+      final bnValue = tfToBnNumbers(cleanValue);
+      return Text(
+        showSymbol ? '৳$bnValue' : bnValue,
+        style: baseStyle.copyWith(
+          fontFamily: 'Hind Siliguri',
+          letterSpacing:
+              baseStyle.letterSpacing != null && baseStyle.letterSpacing! < 0
+              ? 0
+              : baseStyle.letterSpacing,
+        ),
+      );
+    } else {
+      return Text(
+        showSymbol ? '৳$cleanValue' : cleanValue,
+        style: baseStyle.copyWith(fontFamily: 'Inter'),
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfTextPair — Backward compatible single-string localizer context.
+// ---------------------------------------------------------------------------
 class TfTextPair extends StatelessWidget {
   const TfTextPair({
     required this.en,
@@ -92,27 +187,21 @@ class TfTextPair extends StatelessWidget {
   Widget build(BuildContext context) {
     final isBn = tfIsBn(context);
     final text = isBn && bn.isNotEmpty ? bn : en;
-    final style = (isBn ? (bnStyle ?? enStyle) : enStyle) ??
+    final style =
+        (isBn ? (bnStyle ?? enStyle) : enStyle) ??
         const TextStyle(
           color: PosColors.slate,
           fontSize: 14,
           fontWeight: FontWeight.w500,
         );
-    final family = style.fontFamily ?? (isBn ? 'Hind Siliguri' : 'Inter');
-    return Text(
-      text,
-      textAlign: textAlign,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: style.copyWith(fontFamily: family),
-    );
+
+    return TfText(text, textAlign: textAlign, style: style);
   }
 }
 
 // ---------------------------------------------------------------------------
-// TfAppBar — large title row with optional leading + trailing actions.
+// TfAppBar — Large structural title bar with safety alignments.
 // ---------------------------------------------------------------------------
-
 class TfAppBar extends StatelessWidget {
   const TfAppBar({
     required this.title,
@@ -138,6 +227,7 @@ class TfAppBar extends StatelessWidget {
     final s = isBn && (subtitleBn?.isNotEmpty ?? false)
         ? subtitleBn!
         : subtitle;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Row(
@@ -148,27 +238,27 @@ class TfAppBar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TfText(
                   t,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                    fontFamily: tfFontFamily(context),
                     color: PosColors.slate,
                     fontSize: 22,
                     fontWeight: FontWeight.w500,
                     height: 1.1,
-                    letterSpacing: -0.3,
+                    letterSpacing: 0,
                   ),
                 ),
                 if (s != null && s.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
+                  TfText(
                     s,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                      fontFamily: tfFontFamily(context),
                       color: PosColors.muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
@@ -189,9 +279,8 @@ class TfAppBar extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfButton — primary/dark/ghost/paper variants. 44px tap-target floor.
+// TfButton — high performance tap variants.
 // ---------------------------------------------------------------------------
-
 enum TfButtonVariant { primary, dark, ghost, paper }
 
 enum TfButtonSize { lg, md, sm }
@@ -207,6 +296,7 @@ class TfButton extends StatelessWidget {
     this.size = TfButtonSize.md,
     @Deprecated('Use [size] instead.') this.height,
     this.fullWidth = true,
+    this.busy = false,
     super.key,
   });
 
@@ -219,6 +309,7 @@ class TfButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final double? height;
   final bool fullWidth;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -236,9 +327,8 @@ class TfButton extends StatelessWidget {
       TfButtonVariant.paper => PosColors.line,
     };
 
-    // Effective height: explicit height wins for legacy callers, otherwise
-    // pick from the size enum. lg = 50, md = 42, sm = 32 (matches the JSX).
-    final effHeight = height ??
+    final effHeight =
+        height ??
         switch (size) {
           TfButtonSize.lg => 50.0,
           TfButtonSize.md => 42.0,
@@ -259,7 +349,7 @@ class TfButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: onPressed,
+          onTap: disabled || busy ? null : onPressed,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
@@ -273,21 +363,32 @@ class TfButton extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (icon != null) ...[
-                  Icon(
-                    icon,
-                    size: 18,
-                    color: disabled ? PosColors.muted : colors.$2,
-                  ),
+                if (busy || icon != null) ...[
+                  if (busy)
+                    SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          disabled ? PosColors.muted : colors.$2,
+                        ),
+                      ),
+                    )
+                  else
+                    Icon(
+                      icon,
+                      size: 18,
+                      color: disabled ? PosColors.muted : colors.$2,
+                    ),
                   const SizedBox(width: 8),
                 ],
                 Flexible(
                   child: Text(
-                    text,
+                    isBn ? tfToBnNumbers(text) : text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                      fontFamily: tfFontFamily(context),
                       color: disabled ? PosColors.muted : colors.$2,
                       fontSize: fontSize,
                       fontWeight: FontWeight.w500,
@@ -312,9 +413,8 @@ class TfButton extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfCard — paper surface, hairline border, 12px radius.
+// TfCard — Paper surface container context.
 // ---------------------------------------------------------------------------
-
 class TfCard extends StatelessWidget {
   const TfCard({
     required this.child,
@@ -346,9 +446,8 @@ class TfCard extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfChip — pill toggle; active = dark fill.
+// TfChip — Pill toggles for lightning-fast catalog mutations.
 // ---------------------------------------------------------------------------
-
 class TfChip extends StatelessWidget {
   const TfChip({
     required this.label,
@@ -403,9 +502,9 @@ class TfChip extends StatelessWidget {
                 const SizedBox(width: 6),
               ],
               Text(
-                text,
+                isBn ? tfToBnNumbers(text) : text,
                 style: TextStyle(
-                  fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                  fontFamily: tfFontFamily(context),
                   color: active ? Colors.white : PosColors.slate,
                   fontSize: small ? 12 : 13,
                   fontWeight: active ? FontWeight.w500 : FontWeight.w400,
@@ -420,9 +519,8 @@ class TfChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfStatusBadge — pending/accepted/late/served/info pill.
+// TfStatusBadge — Clean tracking badges using updated warning schemas.
 // ---------------------------------------------------------------------------
-
 enum TfStatusKind { pending, accepted, late, served, info, warning }
 
 class TfStatusBadge extends StatelessWidget {
@@ -433,8 +531,6 @@ class TfStatusBadge extends StatelessWidget {
     super.key,
   });
 
-  /// Accepts either a [TfStatusKind] or the legacy string key
-  /// ("pending" | "accepted" | "late" | "served" | "info").
   final String label;
   final Object kind;
   final bool upper;
@@ -449,7 +545,7 @@ class TfStatusBadge extends StatelessWidget {
       TfStatusKind.accepted => (PosColors.successSoft, PosColors.success),
       TfStatusKind.late => (PosColors.dangerSoft, PosColors.danger),
       TfStatusKind.served => (PosColors.successSoft, PosColors.success),
-      TfStatusKind.warning => (PosColors.coralSoft, PosColors.coral),
+      TfStatusKind.warning => (PosColors.warningSoft, PosColors.warning),
       TfStatusKind.info => (PosColors.background, PosColors.muted),
     };
     return Container(
@@ -465,7 +561,7 @@ class TfStatusBadge extends StatelessWidget {
           color: spec.$2,
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          letterSpacing: 0.2,
+          letterSpacing: tfIsBn(context) ? 0 : 0.2,
         ),
       ),
     );
@@ -491,9 +587,8 @@ class TfStatusBadge extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfIconButton — square 38px button, optional badge.
+// TfIconButton — Square actionable targets with smart notification layer.
 // ---------------------------------------------------------------------------
-
 class TfIconButton extends StatelessWidget {
   const TfIconButton({
     required this.icon,
@@ -523,13 +618,13 @@ class TfIconButton extends StatelessWidget {
             Positioned.fill(
               child: Material(
                 color: dark ? PosColors.primaryDark : PosColors.surface,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: onPressed,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: dark ? PosColors.primaryDark : PosColors.line,
                         width: 0.5,
@@ -557,7 +652,7 @@ class TfIconButton extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: PosColors.danger,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: PosColors.surface, width: 1.5),
                   ),
                   child: Text(
@@ -566,6 +661,7 @@ class TfIconButton extends StatelessWidget {
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
+                      fontFamily: 'Inter',
                     ),
                   ),
                 ),
@@ -578,9 +674,8 @@ class TfIconButton extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfFab — 56px amber floating action button with glow.
+// TfFab — Flat low-draw quick action trigger built for budget devices.
 // ---------------------------------------------------------------------------
-
 class TfFab extends StatelessWidget {
   const TfFab({
     required this.onPressed,
@@ -602,12 +697,16 @@ class TfFab extends StatelessWidget {
         height: 56,
         decoration: BoxDecoration(
           color: PosColors.primary,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: PosColors.primaryDark.withValues(alpha: 0.1),
+            width: 1,
+          ),
           boxShadow: PosShadows.glow,
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(999),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
@@ -620,18 +719,19 @@ class TfFab extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfBottomNav — 5-item bottom navigation with amber pip under active item.
+// TfBottomNav — Dynamic contextual footer layout tracking bar.
 // ---------------------------------------------------------------------------
-
 class TfBottomNavItem {
   const TfBottomNavItem({
     required this.icon,
     required this.label,
     this.labelBn,
+    this.selectedIcon,
   });
   final IconData icon;
   final String label;
   final String? labelBn;
+  final IconData? selectedIcon;
 }
 
 class TfBottomNav extends StatelessWidget {
@@ -652,9 +752,7 @@ class TfBottomNav extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: PosColors.surface,
-        border: Border(
-          top: BorderSide(color: PosColors.line, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: PosColors.line, width: 0.5)),
       ),
       child: SafeArea(
         top: false,
@@ -664,8 +762,9 @@ class TfBottomNav extends StatelessWidget {
             children: List.generate(items.length, (i) {
               final it = items[i];
               final selected = i == activeIndex;
-              final text =
-                  isBn && (it.labelBn?.isNotEmpty ?? false) ? it.labelBn! : it.label;
+              final text = isBn && (it.labelBn?.isNotEmpty ?? false)
+                  ? it.labelBn!
+                  : it.label;
               return Expanded(
                 child: InkWell(
                   onTap: () => onChanged(i),
@@ -675,25 +774,22 @@ class TfBottomNav extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          it.icon,
+                          selected ? (it.selectedIcon ?? it.icon) : it.icon,
                           size: 22,
-                          color:
-                              selected ? PosColors.slate : PosColors.muted,
+                          color: selected ? PosColors.slate : PosColors.muted,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          text,
+                          isBn ? tfToBnNumbers(text) : text,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                            fontFamily: tfFontFamily(context),
                             fontSize: 11,
                             fontWeight: selected
                                 ? FontWeight.w500
                                 : FontWeight.w400,
-                            color: selected
-                                ? PosColors.slate
-                                : PosColors.muted,
+                            color: selected ? PosColors.slate : PosColors.muted,
                             height: 1,
                           ),
                         ),
@@ -722,9 +818,8 @@ class TfBottomNav extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfStickyCTA — full-width sticky bottom CTA container with optional helper.
+// TfStickyCTA — Pinned situational workflow primary terminal block.
 // ---------------------------------------------------------------------------
-
 class TfStickyCTA extends StatelessWidget {
   const TfStickyCTA({required this.child, this.helper, super.key});
 
@@ -737,9 +832,7 @@ class TfStickyCTA extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
       decoration: const BoxDecoration(
         color: PosColors.background,
-        border: Border(
-          top: BorderSide(color: PosColors.line, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: PosColors.line, width: 0.5)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -750,10 +843,7 @@ class TfStickyCTA extends StatelessWidget {
             TfText(
               helper!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                color: PosColors.muted,
-              ),
+              style: const TextStyle(fontSize: 12, color: PosColors.muted),
             ),
           ],
         ],
@@ -763,9 +853,8 @@ class TfStickyCTA extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfRail — left-edge color stripe used inside order cards.
+// TfRail — Colored accent visualization spine.
 // ---------------------------------------------------------------------------
-
 class TfRail extends StatelessWidget {
   const TfRail({required this.color, this.width = 4, super.key});
   final Color color;
@@ -784,20 +873,21 @@ class TfRail extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfSectionHeader — "TODAY", "FOUND · 2" style small-caps label.
+// TfSectionHeader — Consistent uppercase structural header text lines.
 // ---------------------------------------------------------------------------
-
 class TfSectionHeader extends StatelessWidget {
   const TfSectionHeader({
     required this.label,
     this.trailing,
     this.padding = const EdgeInsets.fromLTRB(2, 0, 2, 8),
+    this.color = PosColors.muted,
     super.key,
   });
 
   final String label;
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -806,14 +896,14 @@ class TfSectionHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
+            child: TfText(
               label.toUpperCase(),
               style: TextStyle(
                 fontFamily: tfFontFamily(context),
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                letterSpacing: 0.5,
-                color: PosColors.muted,
+                letterSpacing: tfIsBn(context) ? 0 : 0.5,
+                color: color,
               ),
             ),
           ),
@@ -825,10 +915,8 @@ class TfSectionHeader extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfField — labelled text input wrapper (paper surface, 0.5px border,
-// focused = 1px dark border).
+// TfField — Form validation wrapper now safely exposing error feedback paths.
 // ---------------------------------------------------------------------------
-
 class TfField extends StatelessWidget {
   const TfField({
     required this.label,
@@ -844,6 +932,7 @@ class TfField extends StatelessWidget {
     this.maxLines = 1,
     this.onChanged,
     this.hintHelper,
+    this.errorText, // Added primitive support for handling form invalidation feedback logic
     super.key,
   });
 
@@ -860,12 +949,14 @@ class TfField extends StatelessWidget {
   final int maxLines;
   final ValueChanged<String>? onChanged;
   final String? hintHelper;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
     final isBn = tfIsBn(context);
     final lbl = isBn && (labelBn?.isNotEmpty ?? false) ? labelBn! : label;
     final hnt = isBn && (hintBn?.isNotEmpty ?? false) ? hintBn! : hint;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -873,10 +964,10 @@ class TfField extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 2, bottom: 6),
-            child: Text(
+            child: TfText(
               lbl,
               style: TextStyle(
-                fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                fontFamily: tfFontFamily(context),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: PosColors.slate,
@@ -891,7 +982,7 @@ class TfField extends StatelessWidget {
             keyboardType: keyboardType,
             onChanged: onChanged,
             style: TextStyle(
-              fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+              fontFamily: tfFontFamily(context),
               fontSize: 15,
               color: PosColors.slate,
             ),
@@ -900,13 +991,20 @@ class TfField extends StatelessWidget {
               prefixIcon: prefix,
               suffixIcon: suffix,
               isDense: true,
+              errorText: errorText != null
+                  ? (isBn ? tfToBnNumbers(errorText!) : errorText)
+                  : null,
+              errorStyle: TextStyle(
+                fontFamily: tfFontFamily(context),
+                fontSize: 12,
+              ),
             ),
           ),
-          if (hintHelper != null) ...[
+          if (hintHelper != null && errorText == null) ...[
             const SizedBox(height: 6),
             Padding(
               padding: const EdgeInsets.only(left: 2),
-              child: Text(
+              child: TfText(
                 hintHelper!,
                 style: TextStyle(
                   fontFamily: tfFontFamily(context),
@@ -924,10 +1022,69 @@ class TfField extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfTabs — two/three-tab segmented pill row with optional counter chips.
-// Active = dark fill; inactive = paper outline.
+// TfSearchField — Standalone rounded search input with the standard PosRadii.
 // ---------------------------------------------------------------------------
+class TfSearchField extends StatelessWidget {
+  const TfSearchField({
+    required this.controller,
+    required this.hintText,
+    this.onChanged,
+    super.key,
+  });
 
+  final TextEditingController controller;
+  final String hintText;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 46,
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        style: TextStyle(
+          fontFamily: tfFontFamily(context),
+          color: PosColors.slate,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        cursorColor: PosColors.primary,
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(
+            fontFamily: tfFontFamily(context),
+            color: PosColors.muted,
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+          ),
+          prefixIcon: const Icon(Icons.search_rounded, size: 18),
+          prefixIconConstraints: const BoxConstraints(minWidth: 38),
+          filled: true,
+          fillColor: PosColors.surface,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(PosRadii.sm),
+            borderSide: const BorderSide(color: PosColors.line, width: 0.5),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(PosRadii.sm),
+            borderSide: const BorderSide(color: PosColors.line, width: 0.5),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(PosRadii.sm),
+            borderSide: const BorderSide(color: PosColors.primaryDark, width: 1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfTabs — Linear segmented controls with safely unified family badge logic.
+// ---------------------------------------------------------------------------
 class TfTabItem {
   const TfTabItem({required this.label, this.labelBn, this.count});
   final String label;
@@ -954,24 +1111,24 @@ class TfTabs extends StatelessWidget {
       children: List.generate(items.length, (i) {
         final it = items[i];
         final selected = i == activeIndex;
-        final text =
-            isBn && (it.labelBn?.isNotEmpty ?? false) ? it.labelBn! : it.label;
+        final text = isBn && (it.labelBn?.isNotEmpty ?? false)
+            ? it.labelBn!
+            : it.label;
         return Expanded(
           child: Padding(
             padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
             child: Material(
               color: selected ? PosColors.primaryDark : PosColors.surface,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () => onChanged(i),
                 child: Container(
                   height: 44,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color:
-                          selected ? PosColors.primaryDark : PosColors.line,
+                      color: selected ? PosColors.primaryDark : PosColors.line,
                       width: 0.5,
                     ),
                   ),
@@ -979,9 +1136,9 @@ class TfTabs extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        text,
+                        isBn ? tfToBnNumbers(text) : text,
                         style: TextStyle(
-                          fontFamily: isBn ? 'Hind Siliguri' : 'Inter',
+                          fontFamily: tfFontFamily(context),
                           fontSize: 14,
                           fontWeight: selected
                               ? FontWeight.w500
@@ -1003,9 +1160,11 @@ class TfTabs extends StatelessWidget {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            '${it.count}',
+                            isBn ? tfToBnNumbers('${it.count}') : '${it.count}',
                             style: TextStyle(
-                              fontFamily: 'Inter',
+                              fontFamily: tfFontFamily(
+                                context,
+                              ), // Fixed: Routed via unified family configuration path
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
                               color: selected
@@ -1028,21 +1187,264 @@ class TfTabs extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfNavIcon — strokes drawn directly so the icon set matches the JSX
-// NavIcon (orders/menu/home/inventory/settings/bell/plus/arrow/back/check/
-// search/camera/printer/bluetooth/wifi/close/minus/dot/chevron/sparkle/flame).
-//
-// Falls back to Material icons for everything else, so Flutter's IconData
-// API stays the source of truth at call sites.
+// Primitives: TfEmptyState — Universal empty context messaging module.
 // ---------------------------------------------------------------------------
+class TfEmptyState extends StatelessWidget {
+  const TfEmptyState({
+    required this.title,
+    required this.message,
+    this.titleBn,
+    this.messageBn,
+    this.icon = Icons.layers_clear_outlined,
+    this.action,
+    super.key,
+  });
 
+  final String title;
+  final String? titleBn;
+  final String message;
+  final String? messageBn;
+  final IconData icon;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: PosColors.muted.withValues(alpha: 0.6)),
+            const SizedBox(height: 16),
+            TfText(
+              tfPick(context, en: title, bn: titleBn),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: PosColors.slate,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TfText(
+              tfPick(context, en: message, bn: messageBn),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: PosColors.muted,
+                height: 1.4,
+              ),
+            ),
+            if (action != null) ...[const SizedBox(height: 20), action!],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Primitives: TfLoading — Hardware-efficient asynchronous block progress tracker.
+// ---------------------------------------------------------------------------
+class TfLoading extends StatelessWidget {
+  const TfLoading({this.message, this.messageBn, super.key});
+  final String? message;
+  final String? messageBn;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = message != null
+        ? tfPick(context, en: message!, bn: messageBn)
+        : null;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: PosColors.primaryDark,
+              ),
+            ),
+            if (label != null) ...[
+              const SizedBox(height: 12),
+              TfText(
+                label,
+                style: const TextStyle(fontSize: 13, color: PosColors.muted),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Primitives: TfOfflineBanner — Low-latency localized environment banner.
+// ---------------------------------------------------------------------------
+class TfOfflineBanner extends StatelessWidget {
+  const TfOfflineBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: PosColors.warning,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.wifi_off_rounded,
+            size: 14,
+            color: PosColors.primaryDark,
+          ),
+          const SizedBox(width: 8),
+          TfText(
+            tfPick(
+              context,
+              en: "Offline Mode — Changes will sync automatically",
+              bn: "অফলাইন মোড — পরিবর্তনগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক হবে",
+            ),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: PosColors.primaryDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Primitives: TfConfirmSheet — Dialog confirmation context wrappers.
+// ---------------------------------------------------------------------------
+class TfConfirmSheet extends StatelessWidget {
+  const TfConfirmSheet({
+    required this.title,
+    required this.description,
+    required this.onConfirm,
+    this.titleBn,
+    this.descriptionBn,
+    this.confirmLabel,
+    this.confirmLabelBn,
+    this.isDanger = false,
+    super.key,
+  });
+
+  final String title;
+  final String? titleBn;
+  final String description;
+  final String? descriptionBn;
+  final String? confirmLabel;
+  final String? confirmLabelBn;
+  final VoidCallback onConfirm;
+  final bool isDanger;
+
+  static void show(
+    BuildContext context, {
+    required String title,
+    required String description,
+    required VoidCallback onConfirm,
+    String? titleBn,
+    String? descriptionBn,
+    String? confirmLabel,
+    String? confirmLabelBn,
+    bool isDanger = false,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TfConfirmSheet(
+        title: title,
+        titleBn: titleBn,
+        description: description,
+        descriptionBn: descriptionBn,
+        onConfirm: onConfirm,
+        confirmLabel: confirmLabel,
+        confirmLabelBn: confirmLabelBn,
+        isDanger: isDanger,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TfText(
+              tfPick(context, en: title, bn: titleBn),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: PosColors.slate,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TfText(
+              tfPick(context, en: description, bn: descriptionBn),
+              style: const TextStyle(
+                fontSize: 14,
+                color: PosColors.muted,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: TfButton(
+                    onPressed: () => Navigator.pop(context),
+                    label: "Cancel",
+                    labelBn: "বাতিল করুন",
+                    variant: TfButtonVariant.paper,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TfButton(
+                    label: confirmLabel ?? "Confirm",
+                    labelBn: confirmLabelBn ?? "নিশ্চিত করুন",
+                    variant: isDanger
+                        ? TfButtonVariant.dark
+                        : TfButtonVariant.primary,
+                    onPressed: () {
+                      Navigator.pop(context);
+                      onConfirm();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfNavIcon — Static lookup references matching layout blueprints.
+// ---------------------------------------------------------------------------
 class TfNavIcon {
   TfNavIcon._();
 
-  // Receipt-ish ticket — matches the JSX 'orders' glyph.
   static const IconData orders = Icons.receipt_long_outlined;
-  // Fork + spoon — JSX 'menu' is a spoon/fork composition; closest Material is
-  // restaurant_menu_outlined.
   static const IconData menu = Icons.restaurant_menu_outlined;
   static const IconData home = Icons.home_outlined;
   static const IconData inventory = Icons.inventory_2_outlined;
