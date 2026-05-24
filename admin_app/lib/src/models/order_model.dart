@@ -25,6 +25,10 @@ class OrderModel {
     this.covers,
     this.paymentMethod,
     this.customerName,
+    this.customerPhone,
+    this.customerLat,
+    this.customerLng,
+    this.deliveryAddress,
     this.tableNo,
     this.note,
     this.createdByAccountId,
@@ -36,6 +40,10 @@ class OrderModel {
   final String id;
   final String orderNo;
   final String? customerName;
+  final String? customerPhone;
+  final double? customerLat;
+  final double? customerLng;
+  final String? deliveryAddress;
   final String? tableNo;
   final String? note;
   final String? createdByAccountId;
@@ -62,6 +70,10 @@ class OrderModel {
     String? id,
     String? orderNo,
     String? customerName,
+    String? customerPhone,
+    double? customerLat,
+    double? customerLng,
+    String? deliveryAddress,
     String? tableNo,
     String? note,
     String? createdByAccountId,
@@ -86,6 +98,10 @@ class OrderModel {
       id: id ?? this.id,
       orderNo: orderNo ?? this.orderNo,
       customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      customerLat: customerLat ?? this.customerLat,
+      customerLng: customerLng ?? this.customerLng,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       tableNo: tableNo ?? this.tableNo,
       note: note ?? this.note,
       createdByAccountId: createdByAccountId ?? this.createdByAccountId,
@@ -113,6 +129,10 @@ class OrderModel {
       'id': id,
       'orderNo': orderNo,
       'customerName': customerName,
+      'customerPhone': customerPhone,
+      'customerLat': customerLat,
+      'customerLng': customerLng,
+      'deliveryAddress': deliveryAddress,
       'tableNo': tableNo,
       'note': note,
       'createdByAccountId': createdByAccountId,
@@ -139,6 +159,10 @@ class OrderModel {
       'id': id,
       'orderNo': orderNo,
       'customerName': customerName,
+      'customerPhone': customerPhone,
+      'customerLat': customerLat,
+      'customerLng': customerLng,
+      'deliveryAddress': deliveryAddress,
       'tableNo': tableNo,
       'note': note,
       'createdByAccountId': createdByAccountId,
@@ -171,6 +195,10 @@ class OrderModel {
       id: map['id'] as String,
       orderNo: map['orderNo'] as String,
       customerName: map['customerName'] as String?,
+      customerPhone: map['customerPhone'] as String?,
+      customerLat: _doubleOrNull(map['customerLat']),
+      customerLng: _doubleOrNull(map['customerLng']),
+      deliveryAddress: map['deliveryAddress'] as String?,
       tableNo: map['tableNo'] as String?,
       note: map['note'] as String?,
       createdByAccountId: map['createdByAccountId'] as String?,

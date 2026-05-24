@@ -1410,6 +1410,21 @@ class CloudApiService {
     if (order.paymentMethod != null) {
       payload['paymentMethod'] = order.paymentMethod!.value;
     }
+    if (order.customerName != null) {
+      payload['customerName'] = order.customerName;
+    }
+    if (order.customerPhone != null) {
+      payload['customerPhone'] = order.customerPhone;
+    }
+    if (order.customerLat != null) {
+      payload['customerLat'] = order.customerLat;
+    }
+    if (order.customerLng != null) {
+      payload['customerLng'] = order.customerLng;
+    }
+    if (order.deliveryAddress != null) {
+      payload['deliveryAddress'] = order.deliveryAddress;
+    }
     return _sendJson(
       'POST',
       uri,

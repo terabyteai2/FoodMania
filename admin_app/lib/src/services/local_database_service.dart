@@ -89,7 +89,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 9,
+      version: 10,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -808,6 +808,10 @@ class LocalDatabaseService {
         orderNo TEXT NOT NULL UNIQUE,
         source TEXT NOT NULL DEFAULT 'cloud',
         customerName TEXT,
+        customerPhone TEXT,
+        customerLat REAL,
+        customerLng REAL,
+        deliveryAddress TEXT,
         tableNo TEXT,
         note TEXT,
         createdByAccountId TEXT,
@@ -936,6 +940,9 @@ class LocalDatabaseService {
     if (oldVersion < 9) {
       await _migrateOrderItemsBilingualV9(db);
     }
+    if (oldVersion < 10) {
+      await _migrateOrdersDeliveryV10(db);
+    }
   }
 
   Future<void> _migrateMenuBilingualV7(Database db) async {
@@ -1041,6 +1048,18 @@ class LocalDatabaseService {
     );
   }
 
+  Future<void> _migrateOrdersDeliveryV10(Database db) async {
+    await _addColumnIfMissing(db, 'orders', 'customerPhone', 'customerPhone TEXT');
+    await _addColumnIfMissing(db, 'orders', 'customerLat', 'customerLat REAL');
+    await _addColumnIfMissing(db, 'orders', 'customerLng', 'customerLng REAL');
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'deliveryAddress',
+      'deliveryAddress TEXT',
+    );
+  }
+
   Future<void> _ensureSchema(Database db) async {
     await _addColumnIfMissing(
       db,
@@ -1090,6 +1109,7 @@ class LocalDatabaseService {
     await _backfillOrderSequences(db);
     await _migrateOrdersV8(db);
     await _migrateOrderItemsBilingualV9(db);
+    await _migrateOrdersDeliveryV10(db);
     await _createSyncTable(db);
     await _createInventoryTables(db);
     await _migrateInventoryV6(db);

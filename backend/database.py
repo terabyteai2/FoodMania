@@ -156,6 +156,11 @@ async def _ensure_order_columns(conn) -> None:
         ("service_type", "VARCHAR"),
         ("covers", "INTEGER"),
         ("payment_method", "VARCHAR"),
+        ("customer_name", "VARCHAR"),
+        ("customer_phone", "VARCHAR"),
+        ("customer_lat", "NUMERIC(9, 6)"),
+        ("customer_lng", "NUMERIC(9, 6)"),
+        ("delivery_address", "TEXT"),
     ]
     if dialect == "sqlite":
         for column, column_type in columns:

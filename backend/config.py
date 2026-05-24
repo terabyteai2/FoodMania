@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
     MENU_SCAN_OPENAI_MODEL: str = "gpt-4.1-mini"
 
+    # OpenCage reverse-geocoding for delivery orders. Default is the dev key
+    # supplied with the original task; production should override via .env.
+    OPENCAGE_API_KEY: str = "bddd7811b402496bb89b6a81897552ff"
+    OPENCAGE_BASE_URL: str = "https://api.opencagedata.com/geocode/v1/json"
+
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"
 UDDOKTAPAY_LIVE_DEFAULT = "https://pay.uddoktapay.com"

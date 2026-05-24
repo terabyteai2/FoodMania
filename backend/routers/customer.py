@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from database import get_db
 from models import MenuItem, Order, Outlet, Restaurant
 from routers.ws import manager
+from services.opencage_client import reverse_geocode
 
 router = APIRouter(prefix="/customer", tags=["customer"])
 
@@ -135,8 +136,19 @@ class CustomerOrderItem(BaseModel):
 
 class CustomerOrderRequest(BaseModel):
     items: list[CustomerOrderItem]
-    tableNo: str | None = None
+    customerName: str
+    customerPhone: str
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
     note: str | None = None
+    tableNo: str | None = None
+
+    @field_validator("customerName", "customerPhone")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("must not be empty")
+        return value.strip()
 
 
 @router.post("/{outlet_id}/orders")
@@ -169,6 +181,8 @@ async def place_customer_order(
         for item in body.items
     ]
 
+    delivery_address = await reverse_geocode(body.latitude, body.longitude)
+
     order = Order(
         id=order_id,
         outlet_id=outlet.id,
@@ -178,9 +192,15 @@ async def place_customer_order(
         subtotal=round(total, 2),
         vat_rate_percent=vat_rate_percent,
         vat_amount=vat_amount,
-        service_type="dine_in" if body.tableNo else None,
+        service_type="delivery",
+        payment_method="cod",
         items=items_payload,
-        notes=body.tableNo and f"Table {body.tableNo}" or body.note,
+        notes=body.note,
+        customer_name=body.customerName,
+        customer_phone=body.customerPhone,
+        customer_lat=body.latitude,
+        customer_lng=body.longitude,
+        delivery_address=delivery_address,
         created_at=now,
         updated_at=now,
     )
@@ -215,6 +235,11 @@ async def place_customer_order(
                 "paymentMethod": order.payment_method,
                 "items": order.items,
                 "notes": order.notes,
+                "customerName": order.customer_name,
+                "customerPhone": order.customer_phone,
+                "customerLat": float(order.customer_lat) if order.customer_lat is not None else None,
+                "customerLng": float(order.customer_lng) if order.customer_lng is not None else None,
+                "deliveryAddress": order.delivery_address,
                 "createdByAccountId": None,
                 "createdByRole": "customer",
                 "createdAt": order.created_at.isoformat(),
@@ -233,6 +258,9 @@ async def place_customer_order(
         "vatAmount": float(order.vat_amount or 0),
         "items": order.items,
         "notes": order.notes,
+        "customerName": order.customer_name,
+        "customerPhone": order.customer_phone,
+        "deliveryAddress": order.delivery_address,
     })
 
 

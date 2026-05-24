@@ -35,6 +35,9 @@ class TicketCopyData {
     required this.customerNameLabel,
     required this.note,
     required this.noteLabel,
+    this.customerPhone,
+    this.deliveryAddress,
+    this.deliveryHeader,
   });
 
   final String restaurantName;
@@ -53,6 +56,9 @@ class TicketCopyData {
   final String customerNameLabel;
   final String? note;
   final String noteLabel;
+  final String? customerPhone;
+  final String? deliveryAddress;
+  final String? deliveryHeader;
 }
 
 class TicketBitmapRenderer {
@@ -67,9 +73,13 @@ class TicketBitmapRenderer {
 
   static Future<Uint8List> render(TicketCopyData data) async {
     final dynamicRows = data.items.length * 76;
+    final hasDelivery = data.deliveryHeader != null &&
+        ((data.customerPhone?.trim().isNotEmpty == true) ||
+            (data.deliveryAddress?.trim().isNotEmpty == true));
     final optionalRows =
         (data.customerName?.trim().isNotEmpty == true ? 32 : 0) +
-        (data.note?.trim().isNotEmpty == true ? 80 : 0);
+        (data.note?.trim().isNotEmpty == true ? 80 : 0) +
+        (hasDelivery ? 140 : 0);
     final height = (300 + dynamicRows + optionalRows).toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -88,6 +98,22 @@ class TicketBitmapRenderer {
         '${data.customerNameLabel}: ${data.customerName!.trim()}',
         y,
       );
+    }
+    if (hasDelivery) {
+      y = _rule(canvas, y + 4);
+      y = _text(
+        canvas,
+        data.deliveryHeader!,
+        y,
+        fontSize: 22,
+        weight: FontWeight.w500,
+      );
+      if (data.customerPhone?.trim().isNotEmpty == true) {
+        y = _text(canvas, data.customerPhone!.trim(), y, fontSize: 21);
+      }
+      if (data.deliveryAddress?.trim().isNotEmpty == true) {
+        y = _text(canvas, data.deliveryAddress!.trim(), y, fontSize: 19);
+      }
     }
     y = _rule(canvas, y + 4);
 
