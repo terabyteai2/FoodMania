@@ -1007,10 +1007,6 @@ class _OrderCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (order.serviceType == OrderServiceType.delivery) ...[
-                        const SizedBox(height: 8),
-                        _DeliveryInfoBlock(order: order),
-                      ],
                       if ((order.note ?? '').trim().isNotEmpty) ...[
                         const SizedBox(height: 6),
                         TfText(
@@ -3188,92 +3184,6 @@ class _CartFooter extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _DeliveryInfoBlock extends StatelessWidget {
-  const _DeliveryInfoBlock({required this.order});
-
-  final OrderModel order;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = (order.customerName ?? '').trim();
-    final phone = (order.customerPhone ?? '').trim();
-    final address = (order.deliveryAddress ?? '').trim();
-    final hasCoords = order.customerLat != null && order.customerLng != null;
-
-    String? coordsText;
-    if (address.isEmpty && hasCoords) {
-      coordsText =
-          '${order.customerLat!.toStringAsFixed(5)}, ${order.customerLng!.toStringAsFixed(5)}';
-    }
-
-    final contactLine = [
-      if (name.isNotEmpty) name,
-      if (phone.isNotEmpty) phone,
-    ].join(' · ');
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
-      decoration: BoxDecoration(
-        color: PosColors.primaryWash,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: PosColors.line, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              TfSectionHeader(
-                label: 'DELIVERY',
-                color: PosColors.slate,
-                padding: EdgeInsets.zero,
-              ),
-              const SizedBox(width: 8),
-              TfStatusBadge(label: 'COD', kind: TfStatusKind.info),
-            ],
-          ),
-          if (contactLine.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            TfText(
-              contactLine,
-              style: const TextStyle(
-                fontSize: 12,
-                color: PosColors.slate,
-                fontWeight: FontWeight.w500,
-                height: 1.3,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          if (address.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            TfText(
-              address,
-              style: const TextStyle(
-                fontSize: 11,
-                color: PosColors.slate,
-                height: 1.35,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ] else if (coordsText != null) ...[
-            const SizedBox(height: 2),
-            TfText(
-              coordsText,
-              style: const TextStyle(
-                fontSize: 11,
-                color: PosColors.muted,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }

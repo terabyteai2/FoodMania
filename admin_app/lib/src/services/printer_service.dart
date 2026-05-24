@@ -14,7 +14,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/localization/app_strings.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
-import '../models/order_service_type.dart';
 import '../models/order_source.dart';
 import '../models/order_status.dart';
 import 'ticket_bitmap.dart';
@@ -103,8 +102,6 @@ class _ReceiptLabels {
   String get takeaway => _bn ? 'টেকওয়ে' : 'Takeaway';
   String get nameLabel => _bn ? 'নাম' : 'Name';
   String get noteLabel => _bn ? 'নোট' : 'Note';
-  String get deliveryHeader =>
-      _bn ? 'হোম ডেলিভারি (ক্যাশ)' : 'DELIVERY (Cash on delivery)';
   String get total => _bn ? 'মোট' : 'Total';
   String get vatIncluded => _bn ? 'ভ্যাটসহ' : 'VAT included';
   String get totalVatIncluded =>
@@ -547,18 +544,6 @@ class PrinterService {
       customerNameLabel: labels.nameLabel,
       note: isManagerCopy ? order.note : null,
       noteLabel: labels.noteLabel,
-      customerPhone: order.serviceType == OrderServiceType.delivery
-          ? order.customerPhone
-          : null,
-      deliveryAddress: order.serviceType == OrderServiceType.delivery
-          ? (order.deliveryAddress ??
-              (order.customerLat != null && order.customerLng != null
-                  ? '${order.customerLat!.toStringAsFixed(5)}, ${order.customerLng!.toStringAsFixed(5)}'
-                  : null))
-          : null,
-      deliveryHeader: order.serviceType == OrderServiceType.delivery
-          ? labels.deliveryHeader
-          : null,
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);

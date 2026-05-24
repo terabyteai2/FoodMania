@@ -3,21 +3,6 @@ import React, { useEffect, useRef, useState } from 'react'
 const API_BASE = ''
 const MENU_REFRESH_MS = 5000
 
-// ── Theme — Terafoods design tokens (translated from admin_app design_rules.md)
-const T = {
-  primary:     '#F5C127',
-  primaryDark: '#1C1A17',
-  primarySoft: '#FEF1C5',
-  bg:          '#F7F4EE',
-  surface:     '#FFFFFF',
-  ink:         '#1C1A17',
-  muted:       '#888780',
-  line:        '#E8E4DC',
-  success:     '#3D7A5A',
-  danger:      '#A32D2D',
-  body:        'system-ui, -apple-system, "Inter", "Hind Siliguri", sans-serif',
-}
-
 // ── PDF receipt generator ─────────────────────────────────────────────────────
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
 
@@ -29,130 +14,141 @@ async function generateReceipt(order, info, cartItems) {
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
-  doc.setTextColor(28, 26, 23)
+  doc.setTextColor(0, 0, 0)
   doc.text(info?.restaurantName || 'Restaurant', W / 2, y, { align: 'center' }); y += 24
 
   if (info?.outletName) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(10)
-    doc.setTextColor(136, 135, 128)
+    doc.setTextColor(100, 100, 100)
     doc.text(info.outletName, W / 2, y, { align: 'center' }); y += 16
   }
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.setTextColor(136, 135, 128)
+  doc.setTextColor(140, 140, 140)
   doc.text(new Date().toLocaleString('en-BD'), W / 2, y, { align: 'center' }); y += 22
-  doc.setTextColor(28, 26, 23)
+  doc.setTextColor(0, 0, 0)
 
-  doc.setDrawColor(245, 193, 39)
+  doc.setDrawColor(255, 106, 61)
   doc.setLineWidth(0.75)
   doc.line(30, y, W - 30, y); y += 18
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
-  doc.setTextColor(136, 135, 128)
+  doc.setTextColor(140, 140, 140)
   doc.text('ORDER NUMBER', W / 2, y, { align: 'center' }); y += 6
 
   doc.setFontSize(44)
-  doc.setTextColor(245, 193, 39)
-  doc.text(`#${order?.serialNumber ?? '-'}`, W / 2, y + 34, { align: 'center' }); y += 50
-  doc.setTextColor(28, 26, 23)
+  doc.setTextColor(255, 181, 71)
+  doc.text(`#${order.serialNumber}`, W / 2, y + 34, { align: 'center' }); y += 50
+  doc.setTextColor(0, 0, 0)
   doc.line(30, y, W - 30, y); y += 20
-
-  if (order?.customerName || order?.customerPhone || order?.deliveryAddress) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(136, 135, 128)
-    doc.text('DELIVERY TO', 30, y); y += 12
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(28, 26, 23)
-    if (order.customerName)  { doc.text(order.customerName, 30, y); y += 13 }
-    if (order.customerPhone) { doc.text(order.customerPhone, 30, y); y += 13 }
-    if (order.deliveryAddress) {
-      const lines = doc.splitTextToSize(order.deliveryAddress, W - 60)
-      doc.text(lines, 30, y); y += lines.length * 13 + 6
-    }
-    doc.line(30, y, W - 30, y); y += 14
-  }
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
-  doc.setTextColor(136, 135, 128)
+  doc.setTextColor(140, 140, 140)
   doc.text('ITEM', 30, y)
   doc.text('QTY', W / 2, y, { align: 'center' })
   doc.text('AMOUNT', W - 30, y, { align: 'right' })
   y += 4
   doc.setLineWidth(0.3)
-  doc.setDrawColor(232, 228, 220)
+  doc.setDrawColor(200, 200, 200)
   doc.line(30, y, W - 30, y); y += 12
-  doc.setTextColor(28, 26, 23)
+  doc.setTextColor(0, 0, 0)
 
   doc.setFontSize(10)
   for (const item of cartItems) {
     doc.setFont('helvetica', 'normal')
     const nameLines = doc.splitTextToSize(item.name, W / 2 - 10)
     doc.text(nameLines, 30, y)
-    doc.setTextColor(136, 135, 128)
+    doc.setTextColor(80, 80, 80)
     doc.text(`x${item.qty}`, W / 2, y, { align: 'center' })
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(28, 26, 23)
+    doc.setTextColor(0, 0, 0)
     doc.text(pdfTk(item.price * item.qty), W - 30, y, { align: 'right' })
+    if (item.qty > 1) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(160, 160, 160)
+      doc.text(`${pdfTk(item.price)} each`, W - 30, y + 11, { align: 'right' })
+      doc.setFontSize(10)
+    }
     y += nameLines.length > 1 ? nameLines.length * 13 + 6 : 20
-    doc.setTextColor(28, 26, 23)
+    doc.setTextColor(0, 0, 0)
   }
 
-  if (order?.notes) {
+  if (order.notes) {
     y += 4
     doc.setFont('helvetica', 'italic')
     doc.setFontSize(9)
-    doc.setTextColor(136, 135, 128)
+    doc.setTextColor(120, 120, 120)
     const noteLines = doc.splitTextToSize(`Note: ${order.notes}`, W - 60)
     doc.text(noteLines, 30, y); y += noteLines.length * 13 + 4
-    doc.setTextColor(28, 26, 23)
+    doc.setTextColor(0, 0, 0)
   }
 
   y += 4
   doc.setLineWidth(0.75)
-  doc.setDrawColor(245, 193, 39)
+  doc.setDrawColor(255, 106, 61)
   doc.line(30, y, W - 30, y); y += 16
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
   doc.text('Total', 30, y)
-  doc.setTextColor(28, 26, 23)
-  doc.text(pdfTk(order?.total ?? 0), W - 30, y, { align: 'right' }); y += 24
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(136, 135, 128)
-  doc.text('Cash on delivery', 30, y); y += 18
+  doc.setTextColor(255, 181, 71)
+  doc.text(pdfTk(order.total), W - 30, y, { align: 'right' }); y += 30
+  doc.setTextColor(0, 0, 0)
 
-  doc.save(`receipt-${order?.serialNumber ?? order?.orderId?.slice(0, 8) ?? 'order'}.pdf`)
+  doc.setLineWidth(0.3)
+  doc.setDrawColor(220, 220, 220)
+  doc.line(30, y, W - 30, y); y += 14
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(9)
+  doc.setTextColor(160, 160, 160)
+  doc.text('Thank you for dining with us!', W / 2, y, { align: 'center' }); y += 13
+  doc.setFontSize(7)
+  doc.text(`Order ID: ${order.orderId?.slice(0, 12) ?? ''}`, W / 2, y, { align: 'center' })
+
+  doc.save(`receipt-${order.serialNumber ?? order.orderId?.slice(0, 8) ?? 'order'}.pdf`)
 }
 
-// ── Menu icon fallback (food-tone palette — same exception as admin's menu_image_view.dart)
+// ── Theme ─────────────────────────────────────────────────────────────────────
+const T = {
+  bg:      '#1c1410',
+  bgWarm:  '#241914',
+  bgCard:  '#2b1f18',
+  ink:     '#fff3e0',
+  inkSoft: 'rgba(255,243,224,.65)',
+  inkFaint:'rgba(255,243,224,.4)',
+  ember:   '#ff6a3d',
+  amber:   '#ffb547',
+  line:    'rgba(255,243,224,.12)',
+  display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
+  body:    '"Hind Siliguri", system-ui, -apple-system, sans-serif',
+}
+
 const MENU_ICON_STYLES = {
-  pizza:    { glyph: '🍕', color: '#E28714', bg: '#FFF3E0' },
-  burger:   { glyph: '☰', color: '#E28714', bg: '#FFF3E0' },
-  biryani:  { glyph: '◉', color: '#E28714', bg: '#FFF3E0' },
-  rice:     { glyph: '◌', color: '#8a5a32', bg: '#F4ECDF' },
-  curry:    { glyph: '◒', color: '#E28714', bg: '#FFF3E0' },
-  soup:     { glyph: '∪', color: '#E88060', bg: '#FBE4DB' },
-  vegetable:{ glyph: '✦', color: '#3D7A5A', bg: '#EAF4EE' },
-  noodle:   { glyph: '≈', color: '#A32D2D', bg: '#FCEBEB' },
-  bread:    { glyph: '▱', color: '#8a5a32', bg: '#F4ECDF' },
-  chicken:  { glyph: '◔', color: '#E28714', bg: '#FFF3E0' },
-  fish:     { glyph: '◇', color: '#2f7ea8', bg: '#E4F0F7' },
-  beef:     { glyph: '◆', color: '#8a5a32', bg: '#F4ECDF' },
-  snack:    { glyph: '✚', color: '#E28714', bg: '#FFF3E0' },
-  fruit:    { glyph: '●', color: '#A32D2D', bg: '#FCEBEB' },
-  dessert:  { glyph: '✸', color: '#A32D2D', bg: '#FCEBEB' },
-  drink:    { glyph: '▯', color: '#2e9b79', bg: '#E2F3EC' },
-  coffee:   { glyph: '☕', color: '#8a5a32', bg: '#F4ECDF' },
-  tea:      { glyph: '◡', color: '#8a5a32', bg: '#F4ECDF' },
-  breakfast:{ glyph: '◐', color: '#E28714', bg: '#FFF3E0' },
-  set_meal: { glyph: '▦', color: '#E28714', bg: '#FFF3E0' },
-  general:  { glyph: '✦', color: T.primary, bg: T.primarySoft },
+  pizza:    { glyph: '🍕', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
+  burger:   { glyph: '☰', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  biryani:  { glyph: '◉', color: '#e28714', bg: 'rgba(226,135,20,.20)' },
+  rice:     { glyph: '◌', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
+  curry:    { glyph: '◒', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
+  soup:     { glyph: '∪', color: '#e65a3c', bg: 'rgba(230,90,60,.16)' },
+  vegetable:{ glyph: '✦', color: '#3d7a5a', bg: 'rgba(61,122,90,.20)' },
+  noodle:   { glyph: '≈', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  bread:    { glyph: '▱', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  chicken:  { glyph: '◔', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
+  fish:     { glyph: '◇', color: '#2f7ea8', bg: 'rgba(47,126,168,.18)' },
+  beef:     { glyph: '◆', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  snack:    { glyph: '✚', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  fruit:    { glyph: '●', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  dessert:  { glyph: '✸', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  drink:    { glyph: '▯', color: '#2e9b79', bg: 'rgba(46,155,121,.18)' },
+  coffee:   { glyph: '☕', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  tea:      { glyph: '◡', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
+  breakfast:{ glyph: '◐', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  set_meal: { glyph: '▦', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
+  general:  { glyph: '✦', color: T.amber, bg: 'rgba(255,181,71,.14)' },
 }
 
 function inferIconKey(item) {
@@ -194,9 +190,10 @@ function MenuFallbackIcon({ item, size = 32 }) {
       position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
       background: style.bg,
     }}>
-      <span style={{ color: style.color, fontSize: size, lineHeight: 1, fontWeight: 500 }}>
-        {style.glyph}
-      </span>
+      <span style={{
+        color: style.color, fontSize: size, fontFamily: T.display,
+        lineHeight: 1, fontWeight: 800, opacity: .95,
+      }}>{style.glyph}</span>
     </div>
   )
 }
@@ -266,7 +263,11 @@ function unwrapApi(res) {
 async function loadJson(path) {
   const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' })
   let body = null
-  try { body = await res.json() } catch { /* fall through */ }
+  try {
+    body = await res.json()
+  } catch {
+    // Keep the clearer status error below.
+  }
   if (!res.ok) {
     throw new Error(body?.detail || body?.error || `${res.status} ${res.statusText}: ${path}`)
   }
@@ -276,16 +277,12 @@ async function loadJson(path) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const outletId = getOutletId()
-  const [phase, setPhase]       = useState('loading')   // loading | main | cart | success | error
+  const [phase, setPhase]       = useState('loading')
   const [info, setInfo]         = useState(null)
   const [items, setItems]       = useState([])
   const [cart, setCart]         = useState({})
   const [activeCategory, setCat]= useState('All')
   const [note, setNote]         = useState('')
-  const [customerName, setName] = useState('')
-  const [customerPhone, setPhone] = useState('')
-  const [coords, setCoords]     = useState(null)        // { lat, lng, accuracy }
-  const [geoStatus, setGeo]     = useState('idle')      // idle | locating | ok | denied | error
   const [submitting, setSub]    = useState(false)
   const [errorMsg, setErr]      = useState('')
   const [orderRef, setOrderRef] = useState(null)
@@ -295,7 +292,10 @@ export default function App() {
   useEffect(() => {
     if (!outletId) { setPhase('error'); setErr('Invalid menu link.'); return }
     if (outletId === '__demo__') {
-      setInfo(DEMO_INFO); setItems(DEMO_ITEMS); setPhase('main'); return
+      setInfo(DEMO_INFO)
+      setItems(DEMO_ITEMS)
+      setPhase('welcome')
+      return
     }
     let cancelled = false
 
@@ -313,7 +313,7 @@ export default function App() {
           return Object.fromEntries(Object.entries(current).filter(([id]) => liveIds.has(id)))
         })
         setErr('')
-        setPhase(current => (current === 'loading' || current === 'error') ? 'main' : current)
+        setPhase(current => (current === 'loading' || current === 'error') ? 'welcome' : current)
       } catch (e) {
         if (cancelled || silent) return
         setPhase('error')
@@ -323,7 +323,9 @@ export default function App() {
 
     refresh(false)
     const timer = window.setInterval(() => refresh(true), MENU_REFRESH_MS)
-    const onVisible = () => { if (document.visibilityState === 'visible') refresh(true) }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh(true)
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
@@ -344,23 +346,6 @@ export default function App() {
     })
   }
 
-  function requestLocation() {
-    if (!('geolocation' in navigator)) {
-      setGeo('error'); return
-    }
-    setGeo('locating')
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy })
-        setGeo('ok')
-      },
-      err => {
-        setGeo(err.code === err.PERMISSION_DENIED ? 'denied' : 'error')
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
-    )
-  }
-
   async function placeOrder() {
     setSub(true)
     if (outletId === '__demo__') {
@@ -370,16 +355,9 @@ export default function App() {
         return { name: item.name, qty, price: item.price }
       })
       setLastCart(demoCartItems)
-      setOrderRef({
-        serialNumber: Math.floor(Math.random() * 90) + 10,
-        total: cartTotal(cart, items),
-        orderId: 'demo-order-001',
-        notes: note || null,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        deliveryAddress: coords ? `Lat ${coords.lat.toFixed(5)}, Lng ${coords.lng.toFixed(5)}` : null,
-      })
-      setPhase('success'); setSub(false)
+      setOrderRef({ serialNumber: Math.floor(Math.random() * 90) + 10, total: cartTotal(cart, items), orderId: 'demo-order-001', notes: note || null })
+      setPhase('success')
+      setSub(false)
       return
     }
     try {
@@ -390,14 +368,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/customer/${outletId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: orderItems,
-          customerName: customerName.trim(),
-          customerPhone: customerPhone.trim(),
-          latitude: coords.lat,
-          longitude: coords.lng,
-          note: note || null,
-        }),
+        body: JSON.stringify({ items: orderItems, note: note || null }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || data.error || 'Order failed')
@@ -415,29 +386,21 @@ export default function App() {
   if (phase === 'loading') return <LoadingScreen />
   if (phase === 'error')   return <ErrorScreen message={errorMsg} />
   if (phase === 'success') return (
-    <SuccessScreen
-      order={orderRef} info={info} cartItems={lastCart}
-      onBack={() => {
-        setCart({}); setLastCart([]); setNote('')
-        setName(''); setPhone(''); setCoords(null); setGeo('idle')
-        setPhase('main')
-      }}
-    />
+    <SuccessScreen order={orderRef} info={info} cartItems={lastCart}
+      onBack={() => { setCart({}); setLastCart([]); setNote(''); setPhase('menu') }} />
   )
   if (phase === 'cart') return (
-    <CartScreen
-      cart={cart} items={items} note={note} onNote={setNote}
-      onAdd={add} onRemove={rem} onBack={() => setPhase('main')}
-      onPlace={placeOrder} submitting={submitting} info={info}
-      customerName={customerName} onName={setName}
-      customerPhone={customerPhone} onPhone={setPhone}
-      coords={coords} geoStatus={geoStatus} onLocate={requestLocation}
-    />
+    <CartScreen cart={cart} items={items} note={note} onNote={setNote}
+      onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
+      onPlace={placeOrder} submitting={submitting} info={info} />
+  )
+  if (phase === 'welcome') return (
+    <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
   )
 
   return (
     <>
-      <MainPage
+      <MenuScreen
         info={info} items={visible} allItems={items} cart={cart}
         categories={categories} activeCategory={activeCategory}
         onCategory={setCat} onAdd={add} onRemove={rem}
@@ -467,12 +430,12 @@ function LoadingScreen() {
     }}>
       <div style={{
         width: 40, height: 40,
-        border: `0.5px solid ${T.line}`,
-        borderTop: `2px solid ${T.primary}`,
-        borderRadius: 999,
+        border: `2px solid rgba(255,243,224,.1)`,
+        borderTop: `2px solid ${T.amber}`,
+        borderRadius: '50%',
         animation: 'spin .9s linear infinite',
       }} />
-      <p style={{ color: T.muted, marginTop: 20, fontWeight: 500, letterSpacing: 2, fontSize: 11, textTransform: 'uppercase' }}>
+      <p style={{ color: T.inkSoft, marginTop: 20, fontWeight: 500, letterSpacing: 2, fontSize: 11, textTransform: 'uppercase' }}>
         Loading…
       </p>
     </div>
@@ -487,15 +450,15 @@ function ErrorScreen({ message }) {
       background: T.bg, padding: 24, fontFamily: T.body,
     }}>
       <div style={{ fontSize: 42, marginBottom: 16 }}>🍽️</div>
-      <p style={{ color: T.danger, fontSize: 16, textAlign: 'center', padding: '0 32px', fontWeight: 500 }}>
+      <p style={{ color: T.amber, fontFamily: T.display, fontSize: 18, textAlign: 'center', padding: '0 32px' }}>
         {message}
       </p>
     </div>
   )
 }
 
-// ── Hero (compact, ~50vh — replaces standalone Welcome screen) ────────────────
-function Hero({ info }) {
+// ── Welcome Screen ────────────────────────────────────────────────────────────
+function WelcomeScreen({ info, onEnter }) {
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const touchX = useRef(null)
@@ -526,14 +489,11 @@ function Hero({ info }) {
 
   return (
     <div
-      style={{
-        width: '100%', height: '50vh', minHeight: 280, maxHeight: 460,
-        position: 'relative', overflow: 'hidden',
-        background: T.primaryDark, flexShrink: 0,
-      }}
+      style={{ width: '100%', minHeight: '100vh', position: 'relative', overflow: 'hidden', background: T.bg, fontFamily: T.body }}
       onTouchStart={hasGallery ? onTouchStart : undefined}
       onTouchEnd={hasGallery ? onTouchEnd : undefined}
     >
+      {/* Background media */}
       {hasVideo ? (
         <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -548,48 +508,84 @@ function Hero({ info }) {
         <img src={info.bannerUrl} alt=""
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: `radial-gradient(120% 80% at 50% 20%, ${T.primary} 0%, ${T.primaryDark} 70%)`,
-        }} />
+        <>
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: `repeating-linear-gradient(135deg,
+              rgba(255,243,224,.04) 0 12px,
+              rgba(255,243,224,.08) 12px 24px)`,
+          }} />
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(80% 50% at 50% 35%, rgba(255,181,71,.10) 0%, transparent 60%)',
+          }} />
+        </>
       )}
 
+      {/* Gradient overlay */}
       <div style={{
         position: 'absolute', inset: 0,
         background: hasMedia
-          ? 'linear-gradient(180deg, rgba(28,26,23,.35) 0%, rgba(28,26,23,.15) 45%, rgba(28,26,23,.85) 100%)'
+          ? 'linear-gradient(180deg, rgba(28,20,16,.55) 0%, rgba(28,20,16,.25) 40%, rgba(28,20,16,.88) 100%)'
           : 'transparent',
       }} />
 
+      {/* Centered content */}
       <div style={{
-        position: 'relative', height: '100%',
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
-        padding: '20px 22px 26px',
+        position: 'relative', minHeight: '100vh',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '60px 28px', textAlign: 'center',
       }}>
+        {/* Logo mark */}
         <div style={{
-          width: 56, height: 56, borderRadius: 999,
-          background: T.primary, color: T.primaryDark,
+          width: 96, height: 96, borderRadius: 48,
+          background: 'rgba(28,20,16,.65)', border: `1.5px solid ${T.amber}`,
           display: 'grid', placeItems: 'center',
-          fontSize: 28, fontWeight: 500, lineHeight: 1,
-          marginBottom: 12,
+          fontFamily: T.display, fontSize: 56, color: T.amber, lineHeight: 1,
+          boxShadow: '0 12px 40px rgba(255,181,71,.2)',
         }}>
           {info?.restaurantName?.[0]?.toUpperCase() || 'R'}
         </div>
+
+        {/* Restaurant name */}
         <div style={{
-          fontSize: 32, color: T.surface, lineHeight: 1.05, fontWeight: 500,
-          letterSpacing: '-.01em',
+          fontFamily: T.display, fontSize: 60, color: '#fff', marginTop: 24, lineHeight: .9,
+          textTransform: 'uppercase', letterSpacing: '-.015em',
+          textShadow: '0 2px 20px rgba(0,0,0,.5)',
         }}>{info?.restaurantName || 'Restaurant'}</div>
+
+        {/* Outlet subtitle */}
         {info?.outletName && (
-          <div style={{ marginTop: 6, fontSize: 13, color: T.line, fontWeight: 400 }}>
-            {info.outletName} · Online delivery
+          <div style={{ marginTop: 8, fontSize: 13, color: T.inkSoft, letterSpacing: '.05em' }}>
+            {info.outletName}
           </div>
         )}
+
+        {/* CTA button */}
+        <button
+          style={{
+            marginTop: 40, padding: '14px 30px',
+            background: T.ember, color: '#1a0c08', border: 'none', borderRadius: 12,
+            fontFamily: T.display, fontSize: 20, fontWeight: 700, textTransform: 'uppercase',
+            cursor: 'pointer', letterSpacing: '.04em',
+            display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 14px 30px rgba(255,106,61,.4)',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          onClick={onEnter}
+        >
+          <span>See the Menu</span>
+          <span style={{ fontSize: 22, lineHeight: 1 }}>→</span>
+        </button>
+
+        {/* Gallery dots */}
         {hasGallery && gallery.length > 1 && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 20 }}>
             {gallery.map((_, i) => (
               <div key={i} onClick={() => setSlide(i)} style={{
-                width: i === slide ? 18 : 6, height: 6, borderRadius: 999,
-                background: i === slide ? T.primary : 'rgba(247,244,238,.45)',
+                width: i === slide ? 18 : 6, height: 6, borderRadius: 3,
+                background: i === slide ? T.amber : 'rgba(255,181,71,.35)',
                 transition: 'all 0.3s', cursor: 'pointer',
               }} />
             ))}
@@ -600,30 +596,22 @@ function Hero({ info }) {
   )
 }
 
-// ── Main Page (hero + scrollable menu — single page) ──────────────────────────
-function MainPage({ info, items, allItems, cart, categories, activeCategory, onCategory, onAdd, onRemove, onOpenCart, onOpenDetail }) {
+// ── Menu Screen ───────────────────────────────────────────────────────────────
+function MenuScreen({ info, items, allItems, cart, categories, activeCategory, onCategory, onAdd, onRemove, onOpenCart, onOpenDetail }) {
   const count = cartCount(cart)
   const total = cartTotal(cart, allItems)
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: T.body, color: T.ink }}>
-      <Hero info={info} />
-
-      {/* Section header */}
-      <div style={{ padding: '20px 16px 6px' }}>
-        <div style={{ fontSize: 11, color: T.muted, fontWeight: 500, letterSpacing: '.18em', textTransform: 'uppercase' }}>
-          OUR MENU
-        </div>
-        <div style={{ fontSize: 22, color: T.ink, fontWeight: 500, marginTop: 4, lineHeight: 1.1 }}>
-          Browse and order for delivery
-        </div>
-      </div>
+    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
+      {/* Short hero */}
+      <MenuHero info={info} />
 
       {/* Category tabs */}
       <div style={{
-        display: 'flex', padding: '14px 16px 0',
+        display: 'flex', padding: '14px 18px 0',
         overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
-        flexShrink: 0,
+        background: T.bg, flexShrink: 0,
+        borderBottom: `1px solid ${T.line}`,
       }}>
         {categories.map(cat => {
           const active = cat === activeCategory
@@ -631,17 +619,17 @@ function MainPage({ info, items, allItems, cart, categories, activeCategory, onC
             <button key={cat}
               onClick={() => onCategory(cat)}
               style={{
-                flex: '0 0 auto', padding: '8px 14px', marginRight: 8, height: 32,
-                background: active ? T.primaryDark : T.surface,
-                color: active ? T.surface : T.ink,
-                border: `0.5px solid ${active ? T.primaryDark : T.line}`,
-                borderRadius: 999,
-                cursor: 'pointer',
-                fontFamily: T.body, fontSize: 13, fontWeight: 500,
-                whiteSpace: 'nowrap',
+                flex: '0 0 auto', padding: '0 0 12px', marginRight: 20,
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                fontFamily: T.display, fontSize: 17, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '.01em',
+                color: active ? T.amber : T.inkSoft,
+                borderBottom: active ? `2.5px solid ${T.ember}` : '2.5px solid transparent',
+                transition: 'color .15s',
                 WebkitTapHighlightColor: 'transparent',
+                whiteSpace: 'nowrap',
               }}>
-              {cat}
+              {cat === 'All' ? 'All' : cat}
             </button>
           )
         })}
@@ -649,15 +637,16 @@ function MainPage({ info, items, allItems, cart, categories, activeCategory, onC
 
       {/* 2-col grid */}
       <div style={{
-        padding: '14px 12px',
-        paddingBottom: count > 0 ? 110 : 32,
+        padding: '9px 12px',
+        paddingBottom: count > 0 ? 110 : 24,
         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+        flex: 1,
         alignContent: 'start',
       }}>
         {items.length === 0 ? (
           <div style={{
             gridColumn: '1 / -1', textAlign: 'center',
-            color: T.muted, padding: '60px 0', fontStyle: 'italic', fontWeight: 400,
+            color: T.inkSoft, padding: '60px 0', fontStyle: 'italic',
           }}>
             No items available
           </div>
@@ -676,26 +665,96 @@ function MainPage({ info, items, allItems, cart, categories, activeCategory, onC
         )}
       </div>
 
+      {/* Cart bar */}
       {count > 0 && (
         <div className="slide-up" onClick={onOpenCart} style={{
-          position: 'fixed', left: 16, right: 16, bottom: 16, zIndex: 30,
-          background: T.primary, color: T.primaryDark, padding: '14px 18px', borderRadius: 12,
+          position: 'fixed', left: 18, right: 18, bottom: 18, zIndex: 30,
+          background: T.ember, color: '#1a0c08', padding: '13px 18px', borderRadius: 14,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 4px 8px rgba(28,26,23,.18)',
-          cursor: 'pointer', fontWeight: 500,
+          boxShadow: '0 14px 30px rgba(255,106,61,.45)',
+          fontFamily: T.display, textTransform: 'uppercase', letterSpacing: '.02em',
+          cursor: 'pointer',
           WebkitTapHighlightColor: 'transparent',
         }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{
-              width: 26, height: 26, borderRadius: 999, background: T.primaryDark, color: T.primary,
-              display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 500,
-              flexShrink: 0,
+              width: 26, height: 26, borderRadius: 13, background: '#1a0c08', color: T.amber,
+              display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700,
+              fontFamily: T.body, flexShrink: 0,
             }}>{count}</span>
-            <span style={{ fontSize: 15, fontWeight: 500 }}>Checkout</span>
+            <span style={{ fontSize: 18, fontWeight: 700 }}>ORDER</span>
           </span>
-          <span style={{ fontSize: 15, fontWeight: 500 }}>{taka(total)} →</span>
+          <span style={{ fontSize: 18, fontWeight: 700 }}>{taka(total)} →</span>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Menu Hero (short, inside menu page) ───────────────────────────────────────
+function MenuHero({ info }) {
+  const videoRef = useRef(null)
+  const [slide, setSlide] = useState(0)
+  const gallery = info?.galleryImages || []
+  const hasGallery = gallery.length > 0
+  const hasVideo = !hasGallery && !!info?.videoUrl
+
+  useEffect(() => {
+    if (!hasGallery || gallery.length < 2) return
+    const id = setInterval(() => setSlide(i => (i + 1) % gallery.length), 4000)
+    return () => clearInterval(id)
+  }, [hasGallery, gallery.length])
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.play().catch(() => {})
+  }, [info?.videoUrl])
+
+  return (
+    <div style={{ position: 'relative', height: 200, flexShrink: 0, background: T.bgWarm, overflow: 'hidden' }}>
+      {hasVideo ? (
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : hasGallery ? (
+        gallery.map((url, i) => (
+          <img key={url} src={url} alt="" style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+            opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
+          }} />
+        ))
+      ) : info?.bannerUrl ? (
+        <img src={info.bannerUrl} alt=""
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : null}
+
+      {/* Gradient overlay */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(180deg, rgba(28,20,16,.65) 0%, rgba(28,20,16,.1) 40%, rgba(28,20,16,.92) 100%)',
+      }} />
+
+      {/* Top bar */}
+      <div style={{
+        position: 'absolute', top: 52, left: 0, right: 0,
+        display: 'flex', justifyContent: 'space-between', padding: '0 18px',
+        alignItems: 'center',
+      }}>
+        <div style={{ fontSize: 11, letterSpacing: '.3em', color: T.amber, fontFamily: T.body, fontWeight: 600 }}>
+          {info?.restaurantName?.toUpperCase() || 'MENU'}
+        </div>
+        {info?.outletName && (
+          <div style={{ fontSize: 11, color: T.inkSoft, fontFamily: T.body }}>{info.outletName}</div>
+        )}
+      </div>
+
+      {/* Bottom: big name */}
+      <div style={{ position: 'absolute', left: 18, right: 18, bottom: 16 }}>
+        <div style={{
+          fontFamily: T.display, fontSize: 42, lineHeight: .88,
+          textTransform: 'uppercase', letterSpacing: '-.01em',
+          color: '#fff', fontWeight: 800,
+          textShadow: '0 2px 12px rgba(0,0,0,.5)',
+        }}>{info?.restaurantName || 'Menu'}</div>
+      </div>
     </div>
   )
 }
@@ -703,12 +762,13 @@ function MainPage({ info, items, allItems, cart, categories, activeCategory, onC
 // ── Menu Card (2-col grid) ────────────────────────────────────────────────────
 function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
   const hasImage = !!item.imageUrl
+
   return (
     <div
       className="fade-up"
       style={{
-        background: T.surface, borderRadius: 12, overflow: 'hidden',
-        border: `0.5px solid ${T.line}`,
+        background: T.bgCard, borderRadius: 14, overflow: 'hidden',
+        border: `1px solid ${T.line}`,
         display: 'flex', flexDirection: 'column',
         minHeight: 0,
         animationDelay: `${Math.min(delay * 0.04, 0.3)}s`,
@@ -717,9 +777,10 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
       }}
       onClick={onOpenDetail}
     >
+      {/* Image area */}
       <div style={{
-        width: '100%', aspectRatio: '1.28 / 1', maxHeight: 110, position: 'relative',
-        background: T.bg,
+        width: '100%', aspectRatio: '1.28 / 1', maxHeight: 92, position: 'relative',
+        background: T.bgWarm,
         ...(hasImage ? {
           backgroundImage: `url(${item.imageUrl})`,
           backgroundSize: 'cover', backgroundPosition: 'center',
@@ -729,52 +790,67 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
         {!hasImage && <MenuFallbackIcon item={item} size={32} />}
         {item.tag && (
           <span style={{
-            position: 'absolute', top: 8, left: 8,
-            padding: '3px 8px', background: T.primary, color: T.primaryDark,
-            fontSize: 10, letterSpacing: '.12em', borderRadius: 8, fontWeight: 500,
-            whiteSpace: 'nowrap', textTransform: 'uppercase',
-          }}>★ {item.tag}</span>
+            position: 'absolute', top: 7, left: 7,
+            padding: '2px 7px', background: 'rgba(28,20,16,.82)', backdropFilter: 'blur(4px)',
+            color: T.amber, fontSize: 9, letterSpacing: '.14em', borderRadius: 3, fontWeight: 700,
+            whiteSpace: 'nowrap', fontFamily: T.body,
+          }}>★ {item.tag.toUpperCase()}</span>
         )}
-        <div style={{ position: 'absolute', bottom: 8, right: 8 }}
+        {item.videoUrl && (
+          <div style={{
+            position: 'absolute', top: 7, left: item.tag ? undefined : 7,
+            right: 7, bottom: undefined,
+            width: 22, height: 22, borderRadius: 11,
+            background: 'rgba(28,20,16,.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <polygon points="2,1 9,5 2,9" fill={T.amber}/>
+            </svg>
+          </div>
+        )}
+        {/* Add / qty control */}
+        <div style={{ position: 'absolute', top: 7, right: 7 }}
           onClick={e => e.stopPropagation()}>
           {qty === 0 ? (
             <button onClick={onAdd} style={{
-              width: 32, height: 32, borderRadius: 999, border: 'none',
-              background: T.primary, color: T.primaryDark, fontSize: 20, lineHeight: 1,
-              cursor: 'pointer', fontWeight: 500, display: 'grid', placeItems: 'center',
-              boxShadow: '0 4px 8px rgba(28,26,23,.18)',
+              width: 28, height: 28, borderRadius: 14, border: 'none',
+              background: T.ember, color: '#1a0c08', fontSize: 20, lineHeight: 1,
+              cursor: 'pointer', fontWeight: 700, display: 'grid', placeItems: 'center',
               WebkitTapHighlightColor: 'transparent',
             }}>+</button>
           ) : (
             <div style={{
               display: 'flex', alignItems: 'center',
-              background: T.surface, borderRadius: 999,
-              border: `0.5px solid ${T.line}`, height: 32,
-              fontSize: 13, fontWeight: 500,
+              background: 'rgba(28,20,16,.88)', borderRadius: 8,
+              border: `1px solid ${T.line}`, height: 28,
+              fontFamily: T.display, fontSize: 13,
             }}>
-              <span onClick={onRemove} style={{ padding: '0 10px', cursor: 'pointer', color: T.muted, lineHeight: '32px' }}>−</span>
-              <span style={{ padding: '0 2px', color: T.ink, fontWeight: 500, lineHeight: '32px' }}>{qty}</span>
-              <span onClick={onAdd} style={{ padding: '0 10px', cursor: 'pointer', color: T.primaryDark, lineHeight: '32px' }}>+</span>
+              <span onClick={onRemove} style={{ padding: '0 7px', cursor: 'pointer', color: T.inkSoft, lineHeight: '28px' }}>−</span>
+              <span style={{ padding: '0 2px', color: '#fff', fontWeight: 700, lineHeight: '28px' }}>{qty}</span>
+              <span onClick={onAdd} style={{ padding: '0 7px', cursor: 'pointer', color: T.amber, lineHeight: '28px' }}>+</span>
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 72 }}>
+      {/* Info */}
+      <div style={{ padding: '8px 9px 9px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 70 }}>
         <div style={{
-          fontSize: 14, fontWeight: 500, lineHeight: 1.2, color: T.ink,
+          fontFamily: T.display, fontSize: 14, fontWeight: 700, lineHeight: 1.05,
+          textTransform: 'uppercase', color: '#fff',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{item.name}</div>
         {item.description && (
           <div style={{
-            fontSize: 11, color: T.muted, marginTop: 4, fontWeight: 400,
+            fontSize: 10, color: T.inkSoft, marginTop: 3,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{item.description}</div>
         )}
         <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 14, color: T.primaryDark, marginTop: 6, fontWeight: 500 }}>
-          {taka(item.price)}
-        </div>
+        <div style={{
+          fontFamily: T.display, fontSize: 15, color: T.amber, marginTop: 5,
+        }}>{taka(item.price)}</div>
       </div>
     </div>
   )
@@ -801,8 +877,9 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
       className="fade-in"
       style={{
         position: 'fixed', inset: 0, zIndex: 50,
-        background: 'rgba(28,26,23,.5)',
+        background: 'rgba(0,0,0,.6)',
         display: 'flex', alignItems: 'flex-end',
+        backdropFilter: 'blur(3px)',
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
@@ -810,16 +887,17 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
         className="slide-up"
         style={{
           width: '100%', maxHeight: '90vh',
-          background: T.surface,
-          borderTopLeftRadius: 12, borderTopRightRadius: 12,
-          boxShadow: '0 0 8px rgba(28,26,23,.20)',
+          background: T.bg,
+          borderTopLeftRadius: 22, borderTopRightRadius: 22,
+          boxShadow: '0 -20px 50px rgba(0,0,0,.5)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          border: `0.5px solid ${T.line}`, borderBottom: 'none',
+          border: `1px solid ${T.line}`, borderBottom: 'none',
         }}
       >
+        {/* Photo header */}
         <div style={{
           height: 200, position: 'relative', flexShrink: 0,
-          background: T.bg,
+          background: T.bgCard,
           ...(current?.type === 'image' ? {
             backgroundImage: `url(${current.url})`,
             backgroundSize: 'cover', backgroundPosition: 'center',
@@ -830,67 +908,77 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           )}
           <div style={{
-            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
-            width: 44, height: 4, borderRadius: 999, background: 'rgba(255,255,255,.7)',
+            position: 'absolute', inset: 0,
+            borderTopLeftRadius: 22, borderTopRightRadius: 22,
+            background: 'linear-gradient(180deg, rgba(28,20,16,.45) 0%, transparent 40%, rgba(28,20,16,.95) 100%)',
           }} />
+          {/* Drag handle */}
+          <div style={{
+            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+            width: 44, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.4)',
+          }} />
+          {/* Close */}
           <button onClick={onClose} style={{
             position: 'absolute', top: 14, right: 14,
-            width: 32, height: 32, borderRadius: 999,
-            background: T.surface, color: T.ink, border: `0.5px solid ${T.line}`,
-            fontSize: 16, cursor: 'pointer',
+            width: 32, height: 32, borderRadius: 16,
+            background: 'rgba(28,20,16,.75)',
+            color: '#fff', border: 'none', fontSize: 16, cursor: 'pointer',
             display: 'grid', placeItems: 'center',
             WebkitTapHighlightColor: 'transparent',
           }}>✕</button>
           {!current && <MenuFallbackIcon item={item} size={54} />}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 8px' }}>
-          <div style={{ fontSize: 22, color: T.ink, fontWeight: 500, lineHeight: 1.15 }}>
-            {item.name}
-          </div>
+        {/* Scrolling body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 4px' }}>
+          <div style={{
+            fontFamily: T.display, fontSize: 26, lineHeight: .92, textTransform: 'uppercase',
+            color: '#fff', fontWeight: 800, letterSpacing: '-.01em',
+          }}>{item.name}</div>
           {item.description && (
-            <div style={{ marginTop: 10, fontSize: 13, color: T.muted, lineHeight: 1.55, fontWeight: 400 }}>
+            <div style={{ marginTop: 10, fontSize: 13, color: T.inkSoft, lineHeight: 1.55 }}>
               {item.description}
             </div>
           )}
-          <div style={{ fontSize: 18, color: T.primaryDark, marginTop: 12, fontWeight: 500 }}>
-            {taka(item.price)}
-          </div>
+          <div style={{
+            fontFamily: T.display, fontSize: 22, color: T.amber, marginTop: 10, letterSpacing: '-.01em',
+          }}>{taka(item.price)}</div>
           <div style={{ height: 80 }} />
         </div>
 
+        {/* Bottom add bar */}
         <div style={{
-          padding: '14px 18px 24px',
-          borderTop: `0.5px solid ${T.line}`,
-          background: T.surface, flexShrink: 0,
+          padding: '14px 18px 30px',
+          borderTop: `1px solid ${T.line}`,
+          background: T.bg, flexShrink: 0,
           display: 'flex', gap: 10, alignItems: 'center',
         }}>
           {qty === 0 ? (
             <button onClick={onAdd} style={{
-              flex: 1, height: 50, background: T.primary, color: T.primaryDark, border: 'none', borderRadius: 12,
-              fontSize: 15, fontWeight: 500,
-              cursor: 'pointer',
+              flex: 1, height: 50, background: T.ember, color: '#1a0c08', border: 'none', borderRadius: 12,
+              fontFamily: T.display, fontSize: 16, fontWeight: 700, textTransform: 'uppercase',
+              cursor: 'pointer', letterSpacing: '.02em',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px',
               WebkitTapHighlightColor: 'transparent',
             }}>
-              <span>Add to Order</span>
+              <span>Add to Order · যোগ করুন</span>
               <span>{taka(item.price)}</span>
             </button>
           ) : (
             <>
               <div style={{
                 display: 'flex', alignItems: 'center', height: 50,
-                border: `0.5px solid ${T.line}`, borderRadius: 12,
-                fontSize: 16, flexShrink: 0, background: T.surface,
+                border: `1px solid ${T.line}`, borderRadius: 12,
+                fontFamily: T.display, fontSize: 18, flexShrink: 0,
               }}>
-                <span onClick={onRemove} style={{ padding: '0 14px', color: T.muted, cursor: 'pointer', fontSize: 22 }}>−</span>
-                <span style={{ padding: '0 4px', color: T.ink, fontWeight: 500 }}>{qty}</span>
-                <span onClick={onAdd} style={{ padding: '0 14px', color: T.primaryDark, cursor: 'pointer', fontSize: 22 }}>+</span>
+                <span onClick={onRemove} style={{ padding: '0 14px', color: T.inkSoft, cursor: 'pointer', fontSize: 22 }}>−</span>
+                <span style={{ padding: '0 4px', color: '#fff', fontWeight: 700 }}>{qty}</span>
+                <span onClick={onAdd} style={{ padding: '0 14px', color: T.amber, cursor: 'pointer', fontSize: 22 }}>+</span>
               </div>
               <button onClick={onAdd} style={{
-                flex: 1, height: 50, background: T.primary, color: T.primaryDark, border: 'none', borderRadius: 12,
-                fontSize: 14, fontWeight: 500,
-                cursor: 'pointer',
+                flex: 1, height: 50, background: T.ember, color: '#1a0c08', border: 'none', borderRadius: 12,
+                fontFamily: T.display, fontSize: 15, fontWeight: 700, textTransform: 'uppercase',
+                cursor: 'pointer', letterSpacing: '.02em',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px',
                 WebkitTapHighlightColor: 'transparent',
               }}>
@@ -906,56 +994,51 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
 }
 
 // ── Cart Screen ───────────────────────────────────────────────────────────────
-function CartScreen({
-  cart, items, note, onNote, onAdd, onRemove, onBack, onPlace, submitting, info,
-  customerName, onName, customerPhone, onPhone, coords, geoStatus, onLocate,
-}) {
+function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlace, submitting, info }) {
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
     .filter(Boolean)
   const total = cartTotal(cart, items)
 
-  const nameOk = customerName.trim().length > 0
-  const phoneOk = customerPhone.trim().length >= 6
-  const canPlace = nameOk && phoneOk && !!coords && !submitting
-
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body, color: T.ink }}>
+    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
+      {/* Header */}
       <div style={{
-        padding: '50px 16px 14px', borderBottom: `0.5px solid ${T.line}`, flexShrink: 0,
+        padding: '54px 20px 14px', borderBottom: `1px solid ${T.line}`, flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 12,
-        background: T.surface, position: 'sticky', top: 0, zIndex: 10,
+        background: T.bg, position: 'sticky', top: 0, zIndex: 10,
       }}>
         <button onClick={onBack} style={{
-          width: 38, height: 38, borderRadius: 999, flexShrink: 0,
-          background: T.surface, color: T.ink, border: `0.5px solid ${T.line}`,
+          width: 36, height: 36, borderRadius: 18, flexShrink: 0,
+          background: 'rgba(255,243,224,.06)', color: T.ink, border: 'none',
           fontSize: 18, cursor: 'pointer', display: 'grid', placeItems: 'center',
           WebkitTapHighlightColor: 'transparent',
         }}>←</button>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 18, color: T.ink, fontWeight: 500, lineHeight: 1.1 }}>
-            Your Order
-          </div>
+          <div style={{
+            fontFamily: T.display, fontSize: 26, textTransform: 'uppercase',
+            color: '#fff', lineHeight: 1, letterSpacing: '-.005em',
+          }}>Your Order</div>
           {info?.restaurantName && (
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 3, fontWeight: 400 }}>
+            <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3 }}>
               {info.restaurantName}{info.outletName ? ` · ${info.outletName}` : ''}
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 180px' }}>
+      {/* Items */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 20px 180px' }}>
         {cartItems.map((item, i) => (
           <div key={item.id} className="fade-up" style={{
             padding: '14px 0',
-            borderBottom: i === cartItems.length - 1 ? 'none' : `0.5px solid ${T.line}`,
+            borderBottom: i === cartItems.length - 1 ? 'none' : `1px solid ${T.line}`,
             display: 'flex', gap: 12, alignItems: 'flex-start',
             animationDelay: `${i * 0.05}s`,
           }}>
             <div style={{
-              width: 56, height: 56, borderRadius: 8, flexShrink: 0,
-              backgroundColor: T.surface, position: 'relative', overflow: 'hidden',
-              border: `0.5px solid ${T.line}`,
+              width: 56, height: 56, borderRadius: 10, flexShrink: 0,
+              backgroundColor: T.bgCard, position: 'relative', overflow: 'hidden',
               ...(item.imageUrl ? {
                 backgroundImage: `url(${item.imageUrl})`,
                 backgroundSize: 'cover', backgroundPosition: 'center',
@@ -964,23 +1047,22 @@ function CartScreen({
               {!item.imageUrl && <MenuFallbackIcon item={item} size={24} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, color: T.ink, fontWeight: 500, lineHeight: 1.2 }}>
-                {item.name}
-              </div>
-              <div style={{ fontSize: 11, color: T.muted, marginTop: 2, fontWeight: 400 }}>
-                {taka(item.price)} each
-              </div>
+              <div style={{
+                fontFamily: T.display, fontSize: 16, textTransform: 'uppercase',
+                color: '#fff', fontWeight: 700, lineHeight: 1.1,
+              }}>{item.name}</div>
+              <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{taka(item.price)} each</div>
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{
                   display: 'flex', alignItems: 'center',
-                  border: `0.5px solid ${T.line}`, borderRadius: 999, height: 28,
-                  fontSize: 13, background: T.surface,
+                  border: `1px solid ${T.line}`, borderRadius: 8, height: 28,
+                  fontFamily: T.display, fontSize: 14,
                 }}>
-                  <span onClick={() => onRemove(item.id)} style={{ padding: '0 10px', cursor: 'pointer', color: T.muted }}>−</span>
-                  <span style={{ padding: '0 2px', color: T.ink, fontWeight: 500 }}>{item.qty}</span>
-                  <span onClick={() => onAdd(item.id)} style={{ padding: '0 10px', cursor: 'pointer', color: T.primaryDark }}>+</span>
+                  <span onClick={() => onRemove(item.id)} style={{ padding: '0 10px', cursor: 'pointer', color: T.inkSoft }}>−</span>
+                  <span style={{ padding: '0 2px', color: '#fff', fontWeight: 700 }}>{item.qty}</span>
+                  <span onClick={() => onAdd(item.id)} style={{ padding: '0 10px', cursor: 'pointer', color: T.amber }}>+</span>
                 </div>
-                <div style={{ fontSize: 14, color: T.primaryDark, whiteSpace: 'nowrap', fontWeight: 500 }}>
+                <div style={{ fontFamily: T.display, fontSize: 17, color: T.amber, whiteSpace: 'nowrap' }}>
                   {taka(item.price * item.qty)}
                 </div>
               </div>
@@ -988,149 +1070,65 @@ function CartScreen({
           </div>
         ))}
 
-        {/* Delivery details */}
-        <div style={{
-          marginTop: 18, padding: 14, background: T.surface,
-          borderRadius: 12, border: `0.5px solid ${T.line}`,
-        }}>
-          <div style={{ fontSize: 11, color: T.muted, fontWeight: 500, letterSpacing: '.18em', textTransform: 'uppercase' }}>
-            Delivery details
-          </div>
+        {/* Divider */}
+        <div style={{ height: 1, background: T.line, margin: '12px 0' }} />
 
-          <div style={{ marginTop: 12 }}>
-            <Label>Name</Label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={e => onName(e.target.value)}
-              placeholder="Your name"
-              style={fieldStyle}
-            />
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <Label>Phone</Label>
-            <input
-              type="tel"
-              inputMode="numeric"
-              value={customerPhone}
-              onChange={e => onPhone(e.target.value)}
-              placeholder="01XXXXXXXXX"
-              style={fieldStyle}
-            />
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <Label>Location</Label>
-            <button
-              type="button"
-              onClick={onLocate}
-              disabled={geoStatus === 'locating'}
-              style={{
-                width: '100%', height: 42, padding: '0 14px',
-                background: coords ? T.primarySoft : T.surface,
-                color: T.ink, border: `0.5px solid ${coords ? T.primary : T.line}`,
-                borderRadius: 12, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                WebkitTapHighlightColor: 'transparent',
-              }}>
-              <span>📍 {coords ? 'Location captured' : geoStatus === 'locating' ? 'Locating…' : 'Share my location'}</span>
-              {coords && (
-                <span style={{ fontSize: 11, color: T.muted, fontWeight: 400 }}>
-                  ±{Math.round(coords.accuracy)}m
-                </span>
-              )}
-            </button>
-            {geoStatus === 'denied' && (
-              <div style={{ marginTop: 6, fontSize: 11, color: T.danger, fontWeight: 400 }}>
-                Location is required for delivery — please enable permission and retry.
-              </div>
-            )}
-            {geoStatus === 'error' && (
-              <div style={{ marginTop: 6, fontSize: 11, color: T.danger, fontWeight: 400 }}>
-                Could not get your location. Please retry.
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <Label>Note for kitchen (optional)</Label>
-            <textarea
-              style={{ ...fieldStyle, minHeight: 64, resize: 'none', fontFamily: T.body }}
-              placeholder="e.g. no onion, extra spicy"
-              value={note}
-              onChange={e => onNote(e.target.value)}
-              rows={3}
-            />
-          </div>
-
+        {/* Note */}
+        <div style={{ marginTop: 4 }}>
           <div style={{
-            marginTop: 12, padding: '8px 10px', borderRadius: 8,
-            background: T.bg, border: `0.5px solid ${T.line}`,
-            fontSize: 11, color: T.muted, fontWeight: 400,
-          }}>
-            💵 Payment: Cash on delivery
-          </div>
+            fontFamily: T.display, fontSize: 13, color: T.amber,
+            letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+          }}>Note for kitchen</div>
+          <textarea
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 10,
+              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+              fontSize: 13, fontFamily: T.body, resize: 'none', outline: 'none',
+            }}
+            placeholder="e.g. no onion, extra spicy · বিশেষ নির্দেশনা"
+            value={note}
+            onChange={e => onNote(e.target.value)}
+            rows={3}
+          />
         </div>
 
         {/* Total */}
-        <div style={{ marginTop: 14, padding: '14px 0', borderTop: `0.5px solid ${T.line}` }}>
+        <div style={{ marginTop: 12, padding: '14px 0', borderTop: `1px solid ${T.line}` }}>
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            fontFamily: T.display, textTransform: 'uppercase',
           }}>
-            <span style={{ fontSize: 15, color: T.ink, fontWeight: 500 }}>Total</span>
-            <span style={{ fontSize: 20, color: T.primaryDark, whiteSpace: 'nowrap', fontWeight: 500 }}>
-              {taka(total)}
-            </span>
+            <span style={{ fontSize: 18, color: '#fff' }}>Total · মোট</span>
+            <span style={{ fontSize: 22, color: T.amber, whiteSpace: 'nowrap' }}>{taka(total)}</span>
           </div>
         </div>
       </div>
 
+      {/* Footer */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
-        padding: '12px 16px 24px',
-        borderTop: `0.5px solid ${T.line}`, background: T.surface, flexShrink: 0,
+        padding: '12px 18px 30px',
+        borderTop: `1px solid ${T.line}`, background: T.bg, flexShrink: 0,
       }}>
         <button
           style={{
-            width: '100%', padding: '15px 16px', borderRadius: 12,
-            background: canPlace ? T.primary : T.line,
-            color: canPlace ? T.primaryDark : T.muted,
-            border: 'none',
-            fontSize: 15, fontWeight: 500,
-            cursor: canPlace ? 'pointer' : 'not-allowed',
-            boxShadow: canPlace ? '0 4px 8px rgba(28,26,23,.18)' : 'none',
+            width: '100%', padding: '15px 16px', borderRadius: 14,
+            background: T.ember, color: '#1a0c08', border: 'none',
+            fontFamily: T.display, fontSize: 18, textTransform: 'uppercase',
+            cursor: 'pointer', letterSpacing: '.04em', fontWeight: 700,
+            boxShadow: '0 14px 30px rgba(255,106,61,.35)',
+            opacity: submitting ? 0.7 : 1,
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10,
             WebkitTapHighlightColor: 'transparent',
           }}
-          disabled={!canPlace}
+          disabled={submitting}
           onClick={onPlace}
         >
-          {submitting ? 'Placing order…' : 'Place order →'}
+          {submitting ? 'Placing Order…' : <>Place Order · অর্ডার করুন <span style={{ fontSize: 20 }}>→</span></>}
         </button>
-        {!canPlace && !submitting && (
-          <div style={{ marginTop: 6, fontSize: 11, color: T.muted, textAlign: 'center', fontWeight: 400 }}>
-            Add name, phone, and location to continue.
-          </div>
-        )}
       </div>
     </div>
   )
-}
-
-function Label({ children }) {
-  return (
-    <div style={{
-      fontSize: 11, color: T.muted, fontWeight: 500,
-      letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6,
-    }}>{children}</div>
-  )
-}
-
-const fieldStyle = {
-  width: '100%', padding: '10px 14px', borderRadius: 12,
-  border: `0.5px solid ${T.line}`, background: T.surface, color: T.ink,
-  fontSize: 14, fontWeight: 400, outline: 'none', boxSizing: 'border-box',
 }
 
 // ── Success Screen ────────────────────────────────────────────────────────────
@@ -1138,88 +1136,87 @@ function SuccessScreen({ order, info, cartItems, onBack }) {
   const totalItems = cartItems.reduce((s, i) => s + i.qty, 0)
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body, color: T.ink }}>
+    <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {/* Hero check */}
         <div style={{
-          paddingTop: 70, paddingBottom: 24, textAlign: 'center',
+          paddingTop: 90, paddingBottom: 24,
+          background: 'radial-gradient(140% 100% at 50% 0%, rgba(255,106,61,.22) 0%, transparent 60%)',
+          textAlign: 'center',
         }}>
           <div style={{
-            width: 72, height: 72, borderRadius: 999, margin: '0 auto',
-            background: T.primary, color: T.primaryDark,
-            display: 'grid', placeItems: 'center', fontSize: 36, fontWeight: 500,
-            boxShadow: '0 4px 8px rgba(245,193,39,.4)',
+            width: 84, height: 84, borderRadius: 42, margin: '0 auto',
+            background: T.ember, color: '#1a0c08',
+            display: 'grid', placeItems: 'center', fontSize: 42,
+            boxShadow: '0 12px 40px rgba(255,106,61,.5)',
           }}>✓</div>
-          <div style={{ fontSize: 24, color: T.ink, marginTop: 16, lineHeight: 1.1, fontWeight: 500 }}>
-            Order placed
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: T.muted, fontWeight: 400 }}>
-            We'll deliver to you soon
+          <div style={{
+            fontFamily: T.display, fontSize: 38, textTransform: 'uppercase',
+            color: '#fff', marginTop: 18, lineHeight: .95, letterSpacing: '-.01em',
+          }}>Order Placed</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: T.inkSoft, letterSpacing: '.18em' }}>
+            ORDER PLACED · অর্ডার গৃহীত
           </div>
         </div>
 
-        <div style={{ padding: '4px 16px 0' }}>
+        {/* Order number card */}
+        <div style={{ padding: '8px 22px 0' }}>
           <div style={{
-            padding: '18px 18px 20px', borderRadius: 12,
-            background: T.surface, border: `0.5px solid ${T.line}`,
+            padding: '22px 20px 24px', borderRadius: 18,
+            background: T.bgCard, border: `1px solid ${T.line}`,
             textAlign: 'center',
           }}>
-            <div style={{ fontSize: 10, color: T.muted, letterSpacing: '.3em', fontWeight: 500 }}>
-              ORDER NUMBER
-            </div>
+            <div style={{ fontSize: 10, color: T.inkSoft, letterSpacing: '.3em' }}>ORDER NUMBER</div>
             {order?.serialNumber != null && (
-              <div style={{ fontSize: 44, color: T.primaryDark, lineHeight: 1, marginTop: 6, fontWeight: 500 }}>
-                #{order.serialNumber}
-              </div>
+              <div style={{
+                fontFamily: T.display, fontSize: 56, color: T.amber, lineHeight: 1,
+                marginTop: 6, letterSpacing: '-.01em',
+              }}>#{order.serialNumber}</div>
             )}
             <div style={{
-              marginTop: 14, paddingTop: 14, borderTop: `0.5px dashed ${T.line}`,
+              marginTop: 14, paddingTop: 14, borderTop: `1px dashed ${T.line}`,
               display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start', gap: 12,
             }}>
               <div>
-                <div style={{ fontSize: 10, color: T.muted, letterSpacing: '.18em', fontWeight: 500 }}>ITEMS</div>
-                <div style={{ fontSize: 20, color: T.ink, marginTop: 3, fontWeight: 500 }}>{totalItems}</div>
+                <div style={{ fontSize: 10, color: T.inkSoft, letterSpacing: '.18em' }}>ITEMS</div>
+                <div style={{ fontFamily: T.display, fontSize: 22, color: '#fff', marginTop: 3 }}>{totalItems}</div>
               </div>
               <div style={{ width: 1, alignSelf: 'stretch', background: T.line }} />
               <div>
-                <div style={{ fontSize: 10, color: T.muted, letterSpacing: '.18em', fontWeight: 500 }}>TOTAL</div>
-                <div style={{ fontSize: 20, color: T.primaryDark, marginTop: 3, whiteSpace: 'nowrap', fontWeight: 500 }}>
-                  {taka(order?.total || 0)}
-                </div>
+                <div style={{ fontSize: 10, color: T.inkSoft, letterSpacing: '.18em' }}>TOTAL</div>
+                <div style={{
+                  fontFamily: T.display, fontSize: 22, color: T.amber, marginTop: 3, whiteSpace: 'nowrap',
+                }}>{taka(order?.total || 0)}</div>
               </div>
             </div>
           </div>
         </div>
 
-        {order?.deliveryAddress && (
-          <div style={{ padding: '12px 16px 0' }}>
-            <div style={{
-              padding: 14, borderRadius: 12, background: T.surface, border: `0.5px solid ${T.line}`,
-            }}>
-              <div style={{ fontSize: 10, color: T.muted, letterSpacing: '.18em', fontWeight: 500, textTransform: 'uppercase' }}>
-                Delivering to
-              </div>
-              <div style={{ marginTop: 6, fontSize: 13, color: T.ink, fontWeight: 400, lineHeight: 1.4 }}>
-                {order.deliveryAddress}
-              </div>
+        {info?.restaurantName && (
+          <div style={{ padding: '14px 28px 0', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: T.inkSoft, letterSpacing: '.1em', textTransform: 'uppercase' }}>
+              {info.restaurantName}{info.outletName ? ` · ${info.outletName}` : ''}
             </div>
           </div>
         )}
 
-        <div style={{ padding: '16px 22px 12px', textAlign: 'center' }}>
-          <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, fontWeight: 400 }}>
+        <div style={{ padding: '16px 28px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: T.inkSoft, lineHeight: 1.55 }}>
             Your order is being prepared.<br/>
-            Cash on delivery — please keep exact change ready.
+            Please wait. · অপেক্ষা করুন।
           </div>
         </div>
 
         <div style={{ flex: 1 }} />
 
-        <div style={{ padding: '8px 16px 16px' }}>
+        {/* Download receipt */}
+        <div style={{ padding: '8px 18px 16px' }}>
           <button
             style={{
-              width: '100%', padding: '14px 16px', borderRadius: 12,
-              background: T.surface, color: T.ink, border: `0.5px solid ${T.line}`,
-              fontSize: 14, cursor: 'pointer', fontWeight: 500,
+              width: '100%', padding: '14px 16px', borderRadius: 14,
+              background: 'rgba(255,243,224,.06)', color: T.ink, border: `1px solid ${T.line}`,
+              fontFamily: T.display, fontSize: 15, textTransform: 'uppercase', cursor: 'pointer',
+              letterSpacing: '.04em',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               WebkitTapHighlightColor: 'transparent',
             }}
@@ -1227,30 +1224,32 @@ function SuccessScreen({ order, info, cartItems, onBack }) {
           >
             <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ fontSize: 18 }}>↓</span>
-              <span>Download receipt</span>
+              <span>Download Receipt · রিসিট</span>
             </span>
-            <span style={{ fontSize: 11, color: T.muted, letterSpacing: '.16em', fontWeight: 500 }}>PDF</span>
+            <span style={{ fontSize: 11, color: T.inkSoft, letterSpacing: '.16em' }}>PDF</span>
           </button>
         </div>
       </div>
 
+      {/* Footer CTA */}
       <div style={{
-        flexShrink: 0, padding: '12px 16px 24px',
-        borderTop: `0.5px solid ${T.line}`, background: T.surface,
+        flexShrink: 0, padding: '12px 18px 30px',
+        borderTop: `1px solid ${T.line}`, background: T.bg,
       }}>
         <button
           style={{
-            width: '100%', padding: '15px 16px', borderRadius: 12,
-            background: T.primary, color: T.primaryDark, border: 'none',
-            fontSize: 15, cursor: 'pointer', fontWeight: 500,
-            boxShadow: '0 4px 8px rgba(28,26,23,.18)',
+            width: '100%', padding: '15px 16px', borderRadius: 14,
+            background: T.ember, color: '#1a0c08', border: 'none',
+            fontFamily: T.display, fontSize: 18, textTransform: 'uppercase',
+            cursor: 'pointer', letterSpacing: '.04em', fontWeight: 700,
+            boxShadow: '0 14px 30px rgba(255,106,61,.35)',
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10,
             WebkitTapHighlightColor: 'transparent',
           }}
           onClick={onBack}
         >
-          <span>Order again</span>
-          <span style={{ fontSize: 18 }}>→</span>
+          <span>Order Again</span>
+          <span style={{ fontSize: 20 }}>→</span>
         </button>
       </div>
     </div>

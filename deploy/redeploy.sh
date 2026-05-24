@@ -25,6 +25,11 @@ die()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 ssh -o BatchMode=yes -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "true" 2>/dev/null \
   || die "Keyless SSH not configured. Run bash deploy/bootstrap_vps.sh first."
 
+say "Building customer menu frontend"
+cd "${REPO_ROOT}/customer_menu/frontend"
+npm run build --silent 2>/dev/null || die "Customer menu build failed"
+cd "${REPO_ROOT}"
+
 if [[ -f "${REPO_ROOT}/backend/.env" ]]; then
   say "Syncing backend .env to VPS"
   bash "${SCRIPT_DIR}/push-backend-env.sh" || true
