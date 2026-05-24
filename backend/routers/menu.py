@@ -16,6 +16,7 @@ from database import get_db
 from models import AdminAccount, MenuItem, Outlet
 from routers.ws import manager
 from schemas import ImageUploadRequest, MenuItemPayload, ok
+from services.menu_placeholders import resolve_placeholder_url
 from services.menu_scan import MenuScanError, extract_menu_page_texts, parse_menu_text
 
 router = APIRouter()
@@ -276,6 +277,7 @@ async def upload_menu_image(
 @router.post("/outlets/{outlet_id}/menu/scan")
 async def scan_menu_pages(
     outlet_id: str,
+    request: Request,
     files: list[UploadFile] = File(...),
     payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
@@ -323,6 +325,10 @@ async def scan_menu_pages(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(error),
         ) from error
+
+    for index, item in enumerate(parsed.items):
+        if not item.imageUrl:
+            item.imageUrl = resolve_placeholder_url(item.iconKey, index, request)
 
     logger.info(
         "menu scan parsed outlet=%s provider=%s items=%s warnings=%s",

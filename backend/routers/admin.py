@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 import requests as http_requests
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import (
@@ -29,12 +29,27 @@ from services import phone_otp
 from client_api_base import client_visible_api_base
 from config import settings
 from database import get_db
-from models import AdminAccount, Outlet, OutletSubscription, Restaurant
+import storage
+from models import (
+    AdminAccount,
+    BkashSession,
+    DailyStockCount,
+    Device,
+    InventoryItem,
+    MenuItem,
+    Order,
+    Outlet,
+    OutletSubscription,
+    Restaurant,
+    StockAdjustment,
+    UddoktaPaySession,
+)
 from schemas import (
     AdminCreateRequest,
     AdminLoginRequest,
     GoogleAdminAuthRequest,
     OnboardingPlanRequest,
+    OutletWipeRequest,
     PhoneCompleteManagerSignupRequest,
     PhoneSendOtpRequest,
     PhoneVerifyOtpRequest,
@@ -153,6 +168,35 @@ def _public_menu_url(slug: str | None) -> str | None:
     if not clean:
         return None
     return f"https://{clean}.quickbytes.buzz"
+
+
+def _media_urls_for_wipe(outlet: Outlet, menu_items: list[MenuItem]) -> list[str]:
+    urls: list[str] = []
+    for value in [outlet.banner_url, outlet.video_url]:
+        if value:
+            urls.append(value)
+    for value in outlet.gallery_images or []:
+        if isinstance(value, str) and value:
+            urls.append(value)
+    for item in menu_items:
+        if item.image_url:
+            urls.append(item.image_url)
+        if item.video_url:
+            urls.append(item.video_url)
+    return list(dict.fromkeys(urls))
+
+
+def _delete_media_for_outlet(outlet_id: str, urls: list[str]) -> dict[str, int]:
+    deleted_urls = 0
+    deleted_keys = 0
+    for url in urls:
+        storage.delete_by_url(url)
+        deleted_urls += 1
+    for prefix in (f"hero_media/{outlet_id}/images", f"hero_media/{outlet_id}/video"):
+        for key in storage.list_keys(prefix):
+            storage.delete_key(key)
+            deleted_keys += 1
+    return {"mediaUrls": deleted_urls, "mediaKeys": deleted_keys}
 
 
 async def _accounts_by_phone(db: AsyncSession, phone: str) -> list[AdminAccount]:
@@ -985,6 +1029,114 @@ async def update_public_url(
     outlet.public_slug = slug
     await db.commit()
     return ok({"publicSlug": slug, "customerMenuUrl": _public_menu_url(slug)})
+
+
+@router.post("/admin/outlets/{outlet_id}/wipe")
+async def wipe_outlet_data(
+    outlet_id: str,
+    body: OutletWipeRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    manager = await _current_account(payload, db, require_manager=True)
+    token_outlet_id = str(payload.get("sub") or payload.get("outlet_id") or "")
+    if token_outlet_id != outlet_id or manager.outlet_id != outlet_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Outlet access required.",
+        )
+    if body.confirmation.strip() != outlet_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Type the outlet ID exactly to wipe this restaurant.",
+        )
+
+    outlet = (
+        await db.execute(select(Outlet).where(Outlet.id == outlet_id))
+    ).scalar_one_or_none()
+    if outlet is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Outlet not found.",
+        )
+
+    restaurant_id = outlet.restaurant_id
+    server_id = outlet.server_id
+    menu_items = (
+        await db.execute(select(MenuItem).where(MenuItem.outlet_id == outlet_id))
+    ).scalars().all()
+    media_counts = _delete_media_for_outlet(
+        outlet_id,
+        _media_urls_for_wipe(outlet, list(menu_items)),
+    )
+
+    async def delete_rows(model, *conditions) -> int:
+        result = await db.execute(delete(model).where(*conditions))
+        return max(result.rowcount or 0, 0)
+
+    deleted: dict[str, int] = {
+        **media_counts,
+        "stockAdjustments": await delete_rows(
+            StockAdjustment,
+            StockAdjustment.outlet_id == outlet_id,
+        ),
+        "dailyStockCounts": await delete_rows(
+            DailyStockCount,
+            DailyStockCount.outlet_id == outlet_id,
+        ),
+        "inventoryItems": await delete_rows(
+            InventoryItem,
+            InventoryItem.outlet_id == outlet_id,
+        ),
+        "orders": await delete_rows(Order, Order.outlet_id == outlet_id),
+        "menuItems": await delete_rows(MenuItem, MenuItem.outlet_id == outlet_id),
+        "devices": await delete_rows(Device, Device.outlet_id == outlet_id),
+        "subscriptions": await delete_rows(
+            OutletSubscription,
+            OutletSubscription.outlet_id == outlet_id,
+        ),
+        "adminAccounts": await delete_rows(
+            AdminAccount,
+            AdminAccount.outlet_id == outlet_id,
+        ),
+        "uddoktaPaySessions": await delete_rows(
+            UddoktaPaySession,
+            (UddoktaPaySession.outlet_id == outlet_id)
+            | (UddoktaPaySession.server_id == server_id),
+        ),
+        "bkashSessions": await delete_rows(
+            BkashSession,
+            BkashSession.server_id == server_id,
+        ),
+    }
+
+    remaining_outlets = (
+        await db.execute(
+            select(func.count())
+            .select_from(Outlet)
+            .where(Outlet.restaurant_id == restaurant_id, Outlet.id != outlet_id)
+        )
+    ).scalar() or 0
+    deleted["outlets"] = await delete_rows(Outlet, Outlet.id == outlet_id)
+    restaurant_deleted = False
+    if remaining_outlets == 0:
+        deleted["restaurants"] = await delete_rows(
+            Restaurant,
+            Restaurant.id == restaurant_id,
+        )
+        restaurant_deleted = bool(deleted["restaurants"])
+    else:
+        deleted["restaurants"] = 0
+
+    await db.commit()
+    return ok(
+        {
+            "outletId": outlet_id,
+            "restaurantId": restaurant_id,
+            "restaurantDeleted": restaurant_deleted,
+            "deleted": deleted,
+        }
+    )
 
 
 @router.get("/admin/staff")

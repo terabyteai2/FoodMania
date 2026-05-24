@@ -1,0 +1,114 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:local_pos/src/core/localization/app_strings.dart';
+import 'package:local_pos/src/models/order_item.dart';
+import 'package:local_pos/src/models/order_model.dart';
+import 'package:local_pos/src/models/order_source.dart';
+import 'package:local_pos/src/models/order_status.dart';
+import 'package:local_pos/src/services/printer_service.dart';
+import 'package:local_pos/src/services/ticket_bitmap.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('manager copy preview uses compact order data format', () async {
+    final order = OrderModel(
+      id: 'order-30',
+      orderNo: 'ORD-30',
+      sequenceNo: 30,
+      status: OrderStatus.accepted,
+      source: OrderSource.manual,
+      subtotal: 700,
+      vatRatePercent: 5,
+      vatAmount: 35,
+      total: 735,
+      createdAt: DateTime(2026, 5, 24, 13, 17),
+      updatedAt: DateTime(2026, 5, 24, 13, 17),
+      items: [
+        OrderItem(
+          id: 'line-1',
+          orderId: 'order-30',
+          menuItemId: 'burger-1',
+          name: 'Chicken Burger',
+          nameEn: 'Chicken Burger',
+          qty: 1,
+          price: 500,
+          lineTotal: 500,
+        ),
+        OrderItem(
+          id: 'line-2',
+          orderId: 'order-30',
+          menuItemId: 'burger-2',
+          name: 'Egger Burger',
+          nameEn: 'Egger Burger',
+          qty: 2,
+          price: 100,
+          lineTotal: 200,
+        ),
+      ],
+    );
+
+    final ticket = await PrinterService().previewTicket(
+      order,
+      restaurantName: 'Helium',
+      language: AppLanguage.en,
+    );
+
+    expect(ticket, contains('#30'));
+    expect(ticket, contains('Helium'));
+    expect(ticket, contains('Manager Copy'));
+    expect(ticket, contains('24 May 2026 - 1.17 pm'));
+    expect(ticket, contains('1. Chicken Burger'));
+    expect(ticket, contains('- 1x -'));
+    expect(ticket, contains('500/-'));
+    expect(ticket, contains('2. Egger Burger'));
+    expect(ticket, contains('- 2x -'));
+    expect(ticket, contains('200/-'));
+    expect(ticket, contains('Total (VAT included) -'));
+    expect(ticket, contains('700/-'));
+  });
+
+  test(
+    'preview falls back to price times qty when line total is missing',
+    () async {
+      final order = OrderModel(
+        id: 'order-fallback',
+        orderNo: 'ORD-FALLBACK',
+        sequenceNo: 31,
+        status: OrderStatus.accepted,
+        source: OrderSource.manual,
+        subtotal: 0,
+        vatRatePercent: 0,
+        vatAmount: 0,
+        total: 0,
+        createdAt: DateTime(2026, 5, 24, 13, 20),
+        updatedAt: DateTime(2026, 5, 24, 13, 20),
+        items: [
+          OrderItem(
+            id: 'line-fallback',
+            orderId: 'order-fallback',
+            menuItemId: 'burger-fallback',
+            name: 'Fallback Burger',
+            nameEn: 'Fallback Burger',
+            qty: 2,
+            price: 175,
+            lineTotal: 0,
+          ),
+        ],
+      );
+
+      final ticket = await PrinterService().previewTicket(
+        order,
+        restaurantName: 'Helium',
+        language: AppLanguage.en,
+      );
+
+      expect(ticket, contains('Fallback Burger'));
+      expect(ticket, contains('350/-'));
+      expect(ticket, contains('Total (VAT included) -'));
+    },
+  );
+
+  test('bitmap renderer targets 58mm printable width', () {
+    expect(TicketBitmapRenderer.debugPrintableWidth, 384);
+  });
+}

@@ -103,6 +103,10 @@ class PublicSlugUpdateRequest(BaseModel):
     publicSlug: str
 
 
+class OutletWipeRequest(BaseModel):
+    confirmation: str = Field(min_length=1)
+
+
 class StaffDevBypassLoginRequest(BaseModel):
     """Local/dev staff login without Google; server must set STAFF_DEV_BYPASS_SECRET."""
 
@@ -147,6 +151,17 @@ class ImageUploadRequest(BaseModel):
     fileName: str = "menu_image.jpg"
 
 
+class MenuSubItem(BaseModel):
+    nameEn: str = Field(min_length=1)
+    nameBn: str = ""
+
+
+class MenuAddOnCandidate(BaseModel):
+    nameEn: str = Field(min_length=1)
+    nameBn: str = ""
+    price: float = Field(ge=0)
+
+
 class MenuScanCandidate(BaseModel):
     nameEn: str = Field(min_length=1)
     nameBn: str = Field(min_length=1)
@@ -157,6 +172,9 @@ class MenuScanCandidate(BaseModel):
     price: float = Field(gt=0)
     isAvailable: bool = True
     iconKey: str = Field(default="general", min_length=1)
+    imageUrl: str | None = None
+    subItems: list[MenuSubItem] = Field(default_factory=list)
+    addOns: list[MenuAddOnCandidate] = Field(default_factory=list)
 
 
 class ReceiptScanCandidate(BaseModel):
@@ -203,6 +221,18 @@ class DailyStockCountPayload(BaseModel):
 
 # ── Orders ────────────────────────────────────────────────────────────────────
 
+class OrderLineItemPayload(BaseModel):
+    id: str | None = None
+    orderId: str | None = None
+    menuItemId: str | None = None
+    name: str = Field(min_length=1)
+    nameEn: str | None = None
+    nameBn: str | None = None
+    qty: int = Field(default=1, ge=1)
+    price: float = 0
+    lineTotal: float = 0
+
+
 class OrderPayload(BaseModel):
     id: str
     serialNumber: int = 0
@@ -215,7 +245,7 @@ class OrderPayload(BaseModel):
     serviceType: str | None = None
     covers: int | None = None
     paymentMethod: str | None = None
-    items: list[Any] = []
+    items: list[OrderLineItemPayload] = Field(default_factory=list)
     notes: str | None = None
     createdByAccountId: str | None = None
     createdByRole: str | None = None

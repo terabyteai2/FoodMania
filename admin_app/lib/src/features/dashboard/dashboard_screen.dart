@@ -7,6 +7,8 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/dashboard_summary.dart';
+import '../../models/pos_notification.dart';
+import '../orders/orders_screen.dart';
 
 // Tab indices in the bottom nav (mirrors _AppTab in app.dart).
 const int _ordersTab = 0;
@@ -14,9 +16,14 @@ const int _stockTab = 3;
 const int _settingsTab = 4;
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({required this.onNavigate, super.key});
+  const DashboardScreen({
+    required this.onNavigate,
+    this.onNavigateToTarget,
+    super.key,
+  });
 
   final ValueChanged<int> onNavigate;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -40,6 +47,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: PosColors.background,
+      floatingActionButton:
+          app.isManager && app.menuItems.any((i) => i.isAvailable)
+          ? TfFab(
+              tooltip: text.newOrder,
+              onPressed: () => openNewOrderForm(
+                context,
+                onCreated: () => widget.onNavigate(0),
+              ),
+            )
+          : null,
       body: SafeArea(
         child: RefreshIndicator(
           color: PosColors.primaryDark,
@@ -52,6 +69,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _Header(
                 text: text,
                 onNavigateToOrders: () => widget.onNavigate(_ordersTab),
+                onNavigateToTarget: widget.onNavigateToTarget,
               ),
               const SizedBox(height: 16),
               if (summary == null && app.dashboardSummaryLoading)
@@ -173,10 +191,15 @@ class _SectionHeader extends StatelessWidget {
 // ── Header (Right now + avatar) ──────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
-  const _Header({required this.text, required this.onNavigateToOrders});
+  const _Header({
+    required this.text,
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
 
   final AppStrings text;
   final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +210,10 @@ class _Header extends StatelessWidget {
       subtitle: text.isBn ? 'এই মুহূর্তে · $timePart' : 'Right now · $timePart',
       trailing: [
         const HeaderLanguageButton(),
-        HeaderNotificationBell(onNavigateToOrders: onNavigateToOrders),
+        HeaderNotificationBell(
+          onNavigateToOrders: onNavigateToOrders,
+          onNavigateToTarget: onNavigateToTarget,
+        ),
       ],
     );
   }
@@ -441,7 +467,8 @@ class _EarnedTodayCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          TfText(            fmt.format(money.earnedToday),
+          TfText(
+            fmt.format(money.earnedToday),
             style: TextStyle(
               fontFamily: tfFontFamily(context),
               fontSize: 38,
@@ -594,7 +621,8 @@ class _InlineSplitCell extends StatelessWidget {
       children: [
         TfSectionHeader(label: label, padding: EdgeInsets.zero),
         const SizedBox(height: 4),
-        TfText(          value,
+        TfText(
+          value,
           style: TextStyle(
             fontFamily: tfFontFamily(context),
             fontSize: 16,
@@ -672,7 +700,8 @@ class _KpiTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          TfText(            value,
+          TfText(
+            value,
             style: TextStyle(
               fontFamily: tfFontFamily(context),
               fontSize: 18,
@@ -736,7 +765,8 @@ class _NeedsYourEye extends StatelessWidget {
                     color: PosColors.coral,
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: TfText(                    '${items.length}',
+                  child: TfText(
+                    '${items.length}',
                     style: TextStyle(
                       fontFamily: tfFontFamily(context),
                       color: Colors.white,
@@ -868,7 +898,8 @@ class _Pill extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: TfText(        label.toUpperCase(),
+      child: TfText(
+        label.toUpperCase(),
         style: TextStyle(
           fontFamily: tfFontFamily(context),
           color: fg,
@@ -1080,7 +1111,8 @@ class _TopMoverRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 22,
-            child: TfText(              '#$rank',
+            child: TfText(
+              '#$rank',
               style: const TextStyle(
                 fontFamily: 'JetBrains Mono',
                 fontSize: 12,
@@ -1121,7 +1153,8 @@ class _TopMoverRow extends StatelessWidget {
           const SizedBox(width: 10),
           SizedBox(
             width: 36,
-            child: TfText(              '×${mover.qty}',
+            child: TfText(
+              '×${mover.qty}',
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontFamily: tfFontFamily(context),
@@ -1133,7 +1166,8 @@ class _TopMoverRow extends StatelessWidget {
           const SizedBox(width: 8),
           SizedBox(
             width: 62,
-            child: TfText(              currency.format(mover.salesBdt),
+            child: TfText(
+              currency.format(mover.salesBdt),
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontFamily: tfFontFamily(context),

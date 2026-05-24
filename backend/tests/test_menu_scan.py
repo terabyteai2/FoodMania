@@ -90,7 +90,8 @@ def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
     assert "VAT" in joined
     assert "not a sellable menu item" in joined
     assert "iconKey" in joined
-    assert "set_meal" in joined
+    assert "subItems" in joined
+    assert "addOns" in joined
 
 
 def test_menu_scan_uses_json_object_mode_for_groq():

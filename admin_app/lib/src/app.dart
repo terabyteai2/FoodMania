@@ -8,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/notification_center.dart';
 import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
+import 'models/pos_notification.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/inventory/inventory_screen.dart';
 import 'features/menu/menu_management_screen.dart';
@@ -223,6 +224,7 @@ class _MainShellState extends State<MainShell> {
   List<_AppTab> _currentTabOrder = _managerTabOrder;
   String? _lastShownNotificationKey;
   int? _lastShownAppUpdateVersionCode;
+  int _receiptPrinterOpenRequest = 0;
 
   @override
   void initState() {
@@ -297,14 +299,26 @@ class _MainShellState extends State<MainShell> {
         .toList(growable: false);
 
     // Fixed page order matching _AppTab.index ordinals.
-    final ordersIndex = _AppTab.orders.index;
-    void goToOrders() => _setIndex(ordersIndex);
+    void goToOrders() => _selectTab(_AppTab.orders);
     final allPages = [
-      const OrdersScreen(),
-      MenuManagementScreen(onNavigateToOrders: goToOrders),
-      DashboardScreen(onNavigate: _setIndex),
-      InventoryScreen(onNavigateToOrders: goToOrders),
-      SettingsScreen(onNavigateToOrders: goToOrders),
+      OrdersScreen(onNavigateToTarget: _navigateNotificationTarget),
+      MenuManagementScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+      DashboardScreen(
+        onNavigate: _setIndex,
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+      InventoryScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+      SettingsScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
+        receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
+      ),
     ];
 
     // Each page renders the notification bell as one of its own header
@@ -362,7 +376,9 @@ class _MainShellState extends State<MainShell> {
                         return NavigationRailDestination(
                           icon: Icon(destination.icon),
                           selectedIcon: Icon(destination.selectedIcon),
-                          label: Text(destination.label),
+                          label: Text(
+                            text.isBn ? destination.bnLabel : destination.label,
+                          ),
                         );
                       })
                       .toList(growable: false),
@@ -379,6 +395,36 @@ class _MainShellState extends State<MainShell> {
   void _setIndex(int vi) {
     if (vi >= 0 && vi < _currentTabOrder.length) {
       setState(() => _selected = _currentTabOrder[vi]);
+    }
+  }
+
+  void _selectTab(_AppTab tab) {
+    final vi = _currentTabOrder.indexOf(tab);
+    if (vi >= 0) _setIndex(vi);
+  }
+
+  void _navigateNotificationTarget(PosNotificationTarget target) {
+    switch (target) {
+      case PosNotificationTarget.orders:
+        _selectTab(_AppTab.orders);
+        return;
+      case PosNotificationTarget.inventory:
+        _selectTab(_AppTab.stock);
+        return;
+      case PosNotificationTarget.menu:
+        _selectTab(_AppTab.menu);
+        return;
+      case PosNotificationTarget.receiptPrinter:
+        setState(() {
+          _selected = _AppTab.settings;
+          _receiptPrinterOpenRequest++;
+        });
+        return;
+      case PosNotificationTarget.settings:
+        _selectTab(_AppTab.settings);
+        return;
+      case PosNotificationTarget.none:
+        return;
     }
   }
 
@@ -399,10 +445,7 @@ class _MainShellState extends State<MainShell> {
         body: latest.body,
         onOpen: () {
           app.markNotificationRead(latest.id);
-          if (latest.actionTarget == 'pending_orders' ||
-              latest.actionTarget == 'orders') {
-            _setIndex(0);
-          }
+          _navigateNotificationTarget(latest.target);
         },
       );
     });

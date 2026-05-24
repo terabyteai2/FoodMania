@@ -9,15 +9,23 @@ import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
+import '../../models/pos_notification.dart';
 import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 import 'square_image_cropper.dart';
 
+enum _MenuScanSource { camera, gallery }
+
 class MenuManagementScreen extends StatefulWidget {
-  const MenuManagementScreen({this.onNavigateToOrders, super.key});
+  const MenuManagementScreen({
+    this.onNavigateToOrders,
+    this.onNavigateToTarget,
+    super.key,
+  });
 
   /// Called when a pending-order notification is opened from the bell here.
   final VoidCallback? onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   State<MenuManagementScreen> createState() => _MenuManagementScreenState();
@@ -90,6 +98,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         HeaderNotificationBell(
                           onNavigateToOrders:
                               widget.onNavigateToOrders ?? () {},
+                          onNavigateToTarget: widget.onNavigateToTarget,
                         ),
                       ],
                     ),
@@ -183,21 +192,22 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       if (kDebugMode) {
         debugPrint('[MENU_SCAN] scan start');
       }
-      final result = await app.scanAndImportMenu(
-        pages
-            .map(
-              (page) => MenuScanPageUpload(
-                bytes: page.bytes,
-                fileName: page.fileName,
-                mimeType: page.mimeType,
-              ),
-            )
-            .toList(growable: false),
-      );
+      final uploads = pages
+          .map(
+            (page) => MenuScanPageUpload(
+              bytes: page.bytes,
+              fileName: page.fileName,
+              mimeType: page.mimeType,
+            ),
+          )
+          .toList(growable: false);
+      pages.clear();
+      final result = await app.scanAndImportMenu(uploads);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: TfText(            text.menuScanImported(
+          content: TfText(
+            text.menuScanImported(
               result.createdCount,
               result.skippedDuplicateCount,
             ),
@@ -209,9 +219,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         debugPrint('[MENU_SCAN] scan failed error=$error');
       }
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText('${text.menuScanFailed}: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText('${text.menuScanFailed}: $error')),
+      );
     } finally {
       if (mounted) setState(() => _scanBusy = false);
     }
@@ -220,6 +230,55 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   Future<List<PickedMenuScanPage>> _pickMenuScanPages(
     BuildContext context,
   ) async {
+    final text = AppScope.of(context).strings;
+    final source = await showModalBottomSheet<_MenuScanSource>(
+      context: context,
+      backgroundColor: PosColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TfText(
+                  text.isBn ? 'মেনু স্ক্যান' : 'Scan menu',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.slate,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TfButton(
+                  label: text.isBn ? 'ক্যামেরা' : 'Camera',
+                  icon: Icons.photo_camera_rounded,
+                  variant: TfButtonVariant.primary,
+                  onPressed: () =>
+                      Navigator.pop(sheetContext, _MenuScanSource.camera),
+                ),
+                const SizedBox(height: 8),
+                TfButton(
+                  label: text.isBn ? 'গ্যালারি' : 'Gallery',
+                  icon: Icons.photo_library_outlined,
+                  variant: TfButtonVariant.dark,
+                  onPressed: () =>
+                      Navigator.pop(sheetContext, _MenuScanSource.gallery),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (source == null || !context.mounted) return const [];
+    if (source == _MenuScanSource.gallery) {
+      return _scanImageService.pickMenuScanPages();
+    }
     return _captureMenuScanPages(context);
   }
 
@@ -271,6 +330,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   Future<void> _openMenuForm(BuildContext context, {MenuItem? item}) async {
     final app = AppScope.of(context);
+    final text = app.strings;
     final result = await showModalBottomSheet<_MenuFormResult>(
       context: context,
       isScrollControlled: true,
@@ -301,7 +361,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(item == null ? 'Menu item added' : 'Menu item updated'),
+        content: TfText(
+          item == null ? text.menuItemAdded : text.menuItemUpdated,
+        ),
       ),
     );
   }
@@ -319,10 +381,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         ),
       );
       if (cropped == null || !context.mounted) return;
-      final dataUrl = _scanImageService.encodeDataUrl(
-        cropped,
-        mimeType: 'image/png',
-      );
+      final dataUrl = _scanImageService.encodeMenuPhotoDataUrl(cropped);
       var imageUrl = dataUrl;
       var uploadWarning = false;
       try {
@@ -351,7 +410,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: TfText(            uploadWarning
+          content: TfText(
+            uploadWarning
                 ? text.menuImageUploadWarning
                 : text.menuImageUploaded,
           ),
@@ -359,9 +419,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       );
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(
+            error is MenuImageException ? text.menuPhotoTooLarge : '$error',
+          ),
+        ),
+      );
     }
   }
 
@@ -371,8 +435,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     TfConfirmSheet.show(
       context,
       title: text.menuDeleteTitle,
-      description:
-          '${item.name} will be removed from the admin app and future API responses.',
+      description: text.menuDeleteDescription(item.localizedName(app.language)),
       confirmLabel: text.deleteAction,
       isDanger: true,
       onConfirm: () async {
@@ -401,34 +464,43 @@ class _MenuActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shellWidth = (MediaQuery.sizeOf(context).width - 28)
+        .clamp(0.0, 360.0)
+        .toDouble();
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: PosColors.line, width: 0.5),
-          boxShadow: PosShadows.glow,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _MenuActionButton(
-                label: text.addMenuItem,
-                icon: Icons.add_rounded,
-                onPressed: onAddItem,
-              ),
-              const SizedBox(width: 8),
-              _MenuActionButton(
-                label: scanBusy ? text.menuScanning : text.menuScan,
-                icon: Icons.auto_awesome_rounded,
-                primary: true,
-                busy: scanBusy,
-                onPressed: onScan,
-              ),
-            ],
+      child: SizedBox(
+        width: shellWidth,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: PosColors.line, width: 0.5),
+            boxShadow: PosShadows.glow,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _MenuActionButton(
+                    label: text.menuAddActionShort,
+                    icon: Icons.add_rounded,
+                    onPressed: onAddItem,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MenuActionButton(
+                    label: scanBusy ? text.menuScanningShort : text.menuScan,
+                    icon: Icons.auto_awesome_rounded,
+                    primary: true,
+                    busy: scanBusy,
+                    onPressed: onScan,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -453,15 +525,15 @@ class _MenuActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 132, minHeight: 46),
+    return SizedBox(
+      height: 42,
       child: TfButton(
         onPressed: onPressed,
         icon: icon,
         label: label,
         busy: busy,
         variant: primary ? TfButtonVariant.primary : TfButtonVariant.dark,
-        fullWidth: false,
+        fullWidth: true,
       ),
     );
   }
@@ -562,7 +634,8 @@ class _MenuList extends StatelessWidget {
               2,
               7,
             ),
-            child: TfText(              category,
+            child: TfText(
+              category,
               style: TextStyle(
                 color: PosColors.slate,
                 fontSize: 13,
@@ -687,7 +760,8 @@ class _MenuRow extends StatelessWidget {
                     Row(
                       children: [
                         Flexible(
-                          child: TfText(                            item.localizedName(language),
+                          child: TfText(
+                            item.localizedName(language),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -710,7 +784,8 @@ class _MenuRow extends StatelessWidget {
                       ],
                     ),
                     SizedBox(height: 3),
-                    TfText(                      item.localizedDescription(language).trim().isEmpty
+                    TfText(
+                      item.localizedDescription(language).trim().isEmpty
                           ? item.localizedCategory(language)
                           : item.localizedDescription(language),
                       maxLines: 1,
@@ -724,9 +799,10 @@ class _MenuRow extends StatelessWidget {
                     SizedBox(height: 3),
                     Row(
                       children: [
-                        TfText(                          item.isAvailable
-                              ? (text.isBn ? 'উপলব্ধ' : 'Available')
-                              : (text.isBn ? 'বিরতি' : 'Paused'),
+                        TfText(
+                          item.isAvailable
+                              ? text.menuAvailable
+                              : text.menuPaused,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -748,7 +824,8 @@ class _MenuRow extends StatelessWidget {
                               color: PosColors.danger.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: TfText(                              discountLabel,
+                            child: TfText(
+                              discountLabel,
                               style: TextStyle(
                                 color: PosColors.danger,
                                 fontSize: 9,
@@ -767,7 +844,8 @@ class _MenuRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (showDiscount) ...[
-                    TfText(                      tfFormatCurrency(
+                    TfText(
+                      tfFormatCurrency(
                         context,
                         item.price,
                         decimalDigits: priceDecimals,
@@ -779,7 +857,8 @@ class _MenuRow extends StatelessWidget {
                         decoration: TextDecoration.lineThrough,
                       ),
                     ),
-                    TfText(                      tfFormatCurrency(
+                    TfText(
+                      tfFormatCurrency(
                         context,
                         discounted,
                         decimalDigits: priceDecimals,
@@ -791,7 +870,8 @@ class _MenuRow extends StatelessWidget {
                       ),
                     ),
                   ] else
-                    TfText(                      tfFormatCurrency(
+                    TfText(
+                      tfFormatCurrency(
                         context,
                         item.price,
                         decimalDigits: priceDecimals,
@@ -919,6 +999,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     final text = AppScope.of(context).strings;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final theme = Theme.of(context);
+    final placeholderIconKey = _placeholderIconKey();
     final inputTheme = theme.inputDecorationTheme.copyWith(
       fillColor: PosColors.background,
       enabledBorder: OutlineInputBorder(
@@ -950,7 +1031,8 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                     Row(
                       children: [
                         Expanded(
-                          child: TfText(                            widget.initialItem == null
+                          child: TfText(
+                            widget.initialItem == null
                                 ? text.addMenuItem
                                 : text.editMenuItem,
                             style: Theme.of(context).textTheme.titleLarge,
@@ -966,6 +1048,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                     TextFormField(
                       controller: _nameController,
                       textInputAction: TextInputAction.next,
+                      onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(labelText: text.menuItemName),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
@@ -1060,40 +1143,24 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                           aspectRatio: 1,
                           child: MenuImageView(
                             imageUrl: _imageController.text.trim(),
-                            iconKey: _initialExtras.iconKey,
+                            iconKey: placeholderIconKey,
                           ),
                         ),
                       ),
-                    ] else if (_initialExtras.iconKey != null) ...[
+                    ] else ...[
                       SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: PosColors.line),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: MenuImageView(
-                              imageUrl: null,
-                              iconKey: _initialExtras.iconKey,
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: TfText(                              text.isBn
-                                  ? 'AI স্ক্যান প্লেসহোল্ডার ব্যবহৃত হচ্ছে'
-                                  : 'AI scan placeholder in use',
-                              style: TextStyle(
-                                color: PosColors.muted,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: PosColors.line),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: MenuImageView(
+                          imageUrl: null,
+                          iconKey: placeholderIconKey,
+                        ),
                       ),
                     ],
                     SizedBox(height: 14),
@@ -1162,7 +1229,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         return existing.where((c) => c.toLowerCase().contains(query));
       },
       onSelected: (selection) {
-        _categoryController.text = selection;
+        setState(() => _categoryController.text = selection);
       },
       fieldViewBuilder: (context, fieldController, focusNode, onSubmitted) {
         if (fieldController.text.isEmpty &&
@@ -1172,7 +1239,8 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         return TextFormField(
           controller: fieldController,
           focusNode: focusNode,
-          onChanged: (value) => _categoryController.text = value,
+          onChanged: (value) =>
+              setState(() => _categoryController.text = value),
           decoration: InputDecoration(
             labelText: text.menuCategory,
             hintText: text.menuCategoryHint,
@@ -1208,10 +1276,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         ),
       );
       if (cropped == null) return;
-      final dataUrl = _imageService.encodeDataUrl(
-        cropped,
-        mimeType: 'image/png',
-      );
+      final dataUrl = _imageService.encodeMenuPhotoDataUrl(cropped);
       var imageUrl = dataUrl;
       var uploadWarning = false;
       try {
@@ -1225,7 +1290,8 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       final uploaded = !imageUrl.startsWith('data:image/');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: TfText(            uploadWarning
+          content: TfText(
+            uploadWarning
                 ? text.menuImageUploadWarning
                 : uploaded
                 ? text.menuImageUploaded
@@ -1235,9 +1301,13 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(
+            error is MenuImageException ? text.menuPhotoTooLarge : '$error',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _imageBusy = false);
     }
@@ -1294,11 +1364,23 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       if (name.isNotEmpty) addOns.add(MenuAddOn(name: name, price: price));
     }
     return _initialExtras.copyWith(
+      iconKey: _imageController.text.trim().isEmpty
+          ? _placeholderIconKey()
+          : _initialExtras.iconKey,
       clearDiscount: percent == null && flat == null,
       discountPercent: percent,
       discountFlat: flat,
       includes: includes,
       addOns: addOns,
+    );
+  }
+
+  String _placeholderIconKey() {
+    final existing = _initialExtras.iconKey?.trim();
+    if (existing != null && existing.isNotEmpty) return existing;
+    return inferMenuIconKey(
+      name: _nameController.text,
+      category: _categoryController.text,
     );
   }
 }
@@ -1401,7 +1483,8 @@ class _DiscountSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TfText(          text.menuDiscountTitle,
+        TfText(
+          text.menuDiscountTitle,
           style: TextStyle(
             fontSize: 13,
             color: PosColors.slate,

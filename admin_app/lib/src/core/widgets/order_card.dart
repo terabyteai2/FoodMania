@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../app_scope.dart';
 import '../../models/order_model.dart';
 import '../../models/order_status.dart';
 import '../theme/app_theme.dart';
@@ -28,6 +29,7 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppScope.of(context);
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 2);
     final createdTime = DateFormat('MMM d, h:mm a').format(order.createdAt);
     final accent = _accentForStatus(order.status);
@@ -181,7 +183,7 @@ class OrderCard extends StatelessWidget {
                                           SizedBox(width: 10),
                                           Expanded(
                                             child: TfText(
-                                              item.name,
+                                              item.localizedName(app.language),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: Theme.of(

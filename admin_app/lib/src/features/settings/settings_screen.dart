@@ -14,6 +14,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../models/pos_notification.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../services/menu_image_service.dart';
@@ -22,9 +23,16 @@ import '../reports/reports_screen.dart';
 import 'qr_pdf_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({this.onNavigateToOrders, super.key});
+  const SettingsScreen({
+    this.onNavigateToOrders,
+    this.onNavigateToTarget,
+    this.receiptPrinterOpenRequest = 0,
+    super.key,
+  });
 
   final VoidCallback? onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+  final int receiptPrinterOpenRequest;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -53,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _importingOrderHistory = false;
   double _displayScale = 1.0;
   bool _hydrated = false;
+  int _handledReceiptPrinterOpenRequest = 0;
 
   @override
   void didChangeDependencies() {
@@ -73,6 +82,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _outletIdController.addListener(_scheduleAutoSave);
     _syncIntervalController.addListener(_scheduleAutoSave);
     _hydrated = true;
+    _openRequestedReceiptPrinterIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.receiptPrinterOpenRequest !=
+        widget.receiptPrinterOpenRequest) {
+      _openRequestedReceiptPrinterIfNeeded();
+    }
+  }
+
+  void _openRequestedReceiptPrinterIfNeeded() {
+    if (widget.receiptPrinterOpenRequest <= _handledReceiptPrinterOpenRequest) {
+      return;
+    }
+    _handledReceiptPrinterOpenRequest = widget.receiptPrinterOpenRequest;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_openReceiptPrinter());
+    });
   }
 
   @override
@@ -163,10 +192,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openReports,
                 ),
                 _SettingActionData(
-                  title: 'Import order history',
-                  subtitle: 'Upload a CSV export from an older POS.',
+                  title: text.importOrderHistory,
+                  subtitle: text.importOrderHistorySubtitle,
                   icon: Icons.upload_file_outlined,
-                  trailing: _importingOrderHistory ? 'Importing' : 'CSV',
+                  trailing: _importingOrderHistory
+                      ? text.importOrderHistoryLoading
+                      : text.importOrderHistoryCsv,
                   onTap: _importingOrderHistory ? null : _importOrderHistory,
                 ),
                 _SettingActionData(
@@ -202,12 +233,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            _SettingsGroupData(
+              label: text.dangerZoneGroup,
+              items: [
+                _SettingActionData(
+                  title: text.wipeRestaurantData,
+                  subtitle: text.wipeRestaurantDataSubtitle,
+                  icon: Icons.delete_forever_rounded,
+                  onTap: _confirmWipeRestaurant,
+                  danger: true,
+                ),
+              ],
+            ),
           ]
         : [
             // Staff: minimal settings only
             _SettingsGroupData(
               label: text.deviceGroup,
               items: [
+                _SettingActionData(
+                  title: text.receiptPrinter,
+                  subtitle: text.receiptPrinterSubtitle,
+                  icon: Icons.print_outlined,
+                  trailing: app.printerState.connected ? 'Connected' : 'Pair',
+                  onTap: _openReceiptPrinter,
+                ),
                 _SettingActionData(
                   title: text.displaySize,
                   subtitle: app.uiScaleLabel,
@@ -266,27 +316,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     TfAppBar(
                       title: text.settings,
-                      subtitle: 'সেটিংস · v2.2.1',
+                      subtitle: text.isBn
+                          ? 'সেটিংস · v2.2.1'
+                          : 'Settings · v2.2.1',
                       trailing: [
                         HeaderLanguageButton(),
                         HeaderNotificationBell(
                           onNavigateToOrders:
                               widget.onNavigateToOrders ?? () {},
+                          onNavigateToTarget: widget.onNavigateToTarget,
                         ),
                       ],
                     ),
                     SizedBox(height: 14),
                     TfSearchField(
                       controller: _settingsSearchController,
-                      hintText: 'Search settings · সেটিংস খুঁজুন',
+                      hintText: text.searchSettingsHint,
                       onChanged: (_) => setState(() {}),
                     ),
                     SizedBox(height: 12),
                     if (visibleGroups.isEmpty)
                       TfEmptyState(
                         icon: Icons.search_off_rounded,
-                        title: 'No settings found',
-                        message: 'Try a different search.',
+                        title: text.noSettingsFound,
+                        message: text.tryDifferentSearch,
                       )
                     else
                       for (var i = 0; i < visibleGroups.length; i++) ...[
@@ -464,6 +517,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _importOrderHistory() async {
     final app = AppScope.of(context);
+    final text = app.strings;
     try {
       final picked = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -474,7 +528,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final file = picked.files.single;
       final bytes = file.bytes;
       if (bytes == null || bytes.isEmpty) {
-        throw Exception('Could not read the selected CSV file.');
+        throw Exception(
+          text.isBn
+              ? 'নির্বাচিত CSV ফাইল পড়া যায়নি।'
+              : 'Could not read the selected CSV file.',
+        );
       }
 
       setState(() => _importingOrderHistory = true);
@@ -487,15 +545,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final detail = result.errors.isEmpty ? '' : ' ${result.errors.first}';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: TfText(            '${result.importedOrders} historical orders imported'
-            '${skipped > 0 ? ', $skipped skipped.' : '.'}$detail',
+          content: TfText(
+            text.orderHistoryImportSuccess(
+              result.importedOrders,
+              skipped,
+              detail,
+            ),
           ),
         ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: TfText('Order history import failed: $error')),
+        SnackBar(content: TfText(text.orderHistoryImportFailed(error))),
       );
     } finally {
       if (mounted) setState(() => _importingOrderHistory = false);
@@ -504,7 +566,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openReceiptPrinter() async {
     final app = AppScope.of(context);
-    if (!app.isManager) return;
     final text = app.strings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -549,6 +610,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await AppScope.of(context).logOut();
       },
     );
+  }
+
+  Future<void> _confirmWipeRestaurant() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final outletId = app.serverConfig.outletId.trim();
+    if (!app.cloudConfig.canSync || outletId.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TfText(text.wipeRequiresCloud)));
+      return;
+    }
+    final wiped = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          _WipeRestaurantDialog(app: app, text: text, outletId: outletId),
+    );
+    if (!mounted || wiped != true) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: TfText(text.wipeRestaurantSuccess)));
   }
 
   Future<void> _openYourRestaurantInfo() async {
@@ -749,7 +832,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
-        content: TfText(          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
+        content: TfText(
+          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
         ),
       ),
     );
@@ -770,7 +854,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _publicSlugController.text = app.serverConfig.publicSlug;
     messenger.showSnackBar(
       SnackBar(
-        content: TfText(          ok
+        content: TfText(
+          ok
               ? 'Customer URL saved: https://${app.serverConfig.publicSlug}.quickbytes.buzz'
               : app.lastError ?? 'Could not save customer URL.',
         ),
@@ -814,7 +899,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: TfText(          ok
+        content: TfText(
+          ok
               ? text.connectedTo(printer.label)
               : app.printerState.lastError ?? text.printerConnectionFailed,
         ),
@@ -841,7 +927,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: TfText(          ok
+        content: TfText(
+          ok
               ? text.testTicketSent
               : app.printerState.lastError ?? text.testFailed,
         ),
@@ -961,7 +1048,8 @@ class _SettingsActionTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TfText(                  item.title,
+                TfText(
+                  item.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -972,7 +1060,8 @@ class _SettingsActionTile extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: 2),
-                TfText(                  item.subtitle,
+                TfText(
+                  item.subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -989,7 +1078,8 @@ class _SettingsActionTile extends StatelessWidget {
             if (item.trailing != null)
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: 104),
-                child: TfText(                  item.trailing!,
+                child: TfText(
+                  item.trailing!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,
@@ -1032,6 +1122,118 @@ class _SettingsSectionPage extends StatelessWidget {
   }
 }
 
+class _WipeRestaurantDialog extends StatefulWidget {
+  const _WipeRestaurantDialog({
+    required this.app,
+    required this.text,
+    required this.outletId,
+  });
+
+  final PosAppController app;
+  final AppStrings text;
+  final String outletId;
+
+  @override
+  State<_WipeRestaurantDialog> createState() => _WipeRestaurantDialogState();
+}
+
+class _WipeRestaurantDialogState extends State<_WipeRestaurantDialog> {
+  final TextEditingController _controller = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  bool get _matches => _controller.text.trim() == widget.outletId;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _wipe() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final ok = await widget.app.wipeCurrentRestaurant(
+      confirmation: _controller.text,
+    );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() {
+      _submitting = false;
+      _error = widget.text.wipeRestaurantFailed(
+        widget.app.lastError ?? widget.text.somethingWentWrong,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: TfText(widget.text.wipeRestaurantDialogTitle),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TfText(
+              widget.text.wipeRestaurantDialogMessage(widget.outletId),
+              style: const TextStyle(color: PosColors.muted, height: 1.45),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _controller,
+              enabled: !_submitting,
+              decoration: InputDecoration(
+                labelText: widget.text.typeOutletIdToConfirm,
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              TfText(
+                _error!,
+                style: const TextStyle(color: PosColors.danger, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        SizedBox(
+          width: 118,
+          child: TfButton(
+            label: widget.text.cancel,
+            variant: TfButtonVariant.paper,
+            fullWidth: true,
+            onPressed: _submitting ? null : () => Navigator.pop(context, false),
+          ),
+        ),
+        SizedBox(
+          width: 150,
+          child: TfButton(
+            label: widget.text.wipeRestaurantConfirm,
+            variant: TfButtonVariant.dark,
+            fullWidth: true,
+            busy: _submitting,
+            onPressed: !_matches || _submitting ? null : _wipe,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ReadOnlyInfoTile extends StatelessWidget {
   const _ReadOnlyInfoTile({
     required this.icon,
@@ -1056,7 +1258,8 @@ class _ReadOnlyInfoTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TfText(                label,
+              TfText(
+                label,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -1123,12 +1326,14 @@ class _SectionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TfText(                        title,
+                      TfText(
+                        title,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       if (subtitle != null) ...[
                         SizedBox(height: 3),
-                        TfText(                          subtitle!,
+                        TfText(
+                          subtitle!,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -1195,11 +1400,13 @@ class _DisplaySizeCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TfText(                        text.displaySize,
+                      TfText(
+                        text.displaySize,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       SizedBox(height: 3),
-                      TfText(                        text.displaySizeSubtitle,
+                      TfText(
+                        text.displaySizeSubtitle,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -1332,7 +1539,8 @@ class _ScalePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(PosRadii.pill),
         border: Border.all(color: PosColors.lineStrong),
       ),
-      child: TfText(        '$label - $percent%',
+      child: TfText(
+        '$label - $percent%',
         style: TextStyle(
           color: PosColors.slate,
           fontWeight: FontWeight.w500,
@@ -1451,13 +1659,15 @@ class _PrinterSettingsCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TfText(                      state.hasSelectedPrinter
+                    TfText(
+                      state.hasSelectedPrinter
                           ? state.selectedPrinterLabel
                           : text.noPrinterSelected,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     SizedBox(height: 2),
-                    TfText(                      state.connected
+                    TfText(
+                      state.connected
                           ? text.printerConnectedAuto
                           : text.pairPrinterInstruction,
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -1571,11 +1781,13 @@ class _PrinterDeviceTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TfText(                  printer.label,
+                TfText(
+                  printer.label,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 SizedBox(height: 2),
-                TfText(                  printer.address,
+                TfText(
+                  printer.address,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
@@ -1942,11 +2154,13 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
                     ),
                   ),
                   const SizedBox(height: 28),
-                  TfText(                    text.heroVideoTitle,
+                  TfText(
+                    text.heroVideoTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
-                  TfText(                    text.heroVideoSubtitle,
+                  TfText(
+                    text.heroVideoSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 14),
@@ -1964,7 +2178,8 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
                           const Icon(Icons.videocam_rounded),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: TfText(                              text.heroVideoSet,
+                            child: TfText(
+                              text.heroVideoSet,
                               style: TextStyle(fontWeight: FontWeight.w500),
                             ),
                           ),
@@ -2075,7 +2290,8 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             ),
           ),
           SizedBox(height: 20),
-          TfText(            'Customer Menu URL',
+          TfText(
+            'Customer Menu URL',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           SizedBox(height: 6),
@@ -2096,7 +2312,8 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: TfText(                    menuUrl.isEmpty
+                  child: TfText(
+                    menuUrl.isEmpty
                         ? 'Set server URL and outlet ID above'
                         : menuUrl,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2131,7 +2348,8 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
             ),
           ),
           SizedBox(height: 10),
-          TfText(            'Share this link with customers to let them view your menu.',
+          TfText(
+            'Share this link with customers to let them view your menu.',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
@@ -2203,7 +2421,8 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TfText(                text.tablesSubtitle,
+              TfText(
+                text.tablesSubtitle,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               SizedBox(height: 32),
@@ -2220,14 +2439,16 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
                   Expanded(
                     child: Column(
                       children: [
-                        TfText(                          '$_count',
+                        TfText(
+                          '$_count',
                           style: TextStyle(
                             fontSize: 48,
                             fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        TfText(                          text.tables,
+                        TfText(
+                          text.tables,
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -2382,20 +2603,23 @@ class _StaffAccountsCardState extends State<_StaffAccountsCard> {
                           '';
                       return ListTile(
                         leading: Icon(Icons.badge_rounded),
-                        title: TfText(                          account['displayName']?.toString().isNotEmpty == true
+                        title: TfText(
+                          account['displayName']?.toString().isNotEmpty == true
                               ? account['displayName'].toString()
                               : phone,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: TfText(                          phone,
+                        subtitle: TfText(
+                          phone,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            TfText(                              statusLabel,
+                            TfText(
+                              statusLabel,
                               style: TextStyle(
                                 color: statusColor,
                                 fontSize: 12,
@@ -2449,7 +2673,8 @@ class _StaffAccountsCardState extends State<_StaffAccountsCard> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: TfText(          ok ? text.staffAdded : widget.app.lastError ?? 'Could not add staff.',
+        content: TfText(
+          ok ? text.staffAdded : widget.app.lastError ?? 'Could not add staff.',
         ),
       ),
     );
@@ -2531,13 +2756,15 @@ class _AboutUsPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TfText(                              'Rastarant POS',
+                            TfText(
+                              'Rastarant POS',
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 3),
-                            TfText(                              'Version 2.2.1 · by Terabyte AI',
+                            TfText(
+                              'Version 2.2.1 · by Terabyte AI',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: PosColors.muted,
                               ),
@@ -2550,7 +2777,8 @@ class _AboutUsPage extends StatelessWidget {
                   const SizedBox(height: 14),
                   const Divider(height: 1),
                   const SizedBox(height: 14),
-                  TfText(                    'Rastarant POS is a modern, offline-first point-of-sale system '
+                  TfText(
+                    'Rastarant POS is a modern, offline-first point-of-sale system '
                     'designed for Bangladeshi restaurants of every size. It combines '
                     'the reliability of local storage with the power of real-time cloud '
                     'sync, giving your team a single, fast control center for every '
@@ -2756,7 +2984,8 @@ class _AboutUsPage extends StatelessWidget {
           // ── Legal ───────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            child: TfText(              '© 2024–2026 Terabyte AI. All rights reserved.\n'
+            child: TfText(
+              '© 2024–2026 Terabyte AI. All rights reserved.\n'
               'Rastarant POS is a proprietary software product. '
               'Unauthorized copying, redistribution, or reverse-engineering is prohibited.',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -2814,13 +3043,15 @@ class _AboutUsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TfText(                  title,
+                TfText(
+                  title,
                   style: Theme.of(
                     context,
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 3),
-                TfText(                  subtitle,
+                TfText(
+                  subtitle,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.muted,
                     height: 1.5,
@@ -2851,7 +3082,8 @@ class _AboutUsPage extends StatelessWidget {
             color: PosColors.primary,
             shape: BoxShape.circle,
           ),
-          child: TfText(            step,
+          child: TfText(
+            step,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w500,
@@ -2864,13 +3096,15 @@ class _AboutUsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TfText(                title,
+              TfText(
+                title,
                 style: Theme.of(
                   context,
                 ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 3),
-              TfText(                body,
+              TfText(
+                body,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: PosColors.muted,
                   height: 1.5,
@@ -2891,7 +3125,8 @@ class _AboutUsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PosColors.primary.withValues(alpha: 0.25)),
       ),
-      child: TfText(        label,
+      child: TfText(
+        label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: PosColors.primary,
           fontWeight: FontWeight.w500,
@@ -2909,12 +3144,14 @@ class _AboutUsPage extends StatelessWidget {
     return ListTile(
       dense: true,
       leading: Icon(icon, size: 20, color: PosColors.muted),
-      title: TfText(        label,
+      title: TfText(
+        label,
         style: Theme.of(
           context,
         ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
       ),
-      subtitle: TfText(        value,
+      subtitle: TfText(
+        value,
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
@@ -2965,13 +3202,15 @@ class _PrivacyPolicyPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TfText(                              'Privacy Policy',
+                            TfText(
+                              'Privacy Policy',
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 2),
-                            TfText(                              'Last updated: January 1, 2026',
+                            TfText(
+                              'Last updated: January 1, 2026',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: PosColors.muted,
                               ),
@@ -2984,7 +3223,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   const SizedBox(height: 14),
                   const Divider(height: 1),
                   const SizedBox(height: 14),
-                  TfText(                    'Terabyte AI ("we", "us", or "our") built the Rastarant POS app. '
+                  TfText(
+                    'Terabyte AI ("we", "us", or "our") built the Rastarant POS app. '
                     'This Privacy Policy explains how we collect, use, store, and protect '
                     'information when you use this application. By using the app, you agree '
                     'to the practices described in this policy.',
@@ -3258,7 +3498,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
           // ── Footer ──────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: TfText(              'This Privacy Policy is effective as of January 1, 2026 and was last reviewed on May 20, 2026.',
+            child: TfText(
+              'This Privacy Policy is effective as of January 1, 2026 and was last reviewed on May 20, 2026.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: PosColors.muted,
                 height: 1.6,
@@ -3274,7 +3515,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
   Widget _sectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 2),
-      child: TfText(        title,
+      child: TfText(
+        title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
           fontWeight: FontWeight.w500,
           color: PosColors.slate,
@@ -3284,7 +3526,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
   }
 
   Widget _policySubheading(BuildContext context, String text) {
-    return TfText(      text,
+    return TfText(
+      text,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
         fontWeight: FontWeight.w500,
         color: PosColors.slate,
@@ -3293,7 +3536,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
   }
 
   Widget _policyBody(BuildContext context, String text) {
-    return TfText(      text,
+    return TfText(
+      text,
       style: Theme.of(
         context,
       ).textTheme.bodyMedium?.copyWith(color: PosColors.muted, height: 1.6),
@@ -3323,7 +3567,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 10),
           Expanded(
-            child: TfText(              text,
+            child: TfText(
+              text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 height: 1.5,
                 color: PosColors.muted,
@@ -3352,13 +3597,15 @@ class _PrivacyPolicyPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TfText(                  name,
+                TfText(
+                  name,
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 3),
-                TfText(                  description,
+                TfText(
+                  description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.muted,
                     height: 1.5,
@@ -3377,7 +3624,8 @@ class _PrivacyPolicyPage extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: PosColors.muted),
         const SizedBox(width: 8),
-        TfText(          value,
+        TfText(
+          value,
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),

@@ -15,6 +15,47 @@ enum PosNotificationType {
   }
 }
 
+enum PosNotificationTarget {
+  none,
+  orders,
+  inventory,
+  menu,
+  receiptPrinter,
+  settings;
+
+  static PosNotificationTarget parse(String? value) {
+    final normalized = (value ?? '').trim().toLowerCase();
+    if (normalized.isEmpty || normalized == 'test') {
+      return PosNotificationTarget.none;
+    }
+    if (normalized == 'pending_orders' ||
+        normalized == 'orders' ||
+        normalized == 'order') {
+      return PosNotificationTarget.orders;
+    }
+    if (normalized == 'stock' ||
+        normalized == 'inventory' ||
+        normalized == 'low_stock') {
+      return PosNotificationTarget.inventory;
+    }
+    if (normalized == 'menu' || normalized == 'menu_items') {
+      return PosNotificationTarget.menu;
+    }
+    if (normalized == 'settings_printer' ||
+        normalized == 'receipt_printer' ||
+        normalized == 'printer') {
+      return PosNotificationTarget.receiptPrinter;
+    }
+    if (normalized == 'settings' ||
+        normalized == 'staff' ||
+        normalized == 'sync' ||
+        normalized == 'reports') {
+      return PosNotificationTarget.settings;
+    }
+    return PosNotificationTarget.none;
+  }
+}
+
 class PosNotification {
   PosNotification({
     required this.id,
@@ -37,6 +78,18 @@ class PosNotification {
   final DateTime? readAt;
 
   bool get isRead => readAt != null;
+
+  PosNotificationTarget get target {
+    final parsed = PosNotificationTarget.parse(actionTarget);
+    if (parsed != PosNotificationTarget.none) return parsed;
+    return switch (type) {
+      PosNotificationType.pendingOrder ||
+      PosNotificationType.acceptedOrder ||
+      PosNotificationType.printSuccess ||
+      PosNotificationType.printFailed => PosNotificationTarget.orders,
+      PosNotificationType.system => PosNotificationTarget.none,
+    };
+  }
 
   PosNotification copyWith({DateTime? readAt}) {
     return PosNotification(

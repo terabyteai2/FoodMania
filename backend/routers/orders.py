@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_device_payload, get_current_outlet_id
 from database import get_db
-from models import Order
+from models import MenuItem, Order
 from routers.ws import manager
 from schemas import OrderPayload, OrderStatusUpdate, ok
 from routers.menu import _require_manager_scan_access
@@ -49,6 +49,56 @@ def _order_to_dict(order: Order) -> dict:
 def _normalize_order_status(status: str | None) -> str:
     normalized = (status or "").strip().lower()
     return normalized or "pending"
+
+
+def _clean_text(value: object) -> str:
+    return str(value or "").strip()
+
+
+async def _normalized_order_items(
+    outlet_id: str,
+    body: OrderPayload,
+    db: AsyncSession,
+) -> list[dict]:
+    items = [item.model_dump(exclude_none=True) for item in body.items]
+    menu_ids = {
+        menu_id
+        for item in items
+        if (menu_id := _clean_text(item.get("menuItemId")))
+    }
+    menu_by_id: dict[str, MenuItem] = {}
+    if menu_ids:
+        menu_items = (
+            await db.execute(
+                select(MenuItem).where(
+                    MenuItem.outlet_id == outlet_id,
+                    MenuItem.id.in_(menu_ids),
+                )
+            )
+        ).scalars().all()
+        menu_by_id = {item.id: item for item in menu_items}
+
+    normalized: list[dict] = []
+    for item in items:
+        menu_id = _clean_text(item.get("menuItemId"))
+        menu_item = menu_by_id.get(menu_id)
+        fallback_name = _clean_text(item.get("name"))
+        name_en = _clean_text(item.get("nameEn"))
+        name_bn = _clean_text(item.get("nameBn"))
+        if menu_item is not None:
+            name_en = (
+                _clean_text(menu_item.name_en)
+                or _clean_text(menu_item.name)
+                or name_en
+            )
+            name_bn = _clean_text(menu_item.name_bn) or name_bn
+        name_en = name_en or fallback_name
+        name = name_en or fallback_name or name_bn
+        item["name"] = name
+        item["nameEn"] = name_en
+        item["nameBn"] = name_bn
+        normalized.append(item)
+    return normalized
 
 
 def _parse_since(value: str) -> datetime:
@@ -121,7 +171,7 @@ async def push_order(
         service_type=body.serviceType,
         covers=body.covers,
         payment_method=body.paymentMethod,
-        items=body.items,
+        items=await _normalized_order_items(outlet_id, body, db),
         notes=body.notes,
         created_by_account_id=body.createdByAccountId,
         created_by_role=created_by_role,

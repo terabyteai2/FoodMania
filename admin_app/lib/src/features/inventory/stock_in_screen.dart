@@ -329,9 +329,14 @@ class _StockInScreenState extends State<StockInScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TfSectionHeader(
-                    label: text.totalPaid,
-                    padding: EdgeInsets.zero,
+                  TfText(
+                    text.totalPaid.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: text.isBn ? 0 : 0.5,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
                   ),
                   TfText(
                     fmt.format(total),
@@ -387,11 +392,17 @@ class _DateRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              TfSectionHeader(
-                label: text.dateLabel,
-                padding: EdgeInsets.zero,
+              TfText(
+                text.dateLabel.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: text.isBn ? 0 : 0.5,
+                  color: PosColors.muted,
+                ),
               ),
-              TfText(                fmt.format(date),
+              TfText(
+                fmt.format(date),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,

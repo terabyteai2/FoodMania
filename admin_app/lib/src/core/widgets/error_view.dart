@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app_scope.dart';
 import '../theme/app_theme.dart';
 import 'tf_design_system.dart';
 
@@ -11,6 +12,7 @@ class ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
     return TfCard(
       padding: EdgeInsets.all(16),
       child: Row(
@@ -37,7 +39,7 @@ class ErrorView extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TfText(
-                  'Something went wrong',
+                  text.somethingWentWrong,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 SizedBox(height: 4),
@@ -45,7 +47,7 @@ class ErrorView extends StatelessWidget {
                 if (onRetry != null) ...[
                   SizedBox(height: 12),
                   TfButton(
-                    label: 'Retry',
+                    label: text.retry,
                     icon: Icons.refresh,
                     onPressed: onRetry,
                     variant: TfButtonVariant.paper,

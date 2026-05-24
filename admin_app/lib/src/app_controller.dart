@@ -971,6 +971,51 @@ class PosAppController extends ChangeNotifier {
     });
   }
 
+  Future<bool> wipeCurrentRestaurant({required String confirmation}) async {
+    final outletId = serverConfig.outletId.trim();
+    if (!isManager) {
+      lastError = 'Only managers can wipe restaurant data.';
+      notifyListeners();
+      return false;
+    }
+    if (!isCloudReady || !cloudConfig.canSync || outletId.isEmpty) {
+      lastError = 'Cloud sync must be connected before wiping restaurant data.';
+      notifyListeners();
+      return false;
+    }
+    if (confirmation.trim() != outletId) {
+      lastError = 'Type the outlet ID exactly to confirm.';
+      notifyListeners();
+      return false;
+    }
+
+    return _runBusy(() async {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      await cloudApiService.wipeCurrentOutlet(confirmation: outletId);
+      await database.clearLocalData();
+      syncService.resetCloudPullState();
+      menuItems = [];
+      orders = [];
+      notifications = [];
+      syncEvents = [];
+      inventoryItems = [];
+      dashboardSummary = null;
+      dashboardSummaryError = null;
+      inventorySummary = null;
+      inventorySummaryError = null;
+      _knownOrderIds.clear();
+      _alertedPendingOrderIds.clear();
+      _alertedAcceptedOrderIds.clear();
+      _alertedPrintOrderIds.clear();
+      await _prepareNewRestaurantIdentity();
+      await _clearWipedRestaurantPrefs();
+      unawaited(cloudRealtimeService.disconnect());
+    });
+  }
+
   Future<void> saveLocalPublicSlug(String publicSlug) async {
     final cleanSlug = _normalizePublicSlug(publicSlug);
     serverConfig = serverConfig.copyWith(publicSlug: cleanSlug);
@@ -1622,6 +1667,60 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_deviceTokenKey);
   }
 
+  Future<void> _clearWipedRestaurantPrefs() async {
+    isLoggedIn = false;
+    hasSeenIntro = false;
+    needsOnboardingPayment = false;
+    pendingOnboardingLanding = false;
+    pendingHeroMediaSetup = false;
+    bkashPaymentVerified = false;
+    subscriptionState = 'none';
+    trialEndsAt = null;
+    selectedSubscriptionPlan = '';
+    lastBkashPaymentId = null;
+    lastBkashTransactionId = null;
+    accountId = '';
+    accountEmail = '';
+    accountUsername = '';
+    accountDisplayName = '';
+    accountRole = AccountRole.manager;
+    _accountPassword = '';
+    phoneSignupToken = null;
+    verifiedPhoneDisplay = null;
+    pendingStaffInvite = null;
+    serverConfig = serverConfig.copyWith(
+      restaurantName: '',
+      outletName: '',
+      publicSlug: '',
+      tableCount: 10,
+    );
+    cloudConfig = cloudConfig.copyWith(deviceToken: '');
+
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_accountLoggedInKey, false);
+    await preferences.remove(_seenIntroKey);
+    await preferences.remove(_restaurantNameKey);
+    await preferences.remove(_outletNameKey);
+    await preferences.remove(_publicSlugKey);
+    await preferences.remove(_restaurantIdKey);
+    await preferences.remove(_outletIdKey);
+    await preferences.remove(_deviceTokenKey);
+    await preferences.remove(_accountIdKey);
+    await preferences.remove(_accountEmailKey);
+    await preferences.remove(_accountUsernameKey);
+    await preferences.remove(_accountDisplayNameKey);
+    await preferences.remove(_accountRoleKey);
+    await preferences.remove(_accountPasswordKey);
+    await preferences.remove(_selectedPlanKey);
+    await preferences.remove(_subscriptionStateKey);
+    await preferences.remove(_trialEndsAtKey);
+    await preferences.remove(_bkashPaymentVerifiedKey);
+    await preferences.remove(_bkashPaymentIdKey);
+    await preferences.remove(_bkashTransactionIdKey);
+    await preferences.remove(_needsOnboardingPaymentKey);
+    await preferences.setInt(_tableCountKey, 10);
+  }
+
   String _mergePublicApiBaseUrl(String? fromServer, String fallback) {
     final raw = fromServer?.trim() ?? '';
     if (raw.isEmpty) return fallback;
@@ -2048,6 +2147,19 @@ class PosAppController extends ChangeNotifier {
         skipped += 1;
         continue;
       }
+      final tags = <String>[];
+      if (candidate.iconKey.trim().isNotEmpty) {
+        tags.add('icon:${candidate.iconKey.trim()}');
+      }
+      for (final sub in candidate.subItems) {
+        tags.add('inc:${sub.nameEn.trim()}');
+      }
+      for (final addon in candidate.addOns) {
+        final priceStr = addon.price == addon.price.roundToDouble()
+            ? addon.price.toInt().toString()
+            : addon.price.toStringAsFixed(2);
+        tags.add('addon:$priceStr:${addon.nameEn.trim()}');
+      }
       await saveMenuItem(
         name: candidate.nameEn,
         nameEn: candidate.nameEn,
@@ -2059,10 +2171,9 @@ class PosAppController extends ChangeNotifier {
         categoryEn: candidate.categoryEn,
         categoryBn: candidate.categoryBn,
         price: candidate.price,
+        imageUrl: candidate.imageUrl,
         isAvailable: candidate.isAvailable,
-        tags: candidate.iconKey.trim().isEmpty
-            ? const <String>[]
-            : ['icon:${candidate.iconKey.trim()}'],
+        tags: tags,
       );
       created += 1;
     }
@@ -2274,6 +2385,7 @@ class PosAppController extends ChangeNotifier {
       initialStatus: OrderStatus.accepted,
     );
     unawaited(syncService.syncNow());
+    unawaited(_notifyPrinterUnavailableForCreatedOrder(order));
     return order;
   }
 
@@ -2400,18 +2512,12 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<List<BluetoothPrinterDevice>> refreshPairedPrinters() async {
-    if (!isManager) {
-      pairedPrinters = const <BluetoothPrinterDevice>[];
-      notifyListeners();
-      return pairedPrinters;
-    }
     pairedPrinters = await printerService.refreshPairedPrinters();
     notifyListeners();
     return pairedPrinters;
   }
 
   Future<bool> connectPrinter(BluetoothPrinterDevice printer) async {
-    if (!isManager) return false;
     final ok = await printerService.connect(printer);
     printerState = printerService.state;
     if (ok) {
@@ -2423,7 +2529,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> disconnectPrinter() async {
-    if (!isManager) return false;
     final ok = await printerService.disconnect();
     printerState = printerService.state;
     notifyListeners();
@@ -2438,7 +2543,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> testPrinter() {
-    if (!isManager) return Future<bool>.value(false);
     return printerService.testPrint(
       restaurantName: restaurantName,
       outletName: outletName,
@@ -2446,7 +2550,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printOrderTicket(OrderModel order) {
-    if (!isManager) return Future<bool>.value(false);
     if (printerService.hasPrintedOrder(order.id)) {
       return Future<bool>.value(true);
     }
@@ -2473,17 +2576,17 @@ class PosAppController extends ChangeNotifier {
           }
           if (!_alertedPrintOrderIds.contains(order.id)) {
             _alertedPrintOrderIds.add(order.id);
+            final error = printerState.lastError ?? strings.printFailed;
             await addNotification(
               type: ok
                   ? PosNotificationType.printSuccess
                   : PosNotificationType.printFailed,
-              title: ok ? 'Ticket printed' : strings.printFailed,
-              body: ok
-                  ? '${order.displaySequence} was sent to the printer.'
-                  : (printerState.lastError ??
-                        '${order.displaySequence} could not print.'),
+              title: ok ? strings.ticketSentToPrinter : strings.printFailed,
+              body: ok ? strings.ticketPrinted(order.displaySequence) : error,
               orderId: order.id,
-              actionTarget: 'orders',
+              actionTarget: !ok && _isInfrastructurePrintError(error)
+                  ? 'settings_printer'
+                  : 'orders',
               playSound: !ok,
             );
           }
@@ -2497,7 +2600,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printCustomerInvoice(OrderModel order) async {
-    if (!isManager) return false;
     final ok = await printerService.printCustomerInvoice(
       order,
       restaurantName: restaurantName,
@@ -2510,17 +2612,17 @@ class PosAppController extends ChangeNotifier {
     }
     if (!_alertedPrintOrderIds.contains('${order.id}:invoice')) {
       _alertedPrintOrderIds.add('${order.id}:invoice');
+      final error = printerState.lastError ?? strings.printFailed;
       await addNotification(
         type: ok
             ? PosNotificationType.printSuccess
             : PosNotificationType.printFailed,
         title: ok ? strings.printBillAction : strings.printFailed,
-        body: ok
-            ? '${order.displaySequence} customer invoice was sent to the printer.'
-            : (printerState.lastError ??
-                  '${order.displaySequence} customer invoice could not print.'),
+        body: ok ? strings.billPrinted(order.displaySequence) : error,
         orderId: order.id,
-        actionTarget: 'orders',
+        actionTarget: !ok && _isInfrastructurePrintError(error)
+            ? 'settings_printer'
+            : 'orders',
         playSound: !ok,
       );
     }
@@ -2543,6 +2645,8 @@ class PosAppController extends ChangeNotifier {
             n.type == type &&
             n.title == title &&
             n.body == body &&
+            n.orderId == orderId &&
+            n.actionTarget == actionTarget &&
             n.createdAt.isAfter(cutoff),
       );
       if (duplicate) {
@@ -2681,8 +2785,8 @@ class PosAppController extends ChangeNotifier {
     await systemNotifications.requestNotificationAccess();
     await systemNotifications.show(
       id: 999001,
-      title: 'Test notification',
-      body: 'If you can hear this, alerts are wired up correctly.',
+      title: strings.testNotificationTitle,
+      body: strings.testNotificationBody,
       payload: 'test',
       type: PosNotificationType.pendingOrder,
     );
@@ -2771,20 +2875,6 @@ class PosAppController extends ChangeNotifier {
     return known.contains(message.trim());
   }
 
-  Future<void> _ensureAutoPrintPreflight() async {
-    if (!isManager ||
-        !printerState.autoPrintEnabled ||
-        !printerState.hasSelectedPrinter ||
-        _autoPrintInfrastructureBlocked != null) {
-      return;
-    }
-    final block = await printerService.preflightBlockReason();
-    if (block == null) return;
-    _autoPrintInfrastructureBlocked = block;
-    await _notifyPrintInfrastructureOnce(block);
-    _markAcceptedOrdersPrintAlerted();
-  }
-
   Future<void> _notifyPrintInfrastructureOnce(String reason) async {
     if (_alertedPrintFailureReasons.contains(reason)) return;
     _alertedPrintFailureReasons.add(reason);
@@ -2792,7 +2882,26 @@ class PosAppController extends ChangeNotifier {
       type: PosNotificationType.printFailed,
       title: strings.printFailed,
       body: reason,
-      actionTarget: 'orders',
+      actionTarget: 'settings_printer',
+      playSound: true,
+    );
+  }
+
+  Future<void> _notifyPrinterUnavailableForCreatedOrder(
+    OrderModel order,
+  ) async {
+    final reason = await printerService.preflightBlockReason();
+    printerState = printerService.state;
+    if (reason == null) {
+      notifyListeners();
+      return;
+    }
+    await addNotification(
+      type: PosNotificationType.printFailed,
+      title: strings.printFailed,
+      body: reason,
+      orderId: order.id,
+      actionTarget: 'settings_printer',
       playSound: true,
     );
   }
@@ -2811,8 +2920,6 @@ class PosAppController extends ChangeNotifier {
     required Set<String> previousOrderIds,
     required Map<String, OrderStatus> previousStatusById,
   }) async {
-    await _ensureAutoPrintPreflight();
-
     final sorted = List<OrderModel>.from(orders)
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 

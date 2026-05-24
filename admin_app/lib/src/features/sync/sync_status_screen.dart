@@ -20,14 +20,15 @@ class SyncStatusScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final text = app.strings;
     final sync = app.syncState;
     final lastSync = sync.lastSyncAt == null
-        ? 'Never'
+        ? (text.isBn ? 'কখনো নয়' : 'Never')
         : DateFormat('MMM d, h:mm a').format(sync.lastSyncAt!);
 
     return AppScaffold(
-      title: 'Sync Status',
-      subtitle: 'Cloud queue, failed events, retries, and health checks.',
+      title: text.syncStatusTitle,
+      subtitle: text.syncStatusSubtitle,
       actions: [
         StatusBadge(
           label: sync.cloudConnected ? 'Cloud Connected' : 'Cloud Disconnected',
@@ -53,8 +54,8 @@ class SyncStatusScreen extends StatelessWidget {
           SizedBox(height: 12),
           if (app.syncEvents.isEmpty)
             EmptyState(
-              title: 'No sync events',
-              message: 'Queued changes will appear here before cloud delivery.',
+              title: text.noSyncEvents,
+              message: text.queuedChangesWillAppear,
               icon: Icons.cloud_sync_outlined,
             )
           else

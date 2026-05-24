@@ -89,7 +89,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 8,
+      version: 9,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -384,6 +384,8 @@ class LocalDatabaseService {
             orderId: orderId,
             menuItemId: menuItem.id,
             name: menuItem.name,
+            nameEn: menuItem.nameEn,
+            nameBn: menuItem.nameBn,
             qty: requestItem.qty,
             price: menuItem.price,
             lineTotal: lineTotal,
@@ -391,10 +393,10 @@ class LocalDatabaseService {
         );
       }
 
-      const vatRatePercent = 5.0;
       final roundedSubtotal = _roundMoney(subtotal);
-      final vatAmount = _roundMoney(roundedSubtotal * vatRatePercent / 100);
-      final total = _roundMoney(roundedSubtotal + vatAmount);
+      const vatRatePercent = 0.0;
+      const vatAmount = 0.0;
+      final total = roundedSubtotal;
 
       final model = OrderModel(
         id: orderId,
@@ -711,9 +713,13 @@ class LocalDatabaseService {
     final db = await _db;
     await db.transaction((txn) async {
       await txn.delete('sync_events');
+      await txn.delete('notifications');
       await txn.delete('order_items');
       await txn.delete('orders');
       await txn.delete('menu_items');
+      await txn.delete('stock_adjustments');
+      await txn.delete('daily_stock_counts');
+      await txn.delete('inventory_items');
     });
     _emitChange();
   }
@@ -828,6 +834,8 @@ class LocalDatabaseService {
         orderId TEXT NOT NULL,
         menuItemId TEXT NOT NULL,
         name TEXT NOT NULL,
+        nameEn TEXT NOT NULL DEFAULT '',
+        nameBn TEXT NOT NULL DEFAULT '',
         qty INTEGER NOT NULL,
         price REAL NOT NULL,
         lineTotal REAL NOT NULL,
@@ -925,6 +933,9 @@ class LocalDatabaseService {
     if (oldVersion < 8) {
       await _migrateOrdersV8(db);
     }
+    if (oldVersion < 9) {
+      await _migrateOrderItemsBilingualV9(db);
+    }
   }
 
   Future<void> _migrateMenuBilingualV7(Database db) async {
@@ -1015,6 +1026,21 @@ class LocalDatabaseService {
     await db.execute('UPDATE orders SET vatAmount = 0 WHERE vatAmount IS NULL');
   }
 
+  Future<void> _migrateOrderItemsBilingualV9(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'order_items',
+      'nameEn',
+      "nameEn TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'order_items',
+      'nameBn',
+      "nameBn TEXT NOT NULL DEFAULT ''",
+    );
+  }
+
   Future<void> _ensureSchema(Database db) async {
     await _addColumnIfMissing(
       db,
@@ -1063,6 +1089,7 @@ class LocalDatabaseService {
     );
     await _backfillOrderSequences(db);
     await _migrateOrdersV8(db);
+    await _migrateOrderItemsBilingualV9(db);
     await _createSyncTable(db);
     await _createInventoryTables(db);
     await _migrateInventoryV6(db);

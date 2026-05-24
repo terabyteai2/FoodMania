@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -17,14 +18,62 @@ import '../../models/order_model.dart';
 import '../../models/order_service_type.dart';
 import '../../models/order_source.dart';
 import '../../models/order_status.dart';
+import '../../models/pos_notification.dart';
 import 'order_list_filters.dart';
+
+Future<void> openNewOrderForm(
+  BuildContext context, {
+  VoidCallback? onCreated,
+}) async {
+  final app = AppScope.of(context);
+  final menuItems = app.menuItems.where((i) => i.isAvailable).toList();
+  final tableCount = app.serverConfig.tableCount;
+
+  final occupiedTables = <String>{
+    for (final order in app.ordersFor())
+      if (order.status.isOpen)
+        if ((order.tableNo ?? '').trim().isNotEmpty) order.tableNo!.trim(),
+  };
+
+  final created = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _NewOrderPage(
+        menuItems: menuItems,
+        tableCount: tableCount,
+        occupiedTables: occupiedTables,
+        onCreateOrder: (result) async {
+          final order = await app.createManualOrder(
+            requestedItems: result.items,
+            tableNo: result.tableNo,
+            note: result.note,
+            serviceType: result.serviceType,
+            paymentMethod: null,
+          );
+          final shouldPrint =
+              app.isManager &&
+              !app.printerState.autoPrintEnabled &&
+              app.printerState.hasSelectedPrinter &&
+              !app.printerService.hasPrintedOrder(order.id);
+          if (shouldPrint) {
+            await app.printOrderTicket(order);
+          }
+          return order;
+        },
+      ),
+    ),
+  );
+  if (created == true) onCreated?.call();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  const OrdersScreen({this.onNavigateToTarget, super.key});
+
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -33,6 +82,7 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
+  final TextEditingController _searchController = TextEditingController();
   int? _lastPendingCount;
   OrderListFilters _filters = OrderListFilters.none;
 
@@ -44,6 +94,7 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -52,12 +103,19 @@ class _OrdersScreenState extends State<OrdersScreen>
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final rawOrders = app.ordersFor();
-    final allOrders = rawOrders
+    final language = app.language;
+    final searchQuery = _searchController.text.trim();
+    final filterMatchedOrders = rawOrders
         .where((o) => _filters.matches(o))
         .toList(growable: false);
+    final allOrders = filterMatchedOrders
+        .where((o) => _matchesOrderSearch(o, searchQuery, language))
+        .toList(growable: false);
 
-    final rawPendingOrders = _pendingOrders(rawOrders);
-    final rawAcceptedOrders = _acceptedOrders(rawOrders);
+    final unfilteredPendingOrders = _pendingOrders(rawOrders);
+    final unfilteredAcceptedOrders = _acceptedOrders(rawOrders);
+    final searchBasePendingOrders = _pendingOrders(filterMatchedOrders);
+    final searchBaseAcceptedOrders = _acceptedOrders(filterMatchedOrders);
     final pendingOrders = _pendingOrders(allOrders);
     pendingOrders.sort(_sortOrders);
     final acceptedOrders = _acceptedOrders(allOrders);
@@ -68,18 +126,22 @@ class _OrdersScreenState extends State<OrdersScreen>
     final pendingShortcut = _emptyShortcut(
       context: context,
       currentFiltered: pendingOrders,
-      currentUnfiltered: rawPendingOrders,
+      currentSearchBase: searchBasePendingOrders,
+      currentUnfiltered: unfilteredPendingOrders,
       otherFiltered: acceptedOrders,
       otherLabel: text.acceptedTab,
       otherTabIndex: 1,
+      searchActive: searchQuery.isNotEmpty,
     );
     final acceptedShortcut = _emptyShortcut(
       context: context,
       currentFiltered: acceptedOrders,
-      currentUnfiltered: rawAcceptedOrders,
+      currentSearchBase: searchBaseAcceptedOrders,
+      currentUnfiltered: unfilteredAcceptedOrders,
       otherFiltered: pendingOrders,
       otherLabel: text.pendingTab,
       otherTabIndex: 0,
+      searchActive: searchQuery.isNotEmpty,
     );
     _syncTabWithPendingOrders(pendingOrders.length, acceptedOrders.length);
     final hasAnyOpenOrders =
@@ -90,7 +152,10 @@ class _OrdersScreenState extends State<OrdersScreen>
       floatingActionButton: canCreate && hasAnyOpenOrders
           ? TfFab(
               tooltip: text.newOrder,
-              onPressed: () => _openNewOrderForm(context),
+              onPressed: () => openNewOrderForm(
+                context,
+                onCreated: () => _tabs.animateTo(1),
+              ),
             )
           : null,
       body: SafeArea(
@@ -102,6 +167,15 @@ class _OrdersScreenState extends State<OrdersScreen>
               totalFiltered: allOrders.length,
               filtersActive: _filters.isActive,
               onFilterPressed: () => _openOrderFilters(context),
+              onNavigateToTarget: widget.onNavigateToTarget,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: TfSearchField(
+                controller: _searchController,
+                hintText: text.orderSearchHint,
+                onChanged: (_) => setState(() {}),
+              ),
             ),
             _TabStrip(
               controller: _tabs,
@@ -116,8 +190,12 @@ class _OrdersScreenState extends State<OrdersScreen>
                     orders: pendingOrders,
                     emptyTitle: text.quietForNow,
                     canCreate: canCreate,
-                    onCreate: () => _openNewOrderForm(context),
+                    onCreate: () => openNewOrderForm(
+                      context,
+                      onCreated: () => _tabs.animateTo(1),
+                    ),
                     shortcut: pendingShortcut,
+                    searchQuery: searchQuery,
                     onPrint: (o) => _printBill(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                   ),
@@ -125,8 +203,12 @@ class _OrdersScreenState extends State<OrdersScreen>
                     orders: acceptedOrders,
                     emptyTitle: text.noAcceptedOrdersRightNow,
                     canCreate: canCreate,
-                    onCreate: () => _openNewOrderForm(context),
+                    onCreate: () => openNewOrderForm(
+                      context,
+                      onCreated: () => _tabs.animateTo(1),
+                    ),
                     shortcut: acceptedShortcut,
+                    searchQuery: searchQuery,
                     onPrint: (o) => _printBill(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                   ),
@@ -166,13 +248,21 @@ class _OrdersScreenState extends State<OrdersScreen>
   _EmptyShortcut? _emptyShortcut({
     required BuildContext context,
     required List<OrderModel> currentFiltered,
+    required List<OrderModel> currentSearchBase,
     required List<OrderModel> currentUnfiltered,
     required List<OrderModel> otherFiltered,
     required String otherLabel,
     required int otherTabIndex,
+    required bool searchActive,
   }) {
     if (currentFiltered.isNotEmpty) return null;
     final text = AppScope.of(context).strings;
+    if (searchActive && currentSearchBase.isNotEmpty) {
+      return _EmptyShortcut(
+        label: text.clearSearch,
+        onTap: () => setState(_searchController.clear),
+      );
+    }
     if (_filters.isActive && currentUnfiltered.isNotEmpty) {
       return _EmptyShortcut(
         label: text.clearFiltersShortcut,
@@ -186,6 +276,40 @@ class _OrdersScreenState extends State<OrdersScreen>
       );
     }
     return null;
+  }
+
+  bool _matchesOrderSearch(
+    OrderModel order,
+    String query,
+    AppLanguage language,
+  ) {
+    final normalizedQuery = _normalizeOrderSearch(query);
+    if (normalizedQuery.isEmpty) return true;
+    final fields = <String>[
+      order.id,
+      order.orderNo,
+      order.displaySequence,
+      '${order.sequenceNo}',
+      if ((order.customerName ?? '').trim().isNotEmpty) order.customerName!,
+      if ((order.tableNo ?? '').trim().isNotEmpty) order.tableNo!,
+      if ((order.note ?? '').trim().isNotEmpty) order.note!,
+      for (final item in order.items) ...[
+        item.name,
+        item.nameEn,
+        item.nameBn,
+        item.localizedName(language),
+      ],
+    ];
+    return _normalizeOrderSearch(fields.join(' ')).contains(normalizedQuery);
+  }
+
+  String _normalizeOrderSearch(String value) {
+    const bn = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    var normalized = value.toLowerCase().trim();
+    for (var i = 0; i < bn.length; i++) {
+      normalized = normalized.replaceAll(bn[i], '$i');
+    }
+    return normalized.replaceAll('#', '').replaceAll(RegExp(r'\s+'), ' ');
   }
 
   void _syncTabWithPendingOrders(int pendingCount, int acceptedCount) {
@@ -230,52 +354,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     }
   }
 
-  Future<void> _openNewOrderForm(BuildContext context) async {
-    final app = AppScope.of(context);
-    final menuItems = app.menuItems
-        .where((i) => i.isAvailable)
-        .toList(growable: false);
-    final tableCount = app.serverConfig.tableCount;
-
-    // Surface a snapshot of which tables already have an active (pending or
-    // accepted) order so the picker can warn the manager before they kick off
-    // a new ticket for a seat that's still eating.
-    final occupiedTables = <String>{
-      for (final order in app.ordersFor())
-        if (order.status.isOpen)
-          if ((order.tableNo ?? '').trim().isNotEmpty) order.tableNo!.trim(),
-    };
-
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => _NewOrderPage(
-          menuItems: menuItems,
-          tableCount: tableCount,
-          occupiedTables: occupiedTables,
-          onCreateOrder: (result) async {
-            final order = await app.createManualOrder(
-              requestedItems: result.items,
-              tableNo: result.tableNo,
-              note: result.note,
-              serviceType: result.serviceType,
-              paymentMethod: null,
-            );
-            final shouldPrint =
-                app.isManager &&
-                !app.printerState.autoPrintEnabled &&
-                app.printerState.hasSelectedPrinter &&
-                !app.printerService.hasPrintedOrder(order.id);
-            if (shouldPrint) {
-              await app.printOrderTicket(order);
-            }
-            return order;
-          },
-        ),
-      ),
-    );
-  }
-
   Future<void> _printBill(BuildContext context, OrderModel order) async {
     final app = AppScope.of(context);
     if (!app.isManager) return;
@@ -283,8 +361,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (!app.printerState.connected) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(text.printerNotConnectedHint),
-          action: SnackBarAction(label: 'OK', onPressed: () {}),
+          content: TfText(text.printerNotConnectedHint),
+          action: SnackBarAction(label: text.ok, onPressed: () {}),
         ),
       );
       return;
@@ -293,7 +371,8 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: TfText(          ok
+        content: TfText(
+          ok
               ? text.billPrinted(order.displaySequence)
               : (app.printerState.lastError ?? text.printFailed),
         ),
@@ -323,6 +402,7 @@ class _TopBar extends StatelessWidget {
     required this.totalFiltered,
     required this.filtersActive,
     required this.onFilterPressed,
+    required this.onNavigateToTarget,
   });
 
   final int pendingCount;
@@ -330,6 +410,7 @@ class _TopBar extends StatelessWidget {
   final int totalFiltered;
   final bool filtersActive;
   final VoidCallback onFilterPressed;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -350,10 +431,11 @@ class _TopBar extends StatelessWidget {
         title: text.ordersTitle,
         subtitle: subtitle,
         trailing: [
-          // Tapping the bell on this screen is a no-op for navigation,
-          // since we're already on the Orders tab.
           if (!quietEmpty) HeaderLanguageButton(),
-          HeaderNotificationBell(onNavigateToOrders: () {}),
+          HeaderNotificationBell(
+            onNavigateToOrders: () {},
+            onNavigateToTarget: onNavigateToTarget,
+          ),
           if (!quietEmpty)
             TfIconButton(
               icon: Icons.tune_rounded,
@@ -443,11 +525,13 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                 ),
               ),
             ),
-            TfText(              t.filterOrders,
+            TfText(
+              t.filterOrders,
               style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
             ),
             SizedBox(height: 16),
-            TfText(              t.filterByDate,
+            TfText(
+              t.filterByDate,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 fontSize: 12,
@@ -469,7 +553,8 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
               }).toList(),
             ),
             SizedBox(height: 18),
-            TfText(              t.filterBySource,
+            TfText(
+              t.filterBySource,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 fontSize: 12,
@@ -585,6 +670,7 @@ class _OrderList extends StatelessWidget {
     required this.canCreate,
     required this.onCreate,
     required this.shortcut,
+    required this.searchQuery,
     required this.onPrint,
     required this.onStatus,
   });
@@ -594,6 +680,7 @@ class _OrderList extends StatelessWidget {
   final bool canCreate;
   final VoidCallback onCreate;
   final _EmptyShortcut? shortcut;
+  final String searchQuery;
   final void Function(OrderModel) onPrint;
   final void Function(OrderModel, OrderStatus) onStatus;
 
@@ -605,6 +692,7 @@ class _OrderList extends StatelessWidget {
         canCreate: canCreate,
         onCreate: onCreate,
         shortcut: shortcut,
+        searchQuery: searchQuery,
       );
     }
 
@@ -627,106 +715,106 @@ class _SmartOrdersEmptyState extends StatelessWidget {
     required this.canCreate,
     required this.onCreate,
     required this.shortcut,
+    required this.searchQuery,
   });
 
   final String title;
   final bool canCreate;
   final VoidCallback onCreate;
   final _EmptyShortcut? shortcut;
+  final String searchQuery;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
 
+    final isSearchEmpty = searchQuery.trim().isNotEmpty;
+    final titleText = isSearchEmpty ? text.noOrderSearchResultsTitle : title;
+    final messageText = isSearchEmpty
+        ? text.noOrderSearchResultsMessage(searchQuery.trim())
+        : text.quietOrdersMessage;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        return Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 48, 24, 112),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: (constraints.maxHeight - 160)
-                      .clamp(220, 420)
-                      .toDouble(),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 78,
-                      height: 78,
-                      decoration: BoxDecoration(
-                        color: PosColors.primarySoft,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Icon(
-                        TfNavIcon.orders,
-                        color: PosColors.primaryDark,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    TfText(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: PosColors.slate,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        height: 1.2,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TfText(
-                      text.quietOrdersMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: PosColors.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        height: 1.35,
-                      ),
-                    ),
-                    if (!canCreate) ...[
-                      const SizedBox(height: 12),
-                      TfText(
-                        text.addMenuItemsBeforeOrders,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: PosColors.danger,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    if (shortcut != null) ...[
-                      const SizedBox(height: 12),
-                      TfButton(
-                        label: shortcut!.label,
-                        variant: TfButtonVariant.ghost,
-                        fullWidth: false,
-                        onPressed: shortcut!.onTap,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 48, 24, 36),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 96)
+                  .clamp(260, 460)
+                  .toDouble(),
             ),
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: TfButton(
-                label: text.newOrder,
-                icon: TfNavIcon.plus,
-                size: TfButtonSize.lg,
-                onPressed: canCreate ? onCreate : null,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 78,
+                  height: 78,
+                  decoration: BoxDecoration(
+                    color: PosColors.primarySoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Icon(
+                    TfNavIcon.orders,
+                    color: PosColors.primaryDark,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                TfText(
+                  titleText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TfText(
+                  messageText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: PosColors.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    height: 1.35,
+                  ),
+                ),
+                if (!canCreate) ...[
+                  const SizedBox(height: 12),
+                  TfText(
+                    text.addMenuItemsBeforeOrders,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: PosColors.danger,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+                if (shortcut != null) ...[
+                  const SizedBox(height: 12),
+                  TfButton(
+                    label: shortcut!.label,
+                    variant: TfButtonVariant.ghost,
+                    fullWidth: false,
+                    onPressed: shortcut!.onTap,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                TfButton(
+                  label: text.newOrder,
+                  icon: TfNavIcon.plus,
+                  size: TfButtonSize.lg,
+                  fullWidth: false,
+                  onPressed: canCreate ? onCreate : null,
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );
@@ -756,6 +844,11 @@ class _OrderCard extends StatelessWidget {
     final adminStatus = order.status.adminStatus;
     final isPending = adminStatus == OrderStatus.pending;
     final isAccepted = adminStatus == OrderStatus.accepted;
+    final canPrintBill =
+        isAccepted ||
+        adminStatus == OrderStatus.preparing ||
+        adminStatus == OrderStatus.ready ||
+        adminStatus == OrderStatus.served;
     final elapsedMinutes = DateTime.now()
         .difference(order.createdAt.toLocal())
         .inMinutes;
@@ -809,7 +902,7 @@ class _OrderCard extends StatelessWidget {
       padded: false,
       clip: true,
       child: InkWell(
-        onLongPress: canPrint && isAccepted ? onPrint : null,
+        onLongPress: canPrint && canPrintBill ? onPrint : null,
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -841,7 +934,8 @@ class _OrderCard extends StatelessWidget {
                                     letterSpacing: -0.2,
                                   ),
                                 ),
-                                TfText(                                  '· $sourceLabel',
+                                TfText(
+                                  '· $sourceLabel',
                                   style: TextStyle(
                                     fontFamily: tfFontFamily(context),
                                     fontSize: 14,
@@ -857,7 +951,8 @@ class _OrderCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          TfText(                            tfFormatCurrency(context, order.total),
+                          TfText(
+                            tfFormatCurrency(context, order.total),
                             style: TextStyle(
                               fontFamily: tfFontFamily(context),
                               fontSize: 17,
@@ -887,7 +982,7 @@ class _OrderCard extends StatelessWidget {
                             (item) => Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
                               child: TfText(
-                                '${tfFormatNumber(context, item.qty)}× ${item.name}',
+                                '${tfFormatNumber(context, item.qty)}× ${item.localizedName(app.language)}',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   color: PosColors.slate,
@@ -901,7 +996,8 @@ class _OrderCard extends StatelessWidget {
                       if (order.items.length > 3)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: TfText(                            text.isBn
+                          child: TfText(
+                            text.isBn
                                 ? '+${tfFormatNumber(context, order.items.length - 3)} আরও'
                                 : '+${tfFormatNumber(context, order.items.length - 3)} more',
                             style: const TextStyle(
@@ -926,7 +1022,7 @@ class _OrderCard extends StatelessWidget {
                         ),
                       ],
                       // Actions row.
-                      if (canPrint && (isPending || isAccepted)) ...[
+                      if (canPrint && (isPending || canPrintBill)) ...[
                         const SizedBox(height: 12),
                         if (isPending)
                           Row(
@@ -1032,7 +1128,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                     onPressed: () => Navigator.pop(context),
                   ),
                   const Expanded(
-                    child: TfText(                      'Receipt',
+                    child: TfText(
+                      'Receipt',
                       style: TextStyle(
                         fontWeight: FontWeight.w500,
                         fontSize: 16,
@@ -1059,7 +1156,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                             color: PosColors.success,
                           ),
                           const SizedBox(width: 4),
-                          TfText(                            text.ticketSentToPrinter,
+                          TfText(
+                            text.ticketSentToPrinter,
                             style: const TextStyle(
                               color: PosColors.success,
                               fontWeight: FontWeight.w500,
@@ -1099,7 +1197,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        TfText(                          'Order created',
+                        TfText(
+                          'Order created',
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 13,
@@ -1108,7 +1207,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         // Big order # focus.
-                        TfText(                          order.displaySequence,
+                        TfText(
+                          order.displaySequence,
                           style: const TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 56,
@@ -1119,7 +1219,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         if ((order.tableNo ?? '').isNotEmpty)
-                          TfText(                            'Table ${order.tableNo}',
+                          TfText(
+                            'Table ${order.tableNo}',
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 13,
@@ -1153,7 +1254,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 6),
-                        TfText(                          menuUrl != null
+                        TfText(
+                          menuUrl != null
                               ? 'Scan to view the menu'
                               : order.orderNo,
                           style: const TextStyle(
@@ -1177,7 +1279,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        TfText(                          'ITEMS',
+                        TfText(
+                          'ITEMS',
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w500,
@@ -1193,7 +1296,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                               children: [
                                 SizedBox(
                                   width: 28,
-                                  child: TfText(                                    '${tfFormatNumber(context, item.qty)}×',
+                                  child: TfText(
+                                    '${tfFormatNumber(context, item.qty)}×',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 12.5,
@@ -1202,7 +1306,10 @@ class _OrderCreatedSheet extends StatelessWidget {
                                   ),
                                 ),
                                 Expanded(
-                                  child: TfText(                                    item.name,
+                                  child: TfText(
+                                    item.localizedName(
+                                      AppScope.of(context).language,
+                                    ),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 13,
@@ -1210,7 +1317,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                TfText(                                  tfFormatCurrency(context, item.lineTotal),
+                                TfText(
+                                  tfFormatCurrency(context, item.lineTotal),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
                                     fontSize: 13,
@@ -1223,7 +1331,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                         Divider(color: PosColors.line, height: 22),
                         Row(
                           children: [
-                            TfText(                              'TOTAL',
+                            TfText(
+                              'TOTAL',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,
@@ -1232,7 +1341,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
-                            TfText(                              tfFormatCurrency(context, order.total),
+                            TfText(
+                              tfFormatCurrency(context, order.total),
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w500,
@@ -1341,9 +1451,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   String _query = '';
   OrderModel? _createdOrder;
   bool _creating = false;
+  bool _printingReceipt = false;
+  Timer? _successCloseTimer;
 
   @override
   void dispose() {
+    _successCloseTimer?.cancel();
     _pageCtrl.dispose();
     _searchCtrl.dispose();
     _noteCtrl.dispose();
@@ -1419,9 +1532,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     return sum;
   }
 
-  double get _vatAmount => _roundMoney(_subtotal * 0.05);
-
-  double get _total => _roundMoney(_subtotal + _vatAmount);
+  double get _total => _roundMoney(_subtotal);
 
   double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
 
@@ -1471,29 +1582,45 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _creating = false;
       });
       _goToStep(3);
+      _scheduleSuccessClose();
     } catch (error) {
       if (!mounted) return;
       setState(() => _creating = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText('Could not create order: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(
+            AppScope.of(context).strings.couldNotCreateOrder(error),
+          ),
+        ),
+      );
     }
   }
 
-  void _startAnotherOrder() {
-    setState(() {
-      _step = 0;
-      _source = null;
-      _selectedTable = null;
-      _cart.clear();
-      _selectedCategory = 'All';
-      _query = '';
-      _searchCtrl.clear();
-      _noteCtrl.clear();
-      _createdOrder = null;
-      _creating = false;
+  void _scheduleSuccessClose() {
+    _successCloseTimer?.cancel();
+    _successCloseTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || _step != 3) return;
+      Navigator.pop(context, true);
     });
-    _pageCtrl.jumpToPage(0);
+  }
+
+  Future<void> _printCreatedReceipt() async {
+    final order = _createdOrder;
+    if (order == null || _printingReceipt) return;
+    setState(() => _printingReceipt = true);
+    final app = AppScope.of(context);
+    final ok = await app.printCustomerInvoice(order);
+    if (!mounted) return;
+    setState(() => _printingReceipt = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: TfText(
+          ok
+              ? app.strings.billPrinted(order.displaySequence)
+              : (app.printerState.lastError ?? app.strings.printFailed),
+        ),
+      ),
+    );
   }
 
   String get _tableLabel {
@@ -1561,6 +1688,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                   _ReviewStep(
                     menuItems: widget.menuItems,
                     cart: _cart,
+                    totalQty: _totalQty,
                     total: _total,
                     noteCtrl: _noteCtrl,
                     sourceLabel: _tableLabel.isEmpty ? '—' : _tableLabel,
@@ -1572,8 +1700,10 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     order: _createdOrder,
                     serviceLabel: _tableLabel,
                     total: _total,
-                    onDone: () => Navigator.pop(context),
-                    onNewOrder: _startAnotherOrder,
+                    printingReceipt: _printingReceipt,
+                    onPrintReceipt: _createdOrder == null
+                        ? null
+                        : () => unawaited(_printCreatedReceipt()),
                   ),
                 ],
               ),
@@ -1602,7 +1732,8 @@ class _WizardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final app = AppScope.of(context);
+    final text = app.strings;
     final isBn = text.isBn;
     final stepLabels = isBn
         ? const [
@@ -1904,6 +2035,7 @@ class _ReviewStep extends StatelessWidget {
   const _ReviewStep({
     required this.menuItems,
     required this.cart,
+    required this.totalQty,
     required this.total,
     required this.noteCtrl,
     required this.sourceLabel,
@@ -1914,6 +2046,7 @@ class _ReviewStep extends StatelessWidget {
 
   final List<MenuItem> menuItems;
   final Map<String, int> cart;
+  final int totalQty;
   final double total;
   final TextEditingController noteCtrl;
   final String sourceLabel;
@@ -1923,13 +2056,60 @@ class _ReviewStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final app = AppScope.of(context);
+    final text = app.strings;
     return Column(
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
+              TfCard(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: PosColors.primarySoft,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long_rounded,
+                        color: PosColors.primaryDark,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TfText(
+                            text.isBn ? 'অর্ডার রিভিউ' : 'Review order',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: PosColors.slate,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          TfText(
+                            text.isBn
+                                ? '${tfFormatNumber(context, totalQty)} আইটেম · ${tfFormatCurrency(context, total)}'
+                                : '${tfFormatNumber(context, totalQty)} items · ${tfFormatCurrency(context, total)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: PosColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               TfCard(
                 padded: false,
                 child: Column(
@@ -1970,7 +2150,7 @@ class _ReviewStep extends StatelessWidget {
                         child: Row(
                           children: [
                             SizedBox(
-                              width: 26,
+                              width: 36,
                               child: TfText(
                                 '${tfFormatNumber(context, entry.value)}×',
                                 style: TextStyle(
@@ -1983,7 +2163,7 @@ class _ReviewStep extends StatelessWidget {
                             ),
                             Expanded(
                               child: TfText(
-                                item.name,
+                                item.localizedName(app.language),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: PosColors.slate,
@@ -1992,7 +2172,8 @@ class _ReviewStep extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            TfText(                              tfFormatCurrency(
+                            TfText(
+                              tfFormatCurrency(
                                 context,
                                 item.price * entry.value,
                               ),
@@ -2079,31 +2260,41 @@ class _ReviewStep extends StatelessWidget {
           ),
         ),
         TfStickyCTA(
-          child: Row(
-            children: [
-              Expanded(
-                child: TfText(
-                  '${text.totalLabel}: ${tfFormatCurrency(context, total)}',
-                  style: const TextStyle(
-                    color: PosColors.slate,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final totalText =
+                  '${text.totalLabel}: ${tfFormatCurrency(context, total)}';
+              final action = TfButton(
+                label: creating ? '...' : text.sendToKitchen,
+                icon: creating ? null : TfNavIcon.check,
+                size: TfButtonSize.lg,
+                onPressed: creating ? null : () => onCreate(),
+              );
+              final totalLabel = TfText(
+                totalText,
+                style: const TextStyle(
+                  color: PosColors.slate,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: TfButton(
-                  label: creating ? '...' : text.sendToKitchen,
-                  icon: creating ? null : TfNavIcon.check,
-                  size: TfButtonSize.lg,
-                  onPressed: creating ? null : () => onCreate(),
-                ),
-              ),
-            ],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              );
+              if (constraints.maxWidth < 360) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [totalLabel, const SizedBox(height: 8), action],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: totalLabel),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 2, child: action),
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -2121,7 +2312,8 @@ class _AmountLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        TfText(          label,
+        TfText(
+          label,
           style: TextStyle(
             fontSize: 12.5,
             color: PosColors.muted,
@@ -2129,7 +2321,8 @@ class _AmountLine extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        TfText(          value,
+        TfText(
+          value,
           style: TextStyle(
             fontSize: 12.5,
             color: PosColors.slate,
@@ -2146,15 +2339,15 @@ class _OrderCreatedStep extends StatelessWidget {
     required this.order,
     required this.serviceLabel,
     required this.total,
-    required this.onDone,
-    required this.onNewOrder,
+    required this.printingReceipt,
+    required this.onPrintReceipt,
   });
 
   final OrderModel? order;
   final String serviceLabel;
   final double total;
-  final VoidCallback onDone;
-  final VoidCallback onNewOrder;
+  final bool printingReceipt;
+  final VoidCallback? onPrintReceipt;
 
   @override
   Widget build(BuildContext context) {
@@ -2248,6 +2441,18 @@ class _OrderCreatedStep extends StatelessWidget {
                         _AmountLine(label: text.orderLabel, value: orderNo),
                         const SizedBox(height: 8),
                         _AmountLine(label: text.sourceLabel, value: source),
+                        if (order != null && order!.subtotal > 0 && order!.vatAmount > 0) ...[
+                          const SizedBox(height: 8),
+                          _AmountLine(
+                            label: text.subtotalLabel,
+                            value: tfFormatCurrency(context, order!.subtotal),
+                          ),
+                          const SizedBox(height: 8),
+                          _AmountLine(
+                            label: text.vatLabelWithPercent(order!.vatRatePercent),
+                            value: tfFormatCurrency(context, order!.vatAmount),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         _AmountLine(
                           label: text.totalLabel,
@@ -2264,26 +2469,12 @@ class _OrderCreatedStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: TfButton(
-                  label: text.takeAnotherOrder,
-                  icon: TfNavIcon.plus,
-                  variant: TfButtonVariant.dark,
-                  size: TfButtonSize.lg,
-                  onPressed: onNewOrder,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
           TfButton(
-            label: text.backToOrders,
-            icon: Icons.list_alt_outlined,
-            variant: TfButtonVariant.ghost,
-            size: TfButtonSize.md,
-            onPressed: onDone,
+            label: printingReceipt ? '...' : text.printReceiptAction,
+            icon: printingReceipt ? null : Icons.print_outlined,
+            variant: TfButtonVariant.dark,
+            size: TfButtonSize.lg,
+            onPressed: printingReceipt ? null : onPrintReceipt,
           ),
         ],
       ),
@@ -2348,7 +2539,8 @@ class _TableTile extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                TfText(                  tfFormatNumber(context, number),
+                TfText(
+                  tfFormatNumber(context, number),
                   style: TextStyle(
                     fontFamily: tfFontFamily(context),
                     fontSize: 20,
@@ -2506,7 +2698,8 @@ class _MenuGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return Center(
-        child: TfText(          AppScope.of(context).strings.noItemsInCategory,
+        child: TfText(
+          AppScope.of(context).strings.noItemsInCategory,
           style: TextStyle(color: PosColors.muted),
         ),
       );
@@ -2546,6 +2739,7 @@ class _MenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppScope.of(context);
     final inCart = qty > 0;
     final hasImage = (item.imageUrl ?? '').isNotEmpty;
     final extras = item.extras;
@@ -2614,7 +2808,8 @@ class _MenuTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    TfText(                      item.name,
+                    TfText(
+                      item.localizedName(app.language),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -2627,7 +2822,8 @@ class _MenuTile extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: TfText(                            tfFormatCurrency(context, item.price),
+                          child: TfText(
+                            tfFormatCurrency(context, item.price),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -2692,7 +2888,8 @@ class _MenuTile extends StatelessWidget {
                         color: PosColors.primary,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: TfText(                        tfFormatNumber(context, qty),
+                      child: TfText(
+                        tfFormatNumber(context, qty),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontWeight: FontWeight.w500,
@@ -2730,6 +2927,7 @@ class _PlainMenuTileContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppScope.of(context);
     final fg = inCart ? Colors.white : PosColors.slate;
     final muted = inCart
         ? Colors.white.withValues(alpha: 0.78)
@@ -2785,7 +2983,8 @@ class _PlainMenuTileContent extends StatelessWidget {
                     color: PosColors.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: TfText(                    tfFormatNumber(context, qty),
+                  child: TfText(
+                    tfFormatNumber(context, qty),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontWeight: FontWeight.w500,
@@ -2798,7 +2997,8 @@ class _PlainMenuTileContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 7),
-          TfText(            item.name,
+          TfText(
+            item.localizedName(app.language),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -2812,7 +3012,8 @@ class _PlainMenuTileContent extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: TfText(                  tfFormatCurrency(context, item.price),
+                child: TfText(
+                  tfFormatCurrency(context, item.price),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -2950,7 +3151,8 @@ class _CartFooter extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    TfText(                      tfFormatCurrency(context, total),
+                    TfText(
+                      tfFormatCurrency(context, total),
                       style: TextStyle(
                         fontFamily: tfFontFamily(context),
                         fontWeight: FontWeight.w500,

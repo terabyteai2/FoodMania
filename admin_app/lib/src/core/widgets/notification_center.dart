@@ -14,11 +14,11 @@ import 'tf_design_system.dart';
 /// anchored to the top of the screen (similar to a phone's notification
 /// shade) so it never covers the main interaction cards below. Tapping
 /// outside the panel — or any item — dismisses it. `onNavigateToOrders` is
-/// invoked when the user taps a notification whose actionTarget is
-/// `pending_orders` / `orders`.
+/// invoked when the user taps a notification with a related app target.
 void showNotificationCenter(
   BuildContext context, {
   required VoidCallback onNavigateToOrders,
+  ValueChanged<PosNotificationTarget>? onNavigateToTarget,
 }) {
   final app = AppScope.of(context);
   final text = app.strings;
@@ -37,7 +37,10 @@ void showNotificationCenter(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
             child: Material(
               type: MaterialType.transparency,
-              child: _NotificationShade(onNavigateToOrders: onNavigateToOrders),
+              child: _NotificationShade(
+                onNavigateToOrders: onNavigateToOrders,
+                onNavigateToTarget: onNavigateToTarget,
+              ),
             ),
           ),
         ),
@@ -96,9 +99,13 @@ _NotifCategory _categoryOf(PosNotification n) {
 }
 
 class _NotificationShade extends StatefulWidget {
-  const _NotificationShade({required this.onNavigateToOrders});
+  const _NotificationShade({
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
 
   final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   State<_NotificationShade> createState() => _NotificationShadeState();
@@ -185,6 +192,7 @@ class _NotificationShadeState extends State<_NotificationShade> {
                     app: app,
                     text: text,
                     onNavigateToOrders: widget.onNavigateToOrders,
+                    onNavigateToTarget: widget.onNavigateToTarget,
                   ),
                 ),
             ],
@@ -381,27 +389,22 @@ class _InboxList extends StatelessWidget {
     required this.app,
     required this.text,
     required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
   });
 
   final List<PosNotification> items;
   final PosAppController app;
   final AppStrings text;
   final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
-    // Split into pending-order group (collapsed) and the rest.
-    final pendingUnread = items
-        .where((n) => n.type == PosNotificationType.pendingOrder && !n.isRead)
-        .toList();
-    final pendingIds = pendingUnread.map((n) => n.id).toSet();
-    final remaining = items.where((n) => !pendingIds.contains(n.id)).toList();
-
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day);
     final today = <PosNotification>[];
     final earlier = <PosNotification>[];
-    for (final n in remaining) {
+    for (final n in items) {
       if (n.createdAt.isAfter(startOfToday)) {
         today.add(n);
       } else {
@@ -410,48 +413,15 @@ class _InboxList extends StatelessWidget {
     }
 
     final blocks = <Widget>[];
-    if (pendingUnread.length > 1) {
+    if (today.isNotEmpty) {
       blocks.add(_SectionLabel(text.notifSectionToday));
-      blocks.add(
-        _PendingOrdersGroupTile(
-          count: pendingUnread.length,
-          latestTime: pendingUnread.first.createdAt,
-          onTap: () {
-            for (final n in pendingUnread) {
-              app.markNotificationRead(n.id);
-            }
-            Navigator.of(context).pop();
-            onNavigateToOrders();
-          },
-          title: text.pendingOrdersGroupTitle(pendingUnread.length),
-          body: text.pendingOrdersGroupBody,
-          viewLabel: text.viewAction,
-        ),
-      );
-      if (today.isNotEmpty) {
-        blocks.add(const SizedBox(height: 6));
-        for (final n in today) {
-          blocks.add(_buildBanner(context, n));
-        }
-      }
-    } else {
-      // No collapse needed — fold single pending order back into today.
-      final mergedToday = [...pendingUnread, ...today]
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      if (mergedToday.isNotEmpty) {
-        blocks.add(_SectionLabel(text.notifSectionToday));
-        for (final n in mergedToday) {
-          blocks.add(_buildBanner(context, n));
-        }
-      }
+      blocks.addAll(_buildGroupedBlocks(context, today));
     }
 
     if (earlier.isNotEmpty) {
       if (blocks.isNotEmpty) blocks.add(const SizedBox(height: 6));
       blocks.add(_SectionLabel(text.notifSectionEarlier));
-      for (final n in earlier) {
-        blocks.add(_buildBanner(context, n));
-      }
+      blocks.addAll(_buildGroupedBlocks(context, earlier));
     }
 
     return ListView(
@@ -474,14 +444,121 @@ class _InboxList extends StatelessWidget {
         onTap: () {
           app.markNotificationRead(item.id);
           Navigator.of(context).pop();
-          if (item.actionTarget == 'pending_orders' ||
-              item.actionTarget == 'orders') {
-            onNavigateToOrders();
-          }
+          _navigate(item.target);
         },
       ),
     );
   }
+
+  List<Widget> _buildGroupedBlocks(
+    BuildContext context,
+    List<PosNotification> source,
+  ) {
+    final groupedIds = <String>{};
+    final entries = <_NotificationListEntry>[];
+    for (final type in PosNotificationType.values) {
+      final group = source
+          .where((n) => !n.isRead && n.type == type)
+          .toList(growable: false);
+      if (group.length <= 1) continue;
+      groupedIds.addAll(group.map((n) => n.id));
+      group.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      entries.add(_NotificationListEntry.group(group));
+    }
+    for (final item in source.where((n) => !groupedIds.contains(n.id))) {
+      entries.add(_NotificationListEntry.single(item));
+    }
+    entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return [
+      for (final entry in entries)
+        if (entry.group == null)
+          _buildBanner(context, entry.single!)
+        else
+          _buildGroupTile(context, entry.group!),
+    ];
+  }
+
+  Widget _buildGroupTile(BuildContext context, List<PosNotification> group) {
+    final first = group.first;
+    final target = first.target;
+    return _PendingOrdersGroupTile(
+      count: group.length,
+      latestTime: first.createdAt,
+      onTap: () {
+        for (final n in group) {
+          app.markNotificationRead(n.id);
+        }
+        Navigator.of(context).pop();
+        _navigate(target);
+      },
+      title: _groupTitle(first.type, group.length),
+      body: _groupBody(first.type),
+      viewLabel: text.viewAction,
+    );
+  }
+
+  String _groupTitle(PosNotificationType type, int count) {
+    final n = text.isBn ? tfToBnNumbers('$count') : '$count';
+    switch (type) {
+      case PosNotificationType.pendingOrder:
+        return text.isBn ? '$n টি পেন্ডিং অর্ডার' : '$n pending orders';
+      case PosNotificationType.acceptedOrder:
+        return text.isBn
+            ? '$n টি অর্ডার অ্যাকসেপ্ট হয়েছে'
+            : '$n orders accepted';
+      case PosNotificationType.printSuccess:
+        return text.isBn ? '$n টি টিকেট প্রিন্ট হয়েছে' : '$n tickets printed';
+      case PosNotificationType.printFailed:
+        return text.isBn ? '$n টি প্রিন্টার অ্যালার্ট' : '$n printer alerts';
+      case PosNotificationType.system:
+        return text.isBn
+            ? '$n টি সিস্টেম নোটিফিকেশন'
+            : '$n system notifications';
+    }
+  }
+
+  String _groupBody(PosNotificationType type) {
+    switch (type) {
+      case PosNotificationType.pendingOrder:
+        return text.pendingOrdersGroupBody;
+      case PosNotificationType.acceptedOrder:
+        return text.isBn
+            ? 'অর্ডার তালিকা খুলতে ট্যাপ করুন।'
+            : 'Tap to open the orders list.';
+      case PosNotificationType.printFailed:
+        return text.isBn
+            ? 'প্রিন্টার সেটিংস খুলতে ট্যাপ করুন।'
+            : 'Tap to open printer settings.';
+      case PosNotificationType.printSuccess:
+        return text.isBn
+            ? 'প্রিন্টেড অর্ডার দেখতে ট্যাপ করুন।'
+            : 'Tap to view printed orders.';
+      case PosNotificationType.system:
+        return text.isBn
+            ? 'বিস্তারিত দেখতে ট্যাপ করুন।'
+            : 'Tap to view details.';
+    }
+  }
+
+  void _navigate(PosNotificationTarget target) {
+    if (target == PosNotificationTarget.orders) {
+      onNavigateToOrders();
+      return;
+    }
+    if (target != PosNotificationTarget.none) {
+      onNavigateToTarget?.call(target);
+    }
+  }
+}
+
+class _NotificationListEntry {
+  const _NotificationListEntry.single(this.single) : group = null;
+  const _NotificationListEntry.group(this.group) : single = null;
+
+  final PosNotification? single;
+  final List<PosNotification>? group;
+
+  DateTime get createdAt => single?.createdAt ?? group!.first.createdAt;
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -843,13 +920,9 @@ void showTopNotificationToast(
                 close();
               }
             },
-            onVerticalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              if (velocity < -40) close();
-            },
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              if (velocity.abs() > 40) close();
+            onPanEnd: (details) {
+              final velocity = details.velocity.pixelsPerSecond;
+              if (velocity.dy < -40 || velocity.dx.abs() > 40) close();
             },
             child: _TopToastCard(
               title: title,
@@ -1012,17 +1085,22 @@ class _ToastButton extends StatelessWidget {
 
 /// Drop-in bell button for any page header.
 class HeaderNotificationBell extends StatelessWidget {
-  const HeaderNotificationBell({required this.onNavigateToOrders, super.key});
+  const HeaderNotificationBell({
+    required this.onNavigateToOrders,
+    this.onNavigateToTarget,
+    super.key,
+  });
 
   final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final unread = app.unreadNotificationCount;
     return SizedBox(
-      height: 38,
-      width: 38,
+      height: 44,
+      width: 44,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
@@ -1035,6 +1113,7 @@ class HeaderNotificationBell extends StatelessWidget {
               onTap: () => showNotificationCenter(
                 context,
                 onNavigateToOrders: onNavigateToOrders,
+                onNavigateToTarget: onNavigateToTarget,
               ),
               child: Container(
                 decoration: BoxDecoration(
@@ -1046,26 +1125,28 @@ class HeaderNotificationBell extends StatelessWidget {
                       ? Icons.notifications_active_rounded
                       : Icons.notifications_none_rounded,
                   color: unread > 0 ? PosColors.primary : PosColors.slate,
-                  size: 18,
+                  size: 25,
                 ),
               ),
             ),
           ),
           if (unread > 0)
             Positioned(
-              right: -3,
-              top: -3,
+              right: -2,
+              top: -2,
               child: Container(
+                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: PosColors.danger,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: PosColors.surface, width: 1),
                 ),
                 child: Text(
                   unread > 9 ? '9+' : '$unread',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

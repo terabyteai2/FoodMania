@@ -10,15 +10,21 @@ import '../../core/widgets/tf_design_system.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
+import '../../models/pos_notification.dart';
 import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 import 'daily_report_screen.dart';
 import 'stock_in_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
-  const InventoryScreen({this.onNavigateToOrders, super.key});
+  const InventoryScreen({
+    this.onNavigateToOrders,
+    this.onNavigateToTarget,
+    super.key,
+  });
 
   final VoidCallback? onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   State<InventoryScreen> createState() => _InventoryScreenState();
@@ -56,7 +62,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(
-                child: _Header(text: text, summary: summary),
+                child: _Header(
+                  text: text,
+                  summary: summary,
+                  onNavigateToOrders: widget.onNavigateToOrders ?? () {},
+                  onNavigateToTarget: widget.onNavigateToTarget,
+                ),
               ),
               SliverToBoxAdapter(
                 child: _InventorySummaryBand(text: text, summary: summary),
@@ -99,10 +110,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
 // ── Header ────────────────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
-  const _Header({required this.text, required this.summary});
+  const _Header({
+    required this.text,
+    required this.summary,
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
 
   final AppStrings text;
   final InventorySummary? summary;
+  final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +168,10 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 6),
           const HeaderLanguageButton(),
           const SizedBox(width: 6),
-          HeaderNotificationBell(onNavigateToOrders: () {}),
+          HeaderNotificationBell(
+            onNavigateToOrders: onNavigateToOrders,
+            onNavigateToTarget: onNavigateToTarget,
+          ),
         ],
       ),
     );
@@ -301,7 +322,8 @@ class _StockValueCard extends StatelessWidget {
               padding: EdgeInsets.zero,
             ),
             const SizedBox(height: 6),
-            TfText(              tfFormatCurrency(context, stockValue),
+            TfText(
+              tfFormatCurrency(context, stockValue),
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w500,
@@ -379,7 +401,8 @@ class _LowStockAlertCard extends StatelessWidget {
                     color: PosColors.danger,
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: TfText(                    tfFormatNumber(context, alerts.length),
+                  child: TfText(
+                    tfFormatNumber(context, alerts.length),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -407,7 +430,8 @@ class _LowStockAlertCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: TfText(                        isBn && item.nameBn.trim().isNotEmpty
+                      child: TfText(
+                        isBn && item.nameBn.trim().isNotEmpty
                             ? item.nameBn
                             : (item.nameEn.trim().isNotEmpty
                                   ? item.nameEn
@@ -421,7 +445,8 @@ class _LowStockAlertCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    TfText(                      '${_formatQty(context, item.onHand)} ${InventoryUnits.displayLabel(item.unit, isBn: isBn)}',
+                    TfText(
+                      '${_formatQty(context, item.onHand)} ${InventoryUnits.displayLabel(item.unit, isBn: isBn)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -440,7 +465,8 @@ class _LowStockAlertCard extends StatelessWidget {
                             : PosColors.warning.withValues(alpha: 0.20),
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: TfText(                        item.varianceStatus == 'out'
+                      child: TfText(
+                        item.varianceStatus == 'out'
                             ? text.statusOut
                             : text.statusLow,
                         style: TextStyle(
@@ -458,7 +484,8 @@ class _LowStockAlertCard extends StatelessWidget {
             if (alerts.length > 4)
               Padding(
                 padding: const EdgeInsets.only(top: 2, left: 14),
-                child: TfText(                  isBn
+                child: TfText(
+                  isBn
                       ? '+ আরও ${tfFormatNumber(context, alerts.length - 4)} টি আইটেম'
                       : '+ ${tfFormatNumber(context, alerts.length - 4)} more',
                   style: TextStyle(
@@ -658,7 +685,8 @@ class _CategoryChips extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        TfText(                          label,
+                        TfText(
+                          label,
                           style: TextStyle(
                             color: isSelected ? Colors.white : PosColors.slate,
                             fontWeight: FontWeight.w500,
@@ -666,7 +694,8 @@ class _CategoryChips extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        TfText(                          tfFormatNumber(context, bucket.count),
+                        TfText(
+                          tfFormatNumber(context, bucket.count),
                           style: TextStyle(
                             color: isSelected
                                 ? Colors.white.withValues(alpha: 0.7)
@@ -796,7 +825,8 @@ class _InventoryRow extends StatelessWidget {
                           border: Border.all(color: PosColors.line),
                         ),
                         alignment: Alignment.center,
-                        child: TfText(                          primaryName.isEmpty
+                        child: TfText(
+                          primaryName.isEmpty
                               ? '?'
                               : primaryName.characters.first.toUpperCase(),
                           style: TextStyle(
@@ -814,7 +844,8 @@ class _InventoryRow extends StatelessWidget {
                             Row(
                               children: [
                                 Flexible(
-                                  child: TfText(                                    primaryName,
+                                  child: TfText(
+                                    primaryName,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -842,14 +873,16 @@ class _InventoryRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      TfText(                        _formatQty(context, item.onHand),
+                      TfText(
+                        _formatQty(context, item.onHand),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: PosColors.slate,
                         ),
                       ),
-                      TfText(                        unit,
+                      TfText(
+                        unit,
                         style: TextStyle(
                           fontSize: 11,
                           color: PosColors.muted,
@@ -865,7 +898,8 @@ class _InventoryRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TfText(                        '+${_formatQty(context, item.todayIn)} $unit',
+                      TfText(
+                        '+${_formatQty(context, item.todayIn)} $unit',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: item.todayIn > 0
@@ -874,7 +908,8 @@ class _InventoryRow extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      TfText(                        '−${_formatQty(context, item.todayOut)} $unit',
+                      TfText(
+                        '−${_formatQty(context, item.todayOut)} $unit',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: item.todayOut > 0
@@ -943,7 +978,8 @@ class _LowOutBadge extends StatelessWidget {
         color: fg.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: TfText(        isOut ? text.statusOut : text.statusLow,
+      child: TfText(
+        isOut ? text.statusOut : text.statusLow,
         style: TextStyle(
           color: fg,
           fontWeight: FontWeight.w500,
@@ -1085,7 +1121,8 @@ class _SheetShell extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: TfText(                      title,
+                    child: TfText(
+                      title,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w500,
@@ -1347,7 +1384,8 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TfText(            text.countAllItems,
+          TfText(
+            text.countAllItems,
             style: TextStyle(fontSize: 13, color: PosColors.muted),
           ),
           const SizedBox(height: 14),
@@ -1370,7 +1408,8 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: TfText(                        text.aiScanCount,
+                      child: TfText(
+                        text.aiScanCount,
                         style: const TextStyle(
                           color: PosColors.primaryDark,
                           fontSize: 14,
@@ -1391,7 +1430,8 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                TfText(                  text.aiScanCountHint,
+                TfText(
+                  text.aiScanCountHint,
                   style: TextStyle(
                     color: PosColors.primaryDark.withValues(alpha: 0.70),
                     fontSize: 12,
@@ -1400,7 +1440,8 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
                 ),
                 if (_scanError != null) ...[
                   const SizedBox(height: 8),
-                  TfText(                    _scanProvider == null
+                  TfText(
+                    _scanProvider == null
                         ? _scanError!
                         : '${_scanError!} · $_scanProvider',
                     style: TextStyle(

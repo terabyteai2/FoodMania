@@ -165,6 +165,53 @@ IconData menuIconKeyToIcon(String? key) {
   return menuIconStyleFor(key).icon;
 }
 
+String inferMenuIconKey({required String name, String? category}) {
+  final text = '${name.toLowerCase()} ${(category ?? '').toLowerCase()}';
+  bool has(Iterable<String> words) => words.any(text.contains);
+
+  if (has(['pizza'])) return 'pizza';
+  if (has(['burger', 'sandwich'])) return 'burger';
+  if (has([
+    'biryani',
+    'biriyani',
+    'kacchi',
+    'tehari',
+    'polao',
+    'পোলাও',
+    'বিরিয়ানি',
+  ])) {
+    return 'biryani';
+  }
+  if (has(['rice', 'fried rice', 'ভাত'])) return 'rice';
+  if (has(['curry', 'masala', 'korma', 'bhuna', 'ভুনা', 'কারি'])) {
+    return 'curry';
+  }
+  if (has(['soup'])) return 'soup';
+  if (has(['salad', 'veg', 'vegetable', 'সবজি'])) return 'vegetable';
+  if (has(['noodle', 'chowmein', 'chow mein'])) return 'noodle';
+  if (has(['bread', 'naan', 'paratha', 'রুটি', 'পরোটা'])) return 'bread';
+  if (has(['chicken', 'চিকেন', 'মুরগি'])) return 'chicken';
+  if (has(['fish', 'prawn', 'shrimp', 'rui', 'ilish', 'মাছ'])) return 'fish';
+  if (has(['beef', 'mutton', 'kebab', 'kabab', 'গরু', 'খাসি'])) return 'beef';
+  if (has(['snack', 'samosa', 'roll', 'fries', 'singara', 'সমুচা'])) {
+    return 'snack';
+  }
+  if (has(['fruit', 'juice'])) return 'fruit';
+  if (has(['dessert', 'sweet', 'cake', 'firni', 'ice cream', 'মিষ্টি'])) {
+    return 'dessert';
+  }
+  if (has(['drink', 'soda', 'lassi', 'borhani', 'beverage', 'পানীয়'])) {
+    return 'drink';
+  }
+  if (has(['coffee'])) return 'coffee';
+  if (has(['tea', 'cha', 'চা'])) return 'tea';
+  if (has(['breakfast', 'omelet', 'omelette'])) return 'breakfast';
+  if (has(['set meal', 'set_menu', 'combo', 'platter', 'থালি'])) {
+    return 'set_meal';
+  }
+  return 'general';
+}
+
 class _BrokenImage extends StatelessWidget {
   const _BrokenImage({this.iconKey});
   final String? iconKey;

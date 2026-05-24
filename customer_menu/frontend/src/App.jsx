@@ -127,6 +127,77 @@ const T = {
   body:    '"Hind Siliguri", system-ui, -apple-system, sans-serif',
 }
 
+const MENU_ICON_STYLES = {
+  pizza:    { glyph: '🍕', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
+  burger:   { glyph: '☰', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  biryani:  { glyph: '◉', color: '#e28714', bg: 'rgba(226,135,20,.20)' },
+  rice:     { glyph: '◌', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
+  curry:    { glyph: '◒', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
+  soup:     { glyph: '∪', color: '#e65a3c', bg: 'rgba(230,90,60,.16)' },
+  vegetable:{ glyph: '✦', color: '#3d7a5a', bg: 'rgba(61,122,90,.20)' },
+  noodle:   { glyph: '≈', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  bread:    { glyph: '▱', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  chicken:  { glyph: '◔', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
+  fish:     { glyph: '◇', color: '#2f7ea8', bg: 'rgba(47,126,168,.18)' },
+  beef:     { glyph: '◆', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  snack:    { glyph: '✚', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  fruit:    { glyph: '●', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  dessert:  { glyph: '✸', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  drink:    { glyph: '▯', color: '#2e9b79', bg: 'rgba(46,155,121,.18)' },
+  coffee:   { glyph: '☕', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  tea:      { glyph: '◡', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
+  breakfast:{ glyph: '◐', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  set_meal: { glyph: '▦', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
+  general:  { glyph: '✦', color: T.amber, bg: 'rgba(255,181,71,.14)' },
+}
+
+function inferIconKey(item) {
+  const explicit = String(item?.iconKey || '').trim().toLowerCase()
+  if (explicit) return explicit
+  const text = `${item?.name || ''} ${item?.category || ''}`.toLowerCase()
+  const has = words => words.some(w => text.includes(w))
+  if (has(['pizza'])) return 'pizza'
+  if (has(['burger', 'sandwich'])) return 'burger'
+  if (has(['biryani', 'biriyani', 'kacchi', 'tehari', 'polao', 'পোলাও', 'বিরিয়ানি'])) return 'biryani'
+  if (has(['rice', 'fried rice', 'ভাত'])) return 'rice'
+  if (has(['curry', 'masala', 'korma', 'bhuna', 'ভুনা', 'কারি'])) return 'curry'
+  if (has(['soup'])) return 'soup'
+  if (has(['salad', 'veg', 'vegetable', 'সবজি'])) return 'vegetable'
+  if (has(['noodle', 'chowmein', 'chow mein'])) return 'noodle'
+  if (has(['bread', 'naan', 'paratha', 'রুটি', 'পরোটা'])) return 'bread'
+  if (has(['chicken', 'চিকেন', 'মুরগি'])) return 'chicken'
+  if (has(['fish', 'prawn', 'shrimp', 'rui', 'ilish', 'মাছ'])) return 'fish'
+  if (has(['beef', 'mutton', 'kebab', 'kabab', 'গরু', 'খাসি'])) return 'beef'
+  if (has(['snack', 'samosa', 'roll', 'fries', 'singara', 'সমুচা'])) return 'snack'
+  if (has(['fruit', 'juice'])) return 'fruit'
+  if (has(['dessert', 'sweet', 'cake', 'firni', 'ice cream', 'মিষ্টি'])) return 'dessert'
+  if (has(['drink', 'soda', 'lassi', 'borhani', 'beverage', 'পানীয়'])) return 'drink'
+  if (has(['coffee'])) return 'coffee'
+  if (has(['tea', 'cha', 'চা'])) return 'tea'
+  if (has(['breakfast', 'omelet', 'omelette'])) return 'breakfast'
+  if (has(['set meal', 'set_menu', 'combo', 'platter', 'থালি'])) return 'set_meal'
+  return 'general'
+}
+
+function iconStyleFor(item) {
+  return MENU_ICON_STYLES[inferIconKey(item)] || MENU_ICON_STYLES.general
+}
+
+function MenuFallbackIcon({ item, size = 32 }) {
+  const style = iconStyleFor(item)
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+      background: style.bg,
+    }}>
+      <span style={{
+        color: style.color, fontSize: size, fontFamily: T.display,
+        lineHeight: 1, fontWeight: 800, opacity: .95,
+      }}>{style.glyph}</span>
+    </div>
+  )
+}
+
 // ── Demo data ─────────────────────────────────────────────────────────────────
 const DEMO_INFO = {
   restaurantName: 'Helium',
@@ -137,14 +208,14 @@ const DEMO_INFO = {
 }
 
 const DEMO_ITEMS = [
-  { id: 'kacchi',   name: 'Mutton Kacchi Biryani', category: 'Biryani',  price: 450, description: 'Slow-cooked basmati with marinated mutton, potato, saffron and ghee.', tag: "Chef's pick", imageUrl: null },
-  { id: 'chickenb', name: 'Chicken Biryani',        category: 'Biryani',  price: 320, description: 'Aromatic basmati layered with spiced chicken thigh.',                  tag: null,          imageUrl: null },
-  { id: 'beeft',    name: 'Beef Tehari',             category: 'Mains',   price: 280, description: 'Short-grain rice cooked with tender beef cubes and green chillies.',   tag: null,          imageUrl: null },
-  { id: 'pizza',    name: 'Margherita Pizza',        category: 'Mains',   price: 1299,description: 'Wood-fired crust, San Marzano tomato, fior di latte, basil.',          tag: 'Popular',     imageUrl: null },
-  { id: 'samosa',   name: 'Keema Samosa',            category: 'Snacks',  price: 60,  description: 'Crisp pastry with spiced minced beef. Served with tamarind chutney.',  tag: null,          imageUrl: null },
-  { id: 'firni',    name: 'Saffron Firni',           category: 'Desserts',price: 120, description: 'Slow-cooked rice pudding with cardamom, saffron and pistachio.',       tag: null,          imageUrl: null },
-  { id: 'borhani',  name: 'Borhani',                 category: 'Drinks',  price: 80,  description: 'Spiced yogurt drink with mint and roasted cumin.',                     tag: null,          imageUrl: null },
-  { id: 'kebab',    name: 'Sheekh Kebab',            category: 'Mains',   price: 240, description: 'Charcoal-grilled minced beef skewers with cumin and onion.',           tag: null,          imageUrl: null },
+  { id: 'kacchi',   name: 'Mutton Kacchi Biryani', category: 'Biryani',  price: 450, description: 'Slow-cooked basmati with marinated mutton, potato, saffron and ghee.', tag: "Chef's pick", imageUrl: null, iconKey: 'biryani' },
+  { id: 'chickenb', name: 'Chicken Biryani',        category: 'Biryani',  price: 320, description: 'Aromatic basmati layered with spiced chicken thigh.',                  tag: null,          imageUrl: null, iconKey: 'biryani' },
+  { id: 'beeft',    name: 'Beef Tehari',             category: 'Mains',   price: 280, description: 'Short-grain rice cooked with tender beef cubes and green chillies.',   tag: null,          imageUrl: null, iconKey: 'beef' },
+  { id: 'pizza',    name: 'Margherita Pizza',        category: 'Mains',   price: 1299,description: 'Wood-fired crust, San Marzano tomato, fior di latte, basil.',          tag: 'Popular',     imageUrl: null, iconKey: 'pizza' },
+  { id: 'samosa',   name: 'Keema Samosa',            category: 'Snacks',  price: 60,  description: 'Crisp pastry with spiced minced beef. Served with tamarind chutney.',  tag: null,          imageUrl: null, iconKey: 'snack' },
+  { id: 'firni',    name: 'Saffron Firni',           category: 'Desserts',price: 120, description: 'Slow-cooked rice pudding with cardamom, saffron and pistachio.',       tag: null,          imageUrl: null, iconKey: 'dessert' },
+  { id: 'borhani',  name: 'Borhani',                 category: 'Drinks',  price: 80,  description: 'Spiced yogurt drink with mint and roasted cumin.',                     tag: null,          imageUrl: null, iconKey: 'drink' },
+  { id: 'kebab',    name: 'Sheekh Kebab',            category: 'Mains',   price: 240, description: 'Charcoal-grilled minced beef skewers with cumin and onion.',           tag: null,          imageUrl: null, iconKey: 'beef' },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -716,12 +787,7 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
         } : {}),
         flexShrink: 0,
       }}>
-        {!hasImage && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-            fontSize: 28, opacity: .3,
-          }}>🍽️</div>
-        )}
+        {!hasImage && <MenuFallbackIcon item={item} size={32} />}
         {item.tag && (
           <span style={{
             position: 'absolute', top: 7, left: 7,
@@ -860,9 +926,7 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
             display: 'grid', placeItems: 'center',
             WebkitTapHighlightColor: 'transparent',
           }}>✕</button>
-          {!current && (
-            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 40 }}>🍽️</div>
-          )}
+          {!current && <MenuFallbackIcon item={item} size={54} />}
         </div>
 
         {/* Scrolling body */}
@@ -972,14 +1036,16 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
             display: 'flex', gap: 12, alignItems: 'flex-start',
             animationDelay: `${i * 0.05}s`,
           }}>
-            {item.imageUrl && (
-              <div style={{
-                width: 56, height: 56, borderRadius: 10, flexShrink: 0,
-                backgroundColor: T.bgCard,
+            <div style={{
+              width: 56, height: 56, borderRadius: 10, flexShrink: 0,
+              backgroundColor: T.bgCard, position: 'relative', overflow: 'hidden',
+              ...(item.imageUrl ? {
                 backgroundImage: `url(${item.imageUrl})`,
                 backgroundSize: 'cover', backgroundPosition: 'center',
-              }} />
-            )}
+              } : {}),
+            }}>
+              {!item.imageUrl && <MenuFallbackIcon item={item} size={24} />}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontFamily: T.display, fontSize: 16, textTransform: 'uppercase',

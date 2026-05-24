@@ -27,6 +27,20 @@ async def test_order_create_pull_and_status_preserve_metadata():
         headers = {"Authorization": f"Bearer {data['deviceToken']}"}
         outlet_id = data["outletId"]
 
+        menu_item_id = f"menu-{uuid.uuid4()}"
+        menu = await client.post(
+            f"/outlets/{outlet_id}/menu",
+            headers=headers,
+            json={
+                "id": menu_item_id,
+                "name": "Rice",
+                "nameEn": "Rice",
+                "nameBn": "ভাত",
+                "price": 500,
+                "category": "Main",
+            },
+        )
+
         created = await client.post(
             f"/outlets/{outlet_id}/orders",
             headers=headers,
@@ -42,7 +56,23 @@ async def test_order_create_pull_and_status_preserve_metadata():
                 "serviceType": "dine_in",
                 "covers": 3,
                 "paymentMethod": "bkash",
-                "items": [{"name": "Rice", "qty": 1, "lineTotal": 500}],
+                "items": [
+                    {
+                        "menuItemId": menu_item_id,
+                        "name": "Legacy Rice",
+                        "qty": 1,
+                        "price": 500,
+                        "lineTotal": 500,
+                    },
+                    {
+                        "name": "Tea",
+                        "nameEn": "Tea",
+                        "nameBn": "চা",
+                        "qty": 1,
+                        "price": 0,
+                        "lineTotal": 0,
+                    },
+                ],
             },
         )
         pulled = await client.get(f"/outlets/{outlet_id}/orders", headers=headers)
@@ -53,6 +83,7 @@ async def test_order_create_pull_and_status_preserve_metadata():
         )
 
     assert bootstrap.status_code == 200
+    assert menu.status_code == 200
     assert created.status_code == 200
     created_order = created.json()["data"]
     assert created_order["subtotal"] == 500
@@ -61,11 +92,17 @@ async def test_order_create_pull_and_status_preserve_metadata():
     assert created_order["serviceType"] == "dine_in"
     assert created_order["covers"] == 3
     assert created_order["paymentMethod"] == "bkash"
+    assert created_order["items"][0]["name"] == "Rice"
+    assert created_order["items"][0]["nameEn"] == "Rice"
+    assert created_order["items"][0]["nameBn"] == "ভাত"
+    assert created_order["items"][1]["nameEn"] == "Tea"
+    assert created_order["items"][1]["nameBn"] == "চা"
 
     assert pulled.status_code == 200
     pulled_order = next(o for o in pulled.json()["data"] if o["id"] == order_id)
     assert pulled_order["paymentMethod"] == "bkash"
     assert pulled_order["vatAmount"] == 25
+    assert pulled_order["items"][0]["nameBn"] == "ভাত"
 
     assert served.status_code == 200
     served_order = served.json()["data"]

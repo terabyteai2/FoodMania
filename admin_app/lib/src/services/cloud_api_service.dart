@@ -272,6 +272,25 @@ class MenuScanPageUpload {
   final String mimeType;
 }
 
+class MenuScanSubItem {
+  const MenuScanSubItem({required this.nameEn, this.nameBn = ''});
+
+  final String nameEn;
+  final String nameBn;
+}
+
+class MenuScanAddOn {
+  const MenuScanAddOn({
+    required this.nameEn,
+    this.nameBn = '',
+    required this.price,
+  });
+
+  final String nameEn;
+  final String nameBn;
+  final double price;
+}
+
 class MenuScanCandidate {
   const MenuScanCandidate({
     required this.nameEn,
@@ -283,6 +302,9 @@ class MenuScanCandidate {
     required this.price,
     required this.isAvailable,
     this.iconKey = 'general',
+    this.imageUrl,
+    this.subItems = const [],
+    this.addOns = const [],
   });
 
   final String nameEn;
@@ -294,6 +316,9 @@ class MenuScanCandidate {
   final double price;
   final bool isAvailable;
   final String iconKey;
+  final String? imageUrl;
+  final List<MenuScanSubItem> subItems;
+  final List<MenuScanAddOn> addOns;
 
   static MenuScanCandidate? fromJson(Object? value) {
     if (value is! Map) return null;
@@ -336,7 +361,47 @@ class MenuScanCandidate {
           ? json['isAvailable'] as bool
           : true,
       iconKey: rawIcon.isEmpty ? 'general' : rawIcon,
+      imageUrl: _text(json['imageUrl']),
+      subItems: _parseSubItems(json['subItems']),
+      addOns: _parseAddOns(json['addOns']),
     );
+  }
+
+  static List<MenuScanSubItem> _parseSubItems(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <MenuScanSubItem>[];
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final m = Map<String, Object?>.from(entry);
+      final nameEn = _text(m['nameEn']) ?? '';
+      if (nameEn.isEmpty) continue;
+      out.add(MenuScanSubItem(nameEn: nameEn, nameBn: _text(m['nameBn']) ?? ''));
+    }
+    return out;
+  }
+
+  static List<MenuScanAddOn> _parseAddOns(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <MenuScanAddOn>[];
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final m = Map<String, Object?>.from(entry);
+      final nameEn = _text(m['nameEn']) ?? '';
+      if (nameEn.isEmpty) continue;
+      final rawPrice = m['price'];
+      final price = rawPrice is num
+          ? rawPrice.toDouble()
+          : double.tryParse(rawPrice?.toString() ?? '') ?? 0;
+      if (price < 0) continue;
+      out.add(
+        MenuScanAddOn(
+          nameEn: nameEn,
+          nameBn: _text(m['nameBn']) ?? '',
+          price: price,
+        ),
+      );
+    }
+    return out;
   }
 
   static String? _text(Object? value) {
@@ -822,6 +887,24 @@ class CloudApiService {
         ? Map<String, Object?>.from(response['data'] as Map)
         : response;
     return data;
+  }
+
+  Future<Map<String, Object?>> wipeCurrentOutlet({
+    required String confirmation,
+  }) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/admin/outlets/${config.outletId}/wipe');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'POST',
+      uri,
+      body: {'confirmation': confirmation.trim()},
+    );
+    return response['data'] is Map
+        ? Map<String, Object?>.from(response['data'] as Map)
+        : response;
   }
 
   Future<Map<String, Object?>> createAdminAccount({

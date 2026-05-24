@@ -70,6 +70,10 @@ class AppStrings {
   String get connect => isBn ? 'কানেক্ট' : 'Connect';
   String get reconnect => isBn ? 'রীকানেক্ট' : 'Reconnect';
   String get disconnect => isBn ? 'ডিসকানেক্ট' : 'Disconnect';
+  String get ok => isBn ? 'ঠিক আছে' : 'OK';
+  String get somethingWentWrong =>
+      isBn ? 'কিছু ভুল হয়েছে' : 'Something went wrong';
+  String get search => isBn ? 'খুঁজুন' : 'Search';
 
   String get secureTenant => isBn ? 'সুরক্ষিত টেন্যান্ট' : 'Secure tenant';
   String get tokenVerified => isBn ? 'টোকেন ভেরিফাইড' : 'Token verified';
@@ -162,6 +166,11 @@ class AppStrings {
       : 'Changes queue safely when the cloud is temporarily unavailable.';
   String get settingsSaved => isBn ? 'সেটিংস সেভ হয়েছে' : 'Settings saved';
   String get saveFailed => isBn ? 'সেভ ব্যর্থ হয়েছে' : 'Save failed';
+  String get searchSettingsHint => isBn ? 'সেটিংস খুঁজুন' : 'Search settings';
+  String get noSettingsFound =>
+      isBn ? 'কোনো সেটিংস পাওয়া যায়নি' : 'No settings found';
+  String get tryDifferentSearch =>
+      isBn ? 'অন্য সার্চ চেষ্টা করুন।' : 'Try a different search.';
 
   String get receiptPrinter => isBn ? 'রিসিট প্রিন্টার' : 'Receipt Printer';
   String get receiptPrinterSubtitle => isBn
@@ -222,6 +231,26 @@ class AppStrings {
   String get clearCacheSubtitle => isBn
       ? 'এই ডিভাইসের cached menu, orders ও sync queue ক্লিয়ার করুন।'
       : 'Clear cached menu, orders, and sync queue from this device.';
+  String get importOrderHistory =>
+      isBn ? 'অর্ডার হিস্টরি ইমপোর্ট' : 'Import order history';
+  String get importOrderHistorySubtitle => isBn
+      ? 'পুরনো POS থেকে CSV এক্সপোর্ট আপলোড করুন।'
+      : 'Upload a CSV export from an older POS.';
+  String get importOrderHistoryCsv => isBn ? 'CSV' : 'CSV';
+  String get importOrderHistoryLoading => isBn ? 'ইমপোর্ট হচ্ছে' : 'Importing';
+  String orderHistoryImportSuccess(int imported, int skipped, String detail) {
+    final skippedText = skipped > 0
+        ? (isBn ? ', ${_n(skipped)} স্কিপ হয়েছে।' : ', $skipped skipped.')
+        : (isBn ? '।' : '.');
+    final detailText = detail.trim().isEmpty ? '' : ' ${detail.trim()}';
+    return isBn
+        ? '${_n(imported)}টি পুরনো অর্ডার ইমপোর্ট হয়েছে$skippedText$detailText'
+        : '$imported historical orders imported$skippedText$detailText';
+  }
+
+  String orderHistoryImportFailed(Object error) => isBn
+      ? 'অর্ডার হিস্টরি ইমপোর্ট ব্যর্থ হয়েছে: $error'
+      : 'Order history import failed: $error';
   String get yourRestaurantInfo =>
       isBn ? 'আপনার রেস্টুরেন্ট তথ্য' : 'Your Restaurant Info';
   String get yourRestaurantInfoSubtitle => isBn
@@ -240,6 +269,30 @@ class AppStrings {
   String get storeGroup => isBn ? 'স্টোর · Store' : 'Store · স্টোর';
   String get deviceGroup => isBn ? 'ডিভাইস · Device' : 'Device · ডিভাইস';
   String get adminGroup => isBn ? 'অ্যাডমিন · Admin' : 'Admin · অ্যাডমিন';
+  String get dangerZoneGroup =>
+      isBn ? 'ডেঞ্জার জোন · Danger' : 'Danger Zone · ডেঞ্জার';
+  String get wipeRestaurantData =>
+      isBn ? 'রেস্টুরেন্ট ডাটা মুছুন' : 'Wipe restaurant data';
+  String get wipeRestaurantDataSubtitle => isBn
+      ? 'ক্লাউড DB, মিডিয়া এবং এই ডিভাইসের ক্যাশ মুছে ফেলুন।'
+      : 'Delete cloud DB data, media, and this device cache.';
+  String get wipeRestaurantDialogTitle =>
+      isBn ? 'সব রেস্টুরেন্ট ডাটা মুছবেন?' : 'Wipe all restaurant data?';
+  String wipeRestaurantDialogMessage(String outletId) => isBn
+      ? 'এই কাজটি ফিরিয়ে আনা যাবে না। মেনু, অর্ডার, ইনভেন্টরি, স্টাফ, মিডিয়া এবং ক্লাউড রেকর্ড মুছে যাবে। নিশ্চিত করতে আউটলেট ID লিখুন: ${_digits(outletId)}'
+      : 'This cannot be undone. Menu, orders, inventory, staff, media, and cloud records will be deleted. Type the outlet ID to confirm: $outletId';
+  String get typeOutletIdToConfirm =>
+      isBn ? 'নিশ্চিত করতে আউটলেট ID লিখুন' : 'Type outlet ID to confirm';
+  String get wipeRestaurantConfirm => isBn ? 'সব ডাটা মুছুন' : 'Wipe all data';
+  String get wipeRestaurantSuccess => isBn
+      ? 'রেস্টুরেন্ট ডাটা মুছে ফেলা হয়েছে।'
+      : 'Restaurant data has been wiped.';
+  String wipeRestaurantFailed(Object error) => isBn
+      ? 'রেস্টুরেন্ট ডাটা মুছতে পারেনি: $error'
+      : 'Could not wipe restaurant data: $error';
+  String get wipeRequiresCloud => isBn
+      ? 'ক্লাউড কানেকশন ছাড়া রেস্টুরেন্ট ডাটা মুছা যাবে না।'
+      : 'Cloud connection is required to wipe restaurant data.';
 
   // Orders
   String get newOrder => isBn ? 'নতুন অর্ডার' : 'New order';
@@ -273,6 +326,17 @@ class AppStrings {
       : 'Customer Menu Link: Not ready';
   String get clearFiltersShortcut =>
       isBn ? 'ফিল্টার পরিষ্কার করুন' : 'Clear filters';
+  String get orderSearchHint =>
+      isBn ? 'অর্ডার, আইটেম বা টেবিল খুঁজুন' : 'Search order, item, or table';
+  String get clearSearch => isBn ? 'সার্চ পরিষ্কার করুন' : 'Clear search';
+  String get noOrderSearchResultsTitle =>
+      isBn ? 'কোনো অর্ডার মেলেনি' : 'No matching orders';
+  String noOrderSearchResultsMessage(String query) => isBn
+      ? '"${_digits(query)}" দিয়ে কোনো অর্ডার পাওয়া যায়নি।'
+      : 'No orders found for "$query".';
+  String couldNotCreateOrder(Object error) => isBn
+      ? 'অর্ডার তৈরি করা যায়নি: $error'
+      : 'Could not create order: $error';
   String viewOtherOrdersInstead(String label) => isBn
       ? '$label অর্ডার দেখুন'
       : 'View ${label.toLowerCase()} orders instead';
@@ -320,6 +384,7 @@ class AppStrings {
   String get acceptAndSendToKitchen => isBn ? 'অ্যাকসেপ্ট' : 'Accept';
   String get reprintAction => isBn ? 'রিপ্রিন্ট' : 'Reprint';
   String get printBillAction => isBn ? 'বিল প্রিন্ট' : 'Print bill';
+  String get printReceiptAction => isBn ? 'রিসিট প্রিন্ট' : 'Print receipt';
   String get servedAction => isBn ? 'পরিবেশিত' : 'Served';
   String get orderStatusPending => isBn ? 'পেন্ডিং' : 'Pending';
   String get orderStatusInKitchen => isBn ? 'রান্নাঘরে' : 'In kitchen';
@@ -545,6 +610,11 @@ class AppStrings {
   String get printTicket => isBn ? 'টিকেট প্রিন্ট করুন' : 'Print ticket';
   String get ticketSentToPrinter =>
       isBn ? 'টিকেট প্রিন্টারে পাঠানো হয়েছে' : 'Ticket sent to printer';
+  String get testNotificationTitle =>
+      isBn ? 'টেস্ট নোটিফিকেশন' : 'Test notification';
+  String get testNotificationBody => isBn
+      ? 'এই শব্দ শুনতে পেলে alert ঠিকভাবে কাজ করছে।'
+      : 'If you can hear this, alerts are wired up correctly.';
   String get orderNote => isBn
       ? 'অর্ডার নোট (যেমন: পেঁয়াজ ছাড়া, বেশি ঝাল)'
       : 'Order note (e.g. no onion, extra spicy)';
@@ -567,6 +637,19 @@ class AppStrings {
   String get totalLabel => isBn ? 'মোট' : 'Total';
   String get subtotalLabel => isBn ? 'সাবটোটাল' : 'Subtotal';
   String get vatLabel => isBn ? 'ভ্যাট' : 'VAT';
+  String vatLabelWithPercent(double percent) {
+    if (percent <= 0) return vatLabel;
+    final isWhole = percent == percent.roundToDouble();
+    if (isWhole) {
+      return isBn
+          ? '$vatLabel (${_n(percent.toInt())}%)'
+          : '$vatLabel (${percent.toInt()}%)';
+    }
+    final formatted = percent.toStringAsFixed(1);
+    return isBn
+        ? '$vatLabel (${_bnDigits(formatted)}%)'
+        : '$vatLabel ($formatted%)';
+  }
   String get paymentLabel => isBn ? 'পেমেন্ট' : 'Payment';
   String get orderCreatedTitle => isBn ? 'অর্ডার তৈরি হয়েছে' : 'Order created';
   String get sentToKitchenTitle => orderCreatedTitle;
@@ -674,8 +757,10 @@ class AppStrings {
       ? 'অন্য সার্চ বা ক্যাটাগরি চেষ্টা করুন।'
       : 'Try another search or category.';
   String get menuNewButton => isBn ? 'আইটেম যোগ' : 'Add Item';
+  String get menuAddActionShort => isBn ? 'আইটেম' : 'Item';
   String get menuScan => isBn ? 'AI স্ক্যান' : 'AI scan';
   String get menuScanning => isBn ? 'স্ক্যান হচ্ছে...' : 'Scanning...';
+  String get menuScanningShort => isBn ? 'স্ক্যান...' : 'Scanning...';
   String get menuScanPickPages => isBn
       ? 'এক বা একাধিক মেনু পেজ বেছে নিন।'
       : 'Choose one or more menu pages.';
@@ -709,6 +794,18 @@ class AppStrings {
 
   String get addMenuItem => isBn ? 'মেনু আইটেম যোগ করুন' : 'Add Menu Item';
   String get editMenuItem => isBn ? 'মেনু আইটেম সম্পাদনা' : 'Edit Menu Item';
+  String get menuItemAdded =>
+      isBn ? 'মেনু আইটেম যোগ হয়েছে' : 'Menu item added';
+  String get menuItemUpdated =>
+      isBn ? 'মেনু আইটেম আপডেট হয়েছে' : 'Menu item updated';
+  String get cropMenuPhoto => isBn ? 'মেনু ছবি ক্রপ করুন' : 'Crop menu photo';
+  String get usePhoto => isBn ? 'ব্যবহার করুন' : 'Use';
+  String get menuPhotoReadFailed => isBn
+      ? 'ছবিটি পড়া যায়নি। অন্য ছবি বেছে নিন।'
+      : 'Could not read the selected image.';
+  String get menuPhotoTooLarge => isBn
+      ? 'ছবিটি বড়। অন্য ছবি বেছে নিন বা আবার ক্রপ করুন।'
+      : 'Photo is too large. Choose another photo or crop again.';
   String get menuItemName => isBn ? 'আইটেমের নাম' : 'Item name';
   String get menuItemNameRequired =>
       isBn ? 'আইটেমের নাম প্রয়োজন' : 'Item name is required';
@@ -730,12 +827,17 @@ class AppStrings {
   String get menuSaveItem => isBn ? 'আইটেম সেভ করুন' : 'Save Item';
   String get menuDeleteTitle =>
       isBn ? 'মেনু আইটেম মুছবেন?' : 'Delete menu item?';
+  String menuDeleteDescription(String itemName) => isBn
+      ? '$itemName মেনু থেকে সরানো হবে এবং ভবিষ্যৎ API response-এ থাকবে না।'
+      : '$itemName will be removed from the admin app and future API responses.';
   String get deleteAction => isBn ? 'মুছুন' : 'Delete';
   String get menuDeleted =>
       isBn ? 'মেনু আইটেম মুছে ফেলা হয়েছে' : 'Menu item deleted';
   String get menuChooseGallery =>
       isBn ? 'গ্যালারি থেকে বেছে নিন' : 'Choose from gallery';
   String get menuClearImage => isBn ? 'ছবি সরান' : 'Clear image';
+  String get menuAvailable => isBn ? 'উপলব্ধ' : 'Available';
+  String get menuPaused => isBn ? 'বিরতি' : 'Paused';
   String get menuDiscountTitle =>
       isBn ? 'ডিসকাউন্ট (ঐচ্ছিক)' : 'Discount (optional)';
   String get menuDiscountNone => isBn ? 'কোনো ছাড় নেই' : 'No discount';
@@ -929,6 +1031,37 @@ class AppStrings {
       isBn ? 'প্রত্যাশিত vs গণনাকৃত' : 'expected vs counted';
   String get reorderSuggestion => isBn ? 'অর্ডার সাজেশন' : 'Reorder suggestion';
   String get share => isBn ? 'শেয়ার' : 'Share';
+
+  // Reports + sync
+  String get reportsSubtitle => isBn
+      ? 'বিক্রি, অর্ডার এবং PDF এক্সপোর্ট।'
+      : 'Sales, orders, and PDF export.';
+  String get exportPdf => isBn ? 'PDF এক্সপোর্ট' : 'Export PDF';
+  String get pdfExportFailed =>
+      isBn ? 'PDF এক্সপোর্ট ব্যর্থ হয়েছে' : 'PDF export failed';
+  String get noOrdersInThisPeriod =>
+      isBn ? 'এই সময়ে কোনো অর্ডার নেই' : 'No orders in this period';
+  String get ordersAppearInReports => isBn
+      ? 'কাস্টমার বা স্টাফ অর্ডার তৈরি করলে এখানে দেখাবে।'
+      : 'Orders will appear here after customers or staff create them.';
+  String get oneDay => isBn ? '১ দিন' : '1 Day';
+  String get sevenDays => isBn ? '৭ দিন' : '7 Days';
+  String get thirtyDays => isBn ? '৩০ দিন' : '30 Days';
+  String get totalSales => isBn ? 'মোট বিক্রি' : 'Total sales';
+  String get avgOrder => isBn ? 'গড় অর্ডার' : 'Avg order';
+  String get itemsSold => isBn ? 'বিক্রি আইটেম' : 'Items sold';
+  String get completed => isBn ? 'সম্পন্ন' : 'Completed';
+  String get dailyBreakdown => isBn ? 'দৈনিক বিশ্লেষণ' : 'Daily breakdown';
+  String get topSellingItems =>
+      isBn ? 'শীর্ষ বিক্রি আইটেম' : 'Top selling items';
+  String get syncStatusTitle => isBn ? 'সিঙ্ক অবস্থা' : 'Sync Status';
+  String get syncStatusSubtitle => isBn
+      ? 'ক্লাউড queue, failed events, retry এবং health check।'
+      : 'Cloud queue, failed events, retries, and health checks.';
+  String get noSyncEvents => isBn ? 'কোনো সিঙ্ক ইভেন্ট নেই' : 'No sync events';
+  String get queuedChangesWillAppear => isBn
+      ? 'ক্লাউডে পাঠানোর আগে queued changes এখানে দেখাবে।'
+      : 'Queued changes will appear here before cloud delivery.';
 
   // Generic loading + offline banners
   String get liveMetricsOffline =>

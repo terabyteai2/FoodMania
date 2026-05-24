@@ -1,5 +1,6 @@
 """Public customer-facing endpoints — no device token required."""
 
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -41,8 +42,27 @@ def _rewrite_upload_url(request: Request, url: str | None) -> str | None:
     return f"{base}{url[idx:]}"
 
 
+def _icon_key_from_tags(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        tags = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(tags, list):
+        return None
+    for tag in tags:
+        if not isinstance(tag, str):
+            continue
+        value = tag.strip()
+        if value.lower().startswith("icon:"):
+            key = value.split(":", 1)[1].strip().lower()
+            return key or None
+    return None
+
+
 def _item_to_dict(item: MenuItem, request: Request) -> dict:
-    return {
+    data = {
         "id": item.id,
         "name": item.name,
         "nameEn": item.name_en or item.name,
@@ -58,6 +78,10 @@ def _item_to_dict(item: MenuItem, request: Request) -> dict:
         "imageUrl": _rewrite_upload_url(request, item.image_url),
         "videoUrl": _rewrite_upload_url(request, item.video_url),
     }
+    icon_key = _icon_key_from_tags(item.tags_json)
+    if icon_key:
+        data["iconKey"] = icon_key
+    return data
 
 
 async def _get_outlet(outlet_ref: str, db: AsyncSession) -> Outlet:

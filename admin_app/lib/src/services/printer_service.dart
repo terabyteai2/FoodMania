@@ -15,6 +15,7 @@ import '../core/localization/app_strings.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
 import '../models/order_source.dart';
+import '../models/order_status.dart';
 import 'ticket_bitmap.dart';
 
 class BluetoothPrinterDevice {
@@ -88,27 +89,54 @@ class PrinterRuntimeState {
 }
 
 /// Localised receipt labels — switches between English and Bangla.
-/// Menu item names on the ticket are never translated; they print as stored.
 class _ReceiptLabels {
-  _ReceiptLabels(AppLanguage lang) : _bn = lang == AppLanguage.bn;
+  _ReceiptLabels(this.language) : _bn = language == AppLanguage.bn;
 
+  final AppLanguage language;
   final bool _bn;
 
-  String get managerCopy => _bn ? 'ম্যানেজার কপি' : 'MANAGER COPY';
-  String get customerCopy => _bn ? 'কাস্টমার কপি' : 'CUSTOMER COPY';
-  String orderNo(String seq) => _bn ? 'অর্ডার $seq' : 'No $seq';
-  String tableLabel(String t) => _bn ? 'টেবিল $t' : 'Table $t';
+  String get managerCopy => _bn ? 'ম্যানেজার কপি' : 'Manager Copy';
+  String get customerCopy => _bn ? 'কাস্টমার কপি' : 'Customer Copy';
+  String orderNo(String seq) => digits(seq);
+  String tableLabel(String t) => _bn ? 'টেবিল ${digits(t)}' : 'Table $t';
   String get takeaway => _bn ? 'টেকওয়ে' : 'Takeaway';
   String get nameLabel => _bn ? 'নাম' : 'Name';
   String get noteLabel => _bn ? 'নোট' : 'Note';
-  String get total => _bn ? 'মোট' : 'TOTAL';
-  String get thankYou => _bn ? 'ধন্যবাদ' : 'Thank you';
-  String get statusLabel => _bn ? 'স্ট্যাটাস' : 'Status';
-  String get accepted => _bn ? 'গৃহীত' : 'Accepted';
+  String get total => _bn ? 'মোট' : 'Total';
+  String get vatIncluded => _bn ? 'ভ্যাটসহ' : 'VAT included';
+  String get totalVatIncluded =>
+      _bn ? '$total ($vatIncluded)' : '$total ($vatIncluded)';
   String get emptyItemName => _bn ? 'আইটেম' : 'Item';
   String get defaultRestaurantName => _bn ? 'রেস্টুরেন্ট' : 'Restaurant';
 
-  String currencySymbol() => _bn ? '৳' : 'Tk ';
+  String get _locale => _bn ? 'bn_BD' : 'en_US';
+  String qtyText(int qty) => '${digits('$qty')}x';
+  String itemName(OrderItem item) {
+    final value = item.localizedName(language);
+    return value.trim().isEmpty ? emptyItemName : value.trim();
+  }
+
+  String money(num amount) {
+    final rounded = amount.roundToDouble();
+    final value = (amount - rounded).abs() < 0.005
+        ? rounded.toInt().toString()
+        : NumberFormat.decimalPatternDigits(
+            locale: _locale,
+            decimalDigits: 2,
+          ).format(amount);
+    return digits('$value/-');
+  }
+
+  String digits(String value) {
+    if (!_bn) return value;
+    const en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const bn = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    var output = value;
+    for (var i = 0; i < en.length; i++) {
+      output = output.replaceAll(en[i], bn[i]);
+    }
+    return output;
+  }
 
   String sourceLabel(OrderSource source) {
     switch (source) {
@@ -123,7 +151,9 @@ class _ReceiptLabels {
 
   String formatDate(DateTime dt) {
     if (!_bn) {
-      return DateFormat('dd MMM yy h:mm a').format(dt.toLocal());
+      return DateFormat(
+        'dd MMM yyyy - h.mm a',
+      ).format(dt.toLocal()).replaceAll('AM', 'am').replaceAll('PM', 'pm');
     }
     const months = [
       'জানু',
@@ -144,8 +174,10 @@ class _ReceiptLabels {
     final minute = local.minute.toString().padLeft(2, '0');
     final period = hour >= 12 ? 'অপরাহ্ন' : 'সকাল';
     final h12 = hour % 12 == 0 ? 12 : hour % 12;
-    return '${local.day} ${months[local.month - 1]} ${local.year % 100} '
-        '$h12:$minute $period';
+    return digits(
+      '${local.day} ${months[local.month - 1]} ${local.year} - '
+      '$h12.$minute $period',
+    );
   }
 }
 
@@ -304,33 +336,58 @@ class PrinterService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
       final now = DateTime.now();
-      final bytes = <int>[
-        ...generator.reset(),
-        ...generator.text(
-          _ticketText(restaurantName, fallback: 'HYBRID POS'),
-          styles: PosStyles(
-            align: PosAlign.center,
-            bold: true,
-            height: PosTextSize.size2,
-            width: PosTextSize.size2,
+      final testOrder = OrderModel(
+        id: 'printer-diagnostic',
+        orderNo: 'PRINTER-DIAGNOSTIC',
+        sequenceNo: 101,
+        status: OrderStatus.accepted,
+        source: OrderSource.manual,
+        subtotal: 325,
+        vatRatePercent: 0,
+        vatAmount: 0,
+        total: 325,
+        createdAt: now,
+        updatedAt: now,
+        items: [
+          OrderItem(
+            id: 'printer-diagnostic-line-1',
+            orderId: 'printer-diagnostic',
+            menuItemId: 'diagnostic-tea',
+            name: 'Diagnostic Tea',
+            nameEn: 'Diagnostic Tea',
+            qty: 1,
+            price: 125,
+            lineTotal: 125,
           ),
-        ),
-        ...generator.text(
-          _ticketText(outletName, fallback: 'Receipt Printer Test'),
-          styles: PosStyles(align: PosAlign.center, bold: true),
-        ),
-        ...generator.hr(),
-        ...generator.text('Deli ES421 58mm printer test'),
-        ...generator.text(DateFormat('MMM d, yyyy h:mm a').format(now)),
-        ...generator.hr(),
-        ...generator.text(
-          'Printer is ready.',
-          styles: PosStyles(align: PosAlign.center, bold: true),
-        ),
-        ...generator.feed(2),
-        ...generator.cut(),
-      ];
+          OrderItem(
+            id: 'printer-diagnostic-line-2',
+            orderId: 'printer-diagnostic',
+            menuItemId: 'diagnostic-rice',
+            name: 'Diagnostic Rice Bowl',
+            nameEn: 'Diagnostic Rice Bowl',
+            qty: 2,
+            price: 100,
+            lineTotal: 200,
+          ),
+        ],
+      );
+      final bytes = await _buildBitmapCopyBytes(
+        generator,
+        testOrder,
+        labels: _ReceiptLabels(AppLanguage.en),
+        isManagerCopy: true,
+        restaurantName: restaurantName.trim().isEmpty
+            ? 'HYBRID POS'
+            : restaurantName,
+        outletName: outletName,
+      );
       final ok = await PrintBluetoothThermal.writeBytes(bytes);
+      _debugPrintWriteResult(
+        testOrder,
+        copyKind: 'diagnostic',
+        byteCount: bytes.length,
+        ok: ok,
+      );
       if (!ok) throw PrinterException('Test print failed.');
       _emit(_state.copyWith(clearLastError: true));
       return true;
@@ -363,6 +420,12 @@ class PrinterService {
       );
       final okManager = await PrintBluetoothThermal.writeBytes(
         managerCopyBytes,
+      );
+      _debugPrintWriteResult(
+        order,
+        copyKind: 'manager',
+        byteCount: managerCopyBytes.length,
+        ok: okManager,
       );
       if (!okManager) {
         throw PrinterException(
@@ -404,6 +467,12 @@ class PrinterService {
         outletName: outletName,
       );
       final ok = await PrintBluetoothThermal.writeBytes(customerCopyBytes);
+      _debugPrintWriteResult(
+        order,
+        copyKind: 'customer',
+        byteCount: customerCopyBytes.length,
+        ok: ok,
+      );
       if (!ok) {
         throw PrinterException(
           'Printing customer invoice of ${order.orderNo} failed.',
@@ -432,45 +501,45 @@ class PrinterService {
     required String restaurantName,
     String outletName = '',
   }) async {
-    final currency = NumberFormat.currency(
-      symbol: labels.currencySymbol(),
-      decimalDigits: 0,
-    );
     final tableRaw = order.tableNo ?? labels.takeaway;
     final dateText = labels.formatDate(order.createdAt);
+    final effectiveTotal = _orderTotalFor(order);
 
     final items = <TicketLineItem>[
       for (var i = 0; i < order.items.length; i++)
         TicketLineItem(
           index: i + 1,
-          // Item names always print as entered on the menu (not translated).
-          name: order.items[i].name.trim().isEmpty
-              ? labels.emptyItemName
-              : order.items[i].name.trim(),
-          qtyText: '${order.items[i].qty}x',
-          lineTotalText: currency.format(order.items[i].lineTotal),
+          name: labels.itemName(order.items[i]),
+          qtyText: labels.qtyText(order.items[i].qty),
+          lineTotalText: labels.money(_lineTotalFor(order.items[i])),
         ),
     ];
 
-    final cleanOutlet = outletName.trim();
     final cleanRestaurant = restaurantName.trim();
+    final resolvedRestaurant = cleanRestaurant.isEmpty
+        ? labels.defaultRestaurantName
+        : cleanRestaurant;
+    _debugPrintTicketData(
+      order,
+      copyKind: isManagerCopy ? 'manager' : 'customer',
+      restaurantName: resolvedRestaurant,
+      sourceRestaurantName: restaurantName,
+      effectiveTotal: effectiveTotal,
+      labels: labels,
+    );
     final data = TicketCopyData(
-      restaurantName: cleanRestaurant.isEmpty
-          ? labels.defaultRestaurantName
-          : cleanRestaurant,
-      outletName: cleanOutlet.isEmpty ? null : cleanOutlet,
-      orderNumberDisplay: order.displaySequence,
+      restaurantName: resolvedRestaurant,
+      outletName: null,
+      orderNumberDisplay: labels.orderNo(order.displaySequence),
       copyLabel: isManagerCopy ? labels.managerCopy : labels.customerCopy,
       dateLine: dateText,
       tableLine: labels.tableLabel(tableRaw),
       sourceLine: labels.sourceLabel(order.source),
       items: items,
-      totalLabel: labels.total,
-      totalAmount: currency.format(order.total),
+      totalLabel: labels.totalVatIncluded,
+      totalAmount: labels.money(effectiveTotal),
+      totalNote: '',
       isManagerCopy: isManagerCopy,
-      footerLine: isManagerCopy
-          ? '${labels.statusLabel}: ${labels.accepted}'
-          : labels.thankYou,
       customerName: order.customerName,
       customerNameLabel: labels.nameLabel,
       note: isManagerCopy ? order.note : null,
@@ -482,16 +551,27 @@ class PrinterService {
     if (decoded == null) {
       throw PrinterException('Could not decode rendered ticket bitmap.');
     }
+    _debugPrintBitmapResult(
+      order,
+      copyKind: isManagerCopy ? 'manager' : 'customer',
+      pngByteCount: pngBytes.length,
+      width: decoded.width,
+      height: decoded.height,
+    );
     // Convert to grayscale before rasterisation so the ESC/POS driver gets
     // clean luminance values instead of antialiased RGBA noise.
     final grayscale = img.grayscale(decoded);
 
-    return <int>[
+    final bytes = <int>[
       ...generator.reset(),
       ...generator.imageRaster(grayscale, align: PosAlign.center),
-      ...generator.feed(2),
-      ...generator.cut(),
     ];
+    _debugPrintRasterResult(
+      order,
+      copyKind: isManagerCopy ? 'manager' : 'customer',
+      byteCount: bytes.length,
+    );
+    return bytes;
   }
 
   Future<void> markOrderPrinted(OrderModel order) async {
@@ -541,67 +621,127 @@ class PrinterService {
     required bool isManagerCopy,
     required String restaurantName,
   }) {
-    final currency = NumberFormat.currency(symbol: 'Tk ', decimalDigits: 0);
     final copyLabel = isManagerCopy ? labels.managerCopy : labels.customerCopy;
-    final tableRaw = order.tableNo ?? labels.takeaway;
     buffer
-      ..writeln(restaurantName)
-      ..writeln(copyLabel)
       ..writeln(
         _twoCol(
           labels.orderNo(order.displaySequence),
-          DateFormat('dd MMM yy h:mm a').format(order.createdAt),
+          _shortText(restaurantName, 18),
         ),
       )
-      ..writeln(
-        _twoCol(
-          labels.tableLabel(_shortText(tableRaw, 13)),
-          order.source.label,
-        ),
-      )
+      ..writeln(copyLabel)
+      ..writeln(labels.formatDate(order.createdAt))
       ..writeln(_separator('-'));
     for (var i = 0; i < order.items.length; i++) {
       final item = order.items[i];
       buffer.writeln(
         _itemLine(
-          '${i + 1}. ${_itemLabel(item)}',
-          '${item.qty}x',
-          currency.format(item.lineTotal),
+          '${labels.digits('${i + 1}')}. ${labels.itemName(item)}',
+          labels.qtyText(item.qty),
+          labels.money(_lineTotalFor(item)),
         ),
       );
     }
     buffer
       ..writeln(_separator('-'))
-      ..writeln(_twoCol(labels.total, currency.format(order.total)));
-    if (isManagerCopy) {
-      buffer.writeln(_twoCol(labels.statusLabel, labels.accepted));
-    } else {
-      buffer.writeln(_center(labels.thankYou));
+      ..writeln(
+        _twoCol(
+          '${labels.totalVatIncluded} -',
+          labels.money(_orderTotalFor(order)),
+        ),
+      );
+  }
+
+  double _lineTotalFor(OrderItem item) {
+    final computed = item.price * item.qty;
+    if (item.lineTotal > 0 || computed <= 0) return item.lineTotal;
+    return computed;
+  }
+
+  double _orderTotalFor(OrderModel order) {
+    final itemTotal = order.items.fold<double>(
+      0,
+      (total, item) => total + _lineTotalFor(item),
+    );
+    if (itemTotal > 0) return itemTotal;
+    if (order.total > 0) return order.total;
+    if (order.subtotal > 0 || order.vatAmount > 0) {
+      return order.subtotal + order.vatAmount;
+    }
+    return 0;
+  }
+
+  void _debugPrintTicketData(
+    OrderModel order, {
+    required String copyKind,
+    required String restaurantName,
+    required String sourceRestaurantName,
+    required double effectiveTotal,
+    required _ReceiptLabels labels,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[QB-PRINTER] build copy=$copyKind orderId=${order.id} '
+      'display=${order.displaySequence} restaurant="${_logText(restaurantName)}" '
+      'sourceRestaurant="${_logText(sourceRestaurantName)}" '
+      'items=${order.items.length} rawTotal=${order.total} '
+      'subtotal=${order.subtotal} vat=${order.vatAmount} '
+      'printedTotal=${labels.money(effectiveTotal)}',
+    );
+    for (var i = 0; i < order.items.length; i++) {
+      final item = order.items[i];
+      final lineTotal = _lineTotalFor(item);
+      debugPrint(
+        '[QB-PRINTER] item[$i] name="${_logText(labels.itemName(item))}" '
+        'qty=${item.qty} price=${item.price} rawLineTotal=${item.lineTotal} '
+        'printedLineTotal=${labels.money(lineTotal)}',
+      );
     }
   }
 
-  String _itemLabel(OrderItem item) {
-    final name = _ticketText(item.name);
-    final unit = _extractUnit(name);
-    final baseName = unit == null
-        ? name
-        : name
-              .replaceFirst(unit, '')
-              .replaceAll(RegExp(r'[-–—,]+'), ' ')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-    final label = unit == null
-        ? name
-        : '${baseName.isEmpty ? 'Item' : baseName} - $unit';
-    return _shortText(label, 18);
+  void _debugPrintBitmapResult(
+    OrderModel order, {
+    required String copyKind,
+    required int pngByteCount,
+    required int width,
+    required int height,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[QB-PRINTER] bitmap copy=$copyKind orderId=${order.id} '
+      'size=${width}x$height pngBytes=$pngByteCount targetPaper=58mm',
+    );
   }
 
-  String? _extractUnit(String name) {
-    final match = RegExp(
-      r'(\d+(?:\.\d+)?\s?(?:g|gm|kg|ml|l|pcs|pc))\b',
-      caseSensitive: false,
-    ).firstMatch(name);
-    return match?.group(1);
+  void _debugPrintRasterResult(
+    OrderModel order, {
+    required String copyKind,
+    required int byteCount,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[QB-PRINTER] raster copy=$copyKind orderId=${order.id} '
+      'escposBytes=$byteCount',
+    );
+  }
+
+  void _debugPrintWriteResult(
+    OrderModel order, {
+    required String copyKind,
+    required int byteCount,
+    required bool ok,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[QB-PRINTER] write copy=$copyKind orderId=${order.id} '
+      'escposBytes=$byteCount ok=$ok',
+    );
+  }
+
+  String _logText(String value) {
+    final clean = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length <= 48) return clean;
+    return '${clean.substring(0, 45)}...';
   }
 
   String _shortText(String value, int maxChars) {
@@ -612,12 +752,6 @@ class PrinterService {
   }
 
   String _separator(String ch) => ch * _ticketWidth;
-
-  String _center(String value) {
-    final clean = _shortText(value, _ticketWidth);
-    final left = ((_ticketWidth - clean.length) / 2).floor();
-    return '${' ' * left}$clean';
-  }
 
   String _twoCol(String left, String right) {
     final cleanRight = _shortText(right, 14);
@@ -630,13 +764,13 @@ class PrinterService {
   String _itemLine(String name, String qty, String total) {
     final cleanTotal = _shortText(total, 8);
     final cleanQty = _shortText(qty, 3);
-    final nameWidth = _ticketWidth - cleanQty.length - cleanTotal.length - 2;
+    final nameWidth = _ticketWidth - cleanQty.length - cleanTotal.length - 7;
     final cleanName = _shortText(name, nameWidth);
-    final used = cleanName.length + cleanQty.length + cleanTotal.length;
+    final used = cleanName.length + cleanQty.length + cleanTotal.length + 7;
     final gap = _ticketWidth - used;
-    final leftGap = gap <= 1 ? 1 : 2;
+    final leftGap = gap >= 2 ? 2 : gap;
     final rightGap = gap - leftGap;
-    return '$cleanName${' ' * leftGap}$cleanQty${' ' * rightGap}$cleanTotal';
+    return '$cleanName${' ' * leftGap}- $cleanQty - ${' ' * rightGap}$cleanTotal';
   }
 
   /// Lightweight check before auto-printing a batch of orders (no print, no busy).

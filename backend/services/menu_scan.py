@@ -8,7 +8,8 @@ import httpx
 from pydantic import ValidationError
 
 from config import settings
-from schemas import MenuScanCandidate
+from schemas import MenuAddOnCandidate, MenuScanCandidate, MenuSubItem
+from services.menu_placeholders import ICON_KEY_VOCAB, normalize_icon_key
 
 
 LLM_TIMEOUT_SECONDS = 90.0
@@ -70,32 +71,6 @@ def _providers() -> list[_Provider]:
     ]
 
 
-ICON_KEY_VOCAB = [
-    "pizza",
-    "burger",
-    "biryani",
-    "rice",
-    "curry",
-    "soup",
-    "salad",
-    "noodle",
-    "bread",
-    "chicken",
-    "fish",
-    "beef",
-    "vegetable",
-    "snack",
-    "fruit",
-    "dessert",
-    "drink",
-    "coffee",
-    "tea",
-    "breakfast",
-    "set_meal",
-    "general",
-]
-
-
 def _menu_scan_schema() -> dict[str, Any]:
     item = {
         "type": "object",
@@ -136,6 +111,39 @@ def _menu_scan_schema() -> dict[str, Any]:
                     "item name and category. Use 'general' if nothing fits."
                 ),
             },
+            "subItems": {
+                "type": "array",
+                "description": (
+                    "Items included in a combo / set / platter (e.g. 'served with rice "
+                    "and salad'). Empty when the item has no included extras."
+                ),
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "nameEn": {"type": "string"},
+                        "nameBn": {"type": "string"},
+                    },
+                    "required": ["nameEn", "nameBn"],
+                },
+            },
+            "addOns": {
+                "type": "array",
+                "description": (
+                    "Optional priced extras (e.g. 'add cheese +50', 'extra naan ৳20'). "
+                    "Each add-on must have a positive numeric price. Empty when none."
+                ),
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "nameEn": {"type": "string"},
+                        "nameBn": {"type": "string"},
+                        "price": {"type": "number"},
+                    },
+                    "required": ["nameEn", "nameBn", "price"],
+                },
+            },
         },
         "required": [
             "nameEn",
@@ -147,6 +155,8 @@ def _menu_scan_schema() -> dict[str, Any]:
             "price",
             "isAvailable",
             "iconKey",
+            "subItems",
+            "addOns",
         ],
     }
     return {
@@ -178,10 +188,20 @@ def _menu_scan_instructions() -> str:
         "write a polished, restaurant-salesy description in both languages, around "
         "40 words per language, based on the visible item name/category/price. "
         "Use isAvailable true. "
-        "Also pick exactly one iconKey from this fixed enum so the admin app can "
-        f"show a default placeholder visual when no photo is uploaded: {vocab}. "
-        "Use 'set_meal' for combo platters with multiple items, 'general' only as "
-        "a last resort."
+        "Also pick exactly one iconKey from this fixed enum so the backend can "
+        f"assign a default placeholder photo when no real image is available: {vocab}. "
+        "Pick the key that best matches the item's main ingredient or category "
+        "(e.g. 'beef' for steaks, 'chicken' for grilled/fried chicken, 'fish' for "
+        "seafood, 'biryani' for rice platters, 'sweets' for desserts, "
+        "'tea_coffee' for hot drinks, 'beverages' for juices/lassi, "
+        "'soft_drink' for sodas, 'water' for bottled water). Use 'general' only "
+        "as a last resort. "
+        "For combo platters that 'come with' or 'are served with' other items, "
+        "fill subItems with each included item ({nameEn, nameBn}); otherwise "
+        "leave subItems empty. "
+        "For optional priced extras printed near the item (e.g. 'add cheese +50', "
+        "'extra naan ৳20'), fill addOns ({nameEn, nameBn, price}); otherwise "
+        "leave addOns empty. Do not duplicate the main item inside subItems or addOns."
     )
 
 
@@ -292,8 +312,7 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
             raw.get("description")
         )
         legacy_category_en, legacy_category_bn = _split_bilingual(raw.get("category"))
-        raw_icon = str(raw.get("iconKey") or "").strip().lower()
-        icon_key = raw_icon if raw_icon in ICON_KEY_VOCAB else "general"
+        icon_key = normalize_icon_key(raw.get("iconKey"))
         normalized = {
             "nameEn": str(raw.get("nameEn") or legacy_name_en).strip(),
             "nameBn": str(raw.get("nameBn") or legacy_name_bn).strip(),
@@ -314,6 +333,8 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
             "price": raw.get("price"),
             "isAvailable": raw.get("isAvailable", True),
             "iconKey": icon_key,
+            "subItems": _normalize_sub_items(raw.get("subItems")),
+            "addOns": _normalize_add_ons(raw.get("addOns")),
         }
         try:
             items.append(MenuScanCandidate.model_validate(normalized))
@@ -332,6 +353,51 @@ def _split_bilingual(value: Any) -> tuple[str, str]:
         return text, ""
     left, right = text.split("/", 1)
     return left.strip(), right.strip()
+
+
+def _normalize_sub_items(raw: Any) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        name_en = str(entry.get("nameEn") or "").strip()
+        if not name_en:
+            continue
+        out.append(
+            {
+                "nameEn": name_en,
+                "nameBn": str(entry.get("nameBn") or "").strip(),
+            }
+        )
+    return out
+
+
+def _normalize_add_ons(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        name_en = str(entry.get("nameEn") or "").strip()
+        if not name_en:
+            continue
+        try:
+            price = float(entry.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if price < 0:
+            continue
+        out.append(
+            {
+                "nameEn": name_en,
+                "nameBn": str(entry.get("nameBn") or "").strip(),
+                "price": price,
+            }
+        )
+    return out
 
 
 async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:

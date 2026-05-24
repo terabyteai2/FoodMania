@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_pos/src/core/localization/app_strings.dart';
+import 'package:local_pos/src/models/order_item.dart';
 import 'package:local_pos/src/models/order_model.dart';
 import 'package:local_pos/src/models/order_payment_method.dart';
 import 'package:local_pos/src/models/order_service_type.dart';
@@ -51,5 +53,37 @@ void main() {
     expect(order.toJson()['serviceType'], 'dine_in');
     expect(order.toJson()['paymentMethod'], 'bkash');
     expect(order.toJson()['vatAmount'], 25);
+  });
+
+  test('order item bilingual names roundtrip and localize', () {
+    final item = OrderItem(
+      id: 'line-1',
+      orderId: 'order-1',
+      menuItemId: 'menu-1',
+      name: 'Chicken Burger',
+      nameEn: 'Chicken Burger',
+      nameBn: 'চিকেন বার্গার',
+      qty: 2,
+      price: 220,
+      lineTotal: 440,
+    );
+
+    final remapped = OrderItem.fromMap(item.toMap());
+    expect(remapped.toJson()['nameEn'], 'Chicken Burger');
+    expect(remapped.toJson()['nameBn'], 'চিকেন বার্গার');
+    expect(remapped.localizedName(AppLanguage.en), 'Chicken Burger');
+    expect(remapped.localizedName(AppLanguage.bn), 'চিকেন বার্গার');
+
+    final legacy = OrderItem.fromMap({
+      'id': 'line-2',
+      'orderId': 'order-1',
+      'menuItemId': 'menu-2',
+      'name': 'Tea / চা',
+      'qty': 1,
+      'price': 20,
+      'lineTotal': 20,
+    });
+    expect(legacy.localizedName(AppLanguage.en), 'Tea');
+    expect(legacy.localizedName(AppLanguage.bn), 'চা');
   });
 }

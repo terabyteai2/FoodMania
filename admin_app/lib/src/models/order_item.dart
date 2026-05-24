@@ -1,3 +1,5 @@
+import '../core/localization/app_strings.dart';
+
 class OrderItem {
   OrderItem({
     required this.id,
@@ -7,12 +9,16 @@ class OrderItem {
     required this.qty,
     required this.price,
     required this.lineTotal,
+    this.nameEn = '',
+    this.nameBn = '',
   });
 
   final String id;
   final String orderId;
   final String menuItemId;
   final String name;
+  final String nameEn;
+  final String nameBn;
   final int qty;
   final double price;
   final double lineTotal;
@@ -23,6 +29,8 @@ class OrderItem {
       'orderId': orderId,
       'menuItemId': menuItemId,
       'name': name,
+      'nameEn': nameEn,
+      'nameBn': nameBn,
       'qty': qty,
       'price': price,
       'lineTotal': lineTotal,
@@ -35,6 +43,8 @@ class OrderItem {
       'orderId': orderId,
       'menuItemId': menuItemId,
       'name': name,
+      'nameEn': nameEn,
+      'nameBn': nameBn,
       'qty': qty,
       'price': price,
       'lineTotal': lineTotal,
@@ -42,15 +52,43 @@ class OrderItem {
   }
 
   factory OrderItem.fromMap(Map<String, Object?> map) {
+    final name = _text(map['name']) ?? '';
+    final legacySplit = _splitLegacy(name);
     return OrderItem(
-      id: map['id'] as String,
-      orderId: map['orderId'] as String,
-      menuItemId: map['menuItemId'] as String,
-      name: map['name'] as String,
-      qty: (map['qty'] as num).toInt(),
-      price: (map['price'] as num).toDouble(),
-      lineTotal: (map['lineTotal'] as num).toDouble(),
+      id: _text(map['id']) ?? '',
+      orderId: _text(map['orderId']) ?? '',
+      menuItemId: _text(map['menuItemId']) ?? '',
+      name: name,
+      nameEn: _text(map['nameEn']) ?? legacySplit.$1,
+      nameBn: _text(map['nameBn']) ?? legacySplit.$2,
+      qty: _num(map['qty'], fallback: 1).toInt(),
+      price: _num(map['price']),
+      lineTotal: _num(map['lineTotal']),
     );
+  }
+
+  String localizedName(AppLanguage language) {
+    final primary = language == AppLanguage.bn ? nameBn : nameEn;
+    if (primary.trim().isNotEmpty) return primary.trim();
+    final secondary = language == AppLanguage.bn ? nameEn : nameBn;
+    if (secondary.trim().isNotEmpty) return secondary.trim();
+    return name.trim();
+  }
+
+  static String? _text(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  static double _num(Object? value, {double fallback = 0}) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? fallback;
+  }
+
+  static (String, String) _splitLegacy(String value) {
+    if (!value.contains('/')) return (value.trim(), '');
+    final parts = value.split('/');
+    return (parts.first.trim(), parts.skip(1).join('/').trim());
   }
 }
 

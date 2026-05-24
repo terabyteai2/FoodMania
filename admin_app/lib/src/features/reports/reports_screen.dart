@@ -31,21 +31,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final text = app.strings;
     final report = app.salesReportForDays(_days);
     return AppScaffold(
-      title: 'Reports',
-      subtitle: 'Sales, orders, and PDF export.',
+      title: text.reports,
+      subtitle: text.reportsSubtitle,
       showDatePill: false,
       centerHeader: true,
       actions: [
         PrimaryButton(
-          label: 'Export PDF',
+          label: text.exportPdf,
           icon: Icons.picture_as_pdf_outlined,
           busy: _exporting,
           onPressed: report.totalOrders == 0 ? null : () => _sharePdf(report),
         ),
         PrimaryButton(
-          label: 'Print',
+          label: text.printBillAction,
           icon: Icons.print_outlined,
           secondary: true,
           busy: _printing,
@@ -61,9 +62,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
           SizedBox(height: 8),
           if (report.totalOrders == 0)
             EmptyState(
-              title: 'No orders in this period',
-              message:
-                  'Orders will appear here after customers or staff create them.',
+              title: text.noOrdersInThisPeriod,
+              message: text.ordersAppearInReports,
               icon: Icons.assessment_outlined,
             )
           else ...[
@@ -91,9 +91,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText('PDF export failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText('${app.strings.pdfExportFailed}: $error')),
+      );
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -109,9 +109,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText('Print failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText('${app.strings.printFailed}: $error')),
+      );
     } finally {
       if (mounted) setState(() => _printing = false);
     }
@@ -126,6 +126,7 @@ class _PeriodSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
     return TfCard(
       padding: EdgeInsets.all(6),
       child: SegmentedButton<int>(
@@ -138,17 +139,17 @@ class _PeriodSelector extends StatelessWidget {
         segments: [
           ButtonSegment(
             value: 1,
-            label: TfText('1 Day'),
+            label: TfText(text.oneDay),
             icon: Icon(Icons.today_outlined, size: 15),
           ),
           ButtonSegment(
             value: 7,
-            label: TfText('7 Days'),
+            label: TfText(text.sevenDays),
             icon: Icon(Icons.date_range_outlined, size: 15),
           ),
           ButtonSegment(
             value: 30,
-            label: TfText('30 Days'),
+            label: TfText(text.thirtyDays),
             icon: Icon(Icons.calendar_month_outlined, size: 15),
           ),
         ],
@@ -167,6 +168,7 @@ class _ReportSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 960
@@ -183,32 +185,32 @@ class _ReportSummary extends StatelessWidget {
           childAspectRatio: constraints.maxWidth >= 620 ? 2.55 : 1.95,
           children: [
             _ReportTile(
-              label: 'Total sales',
+              label: text.totalSales,
               value: currency.format(report.totalSales),
               icon: Icons.payments_outlined,
             ),
             _ReportTile(
-              label: 'Orders',
+              label: text.orders,
               value: report.totalOrders.toString(),
               icon: Icons.receipt_long_outlined,
             ),
             _ReportTile(
-              label: 'Avg order',
+              label: text.avgOrder,
               value: currency.format(report.averageOrderValue),
               icon: Icons.trending_up_outlined,
             ),
             _ReportTile(
-              label: 'Items sold',
+              label: text.itemsSold,
               value: report.totalItemsSold.toString(),
               icon: Icons.local_dining_outlined,
             ),
             _ReportTile(
-              label: 'Open',
+              label: text.openOrders,
               value: report.openOrders.toString(),
               icon: Icons.pending_actions_outlined,
             ),
             _ReportTile(
-              label: 'Completed',
+              label: text.completed,
               value: report.completedOrders.toString(),
               icon: Icons.done_all,
             ),
@@ -293,7 +295,7 @@ class _DailyBreakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ReportCard(
-      title: 'Daily breakdown',
+      title: AppScope.of(context).strings.dailyBreakdown,
       icon: Icons.bar_chart_outlined,
       child: Column(
         children: [
@@ -318,7 +320,7 @@ class _TopItems extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ReportCard(
-      title: 'Top selling items',
+      title: AppScope.of(context).strings.topSellingItems,
       icon: Icons.emoji_events_outlined,
       child: report.topItems.isEmpty
           ? TfText(
