@@ -216,6 +216,7 @@ fi
 
 # Ensure uploads dirs exist
 mkdir -p "${REMOTE_DIR}/backend/uploads/menu_images" \
+         "${REMOTE_DIR}/backend/uploads/menu_placeholders" \
          "${REMOTE_DIR}/backend/uploads/hero_media" \
          "${REMOTE_DIR}/backend/uploads/outlet_images" \
          "${REMOTE_DIR}/backend/uploads/outlet_videos"

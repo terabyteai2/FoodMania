@@ -180,7 +180,8 @@ def _media_urls_for_wipe(outlet: Outlet, menu_items: list[MenuItem]) -> list[str
             urls.append(value)
     for item in menu_items:
         if item.image_url:
-            urls.append(item.image_url)
+            if "/uploads/menu_placeholders/" not in item.image_url:
+                urls.append(item.image_url)
         if item.video_url:
             urls.append(item.video_url)
     return list(dict.fromkeys(urls))

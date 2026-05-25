@@ -708,6 +708,11 @@ class _MenuRow extends StatelessWidget {
     final discounted = extras.discountedPrice(item.price);
     final showDiscount = extras.hasDiscount && discounted < item.price;
     final hasImage = (item.imageUrl ?? '').trim().isNotEmpty;
+    final iconKey = resolveMenuIconKey(
+      iconKey: extras.iconKey,
+      name: item.name,
+      category: item.category,
+    );
     final discountLabel = text.isBn
         ? tfToBnNumbers(extras.discountBadgeLabel())
         : extras.discountBadgeLabel();
@@ -735,7 +740,7 @@ class _MenuRow extends StatelessWidget {
                         children: [
                           MenuImageView(
                             imageUrl: item.imageUrl,
-                            iconKey: extras.iconKey,
+                            iconKey: iconKey,
                           ),
                           if (!hasImage)
                             Align(

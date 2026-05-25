@@ -70,6 +70,11 @@ class _MenuItemCardState extends State<MenuItemCard> {
                             ),
                             child: MenuImageView(
                               imageUrl: widget.item.imageUrl,
+                              iconKey: resolveMenuIconKey(
+                                iconKey: widget.item.extras.iconKey,
+                                name: widget.item.name,
+                                category: widget.item.category,
+                              ),
                             ),
                           ),
                         ),

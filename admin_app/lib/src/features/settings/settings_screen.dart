@@ -156,6 +156,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: '${app.serverConfig.tableCount} tables',
                   onTap: _openTableSettings,
                 ),
+                _SettingActionData(
+                  title: text.inventorySettings,
+                  subtitle: text.inventorySettingsSubtitle,
+                  icon: Icons.inventory_2_outlined,
+                  trailing: app.varianceTrackingEnabled
+                      ? (text.isBn ? 'চালু' : 'On')
+                      : (text.isBn ? 'বন্ধ' : 'Off'),
+                  onTap: _openInventorySettings,
+                ),
               ],
             ),
             _SettingsGroupData(
@@ -367,6 +376,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           initialCount: app.serverConfig.tableCount,
           onSave: (count) => app.updateTableCount(count),
           text: text,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openInventorySettings() async {
+    final text = AppScope.of(context).strings;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _SettingsSectionPage(
+          title: text.inventorySettings,
+          child: _InventorySettingsCard(text: text),
         ),
       ),
     );
@@ -1347,6 +1368,48 @@ class _SectionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _InventorySettingsCard extends StatelessWidget {
+  const _InventorySettingsCard({required this.text});
+
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return _SectionCard(
+      title: text.inventorySettings,
+      subtitle: text.inventorySettingsSubtitle,
+      icon: Icons.inventory_2_outlined,
+      children: [
+        SwitchListTile.adaptive(
+          value: app.varianceTrackingEnabled,
+          contentPadding: EdgeInsets.zero,
+          onChanged: (value) => app.setVarianceTrackingEnabled(value),
+          title: TfText(
+            text.varianceTracking,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: PosColors.slate,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: TfText(
+              text.varianceTrackingHint,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: PosColors.muted,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

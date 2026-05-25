@@ -39,6 +39,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final app = AppScope.of(context);
     final text = app.strings;
     final summary = app.inventorySummary;
+    final varianceOn = app.varianceTrackingEnabled;
 
     if (!_firstLoadKicked) {
       _firstLoadKicked = true;
@@ -65,12 +66,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: _Header(
                   text: text,
                   summary: summary,
+                  varianceOn: varianceOn,
                   onNavigateToOrders: widget.onNavigateToOrders ?? () {},
                   onNavigateToTarget: widget.onNavigateToTarget,
                 ),
               ),
               SliverToBoxAdapter(
-                child: _InventorySummaryBand(text: text, summary: summary),
+                child: _InventorySummaryBand(
+                  text: text,
+                  summary: summary,
+                  varianceOn: varianceOn,
+                ),
               ),
               if (summary != null && summary.categories.isNotEmpty)
                 SliverToBoxAdapter(
@@ -81,7 +87,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         setState(() => _selectedCategory = key),
                   ),
                 ),
-              SliverToBoxAdapter(child: _ColumnHeader(text: text)),
+              SliverToBoxAdapter(
+                child: _ColumnHeader(text: text, varianceOn: varianceOn),
+              ),
               if (summary == null)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -95,6 +103,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   summary: summary,
                   selectedCategory: _selectedCategory,
                   text: text,
+                  varianceOn: varianceOn,
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 110)),
             ],
@@ -113,20 +122,36 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.text,
     required this.summary,
+    required this.varianceOn,
     required this.onNavigateToOrders,
     required this.onNavigateToTarget,
   });
 
   final AppStrings text;
   final InventorySummary? summary;
+  final bool varianceOn;
   final VoidCallback onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
+    final itemCount = summary?.items.length ?? 0;
     final alerts = summary?.alerts ?? 0;
+    final loss = summary?.varianceTodayBdt ?? 0;
+    final hasLoss = varianceOn && loss < 0;
+
+    final parts = <String>[
+      text.isBn
+          ? '${tfFormatNumber(context, itemCount)} টি আইটেম'
+          : '$itemCount items',
+      text.alertsCount(alerts),
+      if (hasLoss)
+        text.isBn
+            ? '${tfFormatCurrency(context, loss.abs(), decimalDigits: 0)} অব্যাখ্যাত'
+            : '${tfFormatCurrency(context, loss.abs(), decimalDigits: 0)} unexplained',
+    ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 14, 6),
+      padding: const EdgeInsets.fromLTRB(18, 8, 14, 6),
       child: Row(
         children: [
           Expanded(
@@ -144,10 +169,10 @@ class _Header extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 TfText(
-                  '${text.isBn ? 'ইনভেন্টরি' : 'Inventory'} · ${text.alertsCount(alerts)}',
+                  parts.join(' · '),
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: PosColors.muted,
+                    color: hasLoss ? PosColors.danger : PosColors.muted,
                     fontWeight: FontWeight.w400,
                   ),
                 ),
@@ -188,9 +213,9 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ListTile(
-              leading: const Icon(Icons.assessment_outlined),
-              title: Text(text.dailyReport),
+            _MoreMenuRow(
+              icon: Icons.assessment_outlined,
+              label: text.dailyReport,
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -199,9 +224,9 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
                 );
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.fact_check_outlined),
-              title: Text(text.endOfDayCount),
+            _MoreMenuRow(
+              icon: Icons.fact_check_outlined,
+              label: text.endOfDayCount,
               onTap: () {
                 Navigator.pop(context);
                 final app = AppScope.of(context);
@@ -216,9 +241,9 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
                 );
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.add_circle_outline),
-              title: Text(text.addInventoryItem),
+            _MoreMenuRow(
+              icon: Icons.add_circle_outline,
+              label: text.addInventoryItem,
               onTap: () async {
                 Navigator.pop(context);
                 final app = AppScope.of(context);
@@ -241,53 +266,195 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
   );
 }
 
-// ── Stock value card ──────────────────────────────────────────────────────────
+class _MoreMenuRow extends StatelessWidget {
+  const _MoreMenuRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
-class _InventorySummaryBand extends StatelessWidget {
-  const _InventorySummaryBand({required this.text, required this.summary});
-
-  final AppStrings text;
-  final InventorySummary? summary;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final hasAlerts =
-        summary?.items.any(
-          (item) =>
-              item.varianceStatus == 'low' || item.varianceStatus == 'out',
-        ) ??
-        false;
-    if (summary == null || hasAlerts) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: PosColors.slate, size: 20),
+            const SizedBox(width: 14),
+            Expanded(
+              child: TfText(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.slate,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: PosColors.muted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Stock value card ──────────────────────────────────────────────────────────
+
+class _InventorySummaryBand extends StatelessWidget {
+  const _InventorySummaryBand({
+    required this.text,
+    required this.summary,
+    required this.varianceOn,
+  });
+
+  final AppStrings text;
+  final InventorySummary? summary;
+  final bool varianceOn;
+
+  @override
+  Widget build(BuildContext context) {
+    if (summary == null) {
+      return _StockValueCard(text: text, summary: summary);
+    }
+
+    final hasAlerts = summary!.items.any(
+      (item) => item.varianceStatus == 'low' || item.varianceStatus == 'out',
+    );
+
+    if (varianceOn) {
       return Column(
         children: [
-          _StockValueCard(text: text, summary: summary),
-          if (summary != null)
-            _LowStockAlertCard(text: text, summary: summary!),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _SummaryTile(
+                    label: text.stockValueNow,
+                    value: tfFormatCurrency(context, summary!.stockValueBdt),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SummaryTile(
+                    label: text.usedTodayValue,
+                    value: tfFormatCurrency(
+                      context,
+                      _totalSpend(summary!.items),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _LossTile(text: text, summary: summary!),
+                ),
+              ],
+            ),
+          ),
+          if (hasAlerts)
+            _LowStockAlertCard(text: text, summary: summary!)
+          else
+            _StockStatusOkCard(text: text, summary: summary!),
         ],
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-      child: Row(
+    // Variance off: single stock-value card + alert/healthy card below.
+    return Column(
+      children: [
+        _StockValueCard(text: text, summary: summary),
+        if (hasAlerts)
+          _LowStockAlertCard(text: text, summary: summary!)
+        else
+          _StockStatusOkCard(text: text, summary: summary!),
+      ],
+    );
+  }
+
+  static double _totalSpend(List<InventorySummaryItem> items) {
+    return items.fold<double>(0, (sum, item) => sum + item.todaySpendBdt);
+  }
+}
+
+class _SummaryTile extends StatelessWidget {
+  const _SummaryTile({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return TfCard(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 12,
-            child: _StockValueCard(
-              text: text,
-              summary: summary,
-              outerPadding: EdgeInsets.zero,
+          TfSectionHeader(label: label, padding: EdgeInsets.zero),
+          const SizedBox(height: 4),
+          TfText(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: PosColors.slate,
+              height: 1.05,
+              letterSpacing: -0.3,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 9,
-            child: _StockStatusOkCard(
-              text: text,
-              summary: summary!,
-              outerPadding: EdgeInsets.zero,
-              compact: true,
+        ],
+      ),
+    );
+  }
+}
+
+class _LossTile extends StatelessWidget {
+  const _LossTile({required this.text, required this.summary});
+
+  final AppStrings text;
+  final InventorySummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final loss = summary.varianceTodayBdt;
+    final hasLoss = loss < 0;
+    final color = hasLoss ? PosColors.danger : PosColors.muted;
+    final fill = hasLoss ? PosColors.dangerSoft : PosColors.surface;
+    final amount = loss == 0
+        ? '৳0'
+        : '${hasLoss ? '−' : '+'}${tfFormatCurrency(context, loss.abs())}';
+    return TfCard(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      color: fill,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TfSectionHeader(
+            label: text.unexplainedLossToday,
+            color: color,
+            padding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 4),
+          TfText(
+            amount,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: color,
+              height: 1.05,
+              letterSpacing: -0.3,
             ),
           ),
         ],
@@ -297,21 +464,16 @@ class _InventorySummaryBand extends StatelessWidget {
 }
 
 class _StockValueCard extends StatelessWidget {
-  const _StockValueCard({
-    required this.text,
-    required this.summary,
-    this.outerPadding = const EdgeInsets.fromLTRB(14, 6, 14, 12),
-  });
+  const _StockValueCard({required this.text, required this.summary});
 
   final AppStrings text;
   final InventorySummary? summary;
-  final EdgeInsetsGeometry outerPadding;
 
   @override
   Widget build(BuildContext context) {
     final stockValue = summary?.stockValueBdt ?? 0;
     return Padding(
-      padding: outerPadding,
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
       child: TfCard(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
@@ -508,17 +670,10 @@ class _LowStockAlertCard extends StatelessWidget {
 }
 
 class _StockStatusOkCard extends StatelessWidget {
-  const _StockStatusOkCard({
-    required this.text,
-    required this.summary,
-    this.outerPadding = const EdgeInsets.fromLTRB(14, 0, 14, 12),
-    this.compact = false,
-  });
+  const _StockStatusOkCard({required this.text, required this.summary});
 
   final AppStrings text;
   final InventorySummary summary;
-  final EdgeInsetsGeometry outerPadding;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -528,7 +683,7 @@ class _StockStatusOkCard extends StatelessWidget {
         .where((i) => i.varianceStatus != 'low' && i.varianceStatus != 'out')
         .length;
     return Padding(
-      padding: outerPadding,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
@@ -536,101 +691,60 @@ class _StockStatusOkCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: PosColors.success.withValues(alpha: 0.35)),
         ),
-        child: compact
-            ? Column(
+        child: Row(
+          children: [
+            Icon(
+              Icons.check_circle_rounded,
+              color: PosColors.success,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        color: PosColors.success,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: TfText(
-                          isBn ? 'স্টক ঠিক আছে' : 'Stock healthy',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: PosColors.success,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
                   TfText(
-                    '${tfFormatNumber(context, healthy)}/${tfFormatNumber(context, tracked)} ${isBn ? 'ঠিক' : 'ok'}',
-                    style: const TextStyle(
+                    isBn ? 'স্টক ঠিক আছে' : 'Stock is healthy',
+                    style: TextStyle(
+                      color: PosColors.success,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  TfText(
+                    isBn
+                        ? '${tfFormatNumber(context, healthy)}/${tfFormatNumber(context, tracked)} আইটেম থ্রেশহোল্ডের উপরে'
+                        : '${tfFormatNumber(context, healthy)} of ${tfFormatNumber(context, tracked)} items above threshold',
+                    style: TextStyle(
                       color: PosColors.muted,
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
-              )
-            : Row(
-                children: [
-                  Icon(
-                    Icons.check_circle_rounded,
-                    color: PosColors.success,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TfText(
-                          isBn ? 'স্টক ঠিক আছে' : 'Stock is healthy',
-                          style: TextStyle(
-                            color: PosColors.success,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        TfText(
-                          isBn
-                              ? '${tfFormatNumber(context, healthy)}/${tfFormatNumber(context, tracked)} আইটেম থ্রেশহোল্ডের উপরে'
-                              : '${tfFormatNumber(context, healthy)} of ${tfFormatNumber(context, tracked)} items above threshold',
-                          style: TextStyle(
-                            color: PosColors.muted,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PosColors.success,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: TfText(
-                      isBn ? 'সব ঠিক' : 'ALL OK',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ],
               ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: PosColors.success,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: TfText(
+                isBn ? 'সব ঠিক' : 'ALL OK',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -651,66 +765,24 @@ class _CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
     return SizedBox(
       height: 40,
-      child: ListView(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        children: summary.categories
-            .map((bucket) {
-              final isSelected = selected == bucket.key;
-              final label = text.isBn ? bucket.labelBn : bucket.labelEn;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: () => onSelected(bucket.key),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? PosColors.primaryDark
-                          : PosColors.surface,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: isSelected
-                            ? PosColors.primaryDark
-                            : PosColors.line,
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TfText(
-                          label,
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : PosColors.slate,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        TfText(
-                          tfFormatNumber(context, bucket.count),
-                          style: TextStyle(
-                            color: isSelected
-                                ? Colors.white.withValues(alpha: 0.7)
-                                : PosColors.muted,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            })
-            .toList(growable: false),
+        itemCount: summary.categories.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final bucket = summary.categories[index];
+          final isSelected = selected == bucket.key;
+          final count = tfFormatNumber(context, bucket.count);
+          return TfChip(
+            label: '${bucket.labelEn} $count',
+            labelBn: '${bucket.labelBn} $count',
+            active: isSelected,
+            onTap: () => onSelected(bucket.key),
+          );
+        },
       ),
     );
   }
@@ -719,9 +791,10 @@ class _CategoryChips extends StatelessWidget {
 // ── Table header + rows ───────────────────────────────────────────────────────
 
 class _ColumnHeader extends StatelessWidget {
-  const _ColumnHeader({required this.text});
+  const _ColumnHeader({required this.text, required this.varianceOn});
 
   final AppStrings text;
+  final bool varianceOn;
 
   @override
   Widget build(BuildContext context) {
@@ -735,15 +808,35 @@ class _ColumnHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 18, 6),
       child: Row(
         children: [
-          Expanded(flex: 40, child: Text(text.colItem, style: style)),
           Expanded(
-            flex: 26,
-            child: Text(text.colOnHand, style: style, textAlign: TextAlign.end),
+            flex: varianceOn ? 36 : 44,
+            child: TfText(text.colItem, style: style),
           ),
           Expanded(
-            flex: 34,
-            child: Text(text.colInOut, style: style, textAlign: TextAlign.end),
+            flex: varianceOn ? 22 : 26,
+            child: TfText(
+              text.colOnHand,
+              style: style,
+              textAlign: TextAlign.end,
+            ),
           ),
+          Expanded(
+            flex: varianceOn ? 20 : 30,
+            child: TfText(
+              text.colTodayIn,
+              style: style,
+              textAlign: TextAlign.end,
+            ),
+          ),
+          if (varianceOn)
+            Expanded(
+              flex: 22,
+              child: TfText(
+                text.colTodayOut,
+                style: style,
+                textAlign: TextAlign.end,
+              ),
+            ),
         ],
       ),
     );
@@ -755,11 +848,13 @@ class _ItemSliverList extends StatelessWidget {
     required this.summary,
     required this.selectedCategory,
     required this.text,
+    required this.varianceOn,
   });
 
   final InventorySummary summary;
   final String selectedCategory;
   final AppStrings text;
+  final bool varianceOn;
 
   @override
   Widget build(BuildContext context) {
@@ -782,17 +877,25 @@ class _ItemSliverList extends StatelessWidget {
     }
     return SliverList.builder(
       itemCount: filtered.length,
-      itemBuilder: (context, index) =>
-          _InventoryRow(item: filtered[index], text: text),
+      itemBuilder: (context, index) => _InventoryRow(
+        item: filtered[index],
+        text: text,
+        varianceOn: varianceOn,
+      ),
     );
   }
 }
 
 class _InventoryRow extends StatelessWidget {
-  const _InventoryRow({required this.item, required this.text});
+  const _InventoryRow({
+    required this.item,
+    required this.text,
+    required this.varianceOn,
+  });
 
   final InventorySummaryItem item;
   final AppStrings text;
+  final bool varianceOn;
 
   @override
   Widget build(BuildContext context) {
@@ -800,6 +903,7 @@ class _InventoryRow extends StatelessWidget {
     final primaryName = text.isBn && item.nameBn.trim().isNotEmpty
         ? item.nameBn
         : (item.nameEn.trim().isNotEmpty ? item.nameEn : item.nameBn);
+    final showVariancePill = varianceOn && item.hasVariance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: Material(
@@ -813,7 +917,7 @@ class _InventoryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  flex: 40,
+                  flex: varianceOn ? 36 : 44,
                   child: Row(
                     children: [
                       Container(
@@ -841,27 +945,30 @@ class _InventoryRow extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: TfText(
-                                    primaryName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: PosColors.slate,
-                                    ),
-                                  ),
-                                ),
-                                if (item.varianceStatus == 'low' ||
-                                    item.varianceStatus == 'out') ...[
-                                  const SizedBox(width: 6),
-                                  _LowOutBadge(item: item, text: text),
-                                ],
-                              ],
+                            TfText(
+                              primaryName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: PosColors.slate,
+                              ),
                             ),
+                            if (item.isLow || item.isOut || showVariancePill)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: [
+                                    if (item.isLow || item.isOut)
+                                      _LowOutBadge(item: item, text: text),
+                                    if (showVariancePill)
+                                      _VarianceBadge(item: item, text: text),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -869,7 +976,7 @@ class _InventoryRow extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  flex: 26,
+                  flex: varianceOn ? 22 : 26,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -893,34 +1000,38 @@ class _InventoryRow extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  flex: 34,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TfText(
-                        '+${_formatQty(context, item.todayIn)} $unit',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: item.todayIn > 0
-                              ? PosColors.success
-                              : PosColors.muted,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      TfText(
-                        '−${_formatQty(context, item.todayOut)} $unit',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: item.todayOut > 0
-                              ? PosColors.danger
-                              : PosColors.muted,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  flex: varianceOn ? 20 : 30,
+                  child: TfText(
+                    item.todayIn > 0
+                        ? '+${_formatQty(context, item.todayIn)}'
+                        : '—',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: item.todayIn > 0
+                          ? PosColors.success
+                          : PosColors.muted,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
+                if (varianceOn)
+                  Expanded(
+                    flex: 22,
+                    child: TfText(
+                      item.todayOut > 0
+                          ? '−${_formatQty(context, item.todayOut)}'
+                          : '—',
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: item.todayOut > 0
+                            ? PosColors.danger
+                            : PosColors.muted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -982,6 +1093,40 @@ class _LowOutBadge extends StatelessWidget {
         isOut ? text.statusOut : text.statusLow,
         style: TextStyle(
           color: fg,
+          fontWeight: FontWeight.w500,
+          fontSize: 10,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _VarianceBadge extends StatelessWidget {
+  const _VarianceBadge({required this.item, required this.text});
+
+  final InventorySummaryItem item;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoss = item.varianceQty < 0;
+    final color = isLoss ? PosColors.danger : PosColors.success;
+    final qty = item.varianceQty;
+    final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
+    final formatted = qty == qty.roundToDouble()
+        ? tfFormatNumber(context, qty.abs())
+        : tfFormatNumber(context, qty.abs(), decimalDigits: 1);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: TfText(
+        '${isLoss ? '−' : '+'}$formatted $unit',
+        style: TextStyle(
+          color: color,
           fontWeight: FontWeight.w500,
           fontSize: 10,
           letterSpacing: 0.4,
@@ -1129,8 +1274,9 @@ class _SheetShell extends StatelessWidget {
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
+                  TfIconButton(
+                    icon: Icons.close,
+                    tooltip: MaterialLocalizations.of(context).closeButtonLabel,
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -1200,7 +1346,7 @@ class _QuickCountSheetState extends State<_QuickCountSheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: TfText(e.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1223,16 +1369,16 @@ class _QuickCountSheetState extends State<_QuickCountSheet> {
               style: TextStyle(color: PosColors.muted, fontSize: 13),
             ),
           const SizedBox(height: 12),
-          TextField(
+          TfField(
+            label: '${text.leftNow} ($unit)',
             controller: _ctrl,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
             ],
-            decoration: InputDecoration(labelText: '${text.leftNow} ($unit)'),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
           TfButton(
             label: text.saveCount,
             onPressed: _busy ? null : _save,
@@ -1298,7 +1444,7 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: TfText(e.toString())));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1462,18 +1608,15 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
               item.unit,
               isBn: text.isBn,
             );
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: TextField(
-                controller: _controllers[item.id],
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-                ],
-                decoration: InputDecoration(labelText: '${item.name} ($unit)'),
+            return TfField(
+              label: '${item.name} ($unit)',
+              controller: _controllers[item.id],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+              ],
             );
           }),
           TfButton(
@@ -1571,21 +1714,12 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _nameCtrl,
-            decoration: InputDecoration(labelText: text.itemName),
-            textCapitalization: TextCapitalization.words,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _categoryCtrl,
-            decoration: InputDecoration(labelText: text.itemCategory),
-          ),
-          const SizedBox(height: 12),
+          TfField(label: text.itemName, controller: _nameCtrl),
+          TfField(label: text.itemCategory, controller: _categoryCtrl),
           TfText(
             text.unit,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
               color: PosColors.slate,
             ),
@@ -1606,40 +1740,32 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                 })
                 .toList(growable: false),
           ),
-          const SizedBox(height: 12),
-          TextField(
+          const SizedBox(height: 14),
+          TfField(
+            label: '${text.unitPrice} ($unitLabel)',
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
             ],
-            decoration: InputDecoration(
-              labelText: '${text.unitPrice} ($unitLabel)',
-            ),
           ),
-          const SizedBox(height: 12),
-          TextField(
+          TfField(
+            label: '${text.openingStock} ($unitLabel)',
             controller: _qtyCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
             ],
-            decoration: InputDecoration(
-              labelText: '${text.openingStock} ($unitLabel)',
-            ),
           ),
-          const SizedBox(height: 12),
-          TextField(
+          TfField(
+            label: '${text.lowStockAlert} ($unitLabel)',
             controller: _minCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
             ],
-            decoration: InputDecoration(
-              labelText: '${text.lowStockAlert} ($unitLabel)',
-            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 6),
           TfButton(
             label: isEdit ? text.save : text.addInventoryItem,
             onPressed: _submit,

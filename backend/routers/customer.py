@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from database import get_db
 from models import MenuItem, Order, Outlet, Restaurant
 from routers.ws import manager
+from services.menu_placeholders import infer_icon_key, resolve_placeholder_url
 
 router = APIRouter(prefix="/customer", tags=["customer"])
 
@@ -61,7 +62,14 @@ def _icon_key_from_tags(raw: str | None) -> str | None:
     return None
 
 
-def _item_to_dict(item: MenuItem, request: Request) -> dict:
+def _item_to_dict(item: MenuItem, request: Request, item_index: int = 0) -> dict:
+    icon_key = _icon_key_from_tags(item.tags_json) or infer_icon_key(
+        item.name,
+        item.category,
+    )
+    image_url = _rewrite_upload_url(request, item.image_url)
+    if not image_url:
+        image_url = resolve_placeholder_url(icon_key, item_index, request)
     data = {
         "id": item.id,
         "name": item.name,
@@ -75,12 +83,10 @@ def _item_to_dict(item: MenuItem, request: Request) -> dict:
         "categoryEn": item.category_en or item.category or "General",
         "categoryBn": item.category_bn or "",
         "isAvailable": item.is_available,
-        "imageUrl": _rewrite_upload_url(request, item.image_url),
+        "imageUrl": image_url,
         "videoUrl": _rewrite_upload_url(request, item.video_url),
+        "iconKey": icon_key,
     }
-    icon_key = _icon_key_from_tags(item.tags_json)
-    if icon_key:
-        data["iconKey"] = icon_key
     return data
 
 
@@ -121,7 +127,7 @@ async def get_public_menu(
             .order_by(MenuItem.category, MenuItem.name)
         )
     ).scalars().all()
-    return _ok([_item_to_dict(i, request) for i in items])
+    return _ok([_item_to_dict(i, request, index) for index, i in enumerate(items)])
 
 
 # ── POST order ────────────────────────────────────────────────────────────────

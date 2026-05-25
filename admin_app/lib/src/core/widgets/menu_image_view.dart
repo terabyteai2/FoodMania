@@ -190,6 +190,16 @@ IconData menuIconKeyToIcon(String? key) {
   return menuIconStyleFor(key).icon;
 }
 
+String resolveMenuIconKey({
+  String? iconKey,
+  required String name,
+  String? category,
+}) {
+  final explicit = iconKey?.trim();
+  if (explicit != null && explicit.isNotEmpty) return explicit;
+  return inferMenuIconKey(name: name, category: category);
+}
+
 String inferMenuIconKey({required String name, String? category}) {
   final text = '${name.toLowerCase()} ${(category ?? '').toLowerCase()}';
   bool has(Iterable<String> words) => words.any(text.contains);

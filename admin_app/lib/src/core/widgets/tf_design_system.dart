@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 
@@ -933,6 +934,7 @@ class TfField extends StatelessWidget {
     this.onChanged,
     this.hintHelper,
     this.errorText, // Added primitive support for handling form invalidation feedback logic
+    this.inputFormatters,
     super.key,
   });
 
@@ -950,6 +952,7 @@ class TfField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final String? hintHelper;
   final String? errorText;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -981,6 +984,7 @@ class TfField extends StatelessWidget {
             maxLines: obscure ? 1 : maxLines,
             keyboardType: keyboardType,
             onChanged: onChanged,
+            inputFormatters: inputFormatters,
             style: TextStyle(
               fontFamily: tfFontFamily(context),
               fontSize: 15,

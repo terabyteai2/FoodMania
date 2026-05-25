@@ -56,6 +56,14 @@ rsync -az --delete \
   --exclude='*.keystore' \
   "${REPO_ROOT}/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 
+say "Syncing shipped menu placeholder pictures"
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+  "mkdir -p '${REMOTE_DIR}/backend/uploads/menu_placeholders'"
+rsync -az --delete \
+  -e "ssh -p ${VPS_PORT}" \
+  "${REPO_ROOT}/backend/uploads/menu_placeholders/" \
+  "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/backend/uploads/menu_placeholders/"
+
 say "Updating nginx API routes (phone/demo OTP) + restarting backend"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" bash -s <<REMOTE
 set -euo pipefail
@@ -76,6 +84,8 @@ API_BASE="${API_BASE:-https://quickbytes.buzz}"
 say "Smoke test (${API_BASE})"
 curl -fsS --max-time 15 "${API_BASE}/health" >/dev/null \
   || die "Health check failed at ${API_BASE}/health"
+curl -fsS --max-time 15 "${API_BASE}/uploads/menu_placeholders/biryani-1.png" >/dev/null \
+  || die "Placeholder image smoke check failed at ${API_BASE}/uploads/menu_placeholders/biryani-1.png"
 curl -fsS --max-time 20 -X POST "${API_BASE}/admin/phone/send-otp" \
   -H 'Content-Type: application/json' -d '{"phone":"01700000000"}' | grep -q '"smsSent"' \
   || die "Send OTP failed at ${API_BASE}/admin/phone/send-otp"

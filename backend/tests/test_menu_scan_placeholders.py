@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from services.menu_placeholders import (
     ICON_KEY_TO_FILES,
+    infer_icon_key,
     normalize_icon_key,
     placeholder_relative_path,
     resolve_placeholder_url,
@@ -42,6 +43,13 @@ def test_alias_mapping():
     assert normalize_icon_key("sandwitch") == "sandwich"
     assert normalize_icon_key("daal") == "dal"
     assert normalize_icon_key("starter") == "appetizer"
+
+
+def test_infer_icon_key_from_name_and_category():
+    assert infer_icon_key("Chicken Biryani", "Rice") == "biryani"
+    assert infer_icon_key("Beef Tehari", "Mains") == "biryani"
+    assert infer_icon_key("Borhani", "Drinks") == "beverages"
+    assert infer_icon_key("Plain Naan", "Bread") == "appetizer"
 
 
 def test_resolve_url_builds_against_request_base():

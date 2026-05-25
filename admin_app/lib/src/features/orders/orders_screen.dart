@@ -2806,7 +2806,13 @@ class _MenuTile extends StatelessWidget {
     final hasImage = (item.imageUrl ?? '').isNotEmpty;
     final extras = item.extras;
     final hasAddOns = extras.addOns.isNotEmpty;
-    final iconStyle = menuIconStyleFor(extras.iconKey);
+    final iconStyle = menuIconStyleFor(
+      resolveMenuIconKey(
+        iconKey: extras.iconKey,
+        name: item.name,
+        category: item.category,
+      ),
+    );
 
     return GestureDetector(
       onTap: onTap,

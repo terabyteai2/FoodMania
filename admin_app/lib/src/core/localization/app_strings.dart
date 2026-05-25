@@ -997,6 +997,21 @@ class AppStrings {
       ? 'AI স্ক্যান থেকে পরিমাণ বসানো হয়েছে'
       : 'AI scan filled matching counts';
   String get dailyReport => isBn ? 'দৈনিক রিপোর্ট' : 'Daily report';
+  String get inventorySettings =>
+      isBn ? 'ইনভেন্টরি সেটিংস' : 'Inventory settings';
+  String get inventorySettingsSubtitle => isBn
+      ? 'ভ্যারিয়েন্স ট্র্যাকিং চালু/বন্ধ করুন'
+      : 'Turn variance tracking on or off';
+  String get varianceTracking =>
+      isBn ? 'ভ্যারিয়েন্স ট্র্যাকিং' : 'Variance tracking';
+  String get varianceTrackingHint => isBn
+      ? 'POS বিক্রির সাথে গণনাকৃত ব্যবহারের তুলনা করুন এবং অব্যাখ্যাত ক্ষতি দেখান।'
+      : 'Compare counted usage against POS sales and surface unexplained loss.';
+  String get colTodayIn => isBn ? 'আজ ইন' : 'IN TODAY';
+  String get colTodayOut => isBn ? 'আজ আউট' : 'OUT TODAY';
+  String get usedTodayValue => isBn ? 'আজকের ব্যবহার' : 'Used today';
+  String get unexplainedLossToday =>
+      isBn ? 'আজকের অব্যাখ্যাত ক্ষতি' : 'Unexplained loss today';
 
   // Stock in flow
   String get stockInTitle => isBn ? 'স্টক ইন' : 'Stock in';

@@ -130,7 +130,7 @@ All in [`tf_design_system.dart`](../widgets/tf_design_system.dart). Reuse first;
 | `TfChip({label, labelBn, active, onTap, small, leading})` | Toggleable pill. Replaces every `ChoiceChip`/`FilterChip`/`ActionChip`. |
 | `TfStatusBadge({label, kind, upper})` | Small status pill. Kinds: `pending`, `accepted`, `late`, `served`, `info`, `warning`. |
 | `TfSectionHeader({label, color, trailing, padding})` | Uppercase 11px section label. Default `color: PosColors.muted`. Pass `color: PosColors.danger` for alert variants. |
-| `TfField({label, labelBn, controller, hint, hintBn, prefix, suffix, errorText, hintHelper, keyboardType, obscure, maxLines, onChanged})` | Form input wrapper. Use for all labeled fields. |
+| `TfField({label, labelBn, controller, hint, hintBn, prefix, suffix, errorText, hintHelper, keyboardType, obscure, maxLines, onChanged, inputFormatters})` | Form input wrapper. Use for all labeled fields. |
 | `TfSearchField({controller, hintText, onChanged})` | Standalone rounded search field. 46 height, 12 radius. |
 | `TfTabs({items, activeIndex, onChanged})` | Linear segmented control. Items are `TfTabItem(label, labelBn, count?)`. |
 | `TfBottomNav({items, activeIndex, onChanged})` | Footer nav. Items are `TfBottomNavItem(icon, label, …)`. |

@@ -205,6 +205,7 @@ class PosAppController extends ChangeNotifier {
   String _accountPassword = '';
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
+  bool varianceTrackingEnabled = false;
   List<MenuItem> menuItems = [];
   List<OrderModel> orders = [];
   List<PosNotification> notifications = [];
@@ -394,6 +395,8 @@ class PosAppController extends ChangeNotifier {
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
       notificationSoundPath =
           preferences.getString(_notificationSoundPathKey) ?? '';
+      varianceTrackingEnabled =
+          preferences.getBool(_varianceTrackingEnabledKey) ?? false;
       _dismissedAppUpdateVersionCode =
           preferences.getInt(_dismissedAppUpdateVersionCodeKey) ?? 0;
       isLoggedIn = preferences.getBool(_accountLoggedInKey) ?? isTenantReady;
@@ -2723,6 +2726,17 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setVarianceTrackingEnabled(bool value) async {
+    if (varianceTrackingEnabled == value) return;
+    varianceTrackingEnabled = value;
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_varianceTrackingEnabledKey, value);
+    if (value) {
+      unawaited(refreshInventorySummary());
+    }
+  }
+
   Future<void> setNotificationSoundPath(String path) async {
     var stored = path.trim();
     if (stored.isNotEmpty && !stored.startsWith('content://')) {
@@ -3254,6 +3268,8 @@ class PosAppController extends ChangeNotifier {
       'local_pos_notification_sound_enabled';
   static final String _notificationSoundPathKey =
       'local_pos_notification_sound_path';
+  static final String _varianceTrackingEnabledKey =
+      'local_pos_variance_tracking_enabled';
   static final String _dismissedAppUpdateVersionCodeKey =
       'local_pos_dismissed_app_update_version_code';
   static final String _tableCountKey = 'local_pos_table_count';
