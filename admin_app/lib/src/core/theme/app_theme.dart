@@ -109,6 +109,7 @@ class AppTheme {
 
     final baseText = TextStyle(
       fontFamily: 'Inter',
+      fontFamilyFallback: const ['Noto Sans Bengali'],
       color: PosColors.slate,
       fontWeight: FontWeight.w400,
       letterSpacing: 0,
@@ -119,6 +120,7 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: PosColors.background,
       fontFamily: 'Inter',
+      fontFamilyFallback: const ['Noto Sans Bengali'],
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       textTheme: TextTheme(
@@ -376,12 +378,14 @@ class AppTheme {
         ),
         titleTextStyle: const TextStyle(
           fontFamily: 'Inter',
+          fontFamilyFallback: ['Noto Sans Bengali'],
           fontSize: 18,
           fontWeight: FontWeight.w500,
           color: PosColors.slate,
         ),
         contentTextStyle: const TextStyle(
           fontFamily: 'Inter',
+          fontFamilyFallback: ['Noto Sans Bengali'],
           fontSize: 14,
           color: PosColors.muted,
           height: 1.45,

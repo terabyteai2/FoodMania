@@ -900,9 +900,11 @@ class _InventoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
-    final primaryName = text.isBn && item.nameBn.trim().isNotEmpty
-        ? item.nameBn
-        : (item.nameEn.trim().isNotEmpty ? item.nameEn : item.nameBn);
+    final primaryName = InventoryItem.localizedNameParts(
+      nameEn: item.nameEn,
+      nameBn: item.nameBn,
+      language: text.language,
+    );
     final showVariancePill = varianceOn && item.hasVariance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -1357,9 +1359,10 @@ class _QuickCountSheetState extends State<_QuickCountSheet> {
   Widget build(BuildContext context) {
     final text = widget.text;
     final unit = InventoryUnits.displayLabel(widget.item.unit, isBn: text.isBn);
+    final itemName = widget.item.localizedName(text.language);
 
     return _SheetShell(
-      title: '${text.setCount} — ${widget.item.name}',
+      title: '${text.setCount} — $itemName',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1504,12 +1507,16 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
     ].where((value) => value.isNotEmpty).toList(growable: false);
     if (candidates.isEmpty) return null;
     for (final item in widget.items) {
-      final itemName = item.name.trim().toLowerCase();
-      if (itemName.isEmpty) continue;
+      final itemNames = [item.name, item.nameEn, item.nameBn]
+          .map((value) => value.trim().toLowerCase())
+          .where((value) => value.isNotEmpty);
       for (final candidate in candidates) {
-        if (candidate == itemName ||
-            candidate.contains(itemName) ||
-            itemName.contains(candidate)) {
+        if (itemNames.any(
+          (itemName) =>
+              candidate == itemName ||
+              candidate.contains(itemName) ||
+              itemName.contains(candidate),
+        )) {
           return item;
         }
       }
@@ -1608,8 +1615,9 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
               item.unit,
               isBn: text.isBn,
             );
+            final name = item.localizedName(text.language);
             return TfField(
-              label: '${item.name} ($unit)',
+              label: '$name ($unit)',
               controller: _controllers[item.id],
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,

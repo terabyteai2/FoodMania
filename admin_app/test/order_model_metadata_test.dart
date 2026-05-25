@@ -37,6 +37,9 @@ void main() {
       serviceType: OrderServiceType.dineIn,
       covers: 3,
       paymentMethod: OrderPaymentMethod.bkash,
+      customerName: 'Ayesha Khan',
+      deliveryAddress: 'House 5, Road 12, Banani',
+      mobileNumber: '01711223344',
       items: const [],
       createdAt: DateTime.parse('2026-05-23T10:00:00Z'),
       updatedAt: DateTime.parse('2026-05-23T10:00:00Z'),
@@ -49,10 +52,16 @@ void main() {
     expect(remapped.subtotal, 500);
     expect(remapped.vatRatePercent, 5);
     expect(remapped.vatAmount, 25);
+    expect(remapped.customerName, 'Ayesha Khan');
+    expect(remapped.deliveryAddress, 'House 5, Road 12, Banani');
+    expect(remapped.mobileNumber, '01711223344');
 
     expect(order.toJson()['serviceType'], 'dine_in');
     expect(order.toJson()['paymentMethod'], 'bkash');
     expect(order.toJson()['vatAmount'], 25);
+    expect(order.toJson()['customerName'], 'Ayesha Khan');
+    expect(order.toJson()['deliveryAddress'], 'House 5, Road 12, Banani');
+    expect(order.toJson()['mobileNumber'], '01711223344');
   });
 
   test('order item bilingual names roundtrip and localize', () {

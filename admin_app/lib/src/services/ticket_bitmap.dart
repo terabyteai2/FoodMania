@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../core/widgets/tf_design_system.dart';
+
 class TicketLineItem {
   const TicketLineItem({
     required this.index,
@@ -35,6 +37,10 @@ class TicketCopyData {
     required this.customerNameLabel,
     required this.note,
     required this.noteLabel,
+    this.deliveryAddress,
+    this.deliveryAddressLabel = 'Address',
+    this.mobileNumber,
+    this.mobileNumberLabel = 'Phone',
   });
 
   final String restaurantName;
@@ -53,6 +59,10 @@ class TicketCopyData {
   final String customerNameLabel;
   final String? note;
   final String noteLabel;
+  final String? deliveryAddress;
+  final String deliveryAddressLabel;
+  final String? mobileNumber;
+  final String mobileNumberLabel;
 }
 
 class TicketBitmapRenderer {
@@ -69,6 +79,8 @@ class TicketBitmapRenderer {
     final dynamicRows = data.items.length * 76;
     final optionalRows =
         (data.customerName?.trim().isNotEmpty == true ? 32 : 0) +
+        (data.deliveryAddress?.trim().isNotEmpty == true ? 64 : 0) +
+        (data.mobileNumber?.trim().isNotEmpty == true ? 32 : 0) +
         (data.note?.trim().isNotEmpty == true ? 80 : 0);
     final height = (300 + dynamicRows + optionalRows).toDouble();
     final recorder = ui.PictureRecorder();
@@ -86,6 +98,20 @@ class TicketBitmapRenderer {
       y = _text(
         canvas,
         '${data.customerNameLabel}: ${data.customerName!.trim()}',
+        y,
+      );
+    }
+    if (data.deliveryAddress?.trim().isNotEmpty == true) {
+      y = _text(
+        canvas,
+        '${data.deliveryAddressLabel}: ${data.deliveryAddress!.trim()}',
+        y,
+      );
+    }
+    if (data.mobileNumber?.trim().isNotEmpty == true) {
+      y = _text(
+        canvas,
+        '${data.mobileNumberLabel}: ${data.mobileNumber!.trim()}',
         y,
       );
     }
@@ -287,7 +313,7 @@ class TicketBitmapRenderer {
 
   static String _fontFamily(String value) {
     return RegExp(r'[\u0980-\u09FF]').hasMatch(value)
-        ? 'Hind Siliguri'
-        : 'Inter';
+        ? tfBanglaFontFamily
+        : tfEnglishFontFamily;
   }
 }

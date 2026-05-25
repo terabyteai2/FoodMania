@@ -4,12 +4,14 @@ import json
 import uuid
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from config import settings
 from database import get_db
 from models import MenuItem, Order, Outlet, Restaurant
 from routers.ws import manager
@@ -143,6 +145,70 @@ class CustomerOrderRequest(BaseModel):
     items: list[CustomerOrderItem]
     tableNo: str | None = None
     note: str | None = None
+    orderType: str | None = None
+    customerName: str | None = None
+    deliveryAddress: str | None = None
+    mobileNumber: str | None = None
+
+
+class ReverseGeocodeRequest(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+
+
+async def _reverse_geocode_address(lat: float, lng: float) -> str:
+    api_key = settings.GOOGLE_GEOCODING_API_KEY.strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Address lookup is not configured.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={
+                    "latlng": f"{lat},{lng}",
+                    "key": api_key,
+                    "language": "en",
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Address lookup failed.",
+        ) from exc
+
+    google_status = payload.get("status")
+    if google_status == "ZERO_RESULTS":
+        raise HTTPException(status_code=404, detail="No address found near this location.")
+    if google_status != "OK":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Address lookup failed.",
+        )
+
+    results = payload.get("results") or []
+    result = next((item for item in results if item.get("formatted_address")), None)
+    address = (result or {}).get("formatted_address", "").strip()
+    if not address:
+        raise HTTPException(status_code=404, detail="No address found near this location.")
+    return address
+
+
+@router.post("/{outlet_id}/geocode/reverse")
+async def reverse_geocode_customer_location(
+    outlet_id: str,
+    body: ReverseGeocodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a formatted address for a customer-provided browser location."""
+    await _get_outlet(outlet_id, db)
+    address = await _reverse_geocode_address(body.lat, body.lng)
+    return {"address": address}
 
 
 @router.post("/{outlet_id}/orders")
@@ -154,6 +220,16 @@ async def place_customer_order(
     """Place an order from the customer menu web app."""
     if not body.items:
         raise HTTPException(status_code=422, detail="Order must contain at least one item")
+
+    order_type = "delivery"
+    customer_name = (body.customerName or "").strip() or None
+    delivery_address = (body.deliveryAddress or "").strip() or None
+    mobile_number = (body.mobileNumber or "").strip() or None
+    if not (customer_name and delivery_address and mobile_number):
+        raise HTTPException(
+            status_code=422,
+            detail="Delivery requires name, address, and mobile number",
+        )
 
     outlet = await _get_outlet(outlet_id, db)
 
@@ -184,9 +260,12 @@ async def place_customer_order(
         subtotal=round(total, 2),
         vat_rate_percent=vat_rate_percent,
         vat_amount=vat_amount,
-        service_type="dine_in" if body.tableNo else None,
+        service_type=order_type,
         items=items_payload,
-        notes=body.tableNo and f"Table {body.tableNo}" or body.note,
+        notes=body.note,
+        customer_name=customer_name,
+        delivery_address=delivery_address,
+        mobile_number=mobile_number,
         created_at=now,
         updated_at=now,
     )
@@ -221,6 +300,9 @@ async def place_customer_order(
                 "paymentMethod": order.payment_method,
                 "items": order.items,
                 "notes": order.notes,
+                "customerName": order.customer_name,
+                "deliveryAddress": order.delivery_address,
+                "mobileNumber": order.mobile_number,
                 "createdByAccountId": None,
                 "createdByRole": "customer",
                 "createdAt": order.created_at.isoformat(),
@@ -239,6 +321,10 @@ async def place_customer_order(
         "vatAmount": float(order.vat_amount or 0),
         "items": order.items,
         "notes": order.notes,
+        "serviceType": order.service_type,
+        "customerName": order.customer_name,
+        "deliveryAddress": order.delivery_address,
+        "mobileNumber": order.mobile_number,
     })
 
 

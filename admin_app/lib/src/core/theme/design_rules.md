@@ -35,9 +35,9 @@ Every UI surface in `admin_app/lib/src/features/**` is built from the `Tf*` prim
 
 ### Families
 - English → `Inter`
-- Bangla → `Hind Siliguri`
+- Bangla → `Noto Sans Bengali`
 
-Always select the family with `tfFontFamily(context)`. Never write `'Inter'` or `'Hind Siliguri'` as a string literal in feature code. The `Tf*` widgets do this for you.
+Always select the family with `tfFontFamily(context)`. Never write `'Inter'` or `'Noto Sans Bengali'` as a string literal in feature code. The `Tf*` widgets do this for you.
 
 ### Weights
 Only two weights exist in app code:
@@ -230,7 +230,7 @@ The following must never appear in `lib/src/features/**` (or `lib/src/core/widge
 
 - `FontWeight.w600` / `.w700` / `.w800` / `.w900`
 - `Color(0xFF…)` literals (use `PosColors`; the only exceptions are `app_theme.dart` definitions and `menu_image_view.dart`'s food palette)
-- `'Inter'` / `'Hind Siliguri'` string literals (use `tfFontFamily(context)`)
+- `'Inter'` / `'Noto Sans Bengali'` string literals (use `tfFontFamily(context)`)
 - `Text(…)` (use `TfText`)
 - `ChoiceChip` / `FilterChip` / `ActionChip` (use `TfChip`)
 - `FilledButton` / `OutlinedButton` / `TextButton` / `ElevatedButton` (use `TfButton`)
@@ -254,7 +254,7 @@ grep -rn "FontWeight\.w[6-9]" lib/src/features lib/src/core/widgets --include="*
 grep -rnE "(?<![\.\w])Text\(\s*['\"]" lib/src/features --include="*.dart" -P | grep -v TfText  # expect empty
 grep -rn "ChoiceChip\|FilterChip\|ActionChip\|FilledButton\b\|OutlinedButton\b\|TextButton\b" lib/src/features --include="*.dart"  # expect empty
 grep -rnE "(?<!pw\.)\b(BorderRadius|Radius)\.circular\((1[3-9]|2[0-9]|[3-9][0-9]|[1]|[3-7])\)" lib/src/features lib/src/core/widgets --include="*.dart" -P  # expect empty (2 is allowed for thin accents only)
-grep -rnE "fontFamily:\s*'(Inter|Hind Siliguri)'" lib/src --include="*.dart" | grep -v "core/theme/app_theme.dart" | grep -v "core/widgets/tf_design_system.dart"  # expect empty
+grep -rnE "fontFamily:\s*'(Inter|Noto Sans Bengali)'" lib/src --include="*.dart" | grep -v "core/theme/app_theme.dart" | grep -v "core/widgets/tf_design_system.dart"  # expect empty
 grep -rnE "blurRadius:\s*([1-9][0-9]+|9)" lib/src --include="*.dart" | grep -v "core/theme/app_theme.dart"  # expect empty
 grep -rn "Compact\(Header\|IconButton\|SearchField\|SectionLabel\|Surface\)\|EmptyCompactState\|pos_compact_ui" lib/src --include="*.dart"  # expect empty
 ```

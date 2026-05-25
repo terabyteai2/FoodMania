@@ -247,6 +247,9 @@ class OrderPayload(BaseModel):
     paymentMethod: str | None = None
     items: list[OrderLineItemPayload] = Field(default_factory=list)
     notes: str | None = None
+    customerName: str | None = None
+    deliveryAddress: str | None = None
+    mobileNumber: str | None = None
     createdByAccountId: str | None = None
     createdByRole: str | None = None
     createdAt: str | None = None

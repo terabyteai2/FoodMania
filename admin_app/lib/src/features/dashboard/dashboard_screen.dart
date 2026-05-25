@@ -151,16 +151,25 @@ class _SectionHeader extends StatelessWidget {
             child: RichText(
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              strutStyle: tfSafeStrutStyle(
+                context,
+                const TextStyle(fontSize: 11),
+                minBnHeight: 1.28,
+              ),
+              textHeightBehavior: tfSafeTextHeightBehavior(context),
               text: TextSpan(
                 children: [
                   TextSpan(
                     text: en.toUpperCase(),
-                    style: TextStyle(
-                      fontFamily: tfFontFamily(context),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: PosColors.slate,
-                      letterSpacing: 0.7,
+                    style: tfSafeTextStyle(
+                      context,
+                      TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.slate,
+                        letterSpacing: 0.7,
+                      ),
+                      minBnHeight: 1.28,
                     ),
                   ),
                   const TextSpan(
@@ -169,12 +178,15 @@ class _SectionHeader extends StatelessWidget {
                   ),
                   TextSpan(
                     text: bn,
-                    style: TextStyle(
-                      fontFamily: tfFontFamily(context),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: PosColors.muted,
-                      fontStyle: FontStyle.italic,
+                    style: tfSafeTextStyle(
+                      context,
+                      TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: PosColors.muted,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      minBnHeight: 1.28,
                     ),
                   ),
                 ],
@@ -293,6 +305,13 @@ class _StatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isBn = tfIsBn(context);
+    final valueHeight = isBn ? tfBanglaMinLineHeight : 1.0;
+    final valueLetterSpacing = isBn ? 0.0 : -0.5;
+    final displayValue = isBn ? tfToBnNumbers(value) : value;
+    final displaySuffix = valueSuffix == null || !isBn
+        ? valueSuffix
+        : tfToBnNumbers(valueSuffix!);
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
@@ -306,28 +325,38 @@ class _StatusTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               RichText(
+                strutStyle: tfSafeStrutStyle(
+                  context,
+                  TextStyle(fontSize: 26, height: valueHeight),
+                ),
+                textHeightBehavior: tfSafeTextHeightBehavior(context),
                 text: TextSpan(
                   children: [
                     TextSpan(
-                      text: value,
-                      style: TextStyle(
-                        fontFamily: tfFontFamily(context),
-                        fontSize: 26,
-                        fontWeight: FontWeight.w500,
-                        color: valueColor,
-                        height: 1,
-                        letterSpacing: -0.5,
+                      text: displayValue,
+                      style: tfSafeTextStyle(
+                        context,
+                        TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w500,
+                          color: valueColor,
+                          height: valueHeight,
+                          letterSpacing: valueLetterSpacing,
+                        ),
                       ),
                     ),
                     if (valueSuffix != null)
                       TextSpan(
-                        text: valueSuffix,
-                        style: TextStyle(
-                          fontFamily: tfFontFamily(context),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: valueColor.withValues(alpha: 0.6),
-                          height: 1,
+                        text: displaySuffix,
+                        style: tfSafeTextStyle(
+                          context,
+                          TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: valueColor.withValues(alpha: 0.6),
+                            height: valueHeight,
+                            letterSpacing: 0,
+                          ),
                         ),
                       ),
                   ],
@@ -395,16 +424,25 @@ class _EarnedTodayCard extends StatelessWidget {
             children: [
               Expanded(
                 child: RichText(
+                  strutStyle: tfSafeStrutStyle(
+                    context,
+                    const TextStyle(fontSize: 11),
+                    minBnHeight: 1.28,
+                  ),
+                  textHeightBehavior: tfSafeTextHeightBehavior(context),
                   text: TextSpan(
                     children: [
                       TextSpan(
                         text: 'EARNED TODAY',
-                        style: TextStyle(
-                          fontFamily: tfFontFamily(context),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: PosColors.slate,
-                          letterSpacing: 0.7,
+                        style: tfSafeTextStyle(
+                          context,
+                          const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: PosColors.slate,
+                            letterSpacing: 0.7,
+                          ),
+                          minBnHeight: 1.28,
                         ),
                       ),
                       TextSpan(
@@ -413,12 +451,15 @@ class _EarnedTodayCard extends StatelessWidget {
                       ),
                       TextSpan(
                         text: 'আজকের আয়',
-                        style: TextStyle(
-                          fontFamily: tfFontFamily(context),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w400,
-                          color: PosColors.muted,
-                          fontStyle: FontStyle.italic,
+                        style: tfSafeTextStyle(
+                          context,
+                          const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: PosColors.muted,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          minBnHeight: 1.28,
                         ),
                       ),
                     ],

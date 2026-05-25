@@ -85,6 +85,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   final TextEditingController _searchController = TextEditingController();
   int? _lastPendingCount;
   OrderListFilters _filters = OrderListFilters.none;
+  _OrdersDerivation? _cachedDerivation;
 
   @override
   void initState() {
@@ -105,21 +106,14 @@ class _OrdersScreenState extends State<OrdersScreen>
     final rawOrders = app.ordersFor();
     final language = app.language;
     final searchQuery = _searchController.text.trim();
-    final filterMatchedOrders = rawOrders
-        .where((o) => _filters.matches(o))
-        .toList(growable: false);
-    final allOrders = filterMatchedOrders
-        .where((o) => _matchesOrderSearch(o, searchQuery, language))
-        .toList(growable: false);
-
-    final unfilteredPendingOrders = _pendingOrders(rawOrders);
-    final unfilteredAcceptedOrders = _acceptedOrders(rawOrders);
-    final searchBasePendingOrders = _pendingOrders(filterMatchedOrders);
-    final searchBaseAcceptedOrders = _acceptedOrders(filterMatchedOrders);
-    final pendingOrders = _pendingOrders(allOrders);
-    pendingOrders.sort(_sortOrders);
-    final acceptedOrders = _acceptedOrders(allOrders);
-    acceptedOrders.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final derived = _deriveOrders(rawOrders, _filters, searchQuery, language);
+    final allOrders = derived.allOrders;
+    final unfilteredPendingOrders = derived.unfilteredPending;
+    final unfilteredAcceptedOrders = derived.unfilteredAccepted;
+    final searchBasePendingOrders = derived.searchBasePending;
+    final searchBaseAcceptedOrders = derived.searchBaseAccepted;
+    final pendingOrders = derived.pendingOrders;
+    final acceptedOrders = derived.acceptedOrders;
 
     final text = app.strings;
     final canCreate = app.menuItems.any((i) => i.isAvailable);
@@ -198,6 +192,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                     searchQuery: searchQuery,
                     onPrint: (o) => _printBill(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
+                    hasMore: app.hasMoreOrders,
+                    loadingMore: app.loadingMoreOrders,
+                    onLoadMore: app.loadMoreOrders,
                   ),
                   _OrderList(
                     orders: acceptedOrders,
@@ -211,6 +208,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                     searchQuery: searchQuery,
                     onPrint: (o) => _printBill(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
+                    hasMore: app.hasMoreOrders,
+                    loadingMore: app.loadingMoreOrders,
+                    onLoadMore: app.loadMoreOrders,
                   ),
                 ],
               ),
@@ -243,6 +243,51 @@ class _OrdersScreenState extends State<OrdersScreen>
               o.status == OrderStatus.ready,
         )
         .toList(growable: false);
+  }
+
+  /// Memoized derivation of the six filtered/sorted views needed by [build].
+  /// Cache key is the identity of [raw] + [filters] plus the search/language
+  /// strings, so unchanged inputs (the common case during sync churn or tab
+  /// switches) skip ~8 list allocations per frame.
+  _OrdersDerivation _deriveOrders(
+    List<OrderModel> raw,
+    OrderListFilters filters,
+    String searchQuery,
+    AppLanguage language,
+  ) {
+    final cached = _cachedDerivation;
+    if (cached != null &&
+        identical(cached.raw, raw) &&
+        identical(cached.filters, filters) &&
+        cached.searchQuery == searchQuery &&
+        cached.language == language) {
+      return cached;
+    }
+    final filterMatched = raw
+        .where((o) => filters.matches(o))
+        .toList(growable: false);
+    final allOrders = filterMatched
+        .where((o) => _matchesOrderSearch(o, searchQuery, language))
+        .toList(growable: false);
+    final pendingOrders = _pendingOrders(allOrders)..sort(_sortOrders);
+    final acceptedOrders = _acceptedOrders(allOrders)
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final derived = _OrdersDerivation(
+      raw: raw,
+      filters: filters,
+      searchQuery: searchQuery,
+      language: language,
+      filterMatched: filterMatched,
+      allOrders: allOrders,
+      unfilteredPending: _pendingOrders(raw),
+      unfilteredAccepted: _acceptedOrders(raw),
+      searchBasePending: _pendingOrders(filterMatched),
+      searchBaseAccepted: _acceptedOrders(filterMatched),
+      pendingOrders: pendingOrders,
+      acceptedOrders: acceptedOrders,
+    );
+    _cachedDerivation = derived;
+    return derived;
   }
 
   _EmptyShortcut? _emptyShortcut({
@@ -358,15 +403,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     final app = AppScope.of(context);
     if (!app.isManager) return;
     final text = app.strings;
-    if (!app.printerState.connected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: TfText(text.printerNotConnectedHint),
-          action: SnackBarAction(label: text.ok, onPressed: () {}),
-        ),
-      );
-      return;
-    }
     final ok = await app.printCustomerInvoice(order);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -389,6 +425,39 @@ class _OrdersScreenState extends State<OrdersScreen>
     if (!app.isManager) return;
     await app.updateOrderStatus(order.id, status);
   }
+}
+
+/// Cached output of [_OrdersScreenState._deriveOrders]. Stores the inputs
+/// alongside the derived lists so the next build can verify the cache is
+/// still valid via identity / value comparison.
+class _OrdersDerivation {
+  const _OrdersDerivation({
+    required this.raw,
+    required this.filters,
+    required this.searchQuery,
+    required this.language,
+    required this.filterMatched,
+    required this.allOrders,
+    required this.unfilteredPending,
+    required this.unfilteredAccepted,
+    required this.searchBasePending,
+    required this.searchBaseAccepted,
+    required this.pendingOrders,
+    required this.acceptedOrders,
+  });
+
+  final List<OrderModel> raw;
+  final OrderListFilters filters;
+  final String searchQuery;
+  final AppLanguage language;
+  final List<OrderModel> filterMatched;
+  final List<OrderModel> allOrders;
+  final List<OrderModel> unfilteredPending;
+  final List<OrderModel> unfilteredAccepted;
+  final List<OrderModel> searchBasePending;
+  final List<OrderModel> searchBaseAccepted;
+  final List<OrderModel> pendingOrders;
+  final List<OrderModel> acceptedOrders;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -673,6 +742,9 @@ class _OrderList extends StatelessWidget {
     required this.searchQuery,
     required this.onPrint,
     required this.onStatus,
+    this.hasMore = false,
+    this.loadingMore = false,
+    this.onLoadMore,
   });
 
   final List<OrderModel> orders;
@@ -683,6 +755,17 @@ class _OrderList extends StatelessWidget {
   final String searchQuery;
   final void Function(OrderModel) onPrint;
   final void Function(OrderModel, OrderStatus) onStatus;
+
+  /// Whether the underlying `orders` list has more pages available.
+  final bool hasMore;
+
+  /// Whether a load-more fetch is currently in flight.
+  final bool loadingMore;
+
+  /// Fired when scrolling near the bottom; harmless when `hasMore` is false.
+  final Future<void> Function()? onLoadMore;
+
+  bool get _showFooter => hasMore && onLoadMore != null;
 
   @override
   Widget build(BuildContext context) {
@@ -696,14 +779,53 @@ class _OrderList extends StatelessWidget {
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-      itemCount: orders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (_, i) => _OrderCard(
-        order: orders[i],
-        onPrint: () => onPrint(orders[i]),
-        onStatus: (s) => onStatus(orders[i], s),
+    final itemCount = orders.length + (_showFooter ? 1 : 0);
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (!_showFooter || loadingMore) return false;
+        if (notification is ScrollUpdateNotification) {
+          final metrics = notification.metrics;
+          if (metrics.maxScrollExtent - metrics.pixels < 600) {
+            onLoadMore?.call();
+          }
+        }
+        return false;
+      },
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        itemCount: itemCount,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (_, i) {
+          if (_showFooter && i == orders.length) {
+            return _LoadMoreFooter(loading: loadingMore);
+          }
+          return _OrderCard(
+            order: orders[i],
+            onPrint: () => onPrint(orders[i]),
+            onStatus: (s) => onStatus(orders[i], s),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LoadMoreFooter extends StatelessWidget {
+  const _LoadMoreFooter({required this.loading});
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Center(
+        child: loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              )
+            : const SizedBox.shrink(),
       ),
     );
   }
@@ -897,6 +1019,14 @@ class _OrderCard extends StatelessWidget {
     final nextStatus = (isPending && app.isManager)
         ? OrderStatus.accepted
         : null;
+    final deliveryName = (order.customerName ?? '').trim();
+    final deliveryAddress = (order.deliveryAddress ?? '').trim();
+    final mobileNumber = (order.mobileNumber ?? '').trim();
+    final showDeliveryMeta =
+        order.serviceType == OrderServiceType.delivery &&
+        (deliveryName.isNotEmpty ||
+            deliveryAddress.isNotEmpty ||
+            mobileNumber.isNotEmpty);
 
     return TfCard(
       padded: false,
@@ -974,6 +1104,30 @@ class _OrderCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (showDeliveryMeta) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            if (deliveryName.isNotEmpty)
+                              _OrderContactPill(
+                                icon: Icons.person_outline_rounded,
+                                label: deliveryName,
+                              ),
+                            if (deliveryAddress.isNotEmpty)
+                              _OrderContactPill(
+                                icon: Icons.location_on_outlined,
+                                label: deliveryAddress,
+                              ),
+                            if (mobileNumber.isNotEmpty)
+                              _OrderContactPill(
+                                icon: Icons.phone_outlined,
+                                label: mobileNumber,
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       // Items list — first 3, then "+N more".
                       ...order.items
@@ -1081,6 +1235,47 @@ class _OrderCard extends StatelessWidget {
       case null:
         return text.isBn ? 'ডাইন-ইন' : 'Dine-in';
     }
+  }
+}
+
+class _OrderContactPill extends StatelessWidget {
+  const _OrderContactPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: PosColors.surfaceWarm,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: PosColors.line),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: PosColors.muted),
+            const SizedBox(width: 5),
+            Flexible(
+              child: TfText(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: PosColors.slate,
+                  height: 1.25,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -2228,7 +2423,7 @@ class _ReviewStep extends StatelessWidget {
                   minLines: 1,
                   maxLines: 3,
                   style: TextStyle(
-                    fontFamily: text.isBn ? 'Hind Siliguri' : 'Inter',
+                    fontFamily: tfFontFamily(context),
                     fontSize: 14,
                     color: PosColors.slate,
                   ),
@@ -2240,7 +2435,7 @@ class _ReviewStep extends StatelessWidget {
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     hintText: text.kitchenNoteHint,
                     hintStyle: TextStyle(
-                      fontFamily: text.isBn ? 'Hind Siliguri' : 'Inter',
+                      fontFamily: tfFontFamily(context),
                       color: PosColors.muted,
                       fontSize: 13,
                     ),
@@ -3123,26 +3318,46 @@ class _PlainMenuTileContent extends StatelessWidget {
 
 // Renders a menu item image from either a network URL or a base64 data URL.
 // Network images are automatically cached to local storage via CachedNetworkImage.
+// Cache dimensions are sized to the actual render box × device pixel ratio so
+// the in-memory image buffer never exceeds the displayed resolution.
 class _ItemImage extends StatelessWidget {
   const _ItemImage({required this.url});
   final String url;
 
   @override
   Widget build(BuildContext context) {
-    if (url.startsWith('data:image/')) {
-      try {
-        final bytes = base64Decode(url.split(',').last);
-        return Image.memory(bytes, fit: BoxFit.cover);
-      } catch (_) {
-        return _placeholder();
-      }
-    }
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: BoxFit.cover,
-      fadeInDuration: const Duration(milliseconds: 200),
-      placeholder: (context, url) => _placeholder(),
-      errorWidget: (context, url, err) => _placeholder(),
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxSide = [
+          constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
+          constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
+        ].reduce((a, b) => a > b ? a : b);
+        final cachePx = (maxSide * dpr).round().clamp(64, 512);
+
+        if (url.startsWith('data:image/')) {
+          try {
+            final bytes = base64Decode(url.split(',').last);
+            return Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              cacheWidth: cachePx,
+              cacheHeight: cachePx,
+            );
+          } catch (_) {
+            return _placeholder();
+          }
+        }
+        return CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          memCacheWidth: cachePx,
+          memCacheHeight: cachePx,
+          fadeInDuration: const Duration(milliseconds: 200),
+          placeholder: (context, url) => _placeholder(),
+          errorWidget: (context, url, err) => _placeholder(),
+        );
+      },
     );
   }
 

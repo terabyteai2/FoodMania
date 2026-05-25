@@ -32,6 +32,70 @@ ADJUSTMENT_TYPES = {"restock", "usage", "waste", "correction"}
 # Run on Bangladesh local time so "today's spend / variance" matches the wall clock.
 BDT_OFFSET = timedelta(hours=6)
 VARIANCE_TOLERANCE = 0.05  # ignore tiny rounding noise below 5% of a unit
+COMMON_INVENTORY_NAME_BN = {
+    "atta": "আটা",
+    "banana": "কলা",
+    "beef": "বিফ",
+    "beef bone": "বিফ হাড়",
+    "bread": "পাউরুটি",
+    "bun": "বান",
+    "butter": "বাটার",
+    "cabbage": "বাঁধাকপি",
+    "capsicum": "ক্যাপসিকাম",
+    "carrot": "গাজর",
+    "cheese": "চিজ",
+    "chicken": "চিকেন",
+    "chicken breast": "চিকেন ব্রেস্ট",
+    "chicken leg": "চিকেন লেগ",
+    "chili": "মরিচ",
+    "chilli": "মরিচ",
+    "coriander": "ধনিয়া",
+    "coriander leaves": "ধনেপাতা",
+    "cream": "ক্রিম",
+    "cucumber": "শসা",
+    "curd": "দই",
+    "dal": "ডাল",
+    "egg": "ডিম",
+    "fish": "মাছ",
+    "flour": "ময়দা",
+    "garam masala": "গরম মসলা",
+    "garlic": "রসুন",
+    "ginger": "আদা",
+    "green chili": "কাঁচা মরিচ",
+    "green chilli": "কাঁচা মরিচ",
+    "ketchup": "কেচাপ",
+    "lemon": "লেবু",
+    "lime": "লেবু",
+    "maida": "ময়দা",
+    "masala": "মসলা",
+    "mayonnaise": "মেয়োনিজ",
+    "milk": "দুধ",
+    "mint": "পুদিনা",
+    "mustard oil": "সরিষার তেল",
+    "mutton": "মাটন",
+    "noodles": "নুডলস",
+    "oil": "তেল",
+    "onion": "পেঁয়াজ",
+    "pasta": "পাস্তা",
+    "potato": "আলু",
+    "red chili": "শুকনা মরিচ",
+    "red chilli": "শুকনা মরিচ",
+    "rice": "চাল",
+    "salt": "লবণ",
+    "sauce": "সস",
+    "soy sauce": "সয়া সস",
+    "soybean oil": "সয়াবিন তেল",
+    "spice": "মসলা",
+    "spices": "মসলা",
+    "sugar": "চিনি",
+    "tea": "চা",
+    "tomato": "টমেটো",
+    "tomato sauce": "টমেটো সস",
+    "turmeric": "হলুদ",
+    "vinegar": "ভিনেগার",
+    "water": "পানি",
+    "yogurt": "দই",
+}
 
 
 def _bdt_day_bounds(reference: datetime) -> tuple[datetime, datetime]:
@@ -94,10 +158,33 @@ def _category_label(key: str) -> tuple[str, str]:
 
 
 def _split_bilingual(name: str) -> tuple[str, str]:
+    name = name.strip()
     if "/" in name:
         en, bn = name.split("/", 1)
         return en.strip(), bn.strip()
-    return name.strip(), ""
+    if any("\u0980" <= char <= "\u09ff" for char in name):
+        return "", name
+    return name, _bangla_fallback_name(name)
+
+
+def _normalize_name_key(value: str) -> str:
+    normalized = value.strip().lower()
+    chars = [char if char.isalnum() else " " for char in normalized]
+    return " ".join("".join(chars).split())
+
+
+def _bangla_fallback_name(value: str) -> str:
+    key = _normalize_name_key(value)
+    if not key:
+        return ""
+    if key in COMMON_INVENTORY_NAME_BN:
+        return COMMON_INVENTORY_NAME_BN[key]
+    if key.endswith("s") and key[:-1] in COMMON_INVENTORY_NAME_BN:
+        return COMMON_INVENTORY_NAME_BN[key[:-1]]
+    words = key.split()
+    if len(words) > 1 and all(word in COMMON_INVENTORY_NAME_BN for word in words):
+        return " ".join(COMMON_INVENTORY_NAME_BN[word] for word in words)
+    return ""
 
 
 def _item_to_dict(item: InventoryItem) -> dict:

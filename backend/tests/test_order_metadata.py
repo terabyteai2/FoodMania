@@ -56,6 +56,9 @@ async def test_order_create_pull_and_status_preserve_metadata():
                 "serviceType": "dine_in",
                 "covers": 3,
                 "paymentMethod": "bkash",
+                "customerName": "Ayesha Khan",
+                "deliveryAddress": "House 5, Road 12, Banani",
+                "mobileNumber": "01711223344",
                 "items": [
                     {
                         "menuItemId": menu_item_id,
@@ -92,6 +95,9 @@ async def test_order_create_pull_and_status_preserve_metadata():
     assert created_order["serviceType"] == "dine_in"
     assert created_order["covers"] == 3
     assert created_order["paymentMethod"] == "bkash"
+    assert created_order["customerName"] == "Ayesha Khan"
+    assert created_order["deliveryAddress"] == "House 5, Road 12, Banani"
+    assert created_order["mobileNumber"] == "01711223344"
     assert created_order["items"][0]["name"] == "Rice"
     assert created_order["items"][0]["nameEn"] == "Rice"
     assert created_order["items"][0]["nameBn"] == "ভাত"
@@ -102,6 +108,9 @@ async def test_order_create_pull_and_status_preserve_metadata():
     pulled_order = next(o for o in pulled.json()["data"] if o["id"] == order_id)
     assert pulled_order["paymentMethod"] == "bkash"
     assert pulled_order["vatAmount"] == 25
+    assert pulled_order["customerName"] == "Ayesha Khan"
+    assert pulled_order["deliveryAddress"] == "House 5, Road 12, Banani"
+    assert pulled_order["mobileNumber"] == "01711223344"
     assert pulled_order["items"][0]["nameBn"] == "ভাত"
 
     assert served.status_code == 200
@@ -109,3 +118,98 @@ async def test_order_create_pull_and_status_preserve_metadata():
     assert served_order["status"] == "served"
     assert served_order["serviceType"] == "dine_in"
     assert served_order["paymentMethod"] == "bkash"
+    assert served_order["customerName"] == "Ayesha Khan"
+    assert served_order["deliveryAddress"] == "House 5, Road 12, Banani"
+    assert served_order["mobileNumber"] == "01711223344"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_customer_delivery_order_persists_contact_info():
+    await create_tables()
+    server_id = f"order-delivery-{uuid.uuid4()}"
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        bootstrap = await client.post(
+            "/tenants/bootstrap",
+            json={
+                "serverId": server_id,
+                "restaurantName": "Delivery Test",
+                "tableCount": 4,
+            },
+        )
+        data = bootstrap.json()["data"]
+        headers = {"Authorization": f"Bearer {data['deviceToken']}"}
+        outlet_id = data["outletId"]
+
+        menu_item_id = f"menu-{uuid.uuid4()}"
+        await client.post(
+            f"/outlets/{outlet_id}/menu",
+            headers=headers,
+            json={
+                "id": menu_item_id,
+                "name": "Burger",
+                "price": 300,
+                "category": "Main",
+            },
+        )
+
+        ok = await client.post(
+            f"/customer/{outlet_id}/orders",
+            json={
+                "items": [
+                    {"menuItemId": menu_item_id, "name": "Burger", "qty": 2, "price": 300}
+                ],
+                "orderType": "delivery",
+                "customerName": "Ayesha Khan",
+                "deliveryAddress": "House 5, Road 12, Banani",
+                "mobileNumber": "01711223344",
+                "note": "Ring the doorbell twice",
+            },
+        )
+        pulled = await client.get(f"/outlets/{outlet_id}/orders", headers=headers)
+
+        missing = await client.post(
+            f"/customer/{outlet_id}/orders",
+            json={
+                "items": [
+                    {"menuItemId": menu_item_id, "name": "Burger", "qty": 1, "price": 300}
+                ],
+                "orderType": "delivery",
+                "customerName": "Ayesha",
+            },
+        )
+
+        stale_dine_in = await client.post(
+            f"/customer/{outlet_id}/orders",
+            json={
+                "items": [
+                    {"menuItemId": menu_item_id, "name": "Burger", "qty": 1, "price": 300}
+                ],
+                "tableNo": "3",
+            },
+        )
+
+    assert ok.status_code == 200
+    body = ok.json()["data"]
+    assert body["serviceType"] == "delivery"
+    assert body["customerName"] == "Ayesha Khan"
+    assert body["deliveryAddress"] == "House 5, Road 12, Banani"
+    assert body["mobileNumber"] == "01711223344"
+    assert body["notes"] == "Ring the doorbell twice"
+
+    assert pulled.status_code == 200
+    pulled_order = next(
+        o for o in pulled.json()["data"] if o["id"] == body["orderId"]
+    )
+    assert pulled_order["serviceType"] == "delivery"
+    assert pulled_order["customerName"] == "Ayesha Khan"
+    assert pulled_order["deliveryAddress"] == "House 5, Road 12, Banani"
+    assert pulled_order["mobileNumber"] == "01711223344"
+    assert pulled_order["notes"] == "Ring the doorbell twice"
+
+    assert missing.status_code == 422
+    assert "Delivery requires" in missing.json()["detail"]
+
+    assert stale_dine_in.status_code == 422
+    assert "Delivery requires" in stale_dine_in.json()["detail"]

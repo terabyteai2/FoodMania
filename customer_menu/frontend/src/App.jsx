@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 
 const API_BASE = ''
 const MENU_REFRESH_MS = 5000
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyARB64Gh6KXFDjL_rZMqAGFlfNNGcuBWKw'
+let googleMapsLoadPromise = null
 
 // ── PDF receipt generator ─────────────────────────────────────────────────────
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
@@ -274,6 +276,120 @@ async function loadJson(path) {
   return unwrapApi(body)
 }
 
+function loadGoogleMapsApi() {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Maps can only load in a browser.'))
+  }
+  if (window.google?.maps?.importLibrary) {
+    return Promise.resolve(window.google.maps)
+  }
+  if (!GOOGLE_MAPS_API_KEY) {
+    return Promise.reject(new Error('Google Maps key is missing.'))
+  }
+  if (googleMapsLoadPromise) return googleMapsLoadPromise
+
+  googleMapsLoadPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-rastarant-google-maps="true"]')
+    const callback = `__rastarantGoogleMapsLoaded_${Date.now()}`
+    const cleanup = () => {
+      try { delete window[callback] } catch { window[callback] = undefined }
+    }
+
+    window[callback] = () => {
+      cleanup()
+      if (window.google?.maps?.importLibrary) resolve(window.google.maps)
+      else {
+        googleMapsLoadPromise = null
+        reject(new Error('Google Maps did not finish loading.'))
+      }
+    }
+
+    if (existing) {
+      existing.addEventListener('load', () => {
+        cleanup()
+        if (window.google?.maps?.importLibrary) resolve(window.google.maps)
+        else {
+          googleMapsLoadPromise = null
+          reject(new Error('Google Maps did not finish loading.'))
+        }
+      }, { once: true })
+      existing.addEventListener('error', () => {
+        cleanup()
+        googleMapsLoadPromise = null
+        existing.remove()
+        reject(new Error('Could not load Google Maps.'))
+      }, { once: true })
+      return
+    }
+
+    const params = new URLSearchParams({
+      key: GOOGLE_MAPS_API_KEY,
+      v: 'weekly',
+      loading: 'async',
+      auth_referrer_policy: 'origin',
+      callback,
+    })
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`
+    script.async = true
+    script.defer = true
+    script.dataset.rastarantGoogleMaps = 'true'
+    script.onerror = () => {
+      cleanup()
+      googleMapsLoadPromise = null
+      script.remove()
+      reject(new Error('Could not load Google Maps.'))
+    }
+    document.head.appendChild(script)
+  })
+
+  return googleMapsLoadPromise
+}
+
+function getBrowserPosition() {
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error('Location is not available in this browser.'))
+  }
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      position => resolve({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      }),
+      error => {
+        const denied = error.code === error.PERMISSION_DENIED
+        reject(new Error(denied ? 'Location permission was denied.' : 'Could not detect your location.'))
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 },
+    )
+  })
+}
+
+async function reverseGeocodePosition(position, outletId) {
+  if (!outletId || outletId === '__demo__') {
+    throw new Error('Address lookup is not available for this menu.')
+  }
+  const res = await fetch(`${API_BASE}/customer/${encodeURIComponent(outletId)}/geocode/reverse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    body: JSON.stringify(position),
+  })
+  let body = null
+  try {
+    body = await res.json()
+  } catch {
+    // Keep the clearer status error below.
+  }
+  if (!res.ok) {
+    throw new Error(body?.detail || body?.error || 'Could not detect address.')
+  }
+  const data = body?.ok === true ? body.data : body?.data ?? body
+  const address = data?.address?.trim()
+  if (!address) throw new Error('No address found near this location.')
+  return address
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const outletId = getOutletId()
@@ -283,6 +399,7 @@ export default function App() {
   const [cart, setCart]         = useState({})
   const [activeCategory, setCat]= useState('All')
   const [note, setNote]         = useState('')
+  const [delivery, setDelivery] = useState({ name: '', address: '', mobile: '' })
   const [submitting, setSub]    = useState(false)
   const [errorMsg, setErr]      = useState('')
   const [orderRef, setOrderRef] = useState(null)
@@ -365,10 +482,18 @@ export default function App() {
         const item = items.find(i => i.id === id)
         return { menuItemId: id, name: item.name, qty, price: item.price }
       })
+      const payload = {
+        items: orderItems,
+        note: note || null,
+        orderType: 'delivery',
+        customerName: delivery.name.trim(),
+        deliveryAddress: delivery.address.trim(),
+        mobileNumber: delivery.mobile.trim(),
+      }
       const res = await fetch(`${API_BASE}/customer/${outletId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: orderItems, note: note || null }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || data.error || 'Order failed')
@@ -387,12 +512,17 @@ export default function App() {
   if (phase === 'error')   return <ErrorScreen message={errorMsg} />
   if (phase === 'success') return (
     <SuccessScreen order={orderRef} info={info} cartItems={lastCart}
-      onBack={() => { setCart({}); setLastCart([]); setNote(''); setPhase('menu') }} />
+      onBack={() => {
+        setCart({}); setLastCart([]); setNote('')
+        setDelivery({ name: '', address: '', mobile: '' })
+        setPhase('menu')
+      }} />
   )
   if (phase === 'cart') return (
     <CartScreen cart={cart} items={items} note={note} onNote={setNote}
+      delivery={delivery} onDelivery={setDelivery}
       onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
-      onPlace={placeOrder} submitting={submitting} info={info} />
+      onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId} />
   )
   if (phase === 'welcome') return (
     <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
@@ -994,11 +1124,60 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
 }
 
 // ── Cart Screen ───────────────────────────────────────────────────────────────
-function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlace, submitting, info }) {
+function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, onRemove, onBack, onPlace, submitting, info, outletId }) {
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
     .filter(Boolean)
   const total = cartTotal(cart, items)
+  const deliveryReady = delivery.name.trim() && delivery.address.trim() && delivery.mobile.trim().length >= 7
+  const [geo, setGeo] = useState({ status: 'idle', address: '', position: null, error: '' })
+  const mountedRef = useRef(true)
+  const addressRef = useRef(delivery.address)
+
+  useEffect(() => {
+    addressRef.current = delivery.address
+  }, [delivery.address])
+
+  useEffect(() => {
+    mountedRef.current = true
+    detectAddress()
+    return () => { mountedRef.current = false }
+  }, [])
+
+  function setGeoIfMounted(next) {
+    if (!mountedRef.current) return
+    if (typeof next === 'function') setGeo(next)
+    else setGeo(next)
+  }
+
+  async function detectAddress() {
+    if (!outletId || outletId === '__demo__') {
+      setGeoIfMounted({
+        status: 'error',
+        address: '',
+        position: null,
+        error: 'Address lookup is not available for this menu.',
+      })
+      return
+    }
+    setGeoIfMounted(current => ({ ...current, status: 'locating', error: '' }))
+    try {
+      const position = await getBrowserPosition()
+      setGeoIfMounted({ status: 'geocoding', address: '', position, error: '' })
+      const address = await reverseGeocodePosition(position, outletId)
+      if (!mountedRef.current) return
+      setGeo({ status: 'ready', address, position, error: '' })
+      if (!addressRef.current.trim()) {
+        onDelivery(current => ({ ...current, address }))
+      }
+    } catch (error) {
+      setGeoIfMounted(current => ({
+        ...current,
+        status: 'error',
+        error: error.message || 'Could not detect address.',
+      }))
+    }
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
@@ -1073,6 +1252,58 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
         {/* Divider */}
         <div style={{ height: 1, background: T.line, margin: '12px 0' }} />
 
+        {/* Delivery Details */}
+        <div style={{ marginTop: 4, marginBottom: 16 }}>
+          <div style={{
+            fontFamily: T.display, fontSize: 13, color: T.amber,
+            letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+          }}>Delivery Details</div>
+        </div>
+
+        {/* Delivery Form */}
+        <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            type="text"
+            placeholder="Full name"
+            value={delivery.name}
+            onChange={e => onDelivery({ ...delivery, name: e.target.value })}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 10,
+              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+              fontSize: 14, fontFamily: T.body, outline: 'none',
+            }}
+          />
+          <AddressAssistSection
+            geo={geo}
+            currentAddress={delivery.address}
+            onRetry={detectAddress}
+            onUseAddress={() => onDelivery({ ...delivery, address: geo.address })}
+          />
+          <textarea
+            placeholder="Delivery address"
+            rows={2}
+            value={delivery.address}
+            onChange={e => onDelivery({ ...delivery, address: e.target.value })}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 10,
+              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+              fontSize: 14, fontFamily: T.body, resize: 'none', outline: 'none',
+            }}
+          />
+          <input
+            type="tel"
+            inputMode="tel"
+            placeholder="Mobile number"
+            value={delivery.mobile}
+            onChange={e => onDelivery({ ...delivery, mobile: e.target.value })}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 10,
+              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+              fontSize: 14, fontFamily: T.body, outline: 'none',
+            }}
+          />
+        </div>
+
         {/* Note */}
         <div style={{ marginTop: 4 }}>
           <div style={{
@@ -1117,16 +1348,174 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
             fontFamily: T.display, fontSize: 18, textTransform: 'uppercase',
             cursor: 'pointer', letterSpacing: '.04em', fontWeight: 700,
             boxShadow: '0 14px 30px rgba(255,106,61,.35)',
-            opacity: submitting ? 0.7 : 1,
+            opacity: (submitting || !deliveryReady) ? 0.5 : 1,
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10,
             WebkitTapHighlightColor: 'transparent',
           }}
-          disabled={submitting}
+          disabled={submitting || !deliveryReady}
           onClick={onPlace}
         >
           {submitting ? 'Placing Order…' : <>Place Order · অর্ডার করুন <span style={{ fontSize: 20 }}>→</span></>}
         </button>
       </div>
+    </div>
+  )
+}
+
+function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
+  const isLoading = geo.status === 'locating' || geo.status === 'geocoding'
+  const hasAddress = geo.status === 'ready' && geo.address
+  const hasError = geo.status === 'error'
+  const addressMatches = hasAddress && currentAddress.trim() === geo.address.trim()
+  const title = hasAddress ? 'Check delivery address' : isLoading ? 'Finding delivery address' : 'Delivery location'
+  const message = hasAddress
+    ? geo.address
+    : hasError
+    ? geo.error
+    : geo.status === 'geocoding'
+    ? 'Checking the closest street address...'
+    : 'Waiting for location permission...'
+
+  return (
+    <div style={{
+      border: `1px solid ${hasError ? 'rgba(255,106,61,.35)' : T.line}`,
+      background: 'rgba(255,243,224,.045)',
+      borderRadius: 10,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: 10,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: T.display,
+            fontSize: 13,
+            color: hasError ? T.ember : T.amber,
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+            lineHeight: 1.1,
+          }}>{title}</div>
+          <div style={{
+            marginTop: 5,
+            color: hasError ? 'rgba(255,166,145,.95)' : T.inkSoft,
+            fontSize: 12,
+            lineHeight: 1.35,
+          }}>{message}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isLoading}
+          style={{
+            border: `1px solid ${T.line}`,
+            background: isLoading ? 'rgba(255,243,224,.04)' : 'rgba(255,243,224,.08)',
+            color: isLoading ? T.inkFaint : T.ink,
+            borderRadius: 8,
+            padding: '7px 10px',
+            fontSize: 12,
+            fontFamily: T.body,
+            cursor: isLoading ? 'default' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isLoading ? 'Checking' : hasError ? 'Retry' : 'Refresh'}
+        </button>
+      </div>
+      {geo.position && (
+        <AddressMapPreview position={geo.position} />
+      )}
+      {hasAddress && !addressMatches && (
+        <button
+          type="button"
+          onClick={onUseAddress}
+          style={{
+            width: '100%',
+            border: 'none',
+            borderTop: `1px solid ${T.line}`,
+            background: 'rgba(255,181,71,.12)',
+            color: T.amber,
+            padding: '10px 12px',
+            fontFamily: T.display,
+            fontSize: 13,
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+            cursor: 'pointer',
+          }}
+        >
+          Use detected address
+        </button>
+      )}
+    </div>
+  )
+}
+
+function AddressMapPreview({ position }) {
+  const mapRef = useRef(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setFailed(false)
+
+    async function renderMap() {
+      try {
+        await loadGoogleMapsApi()
+        const { Map } = await window.google.maps.importLibrary('maps')
+        if (cancelled || !mapRef.current) return
+        new Map(mapRef.current, {
+          center: position,
+          zoom: 17,
+          disableDefaultUI: true,
+          gestureHandling: 'none',
+          keyboardShortcuts: false,
+          clickableIcons: false,
+        })
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    }
+
+    renderMap()
+    return () => { cancelled = true }
+  }, [position.lat, position.lng])
+
+  return (
+    <div style={{
+      height: 118,
+      position: 'relative',
+      borderTop: `1px solid ${T.line}`,
+      background: T.bgWarm,
+      overflow: 'hidden',
+    }}>
+      {failed ? (
+        <div style={{
+          height: '100%',
+          display: 'grid',
+          placeItems: 'center',
+          color: T.inkFaint,
+          fontSize: 12,
+        }}>Map preview unavailable</div>
+      ) : (
+        <>
+          <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+          <div style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 16,
+            height: 16,
+            borderRadius: 999,
+            background: T.ember,
+            border: '2px solid #fff',
+            boxShadow: '0 6px 18px rgba(0,0,0,.35)',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+          }} />
+        </>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'
     as bt_serial;
 import 'package:image/image.dart' as img;
@@ -32,6 +33,7 @@ class PrinterRuntimeState {
     required this.autoPrintEnabled,
     required this.connected,
     required this.busy,
+    this.usbPrinterAvailable = false,
     this.selectedPrinterName,
     this.selectedPrinterAddress,
     this.lastError,
@@ -42,6 +44,7 @@ class PrinterRuntimeState {
   final bool autoPrintEnabled;
   final bool connected;
   final bool busy;
+  final bool usbPrinterAvailable;
   final String? selectedPrinterName;
   final String? selectedPrinterAddress;
   final String? lastError;
@@ -49,11 +52,13 @@ class PrinterRuntimeState {
   final DateTime? lastPrintedAt;
 
   bool get hasSelectedPrinter {
-    return selectedPrinterAddress != null &&
-        selectedPrinterAddress!.trim().isNotEmpty;
+    return usbPrinterAvailable ||
+        selectedPrinterAddress != null &&
+            selectedPrinterAddress!.trim().isNotEmpty;
   }
 
   String get selectedPrinterLabel {
+    if (usbPrinterAvailable) return 'USB printer (type-C)';
     final name = selectedPrinterName?.trim();
     if (name != null && name.isNotEmpty) return name;
     return selectedPrinterAddress ?? 'No printer selected';
@@ -63,6 +68,7 @@ class PrinterRuntimeState {
     bool? autoPrintEnabled,
     bool? connected,
     bool? busy,
+    bool? usbPrinterAvailable,
     String? selectedPrinterName,
     String? selectedPrinterAddress,
     String? lastError,
@@ -75,6 +81,7 @@ class PrinterRuntimeState {
       autoPrintEnabled: autoPrintEnabled ?? this.autoPrintEnabled,
       connected: connected ?? this.connected,
       busy: busy ?? this.busy,
+      usbPrinterAvailable: usbPrinterAvailable ?? this.usbPrinterAvailable,
       selectedPrinterName: clearPrinter
           ? null
           : selectedPrinterName ?? this.selectedPrinterName,
@@ -102,6 +109,8 @@ class _ReceiptLabels {
   String get takeaway => _bn ? 'টেকওয়ে' : 'Takeaway';
   String get nameLabel => _bn ? 'নাম' : 'Name';
   String get noteLabel => _bn ? 'নোট' : 'Note';
+  String get addressLabel => _bn ? 'ঠিকানা' : 'Address';
+  String get phoneLabel => _bn ? 'মোবাইল' : 'Phone';
   String get total => _bn ? 'মোট' : 'Total';
   String get vatIncluded => _bn ? 'ভ্যাটসহ' : 'VAT included';
   String get totalVatIncluded =>
@@ -182,6 +191,10 @@ class _ReceiptLabels {
 }
 
 class PrinterService {
+  static const MethodChannel _usbPrinterChannel = MethodChannel(
+    'com.terabyteai.foodmania/usb_printer',
+  );
+
   static const String _autoPrintKey = 'printer_auto_print_enabled';
   static const String _printerNameKey = 'printer_selected_name';
   static const String _printerAddressKey = 'printer_selected_address';
@@ -203,6 +216,7 @@ class PrinterService {
 
   Future<void> initialize() async {
     final preferences = await SharedPreferences.getInstance();
+    final usbAvailable = await _hasUsbPrinter();
     _printedOrderIds
       ..clear()
       ..addAll(preferences.getStringList(_printedOrderIdsKey) ?? []);
@@ -215,7 +229,8 @@ class PrinterService {
         autoPrintEnabled: preferences.getBool(_autoPrintKey) ?? true,
         selectedPrinterName: preferences.getString(_printerNameKey),
         selectedPrinterAddress: preferences.getString(_printerAddressKey),
-        connected: false,
+        usbPrinterAvailable: usbAvailable,
+        connected: usbAvailable,
         clearLastError: true,
       ),
     );
@@ -243,8 +258,13 @@ class PrinterService {
       _emit(_state.copyWith(lastError: _friendlyError(error)));
       return [];
     } finally {
+      final usbAvailable = await _hasUsbPrinter();
       _emit(
-        _state.copyWith(busy: false, connected: await _readConnectionStatus()),
+        _state.copyWith(
+          busy: false,
+          usbPrinterAvailable: usbAvailable,
+          connected: usbAvailable || await _readBluetoothConnectionStatus(),
+        ),
       );
     }
   }
@@ -316,7 +336,14 @@ class PrinterService {
   Future<bool> disconnect() async {
     return _withBusyBool(() async {
       final disconnected = await PrintBluetoothThermal.disconnect;
-      _emit(_state.copyWith(connected: !disconnected, clearLastError: true));
+      final usbAvailable = await _hasUsbPrinter();
+      _emit(
+        _state.copyWith(
+          usbPrinterAvailable: usbAvailable,
+          connected: usbAvailable || !disconnected,
+          clearLastError: true,
+        ),
+      );
       return disconnected;
     });
   }
@@ -332,7 +359,7 @@ class PrinterService {
     required String outletName,
   }) async {
     return _withBusyBool(() async {
-      await _ensureConnected();
+      await _ensureAnyPrinterReady();
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
       final now = DateTime.now();
@@ -381,7 +408,7 @@ class PrinterService {
             : restaurantName,
         outletName: outletName,
       );
-      final ok = await PrintBluetoothThermal.writeBytes(bytes);
+      final ok = await _writeBytes(bytes);
       _debugPrintWriteResult(
         testOrder,
         copyKind: 'diagnostic',
@@ -402,7 +429,7 @@ class PrinterService {
     bool markAsPrinted = true,
   }) async {
     return _withBusyBool(() async {
-      await _ensureConnected();
+      await _ensureAnyPrinterReady();
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
       final labels = _ReceiptLabels(language);
@@ -418,9 +445,7 @@ class PrinterService {
         restaurantName: restaurantName,
         outletName: outletName,
       );
-      final okManager = await PrintBluetoothThermal.writeBytes(
-        managerCopyBytes,
-      );
+      final okManager = await _writeBytes(managerCopyBytes);
       _debugPrintWriteResult(
         order,
         copyKind: 'manager',
@@ -454,7 +479,7 @@ class PrinterService {
     AppLanguage language = AppLanguage.en,
   }) async {
     return _withBusyBool(() async {
-      await _ensureConnected();
+      await _ensureAnyPrinterReady();
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
       final labels = _ReceiptLabels(language);
@@ -466,7 +491,7 @@ class PrinterService {
         restaurantName: restaurantName,
         outletName: outletName,
       );
-      final ok = await PrintBluetoothThermal.writeBytes(customerCopyBytes);
+      final ok = await _writeBytes(customerCopyBytes);
       _debugPrintWriteResult(
         order,
         copyKind: 'customer',
@@ -544,6 +569,10 @@ class PrinterService {
       customerNameLabel: labels.nameLabel,
       note: isManagerCopy ? order.note : null,
       noteLabel: labels.noteLabel,
+      deliveryAddress: order.deliveryAddress,
+      deliveryAddressLabel: labels.addressLabel,
+      mobileNumber: order.mobileNumber,
+      mobileNumberLabel: labels.phoneLabel,
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);
@@ -775,15 +804,25 @@ class PrinterService {
 
   /// Lightweight check before auto-printing a batch of orders (no print, no busy).
   Future<String?> preflightBlockReason() async {
+    if (await _hasUsbPrinter()) {
+      _emit(
+        _state.copyWith(
+          usbPrinterAvailable: true,
+          connected: true,
+          clearLastError: true,
+        ),
+      );
+      return null;
+    }
     if (!_state.hasSelectedPrinter) {
-      return 'Select a Bluetooth printer first.';
+      return 'Connect a USB printer or select a Bluetooth printer first.';
     }
     try {
       await _ensureBluetoothReady();
     } catch (error) {
       return _friendlyError(error);
     }
-    final connected = await _readConnectionStatus();
+    final connected = await _readBluetoothConnectionStatus();
     if (!connected) {
       return 'Printer is not connected.';
     }
@@ -817,13 +856,30 @@ class PrinterService {
     }
   }
 
-  Future<void> _ensureConnected() async {
+  Future<void> _ensureAnyPrinterReady() async {
+    final usbAvailable = await _hasUsbPrinter();
+    if (usbAvailable) {
+      _emit(
+        _state.copyWith(
+          usbPrinterAvailable: true,
+          connected: true,
+          clearLastError: true,
+        ),
+      );
+      return;
+    }
+    await _ensureBluetoothConnected();
+  }
+
+  Future<void> _ensureBluetoothConnected() async {
     await _ensureBluetoothReady();
-    var connected = await _readConnectionStatus();
+    var connected = await _readBluetoothConnectionStatus();
     if (!connected) {
       final address = _state.selectedPrinterAddress;
       if (address == null || address.trim().isEmpty) {
-        throw PrinterException('Select a Bluetooth printer first.');
+        throw PrinterException(
+          'Connect a USB printer or select a Bluetooth printer first.',
+        );
       }
       connected = await PrintBluetoothThermal.connect(
         macPrinterAddress: address,
@@ -835,7 +891,65 @@ class PrinterService {
     _emit(_state.copyWith(connected: true, clearLastError: true));
   }
 
-  Future<bool> _readConnectionStatus() async {
+  Future<bool> _writeBytes(List<int> bytes) async {
+    if (await _hasUsbPrinter()) {
+      final usbOk = await _writeUsbBytes(bytes);
+      if (usbOk) {
+        _emit(
+          _state.copyWith(
+            usbPrinterAvailable: true,
+            connected: true,
+            clearLastError: true,
+          ),
+        );
+        return true;
+      }
+      if (kDebugMode) {
+        debugPrint('[QB-PRINTER] USB write failed; trying Bluetooth fallback.');
+      }
+    }
+
+    await _ensureBluetoothConnected();
+    final ok = await PrintBluetoothThermal.writeBytes(bytes);
+    final usbAvailable = await _hasUsbPrinter();
+    _emit(
+      _state.copyWith(
+        usbPrinterAvailable: usbAvailable,
+        connected: usbAvailable || await _readBluetoothConnectionStatus(),
+        clearLastError: ok,
+      ),
+    );
+    return ok;
+  }
+
+  Future<bool> _hasUsbPrinter() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _usbPrinterChannel
+              .invokeMethod<bool>('hasPrinter')
+              .timeout(const Duration(milliseconds: 700)) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _writeUsbBytes(List<int> bytes) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _usbPrinterChannel
+              .invokeMethod<bool>('printBytes', {
+                'bytes': Uint8List.fromList(bytes),
+              })
+              .timeout(const Duration(seconds: 60)) ??
+          false;
+    } catch (error) {
+      if (kDebugMode) debugPrint('[QB-PRINTER] USB write error: $error');
+      return false;
+    }
+  }
+
+  Future<bool> _readBluetoothConnectionStatus() async {
     try {
       return await PrintBluetoothThermal.connectionStatus.timeout(
         Duration(milliseconds: 900),
@@ -850,17 +964,24 @@ class PrinterService {
     try {
       return await action();
     } catch (error) {
+      final usbAvailable = await _hasUsbPrinter();
       _emit(
         _state.copyWith(
-          connected: await _readConnectionStatus(),
+          usbPrinterAvailable: usbAvailable,
+          connected: usbAvailable || await _readBluetoothConnectionStatus(),
           lastError: _friendlyError(error),
         ),
       );
       if (kDebugMode) debugPrint('Printer error: $error');
       return false;
     } finally {
+      final usbAvailable = await _hasUsbPrinter();
       _emit(
-        _state.copyWith(busy: false, connected: await _readConnectionStatus()),
+        _state.copyWith(
+          busy: false,
+          usbPrinterAvailable: usbAvailable,
+          connected: usbAvailable || await _readBluetoothConnectionStatus(),
+        ),
       );
     }
   }
@@ -869,10 +990,11 @@ class PrinterService {
     if (error is PrinterException) return error.message;
     final value = error.toString();
     if (value.contains('permission')) {
-      return 'Bluetooth permission is required.';
+      return 'Printer permission is required.';
     }
     if (value.contains('bluetooth')) return 'Bluetooth is not ready.';
-    return 'Printer action failed. Check printer power and Bluetooth pairing.';
+    if (value.contains('usb')) return 'USB printer is not ready.';
+    return 'Printer action failed. Check printer power, cable, or Bluetooth pairing.';
   }
 
   String _ticketText(String value, {String fallback = '-'}) {

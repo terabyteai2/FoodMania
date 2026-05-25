@@ -73,11 +73,10 @@ class StatusBadge extends StatelessWidget {
             Icon(icon, size: dense ? 12 : 13.5, color: foreground),
             SizedBox(width: 5),
           ],
-          Text(
+          TfText(
             label,
             style: TextStyle(
               color: foreground,
-              fontFamily: tfFontFamily(context),
               fontWeight: FontWeight.w500,
               fontSize: dense ? 10.5 : 11,
               letterSpacing: tfIsBn(context) ? 0 : 0.2,

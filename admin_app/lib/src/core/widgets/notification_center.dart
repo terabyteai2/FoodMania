@@ -352,7 +352,7 @@ class _TabPill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              TfText(
                 label,
                 style: TextStyle(
                   fontSize: 11.5,
@@ -363,7 +363,7 @@ class _TabPill extends StatelessWidget {
               ),
               if (count > 0) ...[
                 const SizedBox(width: 5),
-                Text(
+                TfText(
                   '$count',
                   style: TextStyle(
                     fontSize: 11.5,
@@ -623,7 +623,7 @@ class _PendingOrdersGroupTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
+                  child: TfText(
                     '$count',
                     style: const TextStyle(
                       color: PosColors.primaryDark,
@@ -639,7 +639,7 @@ class _PendingOrdersGroupTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      TfText(
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -651,7 +651,7 @@ class _PendingOrdersGroupTile extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
+                      TfText(
                         body,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -868,7 +868,7 @@ class _MiniActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: border, width: 0.5),
           ),
-          child: Text(
+          child: TfText(
             label,
             style: TextStyle(
               color: fg,
@@ -1068,7 +1068,7 @@ class _ToastButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           constraints: const BoxConstraints(minWidth: 64),
           alignment: Alignment.center,
-          child: Text(
+          child: TfText(
             label,
             style: TextStyle(
               color: fg,
@@ -1256,7 +1256,7 @@ class HeaderLanguageButton extends StatelessWidget {
               border: Border.all(color: PosColors.line, width: 0.5),
             ),
             alignment: Alignment.center,
-            child: Text(
+            child: TfText(
               label,
               style: TextStyle(
                 fontSize: 11,

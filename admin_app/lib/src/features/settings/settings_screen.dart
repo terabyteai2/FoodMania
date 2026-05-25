@@ -357,6 +357,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _SettingsGroupCard(items: visibleGroups[i].items),
                         if (i < visibleGroups.length - 1) SizedBox(height: 14),
                       ],
+                    if (app.demoManagerLoginEnabled) ...[
+                      SizedBox(height: 14),
+                      TfSectionHeader(label: 'Diagnostics'),
+                      SizedBox(height: 7),
+                      _DiagnosticsCard(app: app),
+                    ],
                   ],
                 ),
               ),
@@ -1772,9 +1778,7 @@ class _PrinterSettingsCard extends StatelessWidget {
               variant: TfButtonVariant.paper,
               size: TfButtonSize.sm,
               fullWidth: false,
-              onPressed: state.busy || !state.hasSelectedPrinter
-                  ? null
-                  : onTestPrint,
+              onPressed: state.busy ? null : onTestPrint,
             ),
             if (state.connected)
               TfButton(
@@ -3694,6 +3698,116 @@ class _PrivacyPolicyPage extends StatelessWidget {
           ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
         ),
       ],
+    );
+  }
+}
+
+/// Hidden dev-only diagnostics card. Visible in the Settings list when
+/// [PosAppController.demoManagerLoginEnabled] is true. Surfaces the counts
+/// behind the RAM-optimization work (orders/menu/inventory/notification list
+/// sizes, alert dedupe set size, active subscription count) plus the global
+/// Flutter image cache size so memory hotspots can be spot-checked without
+/// attaching Flutter DevTools.
+class _DiagnosticsCard extends StatefulWidget {
+  const _DiagnosticsCard({required this.app});
+  final PosAppController app;
+
+  @override
+  State<_DiagnosticsCard> createState() => _DiagnosticsCardState();
+}
+
+class _DiagnosticsCardState extends State<_DiagnosticsCard> {
+  @override
+  Widget build(BuildContext context) {
+    final app = widget.app;
+    final imageCache = PaintingBinding.instance.imageCache;
+    final cacheKb = (imageCache.currentSizeBytes / 1024).round();
+    final cacheMaxKb = (imageCache.maximumSizeBytes / 1024).round();
+
+    return TfCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DiagRow(label: 'Orders in memory', value: '${app.diagOrdersInMemory}'),
+          _DiagRow(
+            label: 'More orders to load',
+            value: app.hasMoreOrders
+                ? (app.loadingMoreOrders ? 'loading…' : 'yes')
+                : 'no',
+          ),
+          _DiagRow(label: 'Menu items', value: '${app.diagMenuInMemory}'),
+          _DiagRow(label: 'Inventory items', value: '${app.diagInventoryInMemory}'),
+          _DiagRow(label: 'Notifications', value: '${app.diagNotificationsInMemory}'),
+          _DiagRow(label: 'Alert dedupe set', value: '${app.diagAlertSetSize}'),
+          _DiagRow(label: 'Active subscriptions', value: '${app.diagSubscriptionCount}'),
+          _DiagRow(
+            label: 'Image cache',
+            value:
+                '$cacheKb / $cacheMaxKb kB · ${imageCache.liveImageCount} live',
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TfButton(
+                  label: 'Refresh',
+                  variant: TfButtonVariant.paper,
+                  size: TfButtonSize.sm,
+                  onPressed: () => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TfButton(
+                  label: 'Clear image cache',
+                  variant: TfButtonVariant.paper,
+                  size: TfButtonSize.sm,
+                  onPressed: () {
+                    imageCache.clear();
+                    imageCache.clearLiveImages();
+                    setState(() {});
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagRow extends StatelessWidget {
+  const _DiagRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: TfText(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: PosColors.slate,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TfText(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: PosColors.primaryDark,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

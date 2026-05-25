@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../app_scope.dart';
 import '../../models/order_model.dart';
+import '../../models/order_service_type.dart';
 import '../../models/order_status.dart';
 import '../theme/app_theme.dart';
 import 'status_badge.dart';
@@ -100,10 +101,27 @@ class OrderCard extends StatelessWidget {
                                     icon: Icons.person_outline,
                                     label: order.customerName ?? 'Walk-in',
                                   ),
-                                  _MetaPill(
-                                    icon: Icons.table_restaurant_outlined,
-                                    label: 'Table ${order.tableNo ?? 'N/A'}',
-                                  ),
+                                  if (order.serviceType ==
+                                      OrderServiceType.delivery) ...[
+                                    if ((order.deliveryAddress ?? '')
+                                        .trim()
+                                        .isNotEmpty)
+                                      _MetaPill(
+                                        icon: Icons.location_on_outlined,
+                                        label: order.deliveryAddress!.trim(),
+                                      ),
+                                    if ((order.mobileNumber ?? '')
+                                        .trim()
+                                        .isNotEmpty)
+                                      _MetaPill(
+                                        icon: Icons.phone_outlined,
+                                        label: order.mobileNumber!.trim(),
+                                      ),
+                                  ] else
+                                    _MetaPill(
+                                      icon: Icons.table_restaurant_outlined,
+                                      label: 'Table ${order.tableNo ?? 'N/A'}',
+                                    ),
                                   _MetaPill(
                                     icon: Icons.schedule,
                                     label: createdTime,

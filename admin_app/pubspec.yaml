@@ -63,12 +63,14 @@ flutter:
           weight: 400
         - asset: assets/fonts/Inter.ttf
           weight: 500
-    - family: Hind Siliguri
+    - family: Noto Sans Bengali
       fonts:
-        - asset: assets/fonts/HindSiliguri-Regular.ttf
+        - asset: assets/fonts/NotoSansBengali-Regular.ttf
           weight: 400
-        - asset: assets/fonts/HindSiliguri-Medium.ttf
+        - asset: assets/fonts/NotoSansBengali-Bold.ttf
           weight: 500
+        - asset: assets/fonts/NotoSansBengali-Bold.ttf
+          weight: 700
     - family: JetBrains Mono
       fonts:
         - asset: assets/fonts/JetBrainsMono.ttf

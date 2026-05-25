@@ -117,11 +117,12 @@ def _receipt_scan_instructions() -> str:
         "delivery charges, or grand totals as items. Each line item must have a "
         "positive numeric quantity, a unit, and a positive numeric total in BDT "
         "(no currency symbols). Return English and Bangla names in separate "
-        "fields: nameEn, nameBn. If one language is missing, translate or "
-        "transliterate the missing side. Normalize the unit to one of: kg, gm, "
-        "ltr, ml, pcs, pack, dozen — pick the closest. If unitPriceBdt is not "
-        "printed, compute it as totalBdt / qty (round to 2 decimals). Merge "
-        "duplicate sightings of the same item across pages."
+        "fields: nameEn, nameBn. nameBn must be Bengali script, not Romanized "
+        "Bangla and never a copy of nameEn. If one language is missing, "
+        "translate or transliterate the missing side. Normalize the unit to one "
+        "of: kg, gm, ltr, ml, pcs, pack, dozen — pick the closest. If "
+        "unitPriceBdt is not printed, compute it as totalBdt / qty (round to "
+        "2 decimals). Merge duplicate sightings of the same item across pages."
     )
 
 

@@ -48,7 +48,7 @@ class _StockInScreenState extends State<StockInScreen> {
         .firstOrNull;
     if (item != null) {
       setState(() {
-        _lines.add(_StockInLine.fromItem(item));
+        _lines.add(_StockInLine.fromItem(item, language: app.language));
       });
     }
   }
@@ -82,7 +82,7 @@ class _StockInScreenState extends State<StockInScreen> {
       if (result.createNew) {
         _lines.add(_StockInLine.blank());
       } else if (result.item != null) {
-        _lines.add(_StockInLine.fromItem(result.item!));
+        _lines.add(_StockInLine.fromItem(result.item!, language: app.language));
       }
     });
   }
@@ -97,7 +97,10 @@ class _StockInScreenState extends State<StockInScreen> {
   void _addInventoryItem(InventoryItem item) {
     final alreadyAdded = _lines.any((line) => line.linkedItemId == item.id);
     if (alreadyAdded) return;
-    setState(() => _lines.add(_StockInLine.fromItem(item)));
+    final app = AppScope.of(context);
+    setState(
+      () => _lines.add(_StockInLine.fromItem(item, language: app.language)),
+    );
   }
 
   Future<void> _pickAndScan({required bool fromCamera}) async {
@@ -162,20 +165,28 @@ class _StockInScreenState extends State<StockInScreen> {
         final matchedId =
             line.linkedItemId ?? _matchExistingItem(app.inventoryItems, line);
         if (matchedId != null) {
-          // Keep the saved unit price in sync if the user edited it.
-          final unitPrice = line.parsedUnitPrice;
-          if (unitPrice != null && unitPrice > 0) {
-            final existing = app.inventoryItems
-                .where((i) => i.id == matchedId)
-                .firstOrNull;
-            if (existing != null &&
+          final existing = app.inventoryItems
+              .where((i) => i.id == matchedId)
+              .firstOrNull;
+          if (existing != null) {
+            var updatedExisting = existing;
+            final mergedName = line.inventoryNameForExisting(existing.name);
+            if (mergedName != existing.name) {
+              updatedExisting = updatedExisting.copyWith(name: mergedName);
+            }
+            // Keep the saved unit price in sync if the user edited it.
+            final unitPrice = line.parsedUnitPrice;
+            if (unitPrice != null &&
+                unitPrice > 0 &&
                 (existing.costPerUnit - unitPrice).abs() > 0.001) {
-              await app.saveInventoryItem(
-                existing.copyWith(
-                  costPerUnit: unitPrice,
-                  updatedAt: DateTime.now(),
-                ),
+              updatedExisting = updatedExisting.copyWith(
+                costPerUnit: unitPrice,
               );
+            }
+            if (updatedExisting.name != existing.name ||
+                (updatedExisting.costPerUnit - existing.costPerUnit).abs() >
+                    0.001) {
+              await app.saveInventoryItem(updatedExisting);
             }
           }
           await app.recordInventoryPurchase(
@@ -186,7 +197,7 @@ class _StockInScreenState extends State<StockInScreen> {
         } else {
           final newItem = InventoryItem(
             id: _uuid.v4(),
-            name: line.nameCtrl.text.trim(),
+            name: line.inventoryNameForSave,
             category: '',
             unit: InventoryUnits.normalize(line.unit),
             quantity: 0,
@@ -217,7 +228,28 @@ class _StockInScreenState extends State<StockInScreen> {
     final name = line.nameCtrl.text.trim().toLowerCase();
     if (name.isEmpty) return null;
     for (final item in items) {
-      if (item.name.toLowerCase() == name) return item.id;
+      final itemNames = [item.name, item.nameEn, item.nameBn]
+          .expand(_StockInLine.splitMatchableNames)
+          .toSet()
+          .toList(growable: false);
+      for (final itemName in itemNames) {
+        if (itemName == name) return item.id;
+        if (name.contains(itemName) || itemName.contains(name)) {
+          return item.id;
+        }
+      }
+      for (final lineName in line.matchableNames) {
+        if (lineName.isEmpty) continue;
+        if (itemNames.contains(lineName)) {
+          return item.id;
+        }
+        if (itemNames.any(
+          (itemName) =>
+              lineName.contains(itemName) || itemName.contains(lineName),
+        )) {
+          return item.id;
+        }
+      }
       if (name.contains(item.name.toLowerCase()) ||
           item.name.toLowerCase().contains(name)) {
         return item.id;
@@ -418,12 +450,15 @@ class _InventoryInlinePicker extends StatelessWidget {
         items
             .where((item) {
               if (query.isEmpty) return true;
-              return item.name.toLowerCase().contains(query) ||
+              return item.searchText.contains(query) ||
                   item.category.toLowerCase().contains(query);
             })
             .toList(growable: false)
           ..sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            (a, b) => a
+                .localizedName(text.language)
+                .toLowerCase()
+                .compareTo(b.localizedName(text.language).toLowerCase()),
           );
     final visible = filtered.take(_visibleLimit).toList(growable: false);
 
@@ -520,6 +555,7 @@ class _InventoryPickRow extends StatelessWidget {
     final price = item.costPerUnit > 0
         ? '৳${_StockInLine._formatNumber(item.costPerUnit)} / $unit'
         : text.noSavedPrice;
+    final name = item.localizedName(text.language);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -533,7 +569,7 @@ class _InventoryPickRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TfText(
-                  item.name,
+                  name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -876,27 +912,41 @@ class _NumberField extends StatelessWidget {
 }
 
 class _StockInLine {
-  _StockInLine({String? unit, this.linkedItemId})
-    : nameCtrl = TextEditingController(),
-      qtyCtrl = TextEditingController(),
-      unitPriceCtrl = TextEditingController(),
-      totalCtrl = TextEditingController(),
-      unit = unit ?? 'kg';
+  _StockInLine({
+    String? unit,
+    this.linkedItemId,
+    String? scannedNameEn,
+    String? scannedNameBn,
+  }) : scannedNameEn = scannedNameEn?.trim() ?? '',
+       scannedNameBn = scannedNameBn?.trim() ?? '',
+       nameCtrl = TextEditingController(),
+       qtyCtrl = TextEditingController(),
+       unitPriceCtrl = TextEditingController(),
+       totalCtrl = TextEditingController(),
+       unit = unit ?? 'kg';
 
   factory _StockInLine.blank() => _StockInLine();
 
   factory _StockInLine.fromScan(ReceiptScanLine line) {
-    final entry = _StockInLine(unit: line.unit);
-    entry.nameCtrl.text = line.nameEn.isNotEmpty ? line.nameEn : line.nameBn;
+    final nameEn = line.nameEn.trim();
+    final nameBn = line.nameBn.trim();
+    final entry = _StockInLine(
+      unit: line.unit,
+      scannedNameEn: nameEn,
+      scannedNameBn: nameBn,
+    );
+    entry.nameCtrl.text = nameEn.isNotEmpty ? nameEn : nameBn;
     entry.qtyCtrl.text = _formatNumber(line.qty);
     entry.unitPriceCtrl.text = _formatNumber(line.unitPriceBdt);
     entry.totalCtrl.text = _formatNumber(line.totalBdt);
     return entry;
   }
 
-  factory _StockInLine.fromItem(InventoryItem item) {
+  factory _StockInLine.fromItem(InventoryItem item, {AppLanguage? language}) {
     final entry = _StockInLine(unit: item.unit, linkedItemId: item.id);
-    entry.nameCtrl.text = item.name;
+    entry.nameCtrl.text = language == null
+        ? item.name
+        : item.localizedName(language);
     if (item.costPerUnit > 0) {
       entry.unitPriceCtrl.text = _formatNumber(item.costPerUnit);
     }
@@ -909,6 +959,8 @@ class _StockInLine {
   final TextEditingController totalCtrl;
   final String unit;
   final String? linkedItemId;
+  final String scannedNameEn;
+  final String scannedNameBn;
 
   double? get parsedQty => double.tryParse(qtyCtrl.text.trim());
   double? get parsedUnitPrice => double.tryParse(unitPriceCtrl.text.trim());
@@ -918,6 +970,63 @@ class _StockInLine {
     final qty = parsedQty;
     final name = nameCtrl.text.trim();
     return name.isNotEmpty && qty != null && qty > 0;
+  }
+
+  String get inventoryNameForSave {
+    final entered = nameCtrl.text.trim();
+    if (entered.isEmpty || entered.contains('/')) return entered;
+
+    final scannedEn = scannedNameEn.trim();
+    final scannedBn = scannedNameBn.trim();
+    if (_containsBengali(entered)) {
+      if (scannedEn.isNotEmpty &&
+          !_containsBengali(scannedEn) &&
+          scannedEn.toLowerCase() != entered.toLowerCase()) {
+        return '$scannedEn / $entered';
+      }
+      return entered;
+    }
+
+    if (scannedBn.isNotEmpty &&
+        _containsBengali(scannedBn) &&
+        scannedBn.toLowerCase() != entered.toLowerCase()) {
+      return '$entered / $scannedBn';
+    }
+    return entered;
+  }
+
+  String inventoryNameForExisting(String currentName) {
+    final current = currentName.trim();
+    if (current.isEmpty) return inventoryNameForSave;
+    if (current.contains('/') || _containsBengali(current)) return current;
+    final merged = inventoryNameForSave;
+    if (merged.contains('/') && _containsBengali(merged)) return merged;
+    return current;
+  }
+
+  List<String> get matchableNames {
+    return [
+      nameCtrl.text,
+      inventoryNameForSave,
+      scannedNameEn,
+      scannedNameBn,
+    ].expand(_StockInLine.splitMatchableNames).toSet().toList(growable: false);
+  }
+
+  static List<String> splitMatchableNames(String value) {
+    final raw = value.trim().toLowerCase();
+    if (raw.isEmpty) return const [];
+    if (!raw.contains('/')) return [raw];
+    final parts = raw
+        .split('/')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    return [raw, ...parts];
+  }
+
+  static bool _containsBengali(String value) {
+    return RegExp(r'[\u0980-\u09FF]').hasMatch(value);
   }
 
   void recomputeTotalFromUnitPrice() {
@@ -999,11 +1108,14 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
         widget.items
             .where((item) {
               if (q.isEmpty) return true;
-              return item.name.toLowerCase().contains(q);
+              return item.searchText.contains(q);
             })
             .toList(growable: false)
           ..sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            (a, b) => a
+                .localizedName(text.language)
+                .toLowerCase()
+                .compareTo(b.localizedName(text.language).toLowerCase()),
           );
 
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
@@ -1106,6 +1218,7 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                         final priceText = item.costPerUnit > 0
                             ? '${fmt.format(item.costPerUnit)} / $unit'
                             : text.noSavedPrice;
+                        final name = item.localizedName(text.language);
                         return ListTile(
                           enabled: !alreadyAdded,
                           leading: Container(
@@ -1118,9 +1231,9 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                             ),
                             alignment: Alignment.center,
                             child: TfText(
-                              item.name.isEmpty
+                              name.isEmpty
                                   ? '?'
-                                  : item.name.characters.first.toUpperCase(),
+                                  : name.characters.first.toUpperCase(),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w500,
                                 color: PosColors.slate,
@@ -1128,7 +1241,7 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                             ),
                           ),
                           title: TfText(
-                            item.name,
+                            name,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 14,

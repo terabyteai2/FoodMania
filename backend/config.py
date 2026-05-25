@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     VIDEO_MAX_BYTES: int = 50 * 1024 * 1024  # 50 MB
     BASE_URL: str = "http://localhost:8000"
     GOOGLE_CLIENT_IDS: str = ""
+    GOOGLE_GEOCODING_API_KEY: str = ""
 
     NGROK_AUTHTOKEN: str = ""
     NGROK_STATIC_DOMAIN: str = ""

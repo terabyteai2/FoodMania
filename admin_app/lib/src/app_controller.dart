@@ -15,6 +15,7 @@ import 'core/constants/cloud_defaults.dart';
 import 'core/constants/google_auth_defaults.dart';
 import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
+import 'core/utils/bounded_string_set.dart';
 import 'models/account_role.dart';
 import 'models/app_update_info.dart';
 import 'models/bkash_payment_session.dart';
@@ -87,6 +88,17 @@ enum AppThemePreference {
   }
 }
 
+/// Initial slice of orders pulled into memory on reload — newest first.
+const int kOrdersInitialPage = 200;
+
+/// Page size for `loadMoreOrders()`; the orders list grows by this much
+/// each time the orders screen reaches the end of the scroll extent.
+const int kOrdersPageSize = 100;
+
+/// Hard cap on the per-restaurant alert-tracking sets so they cannot grow
+/// without bound over a long-running app session.
+const int kAlertSetCap = 2000;
+
 class PosAppController extends ChangeNotifier {
   PosAppController({
     LocalDatabaseService? database,
@@ -127,29 +139,29 @@ class PosAppController extends ChangeNotifier {
 
   final Uuid _uuid = Uuid();
   final List<StreamSubscription<Object?>> _subscriptions = [];
-  final Set<String> _knownOrderIds = <String>{};
+  final BoundedStringSet _knownOrderIds = BoundedStringSet(cap: kAlertSetCap);
   final Set<String> _autoPrintInFlight = <String>{};
 
   /// Coalesces concurrent print requests for the same order (auto + manual).
   final Map<String, Future<bool>> _orderPrintFutures = <String, Future<bool>>{};
 
   /// Orders we already fired a pending alert for (prevents sync/DB replay loops).
-  final Set<String> _alertedPendingOrderIds = <String>{};
+  final BoundedStringSet _alertedPendingOrderIds = BoundedStringSet(cap: kAlertSetCap);
 
   /// Orders we already fired an accepted/served alert for.
-  final Set<String> _alertedAcceptedOrderIds = <String>{};
+  final BoundedStringSet _alertedAcceptedOrderIds = BoundedStringSet(cap: kAlertSetCap);
 
   /// Orders we already surfaced a print success/fail alert for.
-  final Set<String> _alertedPrintOrderIds = <String>{};
+  final BoundedStringSet _alertedPrintOrderIds = BoundedStringSet(cap: kAlertSetCap);
 
   /// Auto-print stopped after a failure so DB churn does not re-print forever.
-  final Set<String> _autoPrintGiveUpOrderIds = <String>{};
+  final BoundedStringSet _autoPrintGiveUpOrderIds = BoundedStringSet(cap: kAlertSetCap);
 
   /// Set when Bluetooth/printer is unavailable — blocks auto-print for all orders.
   String? _autoPrintInfrastructureBlocked;
 
   /// One in-app alert per infrastructure error message (e.g. Bluetooth off).
-  final Set<String> _alertedPrintFailureReasons = <String>{};
+  final BoundedStringSet _alertedPrintFailureReasons = BoundedStringSet(cap: kAlertSetCap);
   Timer? _databaseChangeDebounce;
   bool _handlingDatabaseChange = false;
   bool _databaseChangePending = false;
@@ -208,6 +220,8 @@ class PosAppController extends ChangeNotifier {
   bool varianceTrackingEnabled = false;
   List<MenuItem> menuItems = [];
   List<OrderModel> orders = [];
+  bool _hasMoreOrders = false;
+  bool _loadingMoreOrders = false;
   List<PosNotification> notifications = [];
   List<SyncEvent> syncEvents = [];
   List<InventoryItem> inventoryItems = [];
@@ -784,7 +798,9 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> reloadData() async {
     menuItems = await database.getMenuItems();
-    orders = await database.getOrders();
+    final loadedOrders = await database.getOrders(limit: kOrdersInitialPage);
+    orders = loadedOrders;
+    _hasMoreOrders = loadedOrders.length >= kOrdersInitialPage;
     syncEvents = await database.getSyncEvents(statuses: null, limit: 100);
     inventoryItems = await database.getInventoryItems();
     inventoryTodaySpend = await database.getInventoryPurchaseTotalForDate(
@@ -793,6 +809,61 @@ class PosAppController extends ChangeNotifier {
     notifications = await database.getNotifications();
     notifyListeners();
   }
+
+  /// Append the next page of older orders to [orders] for scroll-to-load-more.
+  /// Idempotent while a load is in flight or after the tail has been reached.
+  Future<void> loadMoreOrders() async {
+    if (!_hasMoreOrders || _loadingMoreOrders) return;
+    _loadingMoreOrders = true;
+    notifyListeners();
+    try {
+      final more = await database.getOrders(
+        limit: kOrdersPageSize,
+        offset: orders.length,
+      );
+      if (more.isEmpty) {
+        _hasMoreOrders = false;
+      } else {
+        orders = [...orders, ...more];
+        _hasMoreOrders = more.length >= kOrdersPageSize;
+        // Treat the appended ids as already known so a later sync diff does
+        // not retroactively fire "new order" alerts for historical rows.
+        _knownOrderIds.addAll(more.map((o) => o.id));
+      }
+    } finally {
+      _loadingMoreOrders = false;
+      notifyListeners();
+    }
+  }
+
+  bool get hasMoreOrders => _hasMoreOrders;
+  bool get loadingMoreOrders => _loadingMoreOrders;
+
+  /// Reset every per-restaurant alert-dedupe set. Called on wipe/logout so a
+  /// fresh tenant does not inherit notification-suppression state from the
+  /// previous one.
+  void _clearOrderAlertTracking() {
+    _knownOrderIds.clear();
+    _alertedPendingOrderIds.clear();
+    _alertedAcceptedOrderIds.clear();
+    _alertedPrintOrderIds.clear();
+    _autoPrintGiveUpOrderIds.clear();
+    _alertedPrintFailureReasons.clear();
+  }
+
+  // Diagnostics — surfaced by the hidden dev panel in SettingsScreen.
+  int get diagOrdersInMemory => orders.length;
+  int get diagMenuInMemory => menuItems.length;
+  int get diagInventoryInMemory => inventoryItems.length;
+  int get diagNotificationsInMemory => notifications.length;
+  int get diagAlertSetSize =>
+      _knownOrderIds.length +
+      _alertedPendingOrderIds.length +
+      _alertedAcceptedOrderIds.length +
+      _alertedPrintOrderIds.length +
+      _autoPrintGiveUpOrderIds.length +
+      _alertedPrintFailureReasons.length;
+  int get diagSubscriptionCount => _subscriptions.length;
 
   Future<void> refreshInventory() async {
     inventoryItems = await database.getInventoryItems();
@@ -1009,10 +1080,7 @@ class PosAppController extends ChangeNotifier {
       dashboardSummaryError = null;
       inventorySummary = null;
       inventorySummaryError = null;
-      _knownOrderIds.clear();
-      _alertedPendingOrderIds.clear();
-      _alertedAcceptedOrderIds.clear();
-      _alertedPrintOrderIds.clear();
+      _clearOrderAlertTracking();
       await _prepareNewRestaurantIdentity();
       await _clearWipedRestaurantPrefs();
       unawaited(cloudRealtimeService.disconnect());
@@ -1999,6 +2067,10 @@ class PosAppController extends ChangeNotifier {
     _appUpdateWaitingForPermission = null;
     appUpdateError = null;
     appUpdateStatus = '';
+    _clearOrderAlertTracking();
+    // Stop the notification sound if it is mid-playback so the audio buffer
+    // is released along with the rest of the per-session state.
+    unawaited(_notificationPlayer.stop());
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(_accountLoggedInKey, false);
     // Clear tenant-scoped prefs so the next login cannot briefly show the
@@ -2890,8 +2962,11 @@ class PosAppController extends ChangeNotifier {
       'Turn on Bluetooth first.',
       'Printer is not connected.',
       'Select a Bluetooth printer first.',
+      'Connect a USB printer or select a Bluetooth printer first.',
       'Bluetooth permission is required.',
+      'Printer permission is required.',
       'Bluetooth is not ready.',
+      'USB printer is not ready.',
     };
     return known.contains(message.trim());
   }
@@ -3002,6 +3077,14 @@ class PosAppController extends ChangeNotifier {
     final status = order.status.adminStatus;
     final isAccepted =
         status == OrderStatus.accepted || status == OrderStatus.served;
+    if (isAccepted &&
+        printerState.autoPrintEnabled &&
+        !printerState.hasSelectedPrinter) {
+      final reason = await printerService.preflightBlockReason();
+      printerState = printerService.state;
+      if (reason != null) return;
+      notifyListeners();
+    }
     if (!isAccepted ||
         !printerState.autoPrintEnabled ||
         !printerState.hasSelectedPrinter ||
@@ -3019,6 +3102,10 @@ class PosAppController extends ChangeNotifier {
   }
 
   List<OrderModel> ordersFor({OrderStatus? status, OrderSource? source}) {
+    // Common case: no filter — return the underlying list reference so
+    // identity stays stable across rebuilds and downstream memoization can
+    // skip work when [orders] has not changed.
+    if (status == null && source == null) return orders;
     return orders
         .where((order) {
           final matchesStatus =

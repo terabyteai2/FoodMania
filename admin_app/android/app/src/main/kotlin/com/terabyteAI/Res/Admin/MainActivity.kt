@@ -2,8 +2,18 @@ package com.terabyteai.foodmania.posadmin
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
+import android.hardware.usb.UsbManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
@@ -26,11 +36,46 @@ import java.io.FileInputStream
 class MainActivity : FlutterActivity() {
     private val channelName = "com.terabyteai.foodmania/notification_sound"
     private val appUpdateChannelName = "com.terabyteai.foodmania/app_update"
+    private val usbPrinterChannelName = "com.terabyteai.foodmania/usb_printer"
 
     companion object {
         private const val PENDING_CHANNEL_ID = "pos_pending_orders_v2"
         private const val ACCEPTED_CHANNEL_ID = "pos_accepted_orders_v2"
         private const val DEFAULT_CHANNEL_ID = "pos_orders_default_v2"
+        private const val ACTION_USB_PERMISSION =
+            "com.terabyteai.foodmania.posadmin.USB_PRINTER_PERMISSION"
+    }
+
+    private data class UsbPrinterTarget(
+        val device: UsbDevice,
+        val usbInterface: UsbInterface,
+        val endpoint: UsbEndpoint,
+    )
+
+    private data class PendingUsbPrint(
+        val bytes: ByteArray,
+        val result: MethodChannel.Result,
+    )
+
+    private var pendingUsbPrint: PendingUsbPrint? = null
+    private var usbReceiverRegistered = false
+
+    private val usbPermissionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_USB_PERMISSION) return
+            val pending = pendingUsbPrint ?: return
+            pendingUsbPrint = null
+            val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+            if (!granted) {
+                pending.result.success(false)
+                return
+            }
+            try {
+                pending.result.success(writeUsbPrinterBytes(pending.bytes))
+            } catch (error: Exception) {
+                pending.result.error("USB_PRINT_FAILED", error.message, null)
+            }
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -130,6 +175,203 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, usbPrinterChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "hasPrinter" -> {
+                        try {
+                            result.success(findUsbPrinterTarget() != null)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+                    "printBytes" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("INVALID_ARGUMENT", "bytes are required", null)
+                            return@setMethodCallHandler
+                        }
+                        printUsbPrinterBytes(bytes, result)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    override fun onDestroy() {
+        if (usbReceiverRegistered) {
+            try {
+                unregisterReceiver(usbPermissionReceiver)
+            } catch (_: Exception) {}
+            usbReceiverRegistered = false
+        }
+        super.onDestroy()
+    }
+
+    private fun printUsbPrinterBytes(bytes: ByteArray, result: MethodChannel.Result) {
+        val manager = getSystemService(USB_SERVICE) as UsbManager
+        val target = findUsbPrinterTarget() ?: run {
+            result.success(false)
+            return
+        }
+        if (manager.hasPermission(target.device)) {
+            try {
+                result.success(writeUsbPrinterBytes(bytes))
+            } catch (error: Exception) {
+                result.error("USB_PRINT_FAILED", error.message, null)
+            }
+            return
+        }
+
+        if (pendingUsbPrint != null) {
+            result.error("USB_PRINT_BUSY", "USB printer permission request is already active.", null)
+            return
+        }
+
+        pendingUsbPrint = PendingUsbPrint(bytes, result)
+        ensureUsbPermissionReceiver()
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_MUTABLE
+            } else {
+                0
+            }
+        val intent = Intent(ACTION_USB_PERMISSION).setPackage(packageName)
+        val permissionIntent = PendingIntent.getBroadcast(this, 0, intent, flags)
+        manager.requestPermission(target.device, permissionIntent)
+    }
+
+    private fun ensureUsbPermissionReceiver() {
+        if (usbReceiverRegistered) return
+        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(usbPermissionReceiver, filter)
+        }
+        usbReceiverRegistered = true
+    }
+
+    private fun writeUsbPrinterBytes(bytes: ByteArray): Boolean {
+        val manager = getSystemService(USB_SERVICE) as UsbManager
+        val target = findUsbPrinterTarget() ?: return false
+        if (!manager.hasPermission(target.device)) return false
+        val connection = manager.openDevice(target.device) ?: return false
+        return try {
+            connection.claimInterface(target.usbInterface, true) &&
+                writeBulkBytes(connection, target.endpoint, bytes)
+        } finally {
+            try {
+                connection.releaseInterface(target.usbInterface)
+            } catch (_: Exception) {}
+            connection.close()
+        }
+    }
+
+    private fun writeBulkBytes(
+        connection: UsbDeviceConnection,
+        endpoint: UsbEndpoint,
+        bytes: ByteArray,
+    ): Boolean {
+        var offset = 0
+        val chunkSize = minOf(4096, maxOf(64, endpoint.maxPacketSize * 16))
+        while (offset < bytes.size) {
+            val length = minOf(chunkSize, bytes.size - offset)
+            val written = connection.bulkTransfer(endpoint, bytes, offset, length, 3000)
+            if (written <= 0) return false
+            offset += written
+        }
+        return true
+    }
+
+    private fun findUsbPrinterTarget(): UsbPrinterTarget? {
+        val manager = getSystemService(USB_SERVICE) as UsbManager
+        val targets = manager.deviceList.values.mapNotNull { device ->
+            findUsbPrinterTarget(device)
+        }
+        if (targets.isNotEmpty()) {
+            return targets.sortedByDescending { targetScore(it.device, it.usbInterface) }.first()
+        }
+        val bulkOutTargets = manager.deviceList.values.mapNotNull { device ->
+            findAnyBulkOutTarget(device)
+        }
+        return if (bulkOutTargets.size == 1) bulkOutTargets.first() else null
+    }
+
+    private fun findUsbPrinterTarget(device: UsbDevice): UsbPrinterTarget? {
+        for (i in 0 until device.interfaceCount) {
+            val usbInterface = device.getInterface(i)
+            val endpoint = bulkOutEndpoint(usbInterface) ?: continue
+            if (isPrinterInterface(device, usbInterface)) {
+                return UsbPrinterTarget(device, usbInterface, endpoint)
+            }
+        }
+        return null
+    }
+
+    private fun findAnyBulkOutTarget(device: UsbDevice): UsbPrinterTarget? {
+        for (i in 0 until device.interfaceCount) {
+            val usbInterface = device.getInterface(i)
+            val endpoint = bulkOutEndpoint(usbInterface) ?: continue
+            return UsbPrinterTarget(device, usbInterface, endpoint)
+        }
+        return null
+    }
+
+    private fun bulkOutEndpoint(usbInterface: UsbInterface): UsbEndpoint? {
+        for (i in 0 until usbInterface.endpointCount) {
+            val endpoint = usbInterface.getEndpoint(i)
+            if (
+                endpoint.type == UsbConstants.USB_ENDPOINT_XFER_BULK &&
+                endpoint.direction == UsbConstants.USB_DIR_OUT
+            ) {
+                return endpoint
+            }
+        }
+        return null
+    }
+
+    private fun isPrinterInterface(device: UsbDevice, usbInterface: UsbInterface): Boolean {
+        if (usbInterface.interfaceClass == UsbConstants.USB_CLASS_PRINTER) return true
+        if (usbInterface.interfaceClass != UsbConstants.USB_CLASS_VENDOR_SPEC) return false
+        return printerNameHint(device)
+    }
+
+    private fun targetScore(device: UsbDevice, usbInterface: UsbInterface): Int {
+        var score = 0
+        if (usbInterface.interfaceClass == UsbConstants.USB_CLASS_PRINTER) score += 100
+        if (printerNameHint(device)) score += 50
+        return score
+    }
+
+    private fun printerNameHint(device: UsbDevice): Boolean {
+        val value = listOfNotNull(
+            safeDeviceName { device.manufacturerName },
+            safeDeviceName { device.productName },
+            safeDeviceName { device.deviceName },
+        ).joinToString(" ").lowercase()
+        return listOf(
+            "printer",
+            "thermal",
+            "receipt",
+            "pos",
+            "esc",
+            "deli",
+            "xprinter",
+            "gprinter",
+            "rongta",
+            "epson",
+            "zjiang",
+        ).any { value.contains(it) }
+    }
+
+    private fun safeDeviceName(read: () -> String?): String? {
+        return try {
+            read()?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun runtimeInfo(): Map<String, Any> {

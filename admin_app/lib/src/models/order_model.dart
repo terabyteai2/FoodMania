@@ -27,6 +27,8 @@ class OrderModel {
     this.customerName,
     this.tableNo,
     this.note,
+    this.deliveryAddress,
+    this.mobileNumber,
     this.createdByAccountId,
     this.createdByRole,
   }) : subtotal = subtotal ?? total,
@@ -38,6 +40,8 @@ class OrderModel {
   final String? customerName;
   final String? tableNo;
   final String? note;
+  final String? deliveryAddress;
+  final String? mobileNumber;
   final String? createdByAccountId;
   final String? createdByRole;
   final OrderServiceType? serviceType;
@@ -64,6 +68,8 @@ class OrderModel {
     String? customerName,
     String? tableNo,
     String? note,
+    String? deliveryAddress,
+    String? mobileNumber,
     String? createdByAccountId,
     String? createdByRole,
     OrderServiceType? serviceType,
@@ -88,6 +94,8 @@ class OrderModel {
       customerName: customerName ?? this.customerName,
       tableNo: tableNo ?? this.tableNo,
       note: note ?? this.note,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
+      mobileNumber: mobileNumber ?? this.mobileNumber,
       createdByAccountId: createdByAccountId ?? this.createdByAccountId,
       createdByRole: createdByRole ?? this.createdByRole,
       serviceType: serviceType ?? this.serviceType,
@@ -115,6 +123,8 @@ class OrderModel {
       'customerName': customerName,
       'tableNo': tableNo,
       'note': note,
+      'deliveryAddress': deliveryAddress,
+      'mobileNumber': mobileNumber,
       'createdByAccountId': createdByAccountId,
       'createdByRole': createdByRole,
       'serviceType': serviceType?.value,
@@ -141,6 +151,8 @@ class OrderModel {
       'customerName': customerName,
       'tableNo': tableNo,
       'note': note,
+      'deliveryAddress': deliveryAddress,
+      'mobileNumber': mobileNumber,
       'createdByAccountId': createdByAccountId,
       'createdByRole': createdByRole,
       'serviceType': serviceType?.value,
@@ -173,6 +185,8 @@ class OrderModel {
       customerName: map['customerName'] as String?,
       tableNo: map['tableNo'] as String?,
       note: map['note'] as String?,
+      deliveryAddress: map['deliveryAddress'] as String?,
+      mobileNumber: map['mobileNumber'] as String?,
       createdByAccountId: map['createdByAccountId'] as String?,
       createdByRole: map['createdByRole'] as String?,
       serviceType: OrderServiceType.tryParse(map['serviceType'] as String?),

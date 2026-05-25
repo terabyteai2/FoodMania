@@ -28,20 +28,36 @@ class MenuImageView extends StatelessWidget {
     }
 
     final data = _tryDecodeDataUrl(image);
-    if (data != null) {
-      return Image.memory(
-        data,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) =>
-            _BrokenImage(iconKey: iconKey),
-      );
-    }
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxSide = [
+          constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
+          constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
+        ].reduce((a, b) => a > b ? a : b);
+        // Decode at most at the displayed pixel density so the in-memory
+        // bitmap never exceeds the rendered size.
+        final cachePx = (maxSide * dpr).round().clamp(64, 512);
 
-    return Image.network(
-      image,
-      fit: fit,
-      errorBuilder: (context, error, stackTrace) =>
-          _BrokenImage(iconKey: iconKey),
+        if (data != null) {
+          return Image.memory(
+            data,
+            fit: fit,
+            cacheWidth: cachePx,
+            cacheHeight: cachePx,
+            errorBuilder: (context, error, stackTrace) =>
+                _BrokenImage(iconKey: iconKey),
+          );
+        }
+        return Image.network(
+          image,
+          fit: fit,
+          cacheWidth: cachePx,
+          cacheHeight: cachePx,
+          errorBuilder: (context, error, stackTrace) =>
+              _BrokenImage(iconKey: iconKey),
+        );
+      },
     );
   }
 

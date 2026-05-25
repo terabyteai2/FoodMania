@@ -57,6 +57,7 @@ def test_receipt_scan_prompt_excludes_subtotals_and_keeps_bilingual_fields():
 
     assert "Return JSON only" in joined
     assert "nameEn, nameBn" in joined
+    assert "nameBn must be Bengali script" in joined
     assert "sub-totals, taxes, discounts" in joined
     assert "kg, gm, ltr, ml, pcs, pack, dozen" in joined
 

@@ -298,23 +298,24 @@ class _MainShellState extends State<MainShell> {
         .map((t) => _destinationFor(t, text))
         .toList(growable: false);
 
-    // Fixed page order matching _AppTab.index ordinals.
+    // Fixed page order matching _AppTab.index ordinals. Builders (not eager
+    // instances) so unvisited tabs never mount — see [_LazyIndexedStack].
     void goToOrders() => _selectTab(_AppTab.orders);
-    final allPages = [
-      OrdersScreen(onNavigateToTarget: _navigateNotificationTarget),
-      MenuManagementScreen(
+    final pageBuilders = <WidgetBuilder>[
+      (_) => OrdersScreen(onNavigateToTarget: _navigateNotificationTarget),
+      (_) => MenuManagementScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
       ),
-      DashboardScreen(
+      (_) => DashboardScreen(
         onNavigate: _setIndex,
         onNavigateToTarget: _navigateNotificationTarget,
       ),
-      InventoryScreen(
+      (_) => InventoryScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
       ),
-      SettingsScreen(
+      (_) => SettingsScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
         receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
@@ -325,7 +326,10 @@ class _MainShellState extends State<MainShell> {
     // actions (via HeaderNotificationBell) — no global floating overlay,
     // so it never sits on top of the menu page's "+ New" button etc.
     _maybeShowAppUpdatePrompt(app);
-    final body = IndexedStack(index: _selected.index, children: allPages);
+    final body = _LazyIndexedStack(
+      index: _selected.index,
+      builders: pageBuilders,
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final useRail = constraints.maxWidth >= 760;
@@ -517,7 +521,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           ),
           SizedBox(width: 12),
           Expanded(
-            child: Text(
+            child: TfText(
               text.appUpdateAvailableTitle,
               style: TextStyle(
                 color: PosColors.slate,
@@ -533,7 +537,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          TfText(
             text.appUpdateAvailableMessage(widget.update.versionName),
             style: TextStyle(
               color: PosColors.slate,
@@ -548,7 +552,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           ],
           if (releaseNotes.isNotEmpty) ...[
             SizedBox(height: 14),
-            Text(
+            TfText(
               text.appUpdateReleaseNotes,
               style: TextStyle(
                 color: PosColors.muted,
@@ -558,7 +562,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               ),
             ),
             SizedBox(height: 5),
-            Text(
+            TfText(
               releaseNotes,
               style: TextStyle(
                 color: PosColors.slate,
@@ -568,7 +572,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
             ),
           ],
           SizedBox(height: 14),
-          Text(
+          TfText(
             text.appUpdateAndroidNotice,
             style: TextStyle(
               color: PosColors.muted,
@@ -579,7 +583,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           ),
           if (status.isNotEmpty) ...[
             SizedBox(height: 12),
-            Text(
+            TfText(
               status,
               style: TextStyle(
                 color: PosColors.primaryDark,
@@ -590,7 +594,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           ],
           if (error != null && error.trim().isNotEmpty) ...[
             SizedBox(height: 10),
-            Text(
+            TfText(
               error,
               style: TextStyle(
                 color: PosColors.danger,
@@ -835,6 +839,54 @@ class _RailFooter extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// IndexedStack variant that only builds children for tabs that have actually
+/// been visited. Unvisited slots render a [SizedBox.shrink], so their screens
+/// (and the controllers/streams those screens initState) never come up until
+/// the user opens the tab. Once visited, the slot stays mounted so state and
+/// scroll position survive subsequent tab switches.
+class _LazyIndexedStack extends StatefulWidget {
+  const _LazyIndexedStack({required this.index, required this.builders});
+
+  final int index;
+  final List<WidgetBuilder> builders;
+
+  @override
+  State<_LazyIndexedStack> createState() => _LazyIndexedStackState();
+}
+
+class _LazyIndexedStackState extends State<_LazyIndexedStack> {
+  final Set<int> _visited = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _visited.add(widget.index);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LazyIndexedStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _visited.add(widget.index);
+    if (widget.builders.length != oldWidget.builders.length) {
+      _visited.removeWhere((i) => i >= widget.builders.length);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IndexedStack(
+      index: widget.index,
+      sizing: StackFit.expand,
+      children: [
+        for (var i = 0; i < widget.builders.length; i++)
+          _visited.contains(i)
+              ? widget.builders[i](context)
+              : const SizedBox.shrink(),
+      ],
     );
   }
 }

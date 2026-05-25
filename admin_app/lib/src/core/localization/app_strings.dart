@@ -174,16 +174,16 @@ class AppStrings {
 
   String get receiptPrinter => isBn ? 'রিসিট প্রিন্টার' : 'Receipt Printer';
   String get receiptPrinterSubtitle => isBn
-      ? 'নতুন অর্ডারের জন্য Deli ES421 Bluetooth ticket printing।'
-      : 'Deli ES421 Bluetooth ticket printing for new orders.';
+      ? 'Type-C cable থাকলে USB printing, না থাকলে Bluetooth printing।'
+      : 'Uses type-C USB printing when connected, otherwise Bluetooth.';
   String get noPrinterSelected =>
       isBn ? 'কোনো প্রিন্টার সিলেক্ট করা নেই' : 'No printer selected';
   String get printerConnectedAuto => isBn
       ? 'কানেক্টেড। নতুন অর্ডার অটোমেটিক প্রিন্ট হবে।'
       : 'Connected. New orders will print automatically.';
   String get pairPrinterInstruction => isBn
-      ? 'Scan করুন — কাছের সব Bluetooth ডিভাইস দেখাবে, তারপর connect করুন।'
-      : 'Scan to find nearby Bluetooth devices, then tap to connect.';
+      ? 'Type-C cable লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে connect করুন।'
+      : 'Plug in a type-C printer or scan nearby Bluetooth devices to connect.';
   String get autoPrintNewOrders => isBn
       ? 'অটো-অ্যাকসেপ্ট ও অটো-প্রিন্ট নতুন অর্ডার'
       : 'Auto-accept & auto-print new orders';
@@ -195,8 +195,8 @@ class AppStrings {
   String get testPrint => isBn ? 'টেস্ট প্রিন্ট' : 'Test print';
   String get printFailed => isBn ? 'প্রিন্ট ব্যর্থ হয়েছে' : 'Print failed';
   String get printerNotConnectedHint => isBn
-      ? 'প্রিন্টার কানেক্ট নেই — Settings থেকে পেয়ার করুন।'
-      : 'Printer not connected — go to Settings to pair one.';
+      ? 'প্রিন্টার কানেক্ট নেই — Type-C cable লাগান বা Settings থেকে পেয়ার করুন।'
+      : 'Printer not connected — plug in type-C or pair one in Settings.';
   String ticketPrinted(String seq) => isBn
       ? '${_digits(seq)}-এর টিকেট প্রিন্ট হয়েছে'
       : 'Ticket printed for $seq';

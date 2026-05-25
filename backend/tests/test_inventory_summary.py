@@ -85,3 +85,5 @@ async def test_inventory_summary_reports_stock_value_and_category_buckets():
     chicken = next(row for row in data["items"] if row["nameEn"] == "Chicken")
     assert chicken["nameBn"] == "চিকেন"
     assert chicken["unit"] == "kg"
+    salt = next(row for row in data["items"] if row["nameEn"] == "Salt")
+    assert salt["nameBn"] == "লবণ"

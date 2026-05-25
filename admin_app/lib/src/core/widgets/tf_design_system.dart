@@ -13,11 +13,7 @@ bool tfIsBn(BuildContext context) =>
 
 String tfLocaleTag(BuildContext context) => tfIsBn(context) ? 'bn_BD' : 'en_US';
 
-String tfFormatNumber(
-  BuildContext context,
-  num value, {
-  int? decimalDigits,
-}) {
+String tfFormatNumber(BuildContext context, num value, {int? decimalDigits}) {
   final formatter = decimalDigits == null
       ? NumberFormat.decimalPattern(tfLocaleTag(context))
       : NumberFormat.decimalPatternDigits(
@@ -49,9 +45,69 @@ String tfPick(BuildContext context, {required String en, String? bn}) {
   return tfIsBn(context) ? bn : en;
 }
 
+const String tfEnglishFontFamily = 'Inter';
+const String tfBanglaFontFamily = 'Noto Sans Bengali';
+const double tfBanglaMinLineHeight = 1.36;
+
 /// Dynamic Font Family utility ensuring baseline synchronization.
 String tfFontFamily(BuildContext context) =>
-    tfIsBn(context) ? 'Hind Siliguri' : 'Inter';
+    tfIsBn(context) ? tfBanglaFontFamily : tfEnglishFontFamily;
+
+TextStyle tfSafeTextStyle(
+  BuildContext context,
+  TextStyle base, {
+  double minBnHeight = tfBanglaMinLineHeight,
+}) {
+  final isBn = tfIsBn(context);
+  final safeHeight = isBn && (base.height == null || base.height! < minBnHeight)
+      ? minBnHeight
+      : base.height;
+  final tracking = isBn && base.letterSpacing != null && base.letterSpacing! < 0
+      ? 0.0
+      : base.letterSpacing;
+  final family = isBn
+      ? tfBanglaFontFamily
+      : (base.fontFamily ?? tfEnglishFontFamily);
+
+  return base.copyWith(
+    fontFamily: family,
+    fontFamilyFallback: isBn
+        ? const [tfBanglaFontFamily]
+        : base.fontFamilyFallback,
+    letterSpacing: tracking,
+    height: safeHeight,
+    leadingDistribution: isBn
+        ? TextLeadingDistribution.even
+        : base.leadingDistribution,
+  );
+}
+
+StrutStyle? tfSafeStrutStyle(
+  BuildContext context,
+  TextStyle base, {
+  double minBnHeight = tfBanglaMinLineHeight,
+}) {
+  if (!tfIsBn(context)) return null;
+  final safeHeight = base.height == null || base.height! < minBnHeight
+      ? minBnHeight
+      : base.height;
+  return StrutStyle(
+    fontFamily: tfBanglaFontFamily,
+    fontFamilyFallback: const [tfBanglaFontFamily],
+    fontSize: base.fontSize,
+    height: safeHeight,
+    leadingDistribution: TextLeadingDistribution.even,
+  );
+}
+
+TextHeightBehavior? tfSafeTextHeightBehavior(BuildContext context) {
+  if (!tfIsBn(context)) return null;
+  return const TextHeightBehavior(
+    applyHeightToFirstAscent: true,
+    applyHeightToLastDescent: true,
+    leadingDistribution: TextLeadingDistribution.even,
+  );
+}
 
 /// Internal utility to parse Western Arabic numbers into localized Eastern Bengali digits.
 String tfToBnNumbers(String input) {
@@ -87,18 +143,13 @@ class TfText extends StatelessWidget {
   Widget build(BuildContext context) {
     final isBn = tfIsBn(context);
     final base = style ?? const TextStyle();
-    final family = base.fontFamily ?? tfFontFamily(context);
-
-    // Safety check: Avoid dangerous text tracking configurations breaking nested Bangla glyph structures
-    final double? tracking = isBn
-        ? (base.letterSpacing != null && base.letterSpacing! < 0
-              ? 0.0
-              : base.letterSpacing)
-        : base.letterSpacing;
+    final safeStyle = tfSafeTextStyle(context, base);
 
     return Text(
       isBn ? tfToBnNumbers(text) : text,
-      style: base.copyWith(fontFamily: family, letterSpacing: tracking),
+      style: safeStyle,
+      strutStyle: tfSafeStrutStyle(context, safeStyle),
+      textHeightBehavior: tfSafeTextHeightBehavior(context),
       maxLines: maxLines,
       overflow: overflow,
       textAlign: textAlign,
@@ -140,20 +191,17 @@ class TfMoney extends StatelessWidget {
 
     if (isBn) {
       final bnValue = tfToBnNumbers(cleanValue);
+      final safeStyle = tfSafeTextStyle(context, baseStyle);
       return Text(
         showSymbol ? '৳$bnValue' : bnValue,
-        style: baseStyle.copyWith(
-          fontFamily: 'Hind Siliguri',
-          letterSpacing:
-              baseStyle.letterSpacing != null && baseStyle.letterSpacing! < 0
-              ? 0
-              : baseStyle.letterSpacing,
-        ),
+        style: safeStyle,
+        strutStyle: tfSafeStrutStyle(context, safeStyle),
+        textHeightBehavior: tfSafeTextHeightBehavior(context),
       );
     } else {
       return Text(
         showSymbol ? '৳$cleanValue' : cleanValue,
-        style: baseStyle.copyWith(fontFamily: 'Inter'),
+        style: baseStyle.copyWith(fontFamily: tfEnglishFontFamily),
       );
     }
   }
@@ -384,12 +432,11 @@ class TfButton extends StatelessWidget {
                   const SizedBox(width: 8),
                 ],
                 Flexible(
-                  child: Text(
-                    isBn ? tfToBnNumbers(text) : text,
+                  child: TfText(
+                    text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: tfFontFamily(context),
                       color: disabled ? PosColors.muted : colors.$2,
                       fontSize: fontSize,
                       fontWeight: FontWeight.w500,
@@ -502,10 +549,9 @@ class TfChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
               ],
-              Text(
-                isBn ? tfToBnNumbers(text) : text,
+              TfText(
+                text,
                 style: TextStyle(
-                  fontFamily: tfFontFamily(context),
                   color: active ? Colors.white : PosColors.slate,
                   fontSize: small ? 12 : 13,
                   fontWeight: active ? FontWeight.w500 : FontWeight.w400,
@@ -780,12 +826,11 @@ class TfBottomNav extends StatelessWidget {
                           color: selected ? PosColors.slate : PosColors.muted,
                         ),
                         const SizedBox(height: 4),
-                        Text(
+                        TfText(
                           isBn ? tfToBnNumbers(text) : text,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontFamily: tfFontFamily(context),
                             fontSize: 11,
                             fontWeight: selected
                                 ? FontWeight.w500
@@ -1067,7 +1112,10 @@ class TfSearchField extends StatelessWidget {
           prefixIconConstraints: const BoxConstraints(minWidth: 38),
           filled: true,
           fillColor: PosColors.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 0,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(PosRadii.sm),
             borderSide: const BorderSide(color: PosColors.line, width: 0.5),
@@ -1078,7 +1126,10 @@ class TfSearchField extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(PosRadii.sm),
-            borderSide: const BorderSide(color: PosColors.primaryDark, width: 1),
+            borderSide: const BorderSide(
+              color: PosColors.primaryDark,
+              width: 1,
+            ),
           ),
         ),
       ),
@@ -1139,10 +1190,9 @@ class TfTabs extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        isBn ? tfToBnNumbers(text) : text,
+                      TfText(
+                        text,
                         style: TextStyle(
-                          fontFamily: tfFontFamily(context),
                           fontSize: 14,
                           fontWeight: selected
                               ? FontWeight.w500
@@ -1163,12 +1213,9 @@ class TfTabs extends StatelessWidget {
                                 : PosColors.background,
                             borderRadius: BorderRadius.circular(999),
                           ),
-                          child: Text(
-                            isBn ? tfToBnNumbers('${it.count}') : '${it.count}',
+                          child: TfText(
+                            '${it.count}',
                             style: TextStyle(
-                              fontFamily: tfFontFamily(
-                                context,
-                              ), // Fixed: Routed via unified family configuration path
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
                               color: selected

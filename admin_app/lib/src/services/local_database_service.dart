@@ -89,7 +89,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 9,
+      version: 10,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -117,6 +117,8 @@ class LocalDatabaseService {
   Future<List<MenuItem>> getMenuItems({
     bool includeUnavailable = true,
     bool includeDeleted = false,
+    int? limit,
+    int? offset,
   }) async {
     final db = await _db;
     final where = <String>[];
@@ -133,6 +135,8 @@ class LocalDatabaseService {
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'category COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
+      limit: limit,
+      offset: offset,
     );
     return rows.map(MenuItem.fromMap).toList(growable: false);
   }
@@ -276,6 +280,8 @@ class LocalDatabaseService {
   Future<List<OrderModel>> getOrders({
     OrderStatus? status,
     OrderSource? source,
+    int? limit,
+    int? offset,
   }) async {
     final db = await _db;
     final where = <String>[];
@@ -294,14 +300,22 @@ class LocalDatabaseService {
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'sequenceNo DESC, createdAt DESC',
+      limit: limit,
+      offset: offset,
     );
+    if (orderRows.isEmpty) return const <OrderModel>[];
 
-    final orders = <OrderModel>[];
-    for (final row in orderRows) {
-      final items = await _getOrderItems(row['id'] as String);
-      orders.add(OrderModel.fromMap(row, items: items));
-    }
-    return orders;
+    final orderIds = <String>[
+      for (final row in orderRows) row['id'] as String,
+    ];
+    final itemsByOrderId = await _getOrderItemsForIds(db, orderIds);
+    return [
+      for (final row in orderRows)
+        OrderModel.fromMap(
+          row,
+          items: itemsByOrderId[row['id'] as String] ?? const <OrderItem>[],
+        ),
+    ];
   }
 
   Future<OrderModel?> getOrderById(String id) async {
@@ -323,6 +337,8 @@ class LocalDatabaseService {
     String? customerName,
     String? tableNo,
     String? note,
+    String? deliveryAddress,
+    String? mobileNumber,
     OrderServiceType? serviceType,
     int? covers,
     OrderPaymentMethod? paymentMethod,
@@ -405,6 +421,8 @@ class LocalDatabaseService {
         customerName: _cleanNullable(customerName),
         tableNo: _cleanNullable(tableNo),
         note: _cleanNullable(note),
+        deliveryAddress: _cleanNullable(deliveryAddress),
+        mobileNumber: _cleanNullable(mobileNumber),
         createdByAccountId: _cleanNullable(createdByAccountId),
         createdByRole: _cleanNullable(createdByRole),
         serviceType: serviceType,
@@ -810,6 +828,8 @@ class LocalDatabaseService {
         customerName TEXT,
         tableNo TEXT,
         note TEXT,
+        deliveryAddress TEXT,
+        mobileNumber TEXT,
         createdByAccountId TEXT,
         createdByRole TEXT,
         serviceType TEXT,
@@ -936,6 +956,24 @@ class LocalDatabaseService {
     if (oldVersion < 9) {
       await _migrateOrderItemsBilingualV9(db);
     }
+    if (oldVersion < 10) {
+      await _migrateOrdersDeliveryV10(db);
+    }
+  }
+
+  Future<void> _migrateOrdersDeliveryV10(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'deliveryAddress',
+      'deliveryAddress TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'mobileNumber',
+      'mobileNumber TEXT',
+    );
   }
 
   Future<void> _migrateMenuBilingualV7(Database db) async {
@@ -1261,6 +1299,28 @@ class LocalDatabaseService {
       orderBy: 'name COLLATE NOCASE ASC',
     );
     return rows.map(OrderItem.fromMap).toList(growable: false);
+  }
+
+  /// Batched lookup: one query for many orderIds; returns items grouped by
+  /// orderId. Used by [getOrders] to avoid an N+1 fetch per order row.
+  Future<Map<String, List<OrderItem>>> _getOrderItemsForIds(
+    DatabaseExecutor db,
+    List<String> orderIds,
+  ) async {
+    if (orderIds.isEmpty) return const <String, List<OrderItem>>{};
+    final placeholders = List.filled(orderIds.length, '?').join(',');
+    final rows = await db.query(
+      'order_items',
+      where: 'orderId IN ($placeholders)',
+      whereArgs: orderIds,
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    final grouped = <String, List<OrderItem>>{};
+    for (final row in rows) {
+      final id = row['orderId'] as String;
+      (grouped[id] ??= <OrderItem>[]).add(OrderItem.fromMap(row));
+    }
+    return grouped;
   }
 
   Future<void> _insertSyncEvent(
