@@ -25,6 +25,7 @@ async def create_tables() -> None:
         await _ensure_menu_columns(conn)
         await _ensure_order_columns(conn)
         await _ensure_platform_columns(conn)
+        await _ensure_outlet_theme_column(conn)
     await seed_platform_admin()
     await seed_system_config()
 
@@ -114,6 +115,26 @@ async def _ensure_platform_columns(conn) -> None:
     ]
     for statement in statements:
         await conn.execute(text(statement))
+
+
+async def _ensure_outlet_theme_column(conn) -> None:
+    """Add menu_theme column for customer-menu visual templates."""
+    dialect = conn.dialect.name
+    if dialect == "sqlite":
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE outlets ADD COLUMN menu_theme VARCHAR DEFAULT 'napoli_trattoria'"
+                )
+            )
+        except Exception:
+            pass
+        return
+    await conn.execute(
+        text(
+            "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS menu_theme VARCHAR DEFAULT 'napoli_trattoria'"
+        )
+    )
 
 
 async def _ensure_menu_columns(conn) -> None:

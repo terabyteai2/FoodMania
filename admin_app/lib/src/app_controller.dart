@@ -22,6 +22,7 @@ import 'models/bkash_payment_session.dart';
 import 'models/daily_report.dart';
 import 'models/dashboard_metrics.dart';
 import 'models/dashboard_summary.dart';
+import 'models/facebook_chatbot_config.dart';
 import 'models/inventory_item.dart';
 import 'models/inventory_summary.dart';
 import 'models/inventory_unit.dart';
@@ -146,22 +147,32 @@ class PosAppController extends ChangeNotifier {
   final Map<String, Future<bool>> _orderPrintFutures = <String, Future<bool>>{};
 
   /// Orders we already fired a pending alert for (prevents sync/DB replay loops).
-  final BoundedStringSet _alertedPendingOrderIds = BoundedStringSet(cap: kAlertSetCap);
+  final BoundedStringSet _alertedPendingOrderIds = BoundedStringSet(
+    cap: kAlertSetCap,
+  );
 
   /// Orders we already fired an accepted/served alert for.
-  final BoundedStringSet _alertedAcceptedOrderIds = BoundedStringSet(cap: kAlertSetCap);
+  final BoundedStringSet _alertedAcceptedOrderIds = BoundedStringSet(
+    cap: kAlertSetCap,
+  );
 
   /// Orders we already surfaced a print success/fail alert for.
-  final BoundedStringSet _alertedPrintOrderIds = BoundedStringSet(cap: kAlertSetCap);
+  final BoundedStringSet _alertedPrintOrderIds = BoundedStringSet(
+    cap: kAlertSetCap,
+  );
 
   /// Auto-print stopped after a failure so DB churn does not re-print forever.
-  final BoundedStringSet _autoPrintGiveUpOrderIds = BoundedStringSet(cap: kAlertSetCap);
+  final BoundedStringSet _autoPrintGiveUpOrderIds = BoundedStringSet(
+    cap: kAlertSetCap,
+  );
 
   /// Set when Bluetooth/printer is unavailable — blocks auto-print for all orders.
   String? _autoPrintInfrastructureBlocked;
 
   /// One in-app alert per infrastructure error message (e.g. Bluetooth off).
-  final BoundedStringSet _alertedPrintFailureReasons = BoundedStringSet(cap: kAlertSetCap);
+  final BoundedStringSet _alertedPrintFailureReasons = BoundedStringSet(
+    cap: kAlertSetCap,
+  );
   Timer? _databaseChangeDebounce;
   bool _handlingDatabaseChange = false;
   bool _databaseChangePending = false;
@@ -248,6 +259,9 @@ class PosAppController extends ChangeNotifier {
   bool appUpdateBusy = false;
   String appUpdateStatus = '';
   String? appUpdateError;
+  FacebookChatbotConfig? facebookChatbotConfig;
+  bool facebookChatbotLoading = false;
+  String? facebookChatbotError;
   int _dismissedAppUpdateVersionCode = 0;
   AppUpdateInfo? _appUpdateWaitingForPermission;
   bool _checkingForAppUpdate = false;
@@ -299,6 +313,13 @@ class PosAppController extends ChangeNotifier {
   bool get isCloudReady =>
       cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl;
   bool get isManager => accountRole.isManager;
+
+  /// Temporary kill switch for order-triggered printer side effects.
+  ///
+  /// Pending/accepted order notifications still fire; printer preflight,
+  /// auto-print, and printer success/failure alerts are paused for now.
+  bool get orderPrinterSideEffectsEnabled => false;
+
   int get unreadNotificationCount =>
       notifications.where((notification) => !notification.isRead).length;
 
@@ -376,6 +397,8 @@ class PosAppController extends ChangeNotifier {
             : storedOutletName,
         publicSlug: preferences.getString(_publicSlugKey) ?? '',
         tableCount: preferences.getInt(_tableCountKey) ?? 10,
+        customerMenuTheme:
+            preferences.getString(_customerMenuThemeKey) ?? 'napoli_trattoria',
       );
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
@@ -1042,6 +1065,57 @@ class PosAppController extends ChangeNotifier {
       );
       serverConfig = serverConfig.copyWith(publicSlug: cleanSlug);
       await _persistSettings();
+    });
+  }
+
+  Future<void> loadFacebookChatbotConfig() async {
+    if (!isManager || !cloudConfig.canSync) return;
+    facebookChatbotLoading = true;
+    facebookChatbotError = null;
+    notifyListeners();
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      facebookChatbotConfig = await cloudApiService
+          .fetchFacebookChatbotConfig();
+    } catch (error) {
+      facebookChatbotError = _userVisibleError(error);
+    } finally {
+      facebookChatbotLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> saveFacebookChatbotConfig({
+    required String pageAccessToken,
+    required bool isEnabled,
+    required bool orderingEnabled,
+  }) async {
+    if (!isManager) {
+      lastError = 'Manager access is required.';
+      notifyListeners();
+      return false;
+    }
+    if (!cloudConfig.canSync) {
+      lastError = 'Cloud sync must be connected before configuring Messenger.';
+      notifyListeners();
+      return false;
+    }
+    return _runBusy(() async {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      facebookChatbotConfig = await cloudApiService.updateFacebookChatbotConfig(
+        pageAccessToken: pageAccessToken.trim().isEmpty
+            ? null
+            : pageAccessToken.trim(),
+        isEnabled: isEnabled,
+        orderingEnabled: orderingEnabled,
+      );
+      facebookChatbotError = null;
     });
   }
 
@@ -2467,7 +2541,9 @@ class PosAppController extends ChangeNotifier {
       initialStatus: OrderStatus.accepted,
     );
     unawaited(syncService.syncNow());
-    unawaited(_notifyPrinterUnavailableForCreatedOrder(order));
+    if (orderPrinterSideEffectsEnabled) {
+      unawaited(_notifyPrinterUnavailableForCreatedOrder(order));
+    }
     return order;
   }
 
@@ -2559,6 +2635,26 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  Future<void> updateCustomerMenuTheme(String slug) async {
+    final clean = slug.trim();
+    if (clean.isEmpty || serverConfig.customerMenuTheme == clean) return;
+    serverConfig = serverConfig.copyWith(customerMenuTheme: clean);
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_customerMenuThemeKey, clean);
+    if (serverConfig.outletId.trim().isNotEmpty && cloudConfig.canSync) {
+      try {
+        cloudApiService.configure(
+          cloudConfig: cloudConfig,
+          serverConfig: serverConfig,
+        );
+        await cloudApiService.updateOutletMenuTheme(clean);
+      } catch (error) {
+        debugPrint('[QB-THEME] could not sync menu theme: $error');
+      }
+    }
+  }
+
   Future<void> updateLanguage(AppLanguage value) async {
     if (language == value) return;
     language = value;
@@ -2646,6 +2742,9 @@ class PosAppController extends ChangeNotifier {
           language: language,
         )
         .then((ok) async {
+          if (!orderPrinterSideEffectsEnabled) {
+            return ok;
+          }
           if (!ok) {
             final err = printerState.lastError;
             final fromAuto = _autoPrintInFlight.contains(order.id);
@@ -2692,7 +2791,8 @@ class PosAppController extends ChangeNotifier {
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
       await updateOrderStatus(order.id, OrderStatus.served);
     }
-    if (!_alertedPrintOrderIds.contains('${order.id}:invoice')) {
+    if (orderPrinterSideEffectsEnabled &&
+        !_alertedPrintOrderIds.contains('${order.id}:invoice')) {
       _alertedPrintOrderIds.add('${order.id}:invoice');
       final error = printerState.lastError ?? strings.printFailed;
       await addNotification(
@@ -2720,6 +2820,11 @@ class PosAppController extends ChangeNotifier {
     String? actionTarget,
     bool playSound = true,
   }) async {
+    final isPrinterAlert =
+        type == PosNotificationType.printSuccess ||
+        type == PosNotificationType.printFailed;
+    if (isPrinterAlert && !orderPrinterSideEffectsEnabled) return;
+
     if (type == PosNotificationType.printFailed) {
       final cutoff = DateTime.now().subtract(const Duration(minutes: 2));
       final duplicate = notifications.any(
@@ -2972,6 +3077,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> _notifyPrintInfrastructureOnce(String reason) async {
+    if (!orderPrinterSideEffectsEnabled) return;
     if (_alertedPrintFailureReasons.contains(reason)) return;
     _alertedPrintFailureReasons.add(reason);
     await addNotification(
@@ -2986,6 +3092,7 @@ class PosAppController extends ChangeNotifier {
   Future<void> _notifyPrinterUnavailableForCreatedOrder(
     OrderModel order,
   ) async {
+    if (!orderPrinterSideEffectsEnabled) return;
     final reason = await printerService.preflightBlockReason();
     printerState = printerService.state;
     if (reason == null) {
@@ -3065,11 +3172,14 @@ class PosAppController extends ChangeNotifier {
         }
       }
 
-      await _printAcceptedOrderIfNeeded(order);
+      if (orderPrinterSideEffectsEnabled) {
+        await _printAcceptedOrderIfNeeded(order);
+      }
     }
   }
 
   Future<void> _printAcceptedOrderIfNeeded(OrderModel order) async {
+    if (!orderPrinterSideEffectsEnabled) return;
     // Only the manager device auto-prints. Staff devices forward to manager
     // via cloud sync; the manager app then receives the order and prints.
     if (!isManager) return;
@@ -3189,6 +3299,10 @@ class PosAppController extends ChangeNotifier {
       cloudConfig.autoSyncIntervalSeconds,
     );
     await preferences.setInt(_tableCountKey, serverConfig.tableCount);
+    await preferences.setString(
+      _customerMenuThemeKey,
+      serverConfig.customerMenuTheme,
+    );
   }
 
   Future<void> _persistAccountAuth() async {
@@ -3360,6 +3474,7 @@ class PosAppController extends ChangeNotifier {
   static final String _dismissedAppUpdateVersionCodeKey =
       'local_pos_dismissed_app_update_version_code';
   static final String _tableCountKey = 'local_pos_table_count';
+  static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';

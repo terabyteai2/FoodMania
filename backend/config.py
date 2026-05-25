@@ -76,12 +76,19 @@ class Settings(BaseSettings):
     OCR_SPACE_LANGUAGE: str = "auto"
     GROQ_API_KEY: str = ""
     MENU_SCAN_GROQ_MODEL: str = "openai/gpt-oss-20b"
+    CHATBOT_GROQ_MODEL: str = "openai/gpt-oss-20b"
     XAI_API_KEY: str = ""
     DEEPSEEK_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     MENU_SCAN_XAI_MODEL: str = "grok-4.3"
     MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
     MENU_SCAN_OPENAI_MODEL: str = "gpt-4.1-mini"
+
+    # Facebook Messenger chatbot
+    FACEBOOK_APP_ID: str = ""
+    FACEBOOK_APP_SECRET: str = ""
+    FACEBOOK_WEBHOOK_VERIFY_TOKEN: str = ""
+    META_GRAPH_API_VERSION: str = "v24.0"
 
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"

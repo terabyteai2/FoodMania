@@ -51,6 +51,7 @@ Future<void> openNewOrderForm(
             paymentMethod: null,
           );
           final shouldPrint =
+              app.orderPrinterSideEffectsEnabled &&
               app.isManager &&
               !app.printerState.autoPrintEnabled &&
               app.printerState.hasSelectedPrinter &&
@@ -1614,6 +1615,8 @@ class _OrderResult {
   final String? note;
 }
 
+enum _MenuLayoutMode { compactGrid, largeTiles }
+
 class _NewOrderPage extends StatefulWidget {
   const _NewOrderPage({
     required this.menuItems,
@@ -1644,6 +1647,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _searchCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   String _query = '';
+  _MenuLayoutMode _menuLayoutMode = _MenuLayoutMode.compactGrid;
   OrderModel? _createdOrder;
   bool _creating = false;
   bool _printingReceipt = false;
@@ -1743,6 +1747,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _cart[id] = current - 1;
       }
     });
+  }
+
+  void _selectMenuLayout(_MenuLayoutMode mode) {
+    if (_menuLayoutMode == mode) return;
+    setState(() => _menuLayoutMode = mode);
   }
 
   void _goToReview() {
@@ -1862,7 +1871,9 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     totalQty: _totalQty,
                     searchCtrl: _searchCtrl,
                     query: _query,
+                    layoutMode: _menuLayoutMode,
                     onSearchChanged: (value) => setState(() => _query = value),
+                    onLayoutChanged: _selectMenuLayout,
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),
                     onTap: _tap,
@@ -2828,7 +2839,9 @@ class _MenuStep extends StatelessWidget {
     required this.totalQty,
     required this.searchCtrl,
     required this.query,
+    required this.layoutMode,
     required this.onSearchChanged,
+    required this.onLayoutChanged,
     required this.onCategorySelected,
     required this.onTap,
     required this.onDecrement,
@@ -2844,7 +2857,9 @@ class _MenuStep extends StatelessWidget {
   final int totalQty;
   final TextEditingController searchCtrl;
   final String query;
+  final _MenuLayoutMode layoutMode;
   final ValueChanged<String> onSearchChanged;
+  final ValueChanged<_MenuLayoutMode> onLayoutChanged;
   final ValueChanged<String> onCategorySelected;
   final ValueChanged<String> onTap;
   final ValueChanged<String> onDecrement;
@@ -2852,27 +2867,55 @@ class _MenuStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final isBn = text.isBn;
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
-          child: TextField(
-            controller: searchCtrl,
-            onChanged: onSearchChanged,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: AppScope.of(context).strings.searchMenuItems,
-              prefixIcon: Icon(Icons.search_rounded, color: PosColors.muted),
-              suffixIcon: query.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () {
-                        searchCtrl.clear();
-                        onSearchChanged('');
-                      },
-                      icon: Icon(Icons.close_rounded, color: PosColors.muted),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: searchCtrl,
+                  onChanged: onSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: text.searchMenuItems,
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: PosColors.muted,
                     ),
-            ),
+                    suffixIcon: query.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              searchCtrl.clear();
+                              onSearchChanged('');
+                            },
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: PosColors.muted,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TfIconButton(
+                icon: Icons.grid_view_rounded,
+                tooltip: isBn ? 'কম্প্যাক্ট গ্রিড' : 'Compact grid',
+                dark: layoutMode == _MenuLayoutMode.compactGrid,
+                onPressed: () => onLayoutChanged(_MenuLayoutMode.compactGrid),
+              ),
+              const SizedBox(width: 6),
+              TfIconButton(
+                icon: Icons.view_agenda_outlined,
+                tooltip: isBn ? 'বড় টাইল' : 'Large tiles',
+                dark: layoutMode == _MenuLayoutMode.largeTiles,
+                onPressed: () => onLayoutChanged(_MenuLayoutMode.largeTiles),
+              ),
+            ],
           ),
         ),
         _CategoryChips(
@@ -2884,6 +2927,7 @@ class _MenuStep extends StatelessWidget {
           child: _MenuGrid(
             items: visibleItems,
             cart: cart,
+            layoutMode: layoutMode,
             onTap: onTap,
             onDecrement: onDecrement,
           ),
@@ -2942,12 +2986,14 @@ class _MenuGrid extends StatelessWidget {
   const _MenuGrid({
     required this.items,
     required this.cart,
+    required this.layoutMode,
     required this.onTap,
     required this.onDecrement,
   });
 
   final List<MenuItem> items;
   final Map<String, int> cart;
+  final _MenuLayoutMode layoutMode;
   final ValueChanged<String> onTap;
   final ValueChanged<String> onDecrement;
 
@@ -2962,9 +3008,28 @@ class _MenuGrid extends StatelessWidget {
       );
     }
 
+    if (layoutMode == _MenuLayoutMode.compactGrid) {
+      return GridView.builder(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          mainAxisExtent: 108,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+        ),
+        itemCount: items.length,
+        itemBuilder: (_, i) => _CompactMenuTile(
+          item: items[i],
+          qty: cart[items[i].id] ?? 0,
+          onTap: () => onTap(items[i].id),
+          onDecrement: () => onDecrement(items[i].id),
+        ),
+      );
+    }
+
     return GridView.builder(
-      padding: EdgeInsets.fromLTRB(14, 10, 14, 8),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 160,
         mainAxisExtent: 112,
         mainAxisSpacing: 8,
@@ -2976,6 +3041,172 @@ class _MenuGrid extends StatelessWidget {
         qty: cart[items[i].id] ?? 0,
         onTap: () => onTap(items[i].id),
         onDecrement: () => onDecrement(items[i].id),
+      ),
+    );
+  }
+}
+
+class _CompactMenuTile extends StatelessWidget {
+  const _CompactMenuTile({
+    required this.item,
+    required this.qty,
+    required this.onTap,
+    required this.onDecrement,
+  });
+
+  final MenuItem item;
+  final int qty;
+  final VoidCallback onTap;
+  final VoidCallback onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final inCart = qty > 0;
+    final extras = item.extras;
+    final hasAddOns = extras.addOns.isNotEmpty;
+    final iconStyle = menuIconStyleFor(
+      resolveMenuIconKey(
+        iconKey: extras.iconKey,
+        name: item.name,
+        category: item.category,
+      ),
+    );
+    final fg = inCart ? Colors.white : PosColors.slate;
+    final muted = inCart
+        ? Colors.white.withValues(alpha: 0.76)
+        : PosColors.muted;
+
+    return Material(
+      color: inCart ? PosColors.slate : PosColors.surface,
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(PosRadii.md),
+            border: Border.all(
+              color: inCart ? PosColors.primary : PosColors.line,
+              width: 0.5,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(7, 7, 7, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: inCart
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : iconStyle.background,
+                        borderRadius: BorderRadius.circular(PosRadii.xs),
+                      ),
+                      child: Icon(
+                        iconStyle.icon,
+                        color: inCart ? PosColors.primary : iconStyle.color,
+                        size: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: TfText(
+                        item.localizedName(app.language),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: fg,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(right: inCart ? 27 : 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TfText(
+                              tfFormatCurrency(context, item.price),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          if (hasAddOns && !inCart) ...[
+                            const SizedBox(width: 3),
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 11,
+                              color: PosColors.muted,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (inCart) ...[
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: GestureDetector(
+                    onTap: onDecrement,
+                    child: Container(
+                      width: 21,
+                      height: 21,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.24),
+                        borderRadius: BorderRadius.circular(PosRadii.xs),
+                      ),
+                      child: const Icon(
+                        Icons.remove_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 5,
+                  bottom: 5,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 22),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.primary,
+                      borderRadius: BorderRadius.circular(PosRadii.xs),
+                    ),
+                    child: TfText(
+                      tfFormatNumber(context, qty),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.primaryDark,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

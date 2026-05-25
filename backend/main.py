@@ -14,7 +14,7 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
-from routers import admin, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, tenants, ws
+from routers import admin, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, tenants, ws
 from subscription_service import maybe_expire_subscription
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
@@ -160,6 +160,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.include_router(health.router)
 app.include_router(tenants.router)
 app.include_router(admin.router)
+app.include_router(chatbot.router)
 app.include_router(devices.router)
 app.include_router(menu.router)
 app.include_router(inventory.router)

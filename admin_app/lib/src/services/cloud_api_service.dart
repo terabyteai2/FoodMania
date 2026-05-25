@@ -12,6 +12,7 @@ import '../models/account_role.dart';
 import '../models/app_update_info.dart';
 import '../models/daily_report.dart';
 import '../models/dashboard_summary.dart';
+import '../models/facebook_chatbot_config.dart';
 import '../models/inventory_item.dart';
 import '../models/inventory_summary.dart';
 import '../models/menu_item.dart';
@@ -909,6 +910,36 @@ class CloudApiService {
         : response;
   }
 
+  Future<FacebookChatbotConfig> fetchFacebookChatbotConfig() async {
+    final uri = _uri('/admin/chatbot/facebook');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson('GET', uri);
+    return FacebookChatbotConfig.fromJson(response);
+  }
+
+  Future<FacebookChatbotConfig> updateFacebookChatbotConfig({
+    String? pageAccessToken,
+    required bool isEnabled,
+    required bool orderingEnabled,
+  }) async {
+    final uri = _uri('/admin/chatbot/facebook');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'PUT',
+      uri,
+      body: {
+        if (pageAccessToken != null) 'pageAccessToken': pageAccessToken.trim(),
+        'isEnabled': isEnabled,
+        'orderingEnabled': orderingEnabled,
+      },
+    );
+    return FacebookChatbotConfig.fromJson(response);
+  }
+
   Future<Map<String, Object?>> createAdminAccount({
     required String outletId,
     required String email,
@@ -1341,6 +1372,15 @@ class CloudApiService {
     await _sendJson('PATCH', uri, body: {'videoUrl': videoUrl});
   }
 
+  Future<void> updateOutletMenuTheme(String slug) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/media');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    await _sendJson('PATCH', uri, body: {'menuTheme': slug});
+  }
+
   Future<String> uploadOutletVideo(List<int> bytes, String filename) async {
     final config = _requireServerConfig();
     final uri = _uri('/outlets/${config.outletId}/video');
@@ -1713,6 +1753,8 @@ class CloudApiService {
         return _client.get(uri, headers: headers);
       case 'POST':
         return _client.post(uri, headers: headers, body: body);
+      case 'PUT':
+        return _client.put(uri, headers: headers, body: body);
       case 'PATCH':
         return _client.patch(uri, headers: headers, body: body);
       case 'DELETE':

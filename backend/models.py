@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,6 +40,7 @@ class Outlet(Base):
     banner_url: Mapped[str | None] = mapped_column(Text)
     video_url: Mapped[str | None] = mapped_column(Text)
     gallery_images: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
+    menu_theme: Mapped[str] = mapped_column(String, default="napoli_trattoria")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="outlets")
@@ -50,6 +51,9 @@ class Outlet(Base):
     inventory_items: Mapped[list["InventoryItem"]] = relationship(back_populates="outlet")
     subscription: Mapped["OutletSubscription | None"] = relationship(
         back_populates="outlet", uselist=False
+    )
+    chatbot_integrations: Mapped[list["ChatbotIntegration"]] = relationship(
+        back_populates="outlet"
     )
 
 
@@ -258,3 +262,49 @@ class SystemConfig(Base):
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ChatbotIntegration(Base):
+    __tablename__ = "chatbot_integrations"
+    __table_args__ = (
+        UniqueConstraint("provider", "outlet_id", name="uq_chatbot_provider_outlet"),
+        UniqueConstraint("provider", "page_id", name="uq_chatbot_provider_page"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String, default="facebook", nullable=False)
+    page_id: Mapped[str] = mapped_column(String, nullable=False)
+    page_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    ordering_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    outlet: Mapped[Outlet] = relationship(back_populates="chatbot_integrations")
+    conversations: Mapped[list["ChatbotConversation"]] = relationship(
+        back_populates="integration"
+    )
+
+
+class ChatbotConversation(Base):
+    __tablename__ = "chatbot_conversations"
+    __table_args__ = (
+        UniqueConstraint("integration_id", "psid", name="uq_chatbot_conversation_psid"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    integration_id: Mapped[str] = mapped_column(
+        ForeignKey("chatbot_integrations.id"), nullable=False
+    )
+    page_id: Mapped[str] = mapped_column(String, nullable=False)
+    psid: Mapped[str] = mapped_column(String, nullable=False)
+    state_json: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
+    last_user_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_bot_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    integration: Mapped[ChatbotIntegration] = relationship(back_populates="conversations")

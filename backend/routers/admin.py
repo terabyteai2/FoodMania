@@ -33,6 +33,8 @@ import storage
 from models import (
     AdminAccount,
     BkashSession,
+    ChatbotConversation,
+    ChatbotIntegration,
     DailyStockCount,
     Device,
     InventoryItem,
@@ -1092,6 +1094,16 @@ async def wipe_outlet_data(
         "orders": await delete_rows(Order, Order.outlet_id == outlet_id),
         "menuItems": await delete_rows(MenuItem, MenuItem.outlet_id == outlet_id),
         "devices": await delete_rows(Device, Device.outlet_id == outlet_id),
+        "chatbotConversations": await delete_rows(
+            ChatbotConversation,
+            ChatbotConversation.integration_id.in_(
+                select(ChatbotIntegration.id).where(ChatbotIntegration.outlet_id == outlet_id)
+            ),
+        ),
+        "chatbotIntegrations": await delete_rows(
+            ChatbotIntegration,
+            ChatbotIntegration.outlet_id == outlet_id,
+        ),
         "subscriptions": await delete_rows(
             OutletSubscription,
             OutletSubscription.outlet_id == outlet_id,

@@ -10,6 +10,7 @@ from models import MenuItem, Order
 from routers.ws import manager
 from schemas import OrderPayload, OrderStatusUpdate, ok
 from routers.menu import _require_manager_scan_access
+from services.customer_orders import order_to_dict
 from services.order_history_import import OrderHistoryCsvError, parse_order_history_csv
 
 router = APIRouter()
@@ -24,29 +25,7 @@ def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
 
 
 def _order_to_dict(order: Order) -> dict:
-    return {
-        "id": order.id,
-        "outletId": order.outlet_id,
-        "serialNumber": order.serial_number,
-        "source": order.source,
-        "status": order.status,
-        "totalAmount": float(order.total_amount),
-        "subtotal": float(order.subtotal or order.total_amount or 0),
-        "vatRatePercent": float(order.vat_rate_percent or 0),
-        "vatAmount": float(order.vat_amount or 0),
-        "serviceType": order.service_type,
-        "covers": order.covers,
-        "paymentMethod": order.payment_method,
-        "items": order.items,
-        "notes": order.notes,
-        "customerName": order.customer_name,
-        "deliveryAddress": order.delivery_address,
-        "mobileNumber": order.mobile_number,
-        "createdByAccountId": order.created_by_account_id,
-        "createdByRole": order.created_by_role,
-        "createdAt": order.created_at.isoformat(),
-        "updatedAt": order.updated_at.isoformat(),
-    }
+    return order_to_dict(order)
 
 
 def _normalize_order_status(status: str | None) -> str:

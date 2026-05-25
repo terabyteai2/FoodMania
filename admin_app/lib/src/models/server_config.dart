@@ -7,6 +7,7 @@ class ServerConfig {
     required this.outletName,
     this.publicSlug = '',
     this.tableCount = 10,
+    this.customerMenuTheme = 'napoli_trattoria',
   });
 
   final String serverId;
@@ -16,6 +17,7 @@ class ServerConfig {
   final String outletName;
   final String publicSlug;
   final int tableCount;
+  final String customerMenuTheme;
 
   ServerConfig copyWith({
     String? serverId,
@@ -25,6 +27,7 @@ class ServerConfig {
     String? outletName,
     String? publicSlug,
     int? tableCount,
+    String? customerMenuTheme,
   }) {
     return ServerConfig(
       serverId: serverId ?? this.serverId,
@@ -34,6 +37,7 @@ class ServerConfig {
       outletName: outletName ?? this.outletName,
       publicSlug: publicSlug ?? this.publicSlug,
       tableCount: tableCount ?? this.tableCount,
+      customerMenuTheme: customerMenuTheme ?? this.customerMenuTheme,
     );
   }
 }

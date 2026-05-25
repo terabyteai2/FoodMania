@@ -1,4 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
+import {
+  ThemeProvider,
+  useTokens,
+  resolveTheme,
+  themeAssetPaths,
+  DEFAULT_THEME_SLUG,
+} from './themes'
 
 const API_BASE = ''
 const MENU_REFRESH_MS = 5000
@@ -115,18 +122,12 @@ async function generateReceipt(order, info, cartItems) {
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
-const T = {
-  bg:      '#1c1410',
-  bgWarm:  '#241914',
-  bgCard:  '#2b1f18',
-  ink:     '#fff3e0',
-  inkSoft: 'rgba(255,243,224,.65)',
-  inkFaint:'rgba(255,243,224,.4)',
-  ember:   '#ff6a3d',
-  amber:   '#ffb547',
-  line:    'rgba(255,243,224,.12)',
+// Module-level fallback tokens used only by the menu-icon constants below
+// (which are evaluated at import time, before any React tree exists). Every
+// component grabs its live theme tokens via `useTokens()` at render time.
+const T_FALLBACK = {
+  amber: '#ffb547',
   display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
-  body:    '"Hind Siliguri", system-ui, -apple-system, sans-serif',
 }
 
 const MENU_ICON_STYLES = {
@@ -150,7 +151,7 @@ const MENU_ICON_STYLES = {
   tea:      { glyph: '◡', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
   breakfast:{ glyph: '◐', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
   set_meal: { glyph: '▦', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
-  general:  { glyph: '✦', color: T.amber, bg: 'rgba(255,181,71,.14)' },
+  general:  { glyph: '✦', color: T_FALLBACK.amber, bg: 'rgba(255,181,71,.14)' },
 }
 
 function inferIconKey(item) {
@@ -186,6 +187,7 @@ function iconStyleFor(item) {
 }
 
 function MenuFallbackIcon({ item, size = 32 }) {
+  const T = useTokens()
   const style = iconStyleFor(item)
   return (
     <div style={{
@@ -508,9 +510,12 @@ export default function App() {
     finally { setSub(false) }
   }
 
-  if (phase === 'loading') return <LoadingScreen />
-  if (phase === 'error')   return <ErrorScreen message={errorMsg} />
-  if (phase === 'success') return (
+  const themeSlug = info?.menuTheme || DEFAULT_THEME_SLUG
+
+  let body
+  if (phase === 'loading') body = <LoadingScreen />
+  else if (phase === 'error') body = <ErrorScreen message={errorMsg} />
+  else if (phase === 'success') body = (
     <SuccessScreen order={orderRef} info={info} cartItems={lastCart}
       onBack={() => {
         setCart({}); setLastCart([]); setNote('')
@@ -518,17 +523,16 @@ export default function App() {
         setPhase('menu')
       }} />
   )
-  if (phase === 'cart') return (
+  else if (phase === 'cart') body = (
     <CartScreen cart={cart} items={items} note={note} onNote={setNote}
       delivery={delivery} onDelivery={setDelivery}
       onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
       onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId} />
   )
-  if (phase === 'welcome') return (
+  else if (phase === 'welcome') body = (
     <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
   )
-
-  return (
+  else body = (
     <>
       <MenuScreen
         info={info} items={visible} allItems={items} cart={cart}
@@ -548,10 +552,13 @@ export default function App() {
       )}
     </>
   )
+
+  return <ThemeProvider slug={themeSlug}>{body}</ThemeProvider>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 function LoadingScreen() {
+  const T = useTokens()
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -573,6 +580,7 @@ function LoadingScreen() {
 }
 
 function ErrorScreen({ message }) {
+  const T = useTokens()
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -589,6 +597,7 @@ function ErrorScreen({ message }) {
 
 // ── Welcome Screen ────────────────────────────────────────────────────────────
 function WelcomeScreen({ info, onEnter }) {
+  const T = useTokens()
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const touchX = useRef(null)
@@ -597,6 +606,10 @@ function WelcomeScreen({ info, onEnter }) {
   const hasGallery = !hasVideo && gallery.length > 0
   const hasBanner = !hasVideo && !hasGallery && !!info?.bannerUrl
   const hasMedia = hasVideo || hasGallery || hasBanner
+  // Per-theme placeholder paths reserved for future use; the actual asset
+  // files live under public/themes/<slug>/ and are dropped in by the owner.
+  // eslint-disable-next-line no-unused-vars
+  const _placeholderAssets = themeAssetPaths(T._slug)
 
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return
@@ -625,17 +638,17 @@ function WelcomeScreen({ info, onEnter }) {
     >
       {/* Background media */}
       {hasVideo ? (
-        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline preload="metadata"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : hasGallery ? (
         gallery.map((url, i) => (
-          <img key={url} src={url} alt="" style={{
+          <img key={url} src={url} alt="" loading="lazy" style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
             opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
           }} />
         ))
       ) : hasBanner ? (
-        <img src={info.bannerUrl} alt=""
+        <img src={info.bannerUrl} alt="" loading="lazy"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         <>
@@ -728,6 +741,7 @@ function WelcomeScreen({ info, onEnter }) {
 
 // ── Menu Screen ───────────────────────────────────────────────────────────────
 function MenuScreen({ info, items, allItems, cart, categories, activeCategory, onCategory, onAdd, onRemove, onOpenCart, onOpenDetail }) {
+  const T = useTokens()
   const count = cartCount(cart)
   const total = cartTotal(cart, allItems)
 
@@ -823,6 +837,7 @@ function MenuScreen({ info, items, allItems, cart, categories, activeCategory, o
 
 // ── Menu Hero (short, inside menu page) ───────────────────────────────────────
 function MenuHero({ info }) {
+  const T = useTokens()
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const gallery = info?.galleryImages || []
@@ -842,17 +857,17 @@ function MenuHero({ info }) {
   return (
     <div style={{ position: 'relative', height: 200, flexShrink: 0, background: T.bgWarm, overflow: 'hidden' }}>
       {hasVideo ? (
-        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline preload="metadata"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : hasGallery ? (
         gallery.map((url, i) => (
-          <img key={url} src={url} alt="" style={{
+          <img key={url} src={url} alt="" loading="lazy" style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
             opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
           }} />
         ))
       ) : info?.bannerUrl ? (
-        <img src={info.bannerUrl} alt=""
+        <img src={info.bannerUrl} alt="" loading="lazy"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : null}
 
@@ -891,6 +906,7 @@ function MenuHero({ info }) {
 
 // ── Menu Card (2-col grid) ────────────────────────────────────────────────────
 function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
+  const T = useTokens()
   const hasImage = !!item.imageUrl
 
   return (
@@ -988,6 +1004,7 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
 
 // ── Item Detail Sheet ─────────────────────────────────────────────────────────
 function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
+  const T = useTokens()
   const media = buildMedia(item)
   const videoRef = useRef(null)
   const current = media[0]
@@ -1125,6 +1142,7 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
 
 // ── Cart Screen ───────────────────────────────────────────────────────────────
 function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, onRemove, onBack, onPlace, submitting, info, outletId }) {
+  const T = useTokens()
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
     .filter(Boolean)
@@ -1363,6 +1381,7 @@ function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, on
 }
 
 function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
+  const T = useTokens()
   const isLoading = geo.status === 'locating' || geo.status === 'geocoding'
   const hasAddress = geo.status === 'ready' && geo.address
   const hasError = geo.status === 'error'
@@ -1453,6 +1472,7 @@ function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
 }
 
 function AddressMapPreview({ position }) {
+  const T = useTokens()
   const mapRef = useRef(null)
   const [failed, setFailed] = useState(false)
 
@@ -1522,6 +1542,7 @@ function AddressMapPreview({ position }) {
 
 // ── Success Screen ────────────────────────────────────────────────────────────
 function SuccessScreen({ order, info, cartItems, onBack }) {
+  const T = useTokens()
   const totalItems = cartItems.reduce((s, i) => s + i.qty, 0)
 
   return (

@@ -105,6 +105,40 @@ class AppStrings {
   String scaleLabel(String label, int percent) =>
       isBn ? '$label - ${_n(percent)}%' : '$label - $percent%';
 
+  String get customerMenuTheme =>
+      isBn ? 'কাস্টমার মেনু থিম' : 'Customer Menu Theme';
+  String get customerMenuThemeSubtitle => isBn
+      ? 'পাবলিক অর্ডার পেজের লুক বেছে নিন।'
+      : 'Pick the look of your public ordering page.';
+  String get customerMenuThemePreviewLabel => isBn ? 'প্রিভিউ' : 'Preview';
+  String get facebookMessengerBot =>
+      isBn ? 'Facebook Messenger bot' : 'Facebook Messenger bot';
+  String get facebookMessengerBotSubtitle => isBn
+      ? 'Messenger থেকে মেনু প্রশ্ন ও ডেলিভারি অর্ডার নিন।'
+      : 'Answer menu questions and take delivery orders from Messenger.';
+  String get facebookPageAccessToken =>
+      isBn ? 'Page access token' : 'Page access token';
+  String get facebookPageAccessTokenHint =>
+      isBn ? 'নতুন Page token পেস্ট করুন' : 'Paste a new Page token';
+  String get facebookPageAccessTokenHelper => isBn
+      ? 'সেভ করার পর token backend-এ hidden থাকবে।'
+      : 'After saving, the token stays hidden on the backend.';
+  String get facebookBotEnabled => isBn ? 'Bot চালু' : 'Bot enabled';
+  String get facebookOrderingEnabled =>
+      isBn ? 'ডেলিভারি অর্ডার চালু' : 'Delivery ordering enabled';
+  String get facebookWebhookUrl =>
+      isBn ? 'Webhook callback URL' : 'Webhook callback URL';
+  String get facebookPageId => isBn ? 'Page ID' : 'Page ID';
+  String get facebookPageName => isBn ? 'Page name' : 'Page name';
+  String get facebookTokenSavedAs => isBn ? 'Saved token' : 'Saved token';
+  String get facebookBotConnected => isBn ? 'Connected' : 'Connected';
+  String get facebookBotNotConnected => isBn ? 'Setup needed' : 'Setup needed';
+  String get facebookBotDisabled => isBn ? 'Disabled' : 'Disabled';
+  String get saveMessengerSettings =>
+      isBn ? 'Messenger সেটিংস সেভ করুন' : 'Save Messenger settings';
+  String get messengerSettingsSaved =>
+      isBn ? 'Messenger সেটিংস সেভ হয়েছে' : 'Messenger settings saved';
+
   String get restaurantSection => isBn ? 'রেস্টুরেন্ট' : 'Restaurant';
   String get restaurantSubtitle =>
       isBn ? 'এই আউটলেটের পাবলিক পরিচয়।' : 'Public identity for this outlet.';
@@ -419,6 +453,8 @@ class AppStrings {
     switch (source) {
       case OrderSource.cloud:
         return isBn ? 'ক্লাউড / ওয়েব' : 'Cloud / web';
+      case OrderSource.facebookMessenger:
+        return isBn ? 'Messenger' : 'Messenger';
       case OrderSource.manual:
         return isBn ? 'ম্যানুয়াল' : 'Manual';
       case OrderSource.localLan:

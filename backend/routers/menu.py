@@ -24,6 +24,20 @@ logger = logging.getLogger(__name__)
 MAX_MENU_SCAN_PAGES = 6
 MAX_MENU_SCAN_PAGE_BYTES = 1200 * 1024
 
+ALLOWED_MENU_THEMES = frozenset(
+    {
+        "napoli_trattoria",
+        "tuscan_herb",
+        "amalfi_breeze",
+        "milano_roast",
+        "sultans_hearth",
+        "charcoal_lodge",
+        "bengal_bistro",
+        "grand_mughal",
+    }
+)
+DEFAULT_MENU_THEME = "napoli_trattoria"
+
 
 def _decode_tags(raw: str | None) -> list[str]:
     if not raw:
@@ -371,6 +385,7 @@ async def scan_menu_pages(
 
 class OutletMediaPatch(pydantic.BaseModel):
     videoUrl: str | None = None
+    menuTheme: str | None = None
 
 
 def _hero_images_prefix(outlet_id: str) -> str:
@@ -488,11 +503,24 @@ async def update_outlet_media(
     if outlet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
 
+    fields_set = body.model_fields_set
     previous_url = outlet.video_url
-    outlet.video_url = body.videoUrl
+    video_changed = "videoUrl" in fields_set
+    if video_changed:
+        outlet.video_url = body.videoUrl
+
+    if "menuTheme" in fields_set:
+        theme = body.menuTheme or DEFAULT_MENU_THEME
+        if theme not in ALLOWED_MENU_THEMES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown menu theme '{theme}'.",
+            )
+        outlet.menu_theme = theme
+
     await db.commit()
 
-    if previous_url and previous_url != body.videoUrl:
+    if video_changed and previous_url and previous_url != body.videoUrl:
         storage.delete_by_url(previous_url)
 
-    return ok({"videoUrl": outlet.video_url})
+    return ok({"videoUrl": outlet.video_url, "menuTheme": outlet.menu_theme or DEFAULT_MENU_THEME})

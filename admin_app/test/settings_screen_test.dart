@@ -45,6 +45,69 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('settings exposes Facebook Messenger chatbot setup', (
+    tester,
+  ) async {
+    final controller = PosAppController()..language = AppLanguage.en;
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+
+    expect(find.text('Facebook Messenger bot'), findsOneWidget);
+    expect(
+      find.text(
+        'Answer menu questions and take delivery orders from Messenger.',
+      ),
+      findsOneWidget,
+    );
+
+    controller.dispose();
+  });
+
+  testWidgets('about us and privacy policy use Terafoods copy', (tester) async {
+    final controller = PosAppController()..language = AppLanguage.en;
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+
+    await tester.scrollUntilVisible(
+      find.text('About Us'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('About Us'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Terafoods'), findsWidgets);
+    expect(find.text('Restaurant POS for Bangladesh · v2.2.1'), findsOneWidget);
+    expect(
+      find.textContaining('mobile-first point-of-sale app'),
+      findsOneWidget,
+    );
+    expect(find.text('Rush-ready ordering'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Privacy Policy'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy Policy'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Last updated: May 25, 2026'), findsOneWidget);
+    expect(
+      find.textContaining('built Terafoods for restaurant owners'),
+      findsOneWidget,
+    );
+    expect(find.text('AI Scan Images'), findsOneWidget);
+    expect(find.text('Terafoods Cloud Backend'), findsOneWidget);
+
+    controller.dispose();
+  });
+
   testWidgets('wipe restaurant action requires typed outlet confirmation', (
     tester,
   ) async {
@@ -66,7 +129,11 @@ void main() {
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.scrollUntilVisible(
+      find.text('Wipe restaurant data'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Wipe restaurant data'));
     await tester.pumpAndSettle();

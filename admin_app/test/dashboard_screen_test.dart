@@ -12,6 +12,7 @@ import 'package:local_pos/src/models/order_payment_method.dart';
 import 'package:local_pos/src/models/order_service_type.dart';
 import 'package:local_pos/src/models/order_source.dart';
 import 'package:local_pos/src/models/order_status.dart';
+import 'package:local_pos/src/services/printer_service.dart';
 
 Widget _scoped(PosAppController controller, Widget child) {
   return AppScope(
@@ -35,6 +36,8 @@ MenuItem _menuItem() {
 }
 
 class _OrderFlowController extends PosAppController {
+  int printTicketCalls = 0;
+
   @override
   Future<OrderModel> createManualOrder({
     required List<OrderRequestItem> requestedItems,
@@ -84,6 +87,12 @@ class _OrderFlowController extends PosAppController {
       updatedAt: now,
     );
   }
+
+  @override
+  Future<bool> printOrderTicket(OrderModel order) async {
+    printTicketCalls++;
+    return true;
+  }
 }
 
 void main() {
@@ -112,7 +121,14 @@ void main() {
     final item = _menuItem();
     final controller = _OrderFlowController()
       ..language = AppLanguage.en
-      ..menuItems = [item];
+      ..menuItems = [item]
+      ..printerState = PrinterRuntimeState(
+        autoPrintEnabled: false,
+        connected: true,
+        busy: false,
+        selectedPrinterName: 'Kitchen printer',
+        selectedPrinterAddress: '00:11:22:33',
+      );
 
     await tester.pumpWidget(
       _scoped(controller, DashboardScreen(onNavigate: (_) {})),
@@ -139,7 +155,58 @@ void main() {
     expect(find.text('Print receipt'), findsOneWidget);
     expect(find.text('Burger'), findsOneWidget);
     expect(find.text('Total'), findsOneWidget);
+    expect(controller.orderPrinterSideEffectsEnabled, isFalse);
+    expect(controller.printTicketCalls, 0);
 
     controller.dispose();
   });
+
+  testWidgets(
+    'new order add items defaults to compact grid and toggles layout',
+    (tester) async {
+      final controller = PosAppController()
+        ..language = AppLanguage.en
+        ..menuItems = [_menuItem()];
+
+      await tester.pumpWidget(
+        _scoped(controller, DashboardScreen(onNavigate: (_) {})),
+      );
+
+      await tester.tap(find.byTooltip('New order'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Parcel').first);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      final compact = tester.widget<GridView>(find.byType(GridView));
+      final compactDelegate = compact.gridDelegate;
+      expect(compactDelegate, isA<SliverGridDelegateWithFixedCrossAxisCount>());
+      expect(
+        (compactDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+            .crossAxisCount,
+        4,
+      );
+
+      await tester.tap(find.byTooltip('Large tiles'));
+      await tester.pumpAndSettle();
+
+      final large = tester.widget<GridView>(find.byType(GridView));
+      expect(
+        large.gridDelegate,
+        isA<SliverGridDelegateWithMaxCrossAxisExtent>(),
+      );
+
+      await tester.tap(find.byTooltip('Compact grid'));
+      await tester.pumpAndSettle();
+
+      final compactAgain = tester.widget<GridView>(find.byType(GridView));
+      expect(
+        compactAgain.gridDelegate,
+        isA<SliverGridDelegateWithFixedCrossAxisCount>(),
+      );
+
+      controller.dispose();
+    },
+  );
 }

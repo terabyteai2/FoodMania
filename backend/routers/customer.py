@@ -1,20 +1,21 @@
 """Public customer-facing endpoints — no device token required."""
 
 import json
-import uuid
-from datetime import datetime, timezone
-
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from config import settings
 from database import get_db
-from models import MenuItem, Order, Outlet, Restaurant
-from routers.ws import manager
+from models import MenuItem, Outlet
+from services.customer_orders import (
+    DeliveryOrderLine,
+    create_delivery_order,
+    public_order_response,
+)
 from services.menu_placeholders import infer_icon_key, resolve_placeholder_url
 
 router = APIRouter(prefix="/customer", tags=["customer"])
@@ -218,114 +219,26 @@ async def place_customer_order(
     db: AsyncSession = Depends(get_db),
 ):
     """Place an order from the customer menu web app."""
-    if not body.items:
-        raise HTTPException(status_code=422, detail="Order must contain at least one item")
-
-    order_type = "delivery"
-    customer_name = (body.customerName or "").strip() or None
-    delivery_address = (body.deliveryAddress or "").strip() or None
-    mobile_number = (body.mobileNumber or "").strip() or None
-    if not (customer_name and delivery_address and mobile_number):
-        raise HTTPException(
-            status_code=422,
-            detail="Delivery requires name, address, and mobile number",
-        )
-
     outlet = await _get_outlet(outlet_id, db)
-
-    total = sum(item.price * item.qty for item in body.items)
-    vat_rate_percent = 5.0
-    vat_amount = round(total * vat_rate_percent / 100, 2)
-    final_total = round(total + vat_amount, 2)
-    now = datetime.now(timezone.utc)
-    order_id = str(uuid.uuid4())
-
-    items_payload = [
-        {
-            "menuItemId": item.menuItemId,
-            "name": item.name,
-            "qty": item.qty,
-            "price": item.price,
-            "lineTotal": round(item.price * item.qty, 2),
-        }
+    lines = [
+        DeliveryOrderLine(
+            menu_item_id=item.menuItemId,
+            name=item.name,
+            qty=item.qty,
+            price=item.price,
+        )
         for item in body.items
     ]
-
-    order = Order(
-        id=order_id,
-        outlet_id=outlet.id,
-        source="customer_web",
-        status="pending",
-        total_amount=final_total,
-        subtotal=round(total, 2),
-        vat_rate_percent=vat_rate_percent,
-        vat_amount=vat_amount,
-        service_type=order_type,
-        items=items_payload,
-        notes=body.note,
-        customer_name=customer_name,
-        delivery_address=delivery_address,
-        mobile_number=mobile_number,
-        created_at=now,
-        updated_at=now,
+    order = await create_delivery_order(
+        db=db,
+        outlet=outlet,
+        lines=lines,
+        customer_name=body.customerName,
+        delivery_address=body.deliveryAddress,
+        mobile_number=body.mobileNumber,
+        note=body.note,
     )
-    db.add(order)
-    await db.commit()
-    await db.refresh(order)
-
-    # Assign a 1-based serial number scoped to this outlet
-    count_res = await db.execute(
-        select(func.count()).select_from(Order).where(Order.outlet_id == outlet.id)
-    )
-    order.serial_number = count_res.scalar()
-    await db.commit()
-
-    # Broadcast to the admin POS via WebSocket
-    await manager.broadcast(
-        outlet.id,
-        {
-            "type": "order_created",
-            "data": {
-                "id": order.id,
-                "outletId": order.outlet_id,
-                "serialNumber": order.serial_number,
-                "source": order.source,
-                "status": order.status,
-                "totalAmount": float(order.total_amount),
-                "subtotal": float(order.subtotal or 0),
-                "vatRatePercent": float(order.vat_rate_percent or 0),
-                "vatAmount": float(order.vat_amount or 0),
-                "serviceType": order.service_type,
-                "covers": order.covers,
-                "paymentMethod": order.payment_method,
-                "items": order.items,
-                "notes": order.notes,
-                "customerName": order.customer_name,
-                "deliveryAddress": order.delivery_address,
-                "mobileNumber": order.mobile_number,
-                "createdByAccountId": None,
-                "createdByRole": "customer",
-                "createdAt": order.created_at.isoformat(),
-                "updatedAt": order.updated_at.isoformat(),
-            },
-        },
-    )
-
-    return _ok({
-        "orderId": order.id,
-        "serialNumber": order.serial_number,
-        "status": order.status,
-        "total": float(order.total_amount),
-        "subtotal": float(order.subtotal or 0),
-        "vatRatePercent": float(order.vat_rate_percent or 0),
-        "vatAmount": float(order.vat_amount or 0),
-        "items": order.items,
-        "notes": order.notes,
-        "serviceType": order.service_type,
-        "customerName": order.customer_name,
-        "deliveryAddress": order.delivery_address,
-        "mobileNumber": order.mobile_number,
-    })
+    return _ok(public_order_response(order))
 
 
 # ── GET restaurant info ────────────────────────────────────────────────────────
@@ -362,4 +275,5 @@ async def get_outlet_info(
         "bannerUrl": _rewrite_upload_url(request, outlet.banner_url),
         "videoUrl": _rewrite_upload_url(request, outlet.video_url),
         "galleryImages": gallery,
+        "menuTheme": outlet.menu_theme or "napoli_trattoria",
     })

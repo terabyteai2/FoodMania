@@ -107,6 +107,22 @@ class OutletWipeRequest(BaseModel):
     confirmation: str = Field(min_length=1)
 
 
+class FacebookChatbotConfigRequest(BaseModel):
+    pageAccessToken: str | None = None
+    isEnabled: bool = True
+    orderingEnabled: bool = True
+
+
+class FacebookChatbotConfigResponse(BaseModel):
+    isConfigured: bool
+    isEnabled: bool
+    orderingEnabled: bool
+    pageId: str | None = None
+    pageName: str | None = None
+    tokenPreview: str | None = None
+    lastError: str | None = None
+
+
 class StaffDevBypassLoginRequest(BaseModel):
     """Local/dev staff login without Google; server must set STAFF_DEV_BYPASS_SECRET."""
 

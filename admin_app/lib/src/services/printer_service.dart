@@ -151,6 +151,8 @@ class _ReceiptLabels {
     switch (source) {
       case OrderSource.cloud:
         return _bn ? 'ক্লাউড / ওয়েব' : 'Cloud / web';
+      case OrderSource.facebookMessenger:
+        return 'Messenger';
       case OrderSource.manual:
         return _bn ? 'ম্যানুয়াল' : 'Manual';
       case OrderSource.localLan:

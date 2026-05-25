@@ -34,16 +34,18 @@ class StatusBadge extends StatelessWidget {
   factory StatusBadge.source(OrderSource source) {
     return StatusBadge(
       label: source.label,
-      color: source == OrderSource.cloud
-          ? PosColors.info
-          : source == OrderSource.manual
-          ? PosColors.warning
-          : PosColors.primary,
-      icon: source == OrderSource.cloud
-          ? Icons.cloud_outlined
-          : source == OrderSource.manual
-          ? Icons.edit_note
-          : Icons.router_outlined,
+      color: switch (source) {
+        OrderSource.cloud => PosColors.info,
+        OrderSource.facebookMessenger => PosColors.success,
+        OrderSource.manual => PosColors.warning,
+        OrderSource.localLan => PosColors.primary,
+      },
+      icon: switch (source) {
+        OrderSource.cloud => Icons.cloud_outlined,
+        OrderSource.facebookMessenger => Icons.chat_bubble_outline_rounded,
+        OrderSource.manual => Icons.edit_note,
+        OrderSource.localLan => Icons.router_outlined,
+      },
     );
   }
 

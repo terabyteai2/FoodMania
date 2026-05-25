@@ -20,6 +20,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/menu_image_service.dart';
 import '../../services/printer_service.dart';
 import '../reports/reports_screen.dart';
+import 'customer_menu_themes.dart';
 import 'qr_pdf_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -150,6 +151,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openHeroMedia,
                 ),
                 _SettingActionData(
+                  title: text.customerMenuTheme,
+                  subtitle: text.customerMenuThemeSubtitle,
+                  icon: Icons.palette_outlined,
+                  trailing: resolveCustomerMenuTheme(
+                    app.serverConfig.customerMenuTheme,
+                  ).displayName(isBn: text.isBn),
+                  onTap: _openCustomerMenuTheme,
+                ),
+                _SettingActionData(
                   title: text.tables,
                   subtitle: text.tablesSubtitle,
                   icon: Icons.table_restaurant_outlined,
@@ -216,6 +226,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openYourRestaurantInfo,
                 ),
                 _SettingActionData(
+                  title: text.facebookMessengerBot,
+                  subtitle: text.facebookMessengerBotSubtitle,
+                  icon: Icons.chat_bubble_outline_rounded,
+                  trailing: _facebookBotTrailing(app, text),
+                  onTap: _openFacebookChatbot,
+                ),
+                _SettingActionData(
                   title: text.staffAccounts,
                   subtitle: text.staffAccountsSubtitle,
                   icon: Icons.groups_2_outlined,
@@ -223,13 +240,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _SettingActionData(
                   title: text.aboutUs,
-                  subtitle: 'Product and company details',
+                  subtitle: 'What Terafoods does and who it is for',
                   icon: Icons.info_outline_rounded,
                   onTap: _openAboutUs,
                 ),
                 _SettingActionData(
                   title: text.privacyPolicy,
-                  subtitle: 'How we handle data and privacy',
+                  subtitle: 'How Terafoods handles restaurant data',
                   icon: Icons.privacy_tip_outlined,
                   onTap: _openPrivacyPolicy,
                 ),
@@ -286,13 +303,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _SettingActionData(
                   title: text.aboutUs,
-                  subtitle: 'Product and company details',
+                  subtitle: 'What Terafoods does and who it is for',
                   icon: Icons.info_outline_rounded,
                   onTap: _openAboutUs,
                 ),
                 _SettingActionData(
                   title: text.privacyPolicy,
-                  subtitle: 'How we handle data and privacy',
+                  subtitle: 'How Terafoods handles restaurant data',
                   icon: Icons.privacy_tip_outlined,
                   onTap: _openPrivacyPolicy,
                 ),
@@ -394,6 +411,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context) => _SettingsSectionPage(
           title: text.inventorySettings,
           child: _InventorySettingsCard(text: text),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCustomerMenuTheme() async {
+    final text = AppScope.of(context).strings;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _SettingsSectionPage(
+          title: text.customerMenuTheme,
+          child: const _CustomerMenuThemeCard(),
+        ),
+      ),
+    );
+  }
+
+  String _facebookBotTrailing(PosAppController app, AppStrings text) {
+    final config = app.facebookChatbotConfig;
+    if (config == null || !config.isConfigured) {
+      return text.facebookBotNotConnected;
+    }
+    return config.isEnabled
+        ? text.facebookBotConnected
+        : text.facebookBotDisabled;
+  }
+
+  Future<void> _openFacebookChatbot() async {
+    final text = AppScope.of(context).strings;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _SettingsSectionPage(
+          title: text.facebookMessengerBot,
+          child: const _FacebookChatbotSettingsPage(),
         ),
       ),
     );
@@ -1149,6 +1200,244 @@ class _SettingsSectionPage extends StatelessWidget {
   }
 }
 
+class _FacebookChatbotSettingsPage extends StatefulWidget {
+  const _FacebookChatbotSettingsPage();
+
+  @override
+  State<_FacebookChatbotSettingsPage> createState() =>
+      _FacebookChatbotSettingsPageState();
+}
+
+class _FacebookChatbotSettingsPageState
+    extends State<_FacebookChatbotSettingsPage> {
+  final TextEditingController _tokenController = TextEditingController();
+  bool _enabled = true;
+  bool _orderingEnabled = true;
+  bool _loadRequested = false;
+  String _configKey = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final app = AppScope.of(context);
+    final config = app.facebookChatbotConfig;
+    final nextKey = config == null
+        ? ''
+        : '${config.pageId}|${config.isEnabled}|${config.orderingEnabled}';
+    if (config != null && nextKey != _configKey) {
+      _enabled = config.isEnabled;
+      _orderingEnabled = config.orderingEnabled;
+      _configKey = nextKey;
+    }
+    if (!_loadRequested) {
+      _loadRequested = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(AppScope.of(context).loadFacebookChatbotConfig());
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final config = app.facebookChatbotConfig;
+    final statusLabel = config == null || !config.isConfigured
+        ? text.facebookBotNotConnected
+        : config.isEnabled
+        ? text.facebookBotConnected
+        : text.facebookBotDisabled;
+    final statusKind = config == null || !config.isConfigured
+        ? TfStatusKind.warning
+        : config.isEnabled
+        ? TfStatusKind.accepted
+        : TfStatusKind.info;
+    final webhookUrl = _webhookUrl(app.cloudConfig.baseUrl);
+
+    return _SectionCard(
+      title: text.facebookMessengerBot,
+      subtitle: text.facebookMessengerBotSubtitle,
+      icon: Icons.chat_bubble_outline_rounded,
+      children: [
+        Row(
+          children: [
+            TfStatusBadge(label: statusLabel, kind: statusKind, upper: false),
+            if (app.facebookChatbotLoading) ...[
+              SizedBox(width: 8),
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: 12),
+        TfField(
+          label: text.facebookPageAccessToken,
+          controller: _tokenController,
+          hint: text.facebookPageAccessTokenHint,
+          hintHelper: text.facebookPageAccessTokenHelper,
+          obscure: true,
+        ),
+        _FacebookToggleRow(
+          label: text.facebookBotEnabled,
+          value: _enabled,
+          onChanged: (value) => setState(() => _enabled = value),
+        ),
+        _FacebookToggleRow(
+          label: text.facebookOrderingEnabled,
+          value: _orderingEnabled,
+          onChanged: (value) => setState(() => _orderingEnabled = value),
+        ),
+        SizedBox(height: 10),
+        _FacebookInfoRow(
+          label: text.facebookWebhookUrl,
+          value: webhookUrl,
+          copyable: webhookUrl.isNotEmpty,
+        ),
+        if (config != null && config.isConfigured) ...[
+          _FacebookInfoRow(
+            label: text.facebookPageName,
+            value: config.pageName,
+          ),
+          _FacebookInfoRow(label: text.facebookPageId, value: config.pageId),
+          _FacebookInfoRow(
+            label: text.facebookTokenSavedAs,
+            value: config.tokenPreview,
+          ),
+        ],
+        if ((app.facebookChatbotError ?? config?.lastError ?? '').isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: TfText(
+              app.facebookChatbotError ?? config?.lastError ?? '',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
+            ),
+          ),
+        SizedBox(height: 14),
+        TfButton(
+          label: text.saveMessengerSettings,
+          icon: Icons.check_rounded,
+          busy: app.busy,
+          fullWidth: true,
+          onPressed: app.busy ? null : _save,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await app.saveFacebookChatbotConfig(
+      pageAccessToken: _tokenController.text,
+      isEnabled: _enabled,
+      orderingEnabled: _orderingEnabled,
+    );
+    if (!mounted) return;
+    if (ok) _tokenController.clear();
+    messenger.showSnackBar(
+      SnackBar(
+        content: TfText(
+          ok
+              ? app.strings.messengerSettingsSaved
+              : app.lastError ?? app.strings.saveFailed,
+        ),
+      ),
+    );
+  }
+
+  String _webhookUrl(String baseUrl) {
+    final clean = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (clean.isEmpty) return '';
+    return '$clean/webhooks/facebook';
+  }
+}
+
+class _FacebookToggleRow extends StatelessWidget {
+  const _FacebookToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: TfText(label, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+          Switch(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _FacebookInfoRow extends StatelessWidget {
+  const _FacebookInfoRow({
+    required this.label,
+    required this.value,
+    this.copyable = false,
+  });
+
+  final String label;
+  final String value;
+  final bool copyable;
+
+  @override
+  Widget build(BuildContext context) {
+    final display = value.trim().isEmpty ? '—' : value.trim();
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 116,
+            child: TfText(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
+            ),
+          ),
+          Expanded(
+            child: TfText(
+              display,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          if (copyable)
+            TfIconButton(
+              icon: Icons.copy_rounded,
+              tooltip: 'Copy',
+              onPressed: () => Clipboard.setData(ClipboardData(text: display)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WipeRestaurantDialog extends StatefulWidget {
   const _WipeRestaurantDialog({
     required this.app,
@@ -1588,6 +1877,136 @@ class _LanguageSettingsPage extends StatelessWidget {
         selected: app.language,
         text: text,
         onChanged: app.updateLanguage,
+      ),
+    );
+  }
+}
+
+class _CustomerMenuThemeCard extends StatelessWidget {
+  const _CustomerMenuThemeCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final current = resolveCustomerMenuTheme(
+      app.serverConfig.customerMenuTheme,
+    );
+    return _SectionCard(
+      title: text.customerMenuTheme,
+      subtitle: text.customerMenuThemeSubtitle,
+      icon: Icons.palette_outlined,
+      children: [
+        InputDecorator(
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: current.slug,
+              isExpanded: true,
+              items: customerMenuThemes.map((theme) {
+                return DropdownMenuItem<String>(
+                  value: theme.slug,
+                  child: TfText(
+                    theme.displayName(isBn: text.isBn),
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                app.updateCustomerMenuTheme(value);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _CustomerMenuThemePreview(
+          theme: current,
+          isBn: text.isBn,
+          previewLabel: text.customerMenuThemePreviewLabel,
+        ),
+      ],
+    );
+  }
+}
+
+class _CustomerMenuThemePreview extends StatelessWidget {
+  const _CustomerMenuThemePreview({
+    required this.theme,
+    required this.isBn,
+    required this.previewLabel,
+  });
+
+  final CustomerMenuThemeSpec theme;
+  final bool isBn;
+  final String previewLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: PosColors.background,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TfText(
+            previewLabel,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: PosColors.muted,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: theme.palette
+                .map(
+                  (color) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: PosColors.lineStrong,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 14),
+          TfText(
+            theme.sampleHeading,
+            style: TextStyle(
+              fontSize: 22,
+              color: theme.primary,
+              fontWeight: FontWeight.w700,
+              fontStyle: theme.headingIsItalic
+                  ? FontStyle.italic
+                  : FontStyle.normal,
+              fontFamily: theme.headingFontFamilyHint,
+              letterSpacing: theme.headingIsItalic ? 0 : 1.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          TfText(
+            theme.tagline(isBn: isBn),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: PosColors.muted),
+          ),
+        ],
       ),
     );
   }
@@ -2824,14 +3243,14 @@ class _AboutUsPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             TfText(
-                              'Rastarant POS',
+                              'Terafoods',
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 3),
                             TfText(
-                              'Version 2.2.1 · by Terabyte AI',
+                              'Restaurant POS for Bangladesh · v2.2.1',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: PosColors.muted,
                               ),
@@ -2845,12 +3264,12 @@ class _AboutUsPage extends StatelessWidget {
                   const Divider(height: 1),
                   const SizedBox(height: 14),
                   TfText(
-                    'Rastarant POS is a modern, offline-first point-of-sale system '
-                    'designed for Bangladeshi restaurants of every size. It combines '
-                    'the reliability of local storage with the power of real-time cloud '
-                    'sync, giving your team a single, fast control center for every '
-                    'aspect of daily restaurant operations — from taking the first order '
-                    'of the day to closing out the final shift.',
+                    'Terafoods is a mobile-first point-of-sale app built for '
+                    'mid-range and street-side restaurants in Bangladesh. Owners, '
+                    'managers, and waiters use it on Android phones during real '
+                    'rush hours, often with one hand, in bright light, and on budget '
+                    'devices. The app keeps ordering, printing, inventory, online '
+                    'orders, and daily reporting fast, obvious, and local.',
                     style: theme.textTheme.bodyMedium,
                   ),
                 ],
@@ -2867,65 +3286,65 @@ class _AboutUsPage extends StatelessWidget {
               children: [
                 _featureTile(
                   context,
-                  icon: Icons.wifi_off_rounded,
+                  icon: Icons.touch_app_outlined,
                   color: PosColors.warning,
-                  title: 'Offline-First',
+                  title: 'Rush-ready ordering',
                   subtitle:
-                      'Take orders, update menu, and manage staff even when the internet goes down. All data syncs automatically when connectivity is restored.',
-                ),
-                _divider(),
-                _featureTile(
-                  context,
-                  icon: Icons.cloud_sync_outlined,
-                  color: PosColors.info,
-                  title: 'Real-Time Cloud Sync',
-                  subtitle:
-                      'Orders and menu changes flow instantly to customer-facing web menus and other devices via secure Supabase Edge Functions.',
+                      'Create dine-in or takeaway orders in a simple 3-step flow with large touch targets made for phones and crowded counters.',
                 ),
                 _divider(),
                 _featureTile(
                   context,
                   icon: Icons.groups_2_outlined,
-                  color: PosColors.success,
-                  title: 'Manager & Staff Roles',
+                  color: PosColors.info,
+                  title: 'Manager and waiter modes',
                   subtitle:
-                      'Managers get full access to dashboard, reporting, and settings. Staff get a focused interface for placing and tracking orders.',
+                      'Managers get full control over orders, reports, staff, menu, and settings. Waiters get a focused flow for taking and tracking orders.',
                 ),
                 _divider(),
                 _featureTile(
                   context,
-                  icon: Icons.translate_rounded,
-                  color: PosColors.accent,
-                  title: 'Bilingual — বাংলা / English',
+                  icon: Icons.storefront_outlined,
+                  color: PosColors.success,
+                  title: 'Online storefront and orders',
                   subtitle:
-                      'Switch the entire app between Bangla and English at any time from the Language setting. Every screen, label, and notification respects your choice.',
+                      'Publish a customer ordering page, accept online orders, and keep staff devices in sync with restaurant activity.',
                 ),
                 _divider(),
                 _featureTile(
                   context,
                   icon: Icons.print_outlined,
-                  color: PosColors.purple,
-                  title: 'Bluetooth Thermal Printing',
+                  color: PosColors.accent,
+                  title: 'Kitchen copy and receipt printing',
                   subtitle:
-                      'Pair a Deli ES421 or compatible Bluetooth thermal printer to auto-print kitchen tickets for every new accepted order.',
+                      'Send kitchen tickets and customer receipts to supported Bluetooth or USB thermal printers without slowing the counter down.',
                 ),
                 _divider(),
                 _featureTile(
                   context,
-                  icon: Icons.qr_code_rounded,
-                  color: PosColors.primary,
-                  title: 'Table QR Codes',
+                  icon: Icons.inventory_2_outlined,
+                  color: PosColors.purple,
+                  title: 'Inventory and stock counts',
                   subtitle:
-                      'Generate a branded QR code PDF for each table. Customers scan to access the digital menu and place orders directly.',
+                      'Track stock-in, start counts, low-stock items, mismatches, and daily inventory movement from the same app.',
+                ),
+                _divider(),
+                _featureTile(
+                  context,
+                  icon: Icons.auto_awesome_outlined,
+                  color: PosColors.primary,
+                  title: 'AI-assisted setup',
+                  subtitle:
+                      'Scan a physical menu card or inventory receipt to autofill menu items, prices, stock-in fields, and reporting notes for review.',
                 ),
                 _divider(),
                 _featureTile(
                   context,
                   icon: Icons.assessment_outlined,
                   color: PosColors.danger,
-                  title: 'Sales Reports & Analytics',
+                  title: 'Daily earnings and top items',
                   subtitle:
-                      'Track daily sales, top-selling items, shift performance, and service-mix trends with built-in reporting tools.',
+                      'Owners can review daily and weekly sales, top-selling dishes, service mix, and export-friendly reports after the rush.',
                 ),
               ],
             ),
@@ -2948,29 +3367,29 @@ class _AboutUsPage extends StatelessWidget {
                   _stepRow(
                     context,
                     '1',
-                    'Set up your restaurant',
-                    'A manager creates the restaurant profile and outlet identity on first launch. A private device token is generated and stored securely on the device.',
+                    'Set up the outlet',
+                    'A manager adds the restaurant profile, outlet identity, tables, staff roles, printer, and cloud connection.',
                   ),
                   const SizedBox(height: 12),
                   _stepRow(
                     context,
                     '2',
-                    'Add your menu',
-                    'Create categories and menu items with names, prices, photos, and availability flags. Changes sync to the cloud and the customer-facing web menu instantly.',
+                    'Add or scan the menu',
+                    'Create categories and dishes manually, or scan a physical menu card so Terafoods can suggest names, prices, and categories for approval.',
                   ),
                   const SizedBox(height: 12),
                   _stepRow(
                     context,
                     '3',
-                    'Invite staff',
-                    'Managers add staff by mobile number. Staff verify their phone and accept the invite on their own device.',
+                    'Take orders fast',
+                    'Managers and waiters create dine-in, takeaway, and online orders, then accept, prepare, print, and serve them from the order queue.',
                   ),
                   const SizedBox(height: 12),
                   _stepRow(
                     context,
                     '4',
-                    'Take orders & serve',
-                    'Staff or managers create manual orders. Orders arrive on kitchen screens, get printed automatically, and move through Pending → Accepted → Served states.',
+                    'Close the day clearly',
+                    'Staff update inventory counts and owners check earnings, top items, online order performance, and backup-ready reports.',
                   ),
                 ],
               ),
@@ -2990,13 +3409,13 @@ class _AboutUsPage extends StatelessWidget {
                 children: [
                   _techChip(context, 'Flutter'),
                   _techChip(context, 'Dart'),
-                  _techChip(context, 'Supabase'),
+                  _techChip(context, 'FastAPI'),
                   _techChip(context, 'SQLite (sqflite)'),
                   _techChip(context, 'Google Sign-In'),
                   _techChip(context, 'bKash Payment'),
                   _techChip(context, 'Bluetooth ESC/POS'),
                   _techChip(context, 'WebSocket'),
-                  _techChip(context, 'PDF Generation'),
+                  _techChip(context, 'AI Menu & Inventory Scan'),
                 ],
               ),
             ),
@@ -3004,7 +3423,11 @@ class _AboutUsPage extends StatelessWidget {
           const SizedBox(height: 12),
 
           // ── Company & contact ───────────────────────────────────────────────
-          _infoSectionHeader(context, Icons.business_rounded, 'Terabyte AI'),
+          _infoSectionHeader(
+            context,
+            Icons.business_rounded,
+            'Terafoods by Terabyte AI',
+          ),
           const SizedBox(height: 8),
           _settingsCard(
             child: Column(
@@ -3012,7 +3435,14 @@ class _AboutUsPage extends StatelessWidget {
                 _contactTile(
                   context,
                   icon: Icons.apartment_rounded,
-                  label: 'Company',
+                  label: 'Product',
+                  value: 'Terafoods',
+                ),
+                _divider(),
+                _contactTile(
+                  context,
+                  icon: Icons.business_center_outlined,
+                  label: 'Developer',
                   value: 'Terabyte AI',
                 ),
                 _divider(),
@@ -3053,7 +3483,7 @@ class _AboutUsPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: TfText(
               '© 2024–2026 Terabyte AI. All rights reserved.\n'
-              'Rastarant POS is a proprietary software product. '
+              'Terafoods is a proprietary software product. '
               'Unauthorized copying, redistribution, or reverse-engineering is prohibited.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: PosColors.muted,
@@ -3277,7 +3707,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             TfText(
-                              'Last updated: January 1, 2026',
+                              'Last updated: May 25, 2026',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: PosColors.muted,
                               ),
@@ -3291,10 +3721,11 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   const Divider(height: 1),
                   const SizedBox(height: 14),
                   TfText(
-                    'Terabyte AI ("we", "us", or "our") built the Rastarant POS app. '
-                    'This Privacy Policy explains how we collect, use, store, and protect '
-                    'information when you use this application. By using the app, you agree '
-                    'to the practices described in this policy.',
+                    'Terabyte AI ("we", "us", or "our") built Terafoods for '
+                    'restaurant owners, managers, waiters, and staff in Bangladesh. '
+                    'This Privacy Policy explains how Terafoods handles information '
+                    'inside the manager app, waiter app, online storefront, AI scan '
+                    'features, inventory tools, and cloud sync.',
                     style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
                   ),
                 ],
@@ -3316,21 +3747,35 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   const SizedBox(height: 6),
                   _policyBody(
                     context,
-                    'When you sign in with Google, we receive your Google account email address and display name. This is used solely to authenticate your identity and link you to your restaurant account. We do not receive your Google password.',
+                    'When you sign in, we may receive your name, phone number, email address, Google account profile details, role, and restaurant/outlet access. We use this to authenticate your identity and show the correct manager or waiter experience. We do not receive your Google password.',
                   ),
                   const SizedBox(height: 12),
                   _policySubheading(context, 'Restaurant & Operational Data'),
                   const SizedBox(height: 6),
                   _policyBody(
                     context,
-                    'Orders, menu items, table configurations, staff accounts, and sales records are stored locally on the device using an encrypted SQLite database. When cloud sync is enabled, this data is also sent to your configured Supabase backend for cross-device visibility and backup.',
+                    'Terafoods stores the information needed to run the POS: menu items, categories, prices, photos, availability, tables, dine-in and takeaway orders, online orders, kitchen copy status, receipts, staff actions, inventory counts, stock-in records, mismatch reports, daily sales, top items, and report history.',
+                  ),
+                  const SizedBox(height: 12),
+                  _policySubheading(context, 'Customer Order Details'),
+                  const SizedBox(height: 6),
+                  _policyBody(
+                    context,
+                    'For online, takeaway, or delivery orders, the app may store customer-provided details such as name, phone number, address, order notes, payment method, and order status. Only collect details your restaurant needs to prepare, deliver, and support the order.',
+                  ),
+                  const SizedBox(height: 12),
+                  _policySubheading(context, 'AI Scan Images'),
+                  const SizedBox(height: 6),
+                  _policyBody(
+                    context,
+                    'If you use AI menu scanning or inventory scanning, images of menu cards, receipts, or stock documents are sent to the Terafoods backend for extraction. The result is shown for review before it changes your menu or inventory.',
                   ),
                   const SizedBox(height: 12),
                   _policySubheading(context, 'Device & App Data'),
                   const SizedBox(height: 6),
                   _policyBody(
                     context,
-                    'App preferences such as language, display size, and theme are stored only on the local device using Android SharedPreferences. We do not transmit these preferences to any server.',
+                    'The app may store device identifiers created by Terafoods, private device tokens, printer preferences, language, display size, theme, app version, sync status, and troubleshooting logs. This helps keep devices connected to the right restaurant and resolve support issues.',
                   ),
                 ],
               ),
@@ -3346,25 +3791,31 @@ class _PrivacyPolicyPage extends StatelessWidget {
               context,
               Icons.check_circle_outline_rounded,
               PosColors.success,
-              'To authenticate you and associate your session with the correct restaurant outlet.',
+              'To authenticate staff and connect each device to the correct restaurant, outlet, and role.',
             ),
             _policyPoint(
               context,
               Icons.check_circle_outline_rounded,
               PosColors.success,
-              'To sync your restaurant\'s menu, orders, and operational data across your manager and staff devices in real time.',
+              'To take orders, accept online orders, create kitchen copies, print receipts, update status, and keep service moving during rush hours.',
             ),
             _policyPoint(
               context,
               Icons.check_circle_outline_rounded,
               PosColors.success,
-              'To send order notifications to the correct devices when new orders arrive or status changes occur.',
+              'To sync menu, order, inventory, staff, and report data across manager and waiter devices and the online storefront.',
             ),
             _policyPoint(
               context,
               Icons.check_circle_outline_rounded,
               PosColors.success,
-              'To generate sales reports and analytics for your restaurant management.',
+              'To process menu-card and inventory images so the app can suggest autofill results that your team can approve or edit.',
+            ),
+            _policyPoint(
+              context,
+              Icons.check_circle_outline_rounded,
+              PosColors.success,
+              'To generate daily and weekly reports, top-item summaries, inventory mismatch reports, and office backup data for restaurant owners.',
             ),
             _policyPoint(
               context,
@@ -3376,7 +3827,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
               context,
               Icons.block_rounded,
               PosColors.danger,
-              'We do NOT use your data for profiling, marketing, or any purpose beyond operating the POS system.',
+              'We do NOT use restaurant, staff, or customer order data for third-party advertising.',
             ),
           ]),
           const SizedBox(height: 12),
@@ -3394,21 +3845,21 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   const SizedBox(height: 6),
                   _policyBody(
                     context,
-                    'All operational data (orders, menu, inventory, notifications) is stored in a SQLite database on the device. The app is designed to function fully without internet access so your restaurant never stops serving customers.',
+                    'Operational data is stored in a local SQLite database on the device, with app preferences stored in Android SharedPreferences. This lets Terafoods keep core restaurant work available even when the internet is slow or unavailable.',
                   ),
                   const SizedBox(height: 12),
                   _policySubheading(context, 'Cloud Storage'),
                   const SizedBox(height: 6),
                   _policyBody(
                     context,
-                    'When cloud sync is enabled, data is transmitted over HTTPS to your Supabase instance using device-specific private tokens. These tokens are generated once, stored securely on the device, and never exposed in the UI. Supabase enforces Row-Level Security (RLS) so each restaurant\'s data is isolated from others.',
+                    'When cloud sync, online ordering, storefront, or backup features are enabled, relevant data is transmitted over HTTPS to the Terafoods cloud backend. Each restaurant and outlet is separated by its tenant identity so staff devices only receive data they are authorized to access.',
                   ),
                   const SizedBox(height: 12),
-                  _policySubheading(context, 'Secret Management'),
+                  _policySubheading(context, 'Tokens and Secrets'),
                   const SizedBox(height: 6),
                   _policyBody(
                     context,
-                    'API keys and backend secrets are stored inside Supabase Edge Functions and are never transmitted to or stored in this app. Only your restaurant\'s private device token is kept on-device — and it is not visible in any settings screen.',
+                    'Backend secrets, API keys, and payment credentials are kept on the server side. The app stores only the private tokens required for the signed-in device to connect to its restaurant. These tokens are hidden from normal settings screens.',
                   ),
                 ],
               ),
@@ -3427,7 +3878,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   icon: Icons.account_circle_outlined,
                   name: 'Google Sign-In',
                   description:
-                      'Used for authentication only. Google may collect sign-in analytics per their own Privacy Policy at policies.google.com.',
+                      'Used for manager or staff authentication when Google login is enabled. Google handles sign-in under its own privacy policy.',
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _thirdPartyTile(
@@ -3435,15 +3886,23 @@ class _PrivacyPolicyPage extends StatelessWidget {
                   icon: Icons.payment_rounded,
                   name: 'bKash Payment Gateway',
                   description:
-                      'Used for subscription checkout. Payment data is processed entirely by bKash. We do not store card or wallet credentials.',
+                      'Used for subscription checkout where available. Payment credentials are processed by bKash; Terafoods stores payment status and reference IDs needed for activation and support.',
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _thirdPartyTile(
                   context,
                   icon: Icons.cloud_outlined,
-                  name: 'Supabase',
+                  name: 'Terafoods Cloud Backend',
                   description:
-                      'Used as the cloud database and realtime sync backend. Data at rest is encrypted. See supabase.com/privacy for their policy.',
+                      'Used for sync, online storefronts, online orders, notifications, reports, backups, and device authorization.',
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                _thirdPartyTile(
+                  context,
+                  icon: Icons.auto_awesome_outlined,
+                  name: 'AI Scan Processing',
+                  description:
+                      'Used only when you scan menu cards, receipts, or stock documents. The scan output is returned as suggested menu or inventory fields for staff review.',
                 ),
               ],
             ),
@@ -3458,25 +3917,25 @@ class _PrivacyPolicyPage extends StatelessWidget {
               context,
               Icons.delete_outline_rounded,
               PosColors.info,
-              'Data deletion: You can clear all local cached data at any time from Settings → App Cache → Clear Data.',
+              'Local data: Managers can clear device cache or wipe restaurant data from Settings where those actions are available.',
             ),
             _policyPoint(
               context,
               Icons.logout_rounded,
               PosColors.warning,
-              'Account removal: Contact support@terabyteai.com to request full deletion of your restaurant account and cloud data.',
+              'Account or cloud deletion: Contact support@terabyteai.com to request deletion of your restaurant account, outlet data, staff accounts, or cloud backups.',
             ),
             _policyPoint(
               context,
               Icons.visibility_off_outlined,
               PosColors.muted,
-              'Cloud sync opt-out: You may disable cloud sync at any time. The app continues to work offline with local data only.',
+              'Cloud sync choices: If your plan and setup allow offline-only use, you may keep work local. Online storefronts, multi-device sync, AI scanning, and backups require cloud services.',
             ),
             _policyPoint(
               context,
               Icons.download_outlined,
               PosColors.success,
-              'Data export: Sales reports can be exported from the Reports section for your own records.',
+              'Exports and reports: Sales and inventory reports can be reviewed or exported by authorized users for restaurant records.',
             ),
           ]),
           const SizedBox(height: 12),
@@ -3489,9 +3948,9 @@ class _PrivacyPolicyPage extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: _policyBody(
                 context,
-                'Restaurant owners and operators are solely responsible for complying with applicable data protection, privacy, and consumer laws in their jurisdiction (including Bangladesh\'s Digital Security Act and any applicable GDPR-equivalent regulations). '
-                'This includes obtaining necessary customer consent for data collection, displaying required privacy notices at the point of order, and retaining or deleting customer order data in accordance with local law. '
-                'Terabyte AI provides the technical platform but does not act as a data controller for your customers\' personal information.',
+                'Restaurant owners and operators control what customer details their staff collect through Terafoods and how long those details are needed for service, delivery, support, accounting, and reporting. '
+                'You are responsible for giving customers appropriate notice, collecting only necessary information, and handling order data according to the rules that apply to your restaurant. '
+                'Terafoods provides the POS platform and support tools for operating the restaurant workflow.',
               ),
             ),
           ),
@@ -3505,7 +3964,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: _policyBody(
                 context,
-                'This application is intended for use by restaurant operators, managers, and staff who are 18 years of age or older. We do not knowingly collect personal information from individuals under the age of 18. If you believe a minor has submitted information through this app, please contact us immediately.',
+                'This application is intended for restaurant operators, managers, waiters, and staff who are authorized to work for the restaurant. It is not designed for children. If you believe a child has submitted personal information through the app or storefront, contact us so we can help review and remove it.',
               ),
             ),
           ),
@@ -3519,7 +3978,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: _policyBody(
                 context,
-                'We may update this Privacy Policy from time to time. When we do, the "Last updated" date at the top of this page will be revised. For significant changes, we will provide an in-app notice. Continued use of the app after changes are posted constitutes acceptance of the updated policy.',
+                'We may update this Privacy Policy as Terafoods adds or changes features. When we do, the "Last updated" date at the top of this page will be revised. For significant changes, we will provide an in-app notice or support communication.',
               ),
             ),
           ),
@@ -3536,7 +3995,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
                 children: [
                   _policyBody(
                     context,
-                    'If you have questions, concerns, or requests regarding this Privacy Policy or your personal data, please contact us:',
+                    'For privacy questions, support requests, account deletion, or restaurant data review, contact us:',
                   ),
                   const SizedBox(height: 12),
                   _contactRow(
@@ -3566,7 +4025,7 @@ class _PrivacyPolicyPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: TfText(
-              'This Privacy Policy is effective as of January 1, 2026 and was last reviewed on May 20, 2026.',
+              'This Privacy Policy is effective as of May 25, 2026.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: PosColors.muted,
                 height: 1.6,
@@ -3728,7 +4187,10 @@ class _DiagnosticsCardState extends State<_DiagnosticsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _DiagRow(label: 'Orders in memory', value: '${app.diagOrdersInMemory}'),
+          _DiagRow(
+            label: 'Orders in memory',
+            value: '${app.diagOrdersInMemory}',
+          ),
           _DiagRow(
             label: 'More orders to load',
             value: app.hasMoreOrders
@@ -3736,10 +4198,19 @@ class _DiagnosticsCardState extends State<_DiagnosticsCard> {
                 : 'no',
           ),
           _DiagRow(label: 'Menu items', value: '${app.diagMenuInMemory}'),
-          _DiagRow(label: 'Inventory items', value: '${app.diagInventoryInMemory}'),
-          _DiagRow(label: 'Notifications', value: '${app.diagNotificationsInMemory}'),
+          _DiagRow(
+            label: 'Inventory items',
+            value: '${app.diagInventoryInMemory}',
+          ),
+          _DiagRow(
+            label: 'Notifications',
+            value: '${app.diagNotificationsInMemory}',
+          ),
           _DiagRow(label: 'Alert dedupe set', value: '${app.diagAlertSetSize}'),
-          _DiagRow(label: 'Active subscriptions', value: '${app.diagSubscriptionCount}'),
+          _DiagRow(
+            label: 'Active subscriptions',
+            value: '${app.diagSubscriptionCount}',
+          ),
           _DiagRow(
             label: 'Image cache',
             value:
