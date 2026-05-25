@@ -1,5 +1,6 @@
 """Public customer-facing endpoints — no device token required."""
 
+import html
 import json
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -10,7 +11,8 @@ from sqlalchemy.orm import joinedload
 
 from config import settings
 from database import get_db
-from models import MenuItem, Outlet
+from models import MenuItem, Order, Outlet
+from routers.menu import ALLOWED_MENU_THEMES, DEFAULT_MENU_THEME
 from services.customer_orders import (
     DeliveryOrderLine,
     create_delivery_order,
@@ -44,6 +46,10 @@ def _rewrite_upload_url(request: Request, url: str | None) -> str | None:
         return url  # not an upload URL — leave as-is
     base = str(request.base_url).rstrip("/")
     return f"{base}{url[idx:]}"
+
+
+def _public_menu_theme(value: str | None) -> str:
+    return value if value in ALLOWED_MENU_THEMES else DEFAULT_MENU_THEME
 
 
 def _icon_key_from_tags(raw: str | None) -> str | None:
@@ -91,6 +97,67 @@ def _item_to_dict(item: MenuItem, request: Request, item_index: int = 0) -> dict
         "iconKey": icon_key,
     }
     return data
+
+
+def _money(value: object) -> str:
+    try:
+        return f"{float(value or 0):.2f}"
+    except (TypeError, ValueError):
+        return "0.00"
+
+
+def _order_details_html(order: Order, outlet: Outlet) -> str:
+    restaurant_name = html.escape(outlet.restaurant.name if outlet.restaurant else outlet.name)
+    service = html.escape((order.service_type or "dine_in").replace("_", " ").title())
+    rows = []
+    for item in order.items or []:
+        name = html.escape(str(item.get("nameEn") or item.get("name") or "Item"))
+        qty = html.escape(str(item.get("qty") or 1))
+        total = _money(item.get("lineTotal") or (float(item.get("price") or 0) * float(item.get("qty") or 1)))
+        rows.append(f"<tr><td>{qty}x {name}</td><td>৳{total}</td></tr>")
+    delivery = ""
+    if (order.service_type or "").lower() == "delivery":
+        delivery = f"""
+        <section>
+          <h2>Delivery</h2>
+          <p>{html.escape(order.customer_name or "")}</p>
+          <p>{html.escape(order.mobile_number or "")}</p>
+          <p>{html.escape(order.delivery_address or "")}</p>
+        </section>
+        """
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{restaurant_name} Order {order.serial_number}</title>
+  <style>
+    body {{ margin: 0; font-family: Inter, system-ui, sans-serif; background: #f7f2e8; color: #201812; }}
+    main {{ max-width: 720px; margin: 0 auto; padding: 28px 18px 48px; }}
+    h1 {{ margin: 0 0 6px; font-size: 30px; }}
+    h2 {{ margin: 22px 0 8px; font-size: 15px; text-transform: uppercase; letter-spacing: .08em; }}
+    .meta, table, section {{ background: white; border: 1px solid #e4d8c4; border-radius: 12px; padding: 14px; }}
+    .meta p, section p {{ margin: 4px 0; }}
+    table {{ width: 100%; border-collapse: separate; border-spacing: 0 8px; }}
+    td:last-child {{ text-align: right; white-space: nowrap; }}
+    .total {{ font-size: 22px; font-weight: 700; text-align: right; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{restaurant_name}</h1>
+    <div class="meta">
+      <p><strong>Order:</strong> #{order.serial_number or "-"}</p>
+      <p><strong>Type:</strong> {service}</p>
+      <p><strong>Status:</strong> {html.escape(order.status.title())}</p>
+    </div>
+    {delivery}
+    <h2>Items</h2>
+    <table><tbody>{"".join(rows)}</tbody></table>
+    <p class="total">Total ৳{_money(order.total_amount)}</p>
+  </main>
+</body>
+</html>"""
 
 
 async def _get_outlet(outlet_ref: str, db: AsyncSession) -> Outlet:
@@ -241,6 +308,27 @@ async def place_customer_order(
     return _ok(public_order_response(order))
 
 
+@router.get("/orders/{order_id}")
+async def get_public_order_details_page(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    order = (
+        await db.execute(
+            select(Order)
+            .where(Order.id == order_id)
+            .options(joinedload(Order.outlet).joinedload(Outlet.restaurant))
+        )
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return Response(
+        content=_order_details_html(order, order.outlet),
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
 # ── GET restaurant info ────────────────────────────────────────────────────────
 
 @router.get("/{outlet_id}/info")
@@ -275,5 +363,5 @@ async def get_outlet_info(
         "bannerUrl": _rewrite_upload_url(request, outlet.banner_url),
         "videoUrl": _rewrite_upload_url(request, outlet.video_url),
         "galleryImages": gallery,
-        "menuTheme": outlet.menu_theme or "napoli_trattoria",
+        "menuTheme": _public_menu_theme(outlet.menu_theme),
     })

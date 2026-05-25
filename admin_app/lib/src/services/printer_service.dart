@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/localization/app_strings.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
+import '../models/order_service_type.dart';
 import '../models/order_source.dart';
 import '../models/order_status.dart';
 import 'ticket_bitmap.dart';
@@ -429,6 +430,7 @@ class PrinterService {
     required String outletName,
     AppLanguage language = AppLanguage.en,
     bool markAsPrinted = true,
+    String? orderDetailsUrl,
   }) async {
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady();
@@ -436,9 +438,6 @@ class PrinterService {
       final generator = Generator(PaperSize.mm58, profile);
       final labels = _ReceiptLabels(language);
 
-      // Render the kitchen/manager ticket as a bitmap, then ship raster bytes
-      // to the printer. The customer invoice is printed separately from the
-      // accepted order card when the bill is requested.
       final managerCopyBytes = await _buildBitmapCopyBytes(
         generator,
         order,
@@ -446,6 +445,7 @@ class PrinterService {
         isManagerCopy: true,
         restaurantName: restaurantName,
         outletName: outletName,
+        orderDetailsUrl: orderDetailsUrl,
       );
       final okManager = await _writeBytes(managerCopyBytes);
       _debugPrintWriteResult(
@@ -457,6 +457,27 @@ class PrinterService {
       if (!okManager) {
         throw PrinterException(
           'Printing manager copy of ${order.orderNo} failed.',
+        );
+      }
+      final customerCopyBytes = await _buildBitmapCopyBytes(
+        generator,
+        order,
+        labels: labels,
+        isManagerCopy: false,
+        restaurantName: restaurantName,
+        outletName: outletName,
+        orderDetailsUrl: orderDetailsUrl,
+      );
+      final okCustomer = await _writeBytes(customerCopyBytes);
+      _debugPrintWriteResult(
+        order,
+        copyKind: 'customer',
+        byteCount: customerCopyBytes.length,
+        ok: okCustomer,
+      );
+      if (!okCustomer) {
+        throw PrinterException(
+          'Printing customer copy of ${order.orderNo} failed.',
         );
       }
 
@@ -479,6 +500,7 @@ class PrinterService {
     required String restaurantName,
     required String outletName,
     AppLanguage language = AppLanguage.en,
+    String? orderDetailsUrl,
   }) async {
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady();
@@ -492,6 +514,7 @@ class PrinterService {
         isManagerCopy: false,
         restaurantName: restaurantName,
         outletName: outletName,
+        orderDetailsUrl: orderDetailsUrl,
       );
       final ok = await _writeBytes(customerCopyBytes);
       _debugPrintWriteResult(
@@ -527,6 +550,7 @@ class PrinterService {
     required bool isManagerCopy,
     required String restaurantName,
     String outletName = '',
+    String? orderDetailsUrl,
   }) async {
     final tableRaw = order.tableNo ?? labels.takeaway;
     final dateText = labels.formatDate(order.createdAt);
@@ -558,6 +582,7 @@ class PrinterService {
       restaurantName: resolvedRestaurant,
       outletName: null,
       orderNumberDisplay: labels.orderNo(order.displaySequence),
+      orderTypeLabel: _orderTypeLabel(order, labels),
       copyLabel: isManagerCopy ? labels.managerCopy : labels.customerCopy,
       dateLine: dateText,
       tableLine: labels.tableLabel(tableRaw),
@@ -571,6 +596,7 @@ class PrinterService {
       customerNameLabel: labels.nameLabel,
       note: isManagerCopy ? order.note : null,
       noteLabel: labels.noteLabel,
+      orderDetailsUrl: orderDetailsUrl,
       deliveryAddress: order.deliveryAddress,
       deliveryAddressLabel: labels.addressLabel,
       mobileNumber: order.mobileNumber,
@@ -593,8 +619,16 @@ class PrinterService {
     // clean luminance values instead of antialiased RGBA noise.
     final grayscale = img.grayscale(decoded);
 
+    final detailsUrl = orderDetailsUrl?.trim();
     final bytes = <int>[
       ...generator.reset(),
+      if (detailsUrl != null && detailsUrl.isNotEmpty) ...[
+        ...generator.qrcode(
+          detailsUrl,
+          align: PosAlign.right,
+          size: QRSize.size4,
+        ),
+      ],
       ...generator.imageRaster(grayscale, align: PosAlign.center),
     ];
     _debugPrintRasterResult(
@@ -700,6 +734,17 @@ class PrinterService {
       return order.subtotal + order.vatAmount;
     }
     return 0;
+  }
+
+  String _orderTypeLabel(OrderModel order, _ReceiptLabels labels) {
+    switch (order.serviceType ?? OrderServiceType.dineIn) {
+      case OrderServiceType.delivery:
+        return labels._bn ? 'ডেলিভারি' : 'Delivery';
+      case OrderServiceType.takeaway:
+        return labels._bn ? 'পার্সেল' : 'Takeaway';
+      case OrderServiceType.dineIn:
+        return labels._bn ? 'ডাইন ইন' : 'Dine in';
+    }
   }
 
   void _debugPrintTicketData(

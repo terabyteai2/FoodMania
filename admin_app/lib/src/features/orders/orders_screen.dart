@@ -192,6 +192,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     shortcut: pendingShortcut,
                     searchQuery: searchQuery,
                     onPrint: (o) => _printBill(context, o),
+                    onEdit: null,
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
@@ -208,6 +209,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     shortcut: acceptedShortcut,
                     searchQuery: searchQuery,
                     onPrint: (o) => _printBill(context, o),
+                    onEdit: (o) => _openEditOrderSheet(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
@@ -425,6 +427,34 @@ class _OrdersScreenState extends State<OrdersScreen>
     final app = AppScope.of(context);
     if (!app.isManager) return;
     await app.updateOrderStatus(order.id, status);
+  }
+
+  Future<void> _openEditOrderSheet(
+    BuildContext context,
+    OrderModel order,
+  ) async {
+    final app = AppScope.of(context);
+    if (!app.isManager) return;
+    final result = await showModalBottomSheet<_OrderEditResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditOrderSheet(order: order),
+    );
+    if (result == null || !context.mounted) return;
+    if (result.delete) {
+      await app.deleteOrder(order.id);
+      return;
+    }
+    await app.updateOrderDetails(
+      order.id,
+      serviceType: result.serviceType,
+      tableNo: result.tableNo,
+      note: result.note,
+      customerName: result.customerName,
+      deliveryAddress: result.deliveryAddress,
+      mobileNumber: result.mobileNumber,
+    );
   }
 }
 
@@ -742,6 +772,7 @@ class _OrderList extends StatelessWidget {
     required this.shortcut,
     required this.searchQuery,
     required this.onPrint,
+    required this.onEdit,
     required this.onStatus,
     this.hasMore = false,
     this.loadingMore = false,
@@ -755,6 +786,7 @@ class _OrderList extends StatelessWidget {
   final _EmptyShortcut? shortcut;
   final String searchQuery;
   final void Function(OrderModel) onPrint;
+  final void Function(OrderModel)? onEdit;
   final void Function(OrderModel, OrderStatus) onStatus;
 
   /// Whether the underlying `orders` list has more pages available.
@@ -803,6 +835,7 @@ class _OrderList extends StatelessWidget {
           return _OrderCard(
             order: orders[i],
             onPrint: () => onPrint(orders[i]),
+            onEdit: onEdit == null ? null : () => onEdit!(orders[i]),
             onStatus: (s) => onStatus(orders[i], s),
           );
         },
@@ -952,11 +985,13 @@ class _OrderCard extends StatelessWidget {
   const _OrderCard({
     required this.order,
     required this.onPrint,
+    required this.onEdit,
     required this.onStatus,
   });
 
   final OrderModel order;
   final VoidCallback onPrint;
+  final VoidCallback? onEdit;
   final ValueChanged<OrderStatus> onStatus;
 
   @override
@@ -1023,11 +1058,13 @@ class _OrderCard extends StatelessWidget {
     final deliveryName = (order.customerName ?? '').trim();
     final deliveryAddress = (order.deliveryAddress ?? '').trim();
     final mobileNumber = (order.mobileNumber ?? '').trim();
+    final isDelivery = order.serviceType == OrderServiceType.delivery;
     final showDeliveryMeta =
         order.serviceType == OrderServiceType.delivery &&
         (deliveryName.isNotEmpty ||
             deliveryAddress.isNotEmpty ||
             mobileNumber.isNotEmpty);
+    final serviceKind = isDelivery ? TfStatusKind.pending : TfStatusKind.info;
 
     return TfCard(
       padded: false,
@@ -1082,15 +1119,25 @@ class _OrderCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          TfText(
-                            tfFormatCurrency(context, order.total),
-                            style: TextStyle(
-                              fontFamily: tfFontFamily(context),
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                              color: PosColors.slate,
-                              letterSpacing: -0.3,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              TfStatusBadge(
+                                label: _serviceTypeLabel(context, order),
+                                kind: serviceKind,
+                              ),
+                              const SizedBox(height: 6),
+                              TfText(
+                                tfFormatCurrency(context, order.total),
+                                style: TextStyle(
+                                  fontFamily: tfFontFamily(context),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                  color: PosColors.slate,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1111,7 +1158,7 @@ class _OrderCard extends StatelessWidget {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
-                            if (deliveryName.isNotEmpty)
+                            if (!isPending && deliveryName.isNotEmpty)
                               _OrderContactPill(
                                 icon: Icons.person_outline_rounded,
                                 label: deliveryName,
@@ -1121,7 +1168,7 @@ class _OrderCard extends StatelessWidget {
                                 icon: Icons.location_on_outlined,
                                 label: deliveryAddress,
                               ),
-                            if (mobileNumber.isNotEmpty)
+                            if (!isPending && mobileNumber.isNotEmpty)
                               _OrderContactPill(
                                 icon: Icons.phone_outlined,
                                 label: mobileNumber,
@@ -1203,12 +1250,30 @@ class _OrderCard extends StatelessWidget {
                             ],
                           )
                         else
-                          TfButton(
-                            label: text.printBillAction,
-                            icon: TfNavIcon.printer,
-                            variant: TfButtonVariant.dark,
-                            size: TfButtonSize.md,
-                            onPressed: onPrint,
+                          Row(
+                            children: [
+                              if (onEdit != null) ...[
+                                Expanded(
+                                  child: TfButton(
+                                    label: text.isBn ? 'এডিট' : 'Edit',
+                                    icon: Icons.edit_outlined,
+                                    variant: TfButtonVariant.ghost,
+                                    size: TfButtonSize.md,
+                                    onPressed: onEdit,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Expanded(
+                                child: TfButton(
+                                  label: text.printBillAction,
+                                  icon: TfNavIcon.printer,
+                                  variant: TfButtonVariant.dark,
+                                  size: TfButtonSize.md,
+                                  onPressed: onPrint,
+                                ),
+                              ),
+                            ],
                           ),
                       ],
                     ],
@@ -1236,6 +1301,11 @@ class _OrderCard extends StatelessWidget {
       case null:
         return text.isBn ? 'ডাইন-ইন' : 'Dine-in';
     }
+  }
+
+  String _serviceTypeLabel(BuildContext context, OrderModel order) {
+    final type = order.serviceType ?? OrderServiceType.dineIn;
+    return AppScope.of(context).strings.isBn ? type.banglaLabel : type.label;
   }
 }
 
@@ -1274,6 +1344,192 @@ class _OrderContactPill extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderEditResult {
+  const _OrderEditResult({
+    required this.serviceType,
+    this.tableNo,
+    this.note,
+    this.customerName,
+    this.deliveryAddress,
+    this.mobileNumber,
+    this.delete = false,
+  });
+
+  final OrderServiceType serviceType;
+  final String? tableNo;
+  final String? note;
+  final String? customerName;
+  final String? deliveryAddress;
+  final String? mobileNumber;
+  final bool delete;
+}
+
+class _EditOrderSheet extends StatefulWidget {
+  const _EditOrderSheet({required this.order});
+
+  final OrderModel order;
+
+  @override
+  State<_EditOrderSheet> createState() => _EditOrderSheetState();
+}
+
+class _EditOrderSheetState extends State<_EditOrderSheet> {
+  late OrderServiceType _serviceType;
+  late final TextEditingController _tableCtrl;
+  late final TextEditingController _noteCtrl;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _phoneCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final order = widget.order;
+    _serviceType = order.serviceType ?? OrderServiceType.dineIn;
+    _tableCtrl = TextEditingController(text: order.tableNo ?? '');
+    _noteCtrl = TextEditingController(text: order.note ?? '');
+    _nameCtrl = TextEditingController(text: order.customerName ?? '');
+    _addressCtrl = TextEditingController(text: order.deliveryAddress ?? '');
+    _phoneCtrl = TextEditingController(text: order.mobileNumber ?? '');
+  }
+
+  @override
+  void dispose() {
+    _tableCtrl.dispose();
+    _noteCtrl.dispose();
+    _nameCtrl.dispose();
+    _addressCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _clean(TextEditingController controller) {
+    final value = controller.text.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final isDelivery = _serviceType == OrderServiceType.delivery;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: PosColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+            children: [
+              TfText(
+                text.isBn ? 'অর্ডার এডিট' : 'Edit order',
+                style: TextStyle(
+                  fontFamily: tfFontFamily(context),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.slate,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SegmentedButton<OrderServiceType>(
+                segments: OrderServiceType.values
+                    .map(
+                      (type) => ButtonSegment<OrderServiceType>(
+                        value: type,
+                        label: TfText(
+                          text.isBn ? type.banglaLabel : type.label,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+                selected: {_serviceType},
+                onSelectionChanged: (values) {
+                  setState(() => _serviceType = values.first);
+                },
+              ),
+              const SizedBox(height: 16),
+              if (_serviceType == OrderServiceType.dineIn)
+                TfField(
+                  label: 'Table number',
+                  labelBn: 'টেবিল নম্বর',
+                  controller: _tableCtrl,
+                  keyboardType: TextInputType.number,
+                ),
+              TfField(
+                label: 'Order note',
+                labelBn: 'অর্ডার নোট',
+                controller: _noteCtrl,
+                maxLines: 2,
+              ),
+              if (isDelivery) ...[
+                TfField(
+                  label: 'Customer name',
+                  labelBn: 'কাস্টমারের নাম',
+                  controller: _nameCtrl,
+                ),
+                TfField(
+                  label: 'Mobile number',
+                  labelBn: 'মোবাইল নম্বর',
+                  controller: _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                ),
+                TfField(
+                  label: 'Delivery address',
+                  labelBn: 'ডেলিভারি ঠিকানা',
+                  controller: _addressCtrl,
+                  maxLines: 3,
+                ),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: TfButton(
+                      label: text.isBn ? 'ডিলিট' : 'Delete',
+                      icon: Icons.delete_outline,
+                      variant: TfButtonVariant.ghost,
+                      onPressed: () => Navigator.of(context).pop(
+                        const _OrderEditResult(
+                          serviceType: OrderServiceType.dineIn,
+                          delete: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TfButton(
+                      label: text.isBn ? 'সেভ' : 'Save',
+                      icon: TfNavIcon.check,
+                      onPressed: () => Navigator.of(context).pop(
+                        _OrderEditResult(
+                          serviceType: _serviceType,
+                          tableNo: _serviceType == OrderServiceType.dineIn
+                              ? _clean(_tableCtrl)
+                              : null,
+                          note: _clean(_noteCtrl),
+                          customerName: isDelivery ? _clean(_nameCtrl) : null,
+                          deliveryAddress: isDelivery
+                              ? _clean(_addressCtrl)
+                              : null,
+                          mobileNumber: isDelivery ? _clean(_phoneCtrl) : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

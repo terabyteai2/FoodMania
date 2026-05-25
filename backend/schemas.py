@@ -17,6 +17,7 @@ def err(message: str) -> dict:
 class BootstrapRequest(BaseModel):
     serverId: str
     restaurantName: str
+    managerName: str | None = None
     outletName: str | None = None
     restaurantId: str | None = None
     outletId: str | None = None
@@ -76,6 +77,7 @@ class PhoneVerifyOtpRequest(BaseModel):
 class PhoneCompleteManagerSignupRequest(BaseModel):
     signupToken: str
     restaurantName: str
+    managerName: str | None = None
     outletName: str | None = None
     serverId: str | None = None
     outletId: str | None = None
@@ -121,6 +123,11 @@ class FacebookChatbotConfigResponse(BaseModel):
     pageName: str | None = None
     tokenPreview: str | None = None
     lastError: str | None = None
+
+
+class FacebookChatbotOAuthStartResponse(BaseModel):
+    authorizationUrl: str
+    expiresInSeconds: int
 
 
 class StaffDevBypassLoginRequest(BaseModel):
@@ -261,6 +268,7 @@ class OrderPayload(BaseModel):
     serviceType: str | None = None
     covers: int | None = None
     paymentMethod: str | None = None
+    tableNo: str | None = None
     items: list[OrderLineItemPayload] = Field(default_factory=list)
     notes: str | None = None
     customerName: str | None = None
@@ -274,6 +282,16 @@ class OrderPayload(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str
+    updatedAt: str | None = None
+
+
+class OrderDetailsUpdate(BaseModel):
+    serviceType: str | None = None
+    tableNo: str | None = None
+    notes: str | None = None
+    customerName: str | None = None
+    deliveryAddress: str | None = None
+    mobileNumber: str | None = None
     updatedAt: str | None = None
 
 

@@ -24,6 +24,7 @@ class TicketCopyData {
     required this.restaurantName,
     required this.outletName,
     required this.orderNumberDisplay,
+    required this.orderTypeLabel,
     required this.copyLabel,
     required this.dateLine,
     required this.tableLine,
@@ -37,6 +38,7 @@ class TicketCopyData {
     required this.customerNameLabel,
     required this.note,
     required this.noteLabel,
+    this.orderDetailsUrl,
     this.deliveryAddress,
     this.deliveryAddressLabel = 'Address',
     this.mobileNumber,
@@ -46,6 +48,7 @@ class TicketCopyData {
   final String restaurantName;
   final String? outletName;
   final String orderNumberDisplay;
+  final String orderTypeLabel;
   final String copyLabel;
   final String dateLine;
   final String tableLine;
@@ -59,6 +62,7 @@ class TicketCopyData {
   final String customerNameLabel;
   final String? note;
   final String noteLabel;
+  final String? orderDetailsUrl;
   final String? deliveryAddress;
   final String deliveryAddressLabel;
   final String? mobileNumber;
@@ -91,7 +95,18 @@ class TicketBitmapRenderer {
     );
 
     var y = 0.0;
-    y = _headerRow(canvas, data.orderNumberDisplay, data.restaurantName, y);
+    y = _headerRow(canvas, data.orderTypeLabel, data.orderNumberDisplay, y);
+    y = _text(
+      canvas,
+      data.restaurantName,
+      y,
+      fontSize: 30,
+      weight: FontWeight.w700,
+      align: TextAlign.center,
+    );
+    if (data.orderDetailsUrl?.trim().isNotEmpty == true) {
+      y = _text(canvas, 'Scan QR for full details', y, fontSize: 16);
+    }
     y = _text(canvas, data.copyLabel, y, fontSize: 22, weight: FontWeight.w500);
     y = _text(canvas, data.dateLine, y, fontSize: 18);
     if (data.customerName?.trim().isNotEmpty == true) {
@@ -161,24 +176,30 @@ class TicketBitmapRenderer {
 
   static double _headerRow(
     Canvas canvas,
+    String orderType,
     String orderNumber,
-    String restaurantName,
     double y,
   ) {
-    final rightWidth = (_width - (_padding * 2)) * 0.58;
-    final leftWidth = (_width - (_padding * 2)) - rightWidth - 10;
-    final left = _painter(orderNumber, fontSize: 28, weight: FontWeight.w500)
-      ..layout(maxWidth: leftWidth);
-    final right = _painter(
-      restaurantName,
+    final columnWidth = (_width - (_padding * 2)) / 3;
+    final left = _painter(orderType, fontSize: 18, weight: FontWeight.w600)
+      ..layout(maxWidth: columnWidth);
+    final center = _painter(
+      orderNumber,
       fontSize: 24,
-      weight: FontWeight.w500,
-      align: TextAlign.right,
-      maxLines: 1,
-    )..layout(maxWidth: rightWidth);
-    left.paint(canvas, Offset(_padding, y));
-    right.paint(canvas, Offset(_width - _padding - right.width, y + 2));
-    return y + (left.height > right.height ? left.height : right.height) + 4;
+      weight: FontWeight.w600,
+      align: TextAlign.center,
+    )..layout(maxWidth: columnWidth);
+    final right = _painter('QR', fontSize: 18, weight: FontWeight.w600)
+      ..layout(maxWidth: columnWidth);
+    left.paint(canvas, Offset(_padding, y + 4));
+    center.paint(canvas, Offset((_width - center.width) / 2, y));
+    right.paint(canvas, Offset(_width - _padding - right.width, y + 4));
+    final h = [
+      left.height,
+      center.height,
+      right.height,
+    ].reduce((a, b) => a > b ? a : b);
+    return y + h + 6;
   }
 
   static double _text(

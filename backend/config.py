@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     FACEBOOK_APP_SECRET: str = ""
     FACEBOOK_WEBHOOK_VERIFY_TOKEN: str = ""
     META_GRAPH_API_VERSION: str = "v24.0"
+    FACEBOOK_LOGIN_SCOPES: str = "pages_show_list,pages_manage_metadata,pages_messaging"
+    FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES: int = 15
 
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"

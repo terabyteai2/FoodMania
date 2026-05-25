@@ -3,6 +3,7 @@ import {
   ThemeProvider,
   useTokens,
   resolveTheme,
+  resolveOverrides,
   themeAssetPaths,
   DEFAULT_THEME_SLUG,
 } from './themes'
@@ -15,7 +16,7 @@ let googleMapsLoadPromise = null
 // ── PDF receipt generator ─────────────────────────────────────────────────────
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
 
-async function generateReceipt(order, info, cartItems) {
+export async function generateReceipt(order, info, cartItems) {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'pt', format: 'a5' })
   const W = doc.internal.pageSize.getWidth()
@@ -154,7 +155,7 @@ const MENU_ICON_STYLES = {
   general:  { glyph: '✦', color: T_FALLBACK.amber, bg: 'rgba(255,181,71,.14)' },
 }
 
-function inferIconKey(item) {
+export function inferIconKey(item) {
   const explicit = String(item?.iconKey || '').trim().toLowerCase()
   if (explicit) return explicit
   const text = `${item?.name || ''} ${item?.category || ''}`.toLowerCase()
@@ -182,11 +183,11 @@ function inferIconKey(item) {
   return 'general'
 }
 
-function iconStyleFor(item) {
+export function iconStyleFor(item) {
   return MENU_ICON_STYLES[inferIconKey(item)] || MENU_ICON_STYLES.general
 }
 
-function MenuFallbackIcon({ item, size = 32 }) {
+export function MenuFallbackIcon({ item, size = 32 }) {
   const T = useTokens()
   const style = iconStyleFor(item)
   return (
@@ -240,16 +241,16 @@ function getOutletId() {
   return parts[parts.length - 1] || null
 }
 
-function cartTotal(cart, items) {
+export function cartTotal(cart, items) {
   return Object.entries(cart).reduce((sum, [id, qty]) => {
     const item = items.find(i => i.id === id)
     return sum + (item ? item.price * qty : 0)
   }, 0)
 }
-function cartCount(cart) { return Object.values(cart).reduce((s, q) => s + q, 0) }
-function taka(n) { return '৳' + Math.round(n).toLocaleString('en-BD') }
+export function cartCount(cart) { return Object.values(cart).reduce((s, q) => s + q, 0) }
+export function taka(n) { return '৳' + Math.round(n).toLocaleString('en-BD') }
 
-function buildMedia(item) {
+export function buildMedia(item) {
   const media = []
   if (item.imageUrl) media.push({ type: 'image', url: item.imageUrl })
   if (item.videoUrl) media.push({ type: 'video', url: item.videoUrl })
@@ -278,7 +279,7 @@ async function loadJson(path) {
   return unwrapApi(body)
 }
 
-function loadGoogleMapsApi() {
+export function loadGoogleMapsApi() {
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('Maps can only load in a browser.'))
   }
@@ -348,7 +349,7 @@ function loadGoogleMapsApi() {
   return googleMapsLoadPromise
 }
 
-function getBrowserPosition() {
+export function getBrowserPosition() {
   if (!navigator.geolocation) {
     return Promise.reject(new Error('Location is not available in this browser.'))
   }
@@ -367,7 +368,7 @@ function getBrowserPosition() {
   })
 }
 
-async function reverseGeocodePosition(position, outletId) {
+export async function reverseGeocodePosition(position, outletId) {
   if (!outletId || outletId === '__demo__') {
     throw new Error('Address lookup is not available for this menu.')
   }
@@ -411,7 +412,9 @@ export default function App() {
   useEffect(() => {
     if (!outletId) { setPhase('error'); setErr('Invalid menu link.'); return }
     if (outletId === '__demo__') {
-      setInfo(DEMO_INFO)
+      const params = new URLSearchParams(window.location.search)
+      const themeOverride = params.get('theme')
+      setInfo(themeOverride ? { ...DEMO_INFO, menuTheme: themeOverride } : DEMO_INFO)
       setItems(DEMO_ITEMS)
       setPhase('welcome')
       return
@@ -511,47 +514,87 @@ export default function App() {
   }
 
   const themeSlug = info?.menuTheme || DEFAULT_THEME_SLUG
+  const overrides = resolveOverrides(themeSlug)
 
   let body
-  if (phase === 'loading') body = <LoadingScreen />
-  else if (phase === 'error') body = <ErrorScreen message={errorMsg} />
-  else if (phase === 'success') body = (
-    <SuccessScreen order={orderRef} info={info} cartItems={lastCart}
-      onBack={() => {
-        setCart({}); setLastCart([]); setNote('')
-        setDelivery({ name: '', address: '', mobile: '' })
-        setPhase('menu')
-      }} />
-  )
-  else if (phase === 'cart') body = (
-    <CartScreen cart={cart} items={items} note={note} onNote={setNote}
-      delivery={delivery} onDelivery={setDelivery}
-      onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
-      onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId} />
-  )
-  else if (phase === 'welcome') body = (
-    <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
-  )
-  else body = (
-    <>
-      <MenuScreen
-        info={info} items={visible} allItems={items} cart={cart}
-        categories={categories} activeCategory={activeCategory}
-        onCategory={setCat} onAdd={add} onRemove={rem}
-        onOpenCart={() => setPhase('cart')}
-        onOpenDetail={item => setLightbox({ item })}
+  if (phase === 'loading') {
+    body = overrides ? <overrides.Loading /> : <LoadingScreen />
+  } else if (phase === 'error') {
+    body = overrides
+      ? <overrides.Error message={errorMsg} />
+      : <ErrorScreen message={errorMsg} />
+  } else if (phase === 'success') {
+    const onBack = () => {
+      setCart({}); setLastCart([]); setNote('')
+      setDelivery({ name: '', address: '', mobile: '' })
+      setPhase('menu')
+    }
+    body = overrides
+      ? <overrides.Success order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
+      : <SuccessScreen order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
+  } else if (phase === 'cart') {
+    body = overrides ? (
+      <overrides.Cart
+        cart={cart} items={items} note={note} onNote={setNote}
+        delivery={delivery} onDelivery={setDelivery}
+        onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
+        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
       />
-      {lightbox && (
-        <ItemDetailSheet
-          item={lightbox.item}
-          qty={cart[lightbox.item.id] || 0}
-          onAdd={() => add(lightbox.item.id)}
-          onRemove={() => rem(lightbox.item.id)}
-          onClose={() => setLightbox(null)}
+    ) : (
+      <CartScreen cart={cart} items={items} note={note} onNote={setNote}
+        delivery={delivery} onDelivery={setDelivery}
+        onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
+        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId} />
+    )
+  } else if (overrides) {
+    // For themes that ship a single-page Storefront (e.g. Hearth),
+    // 'welcome' and 'menu' phases both render the same scrollable
+    // surface — the only difference is whether to land at the menu
+    // anchor on mount.
+    body = (
+      <>
+        <overrides.Storefront
+          info={info} items={items} cart={cart}
+          onAdd={add} onRemove={rem}
+          onOpenCart={() => setPhase('cart')}
+          onOpenDetail={item => setLightbox({ item })}
+          initialView={phase === 'menu' ? 'menu' : 'hero'}
         />
-      )}
-    </>
-  )
+        {lightbox && (
+          <overrides.ItemSheet
+            item={lightbox.item}
+            qty={cart[lightbox.item.id] || 0}
+            onAdd={() => add(lightbox.item.id)}
+            onRemove={() => rem(lightbox.item.id)}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </>
+    )
+  } else if (phase === 'welcome') {
+    body = <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
+  } else {
+    body = (
+      <>
+        <MenuScreen
+          info={info} items={visible} allItems={items} cart={cart}
+          categories={categories} activeCategory={activeCategory}
+          onCategory={setCat} onAdd={add} onRemove={rem}
+          onOpenCart={() => setPhase('cart')}
+          onOpenDetail={item => setLightbox({ item })}
+        />
+        {lightbox && (
+          <ItemDetailSheet
+            item={lightbox.item}
+            qty={cart[lightbox.item.id] || 0}
+            onAdd={() => add(lightbox.item.id)}
+            onRemove={() => rem(lightbox.item.id)}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </>
+    )
+  }
 
   return <ThemeProvider slug={themeSlug}>{body}</ThemeProvider>
 }

@@ -35,6 +35,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   String _selectedCategory = 'All';
   final TextEditingController _searchController = TextEditingController();
   final MenuImageService _scanImageService = MenuImageService();
+  final Set<String> _selectedItemIds = <String>{};
   bool _scanBusy = false;
 
   @override
@@ -65,6 +66,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         })
         .toList(growable: false);
     final paused = app.menuItems.where((item) => !item.isAvailable).length;
+    _selectedItemIds.removeWhere(
+      (id) => !app.menuItems.any((item) => item.id == id),
+    );
 
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -139,12 +143,30 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         icon: Icons.search_off_rounded,
                       )
                     else ...[
+                      if (_selectedItemIds.isNotEmpty) ...[
+                        _BulkMenuToolbar(
+                          count: _selectedItemIds.length,
+                          onDiscount: () => _applyBulkDiscount(context),
+                          onClear: () => setState(_selectedItemIds.clear),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       _MenuList(
                         items: items,
                         language: language,
+                        selectedIds: _selectedItemIds,
+                        selectionMode: _selectedItemIds.isNotEmpty,
                         onEdit: app.isManager
                             ? (item) => _openMenuForm(context, item: item)
                             : (_) {},
+                        onSelect: (item) {
+                          if (!app.isManager) return;
+                          setState(() {
+                            if (!_selectedItemIds.add(item.id)) {
+                              _selectedItemIds.remove(item.id);
+                            }
+                          });
+                        },
                         onDelete: app.isManager
                             ? (item) => _confirmDelete(context, item)
                             : (_) {},
@@ -225,6 +247,50 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     } finally {
       if (mounted) setState(() => _scanBusy = false);
     }
+  }
+
+  Future<void> _applyBulkDiscount(BuildContext context) async {
+    final app = AppScope.of(context);
+    final result = await showModalBottomSheet<_BulkDiscountResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _BulkDiscountSheet(),
+    );
+    if (result == null) return;
+    final selected = app.menuItems
+        .where((item) => _selectedItemIds.contains(item.id))
+        .toList(growable: false);
+    for (final item in selected) {
+      final extras = item.extras.copyWith(
+        discountPercent: result.mode == _DiscountMode.percent
+            ? result.value
+            : null,
+        discountFlat: result.mode == _DiscountMode.flat ? result.value : null,
+        clearDiscount: result.mode == _DiscountMode.none,
+      );
+      await app.saveMenuItem(
+        id: item.id,
+        name: item.name,
+        nameEn: item.nameEn,
+        nameBn: item.nameBn,
+        description: item.description,
+        descriptionEn: item.descriptionEn,
+        descriptionBn: item.descriptionBn,
+        category: item.category,
+        categoryEn: item.categoryEn,
+        categoryBn: item.categoryBn,
+        price: item.price,
+        imageUrl: item.imageUrl,
+        isAvailable: item.isAvailable,
+        preparationTimeMinutes: item.preparationTimeMinutes,
+        tags: extras.toTags(),
+        createdAt: item.createdAt,
+        syncAfterSave: false,
+      );
+    }
+    await app.syncNow();
+    if (mounted) setState(_selectedItemIds.clear);
   }
 
   Future<List<PickedMenuScanPage>> _pickMenuScanPages(
@@ -607,11 +673,170 @@ class _CategoryStrip extends StatelessWidget {
   }
 }
 
+class _BulkMenuToolbar extends StatelessWidget {
+  const _BulkMenuToolbar({
+    required this.count,
+    required this.onDiscount,
+    required this.onClear,
+  });
+
+  final int count;
+  final VoidCallback onDiscount;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return TfCard(
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          Expanded(
+            child: TfText(
+              text.isBn
+                  ? '${tfToBnNumbers('$count')} আইটেম নির্বাচিত'
+                  : '$count items selected',
+              style: const TextStyle(
+                color: PosColors.slate,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TfButton(
+            label: text.isBn ? 'ডিসকাউন্ট' : 'Discount',
+            icon: Icons.local_offer_outlined,
+            fullWidth: false,
+            size: TfButtonSize.sm,
+            onPressed: onDiscount,
+          ),
+          const SizedBox(width: 8),
+          TfIconButton(
+            icon: Icons.close_rounded,
+            tooltip: text.isBn ? 'বন্ধ' : 'Clear',
+            onPressed: onClear,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BulkDiscountResult {
+  const _BulkDiscountResult({required this.mode, required this.value});
+
+  final _DiscountMode mode;
+  final double? value;
+}
+
+class _BulkDiscountSheet extends StatefulWidget {
+  const _BulkDiscountSheet();
+
+  @override
+  State<_BulkDiscountSheet> createState() => _BulkDiscountSheetState();
+}
+
+class _BulkDiscountSheetState extends State<_BulkDiscountSheet> {
+  final _valueCtrl = TextEditingController();
+  _DiscountMode _mode = _DiscountMode.percent;
+
+  @override
+  void dispose() {
+    _valueCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: PosColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+            children: [
+              TfText(
+                text.isBn ? 'একসাথে ডিসকাউন্ট' : 'Bulk discount',
+                style: TextStyle(
+                  fontFamily: tfFontFamily(context),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.slate,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SegmentedButton<_DiscountMode>(
+                segments: [
+                  ButtonSegment(
+                    value: _DiscountMode.percent,
+                    label: TfText(text.isBn ? 'শতাংশ' : 'Percent'),
+                  ),
+                  ButtonSegment(
+                    value: _DiscountMode.flat,
+                    label: TfText(text.isBn ? 'টাকা' : 'Flat'),
+                  ),
+                  ButtonSegment(
+                    value: _DiscountMode.none,
+                    label: TfText(text.isBn ? 'মুছুন' : 'Clear'),
+                  ),
+                ],
+                selected: {_mode},
+                onSelectionChanged: (values) => setState(() {
+                  _mode = values.first;
+                  if (_mode == _DiscountMode.none) _valueCtrl.clear();
+                }),
+              ),
+              const SizedBox(height: 16),
+              if (_mode != _DiscountMode.none)
+                TfField(
+                  label: _mode == _DiscountMode.percent
+                      ? 'Discount percent'
+                      : 'Discount amount',
+                  labelBn: _mode == _DiscountMode.percent
+                      ? 'ডিসকাউন্ট শতাংশ'
+                      : 'ডিসকাউন্ট টাকা',
+                  controller: _valueCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+              TfButton(
+                label: text.isBn ? 'প্রয়োগ করুন' : 'Apply',
+                icon: TfNavIcon.check,
+                onPressed: () {
+                  final value = double.tryParse(_valueCtrl.text.trim());
+                  if (_mode != _DiscountMode.none &&
+                      (value == null || value <= 0)) {
+                    return;
+                  }
+                  Navigator.of(
+                    context,
+                  ).pop(_BulkDiscountResult(mode: _mode, value: value));
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MenuList extends StatelessWidget {
   const _MenuList({
     required this.items,
     required this.language,
+    required this.selectedIds,
+    required this.selectionMode,
     required this.onEdit,
+    required this.onSelect,
     required this.onDelete,
     required this.onAvailabilityChanged,
     required this.onAddImage,
@@ -619,7 +844,10 @@ class _MenuList extends StatelessWidget {
 
   final List<MenuItem> items;
   final AppLanguage language;
+  final Set<String> selectedIds;
+  final bool selectionMode;
   final ValueChanged<MenuItem> onEdit;
+  final ValueChanged<MenuItem> onSelect;
   final ValueChanged<MenuItem> onDelete;
   final void Function(MenuItem item, bool value) onAvailabilityChanged;
   final ValueChanged<MenuItem> onAddImage;
@@ -668,7 +896,10 @@ class _MenuList extends StatelessWidget {
                 return _MenuRow(
                   item: item,
                   language: language,
-                  onEdit: () => onEdit(item),
+                  selected: selectedIds.contains(item.id),
+                  selectionMode: selectionMode,
+                  onEdit: () => selectionMode ? onSelect(item) : onEdit(item),
+                  onSelect: () => onSelect(item),
                   onDelete: () => onDelete(item),
                   onAvailabilityChanged: (value) =>
                       onAvailabilityChanged(item, value),
@@ -687,7 +918,10 @@ class _MenuRow extends StatelessWidget {
   const _MenuRow({
     required this.item,
     required this.language,
+    required this.selected,
+    required this.selectionMode,
     required this.onEdit,
+    required this.onSelect,
     required this.onDelete,
     required this.onAvailabilityChanged,
     required this.onAddImage,
@@ -695,7 +929,10 @@ class _MenuRow extends StatelessWidget {
 
   final MenuItem item;
   final AppLanguage language;
+  final bool selected;
+  final bool selectionMode;
   final VoidCallback onEdit;
+  final VoidCallback onSelect;
   final VoidCallback onDelete;
   final ValueChanged<bool> onAvailabilityChanged;
   final VoidCallback onAddImage;
@@ -720,7 +957,8 @@ class _MenuRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onEdit,
-        onLongPress: onDelete,
+        onLongPress: onSelect,
+        onSecondaryTap: onDelete,
         child: Padding(
           padding: EdgeInsets.fromLTRB(10, 9, 8, 9),
           child: Row(
@@ -729,7 +967,7 @@ class _MenuRow extends StatelessWidget {
                 message: hasImage ? text.editMenuItem : text.menuChooseGallery,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: hasImage ? onEdit : onAddImage,
+                  onTap: onAddImage,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
@@ -770,6 +1008,10 @@ class _MenuRow extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 10),
+              if (selectionMode) ...[
+                Checkbox(value: selected, onChanged: (_) => onSelect()),
+                const SizedBox(width: 6),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

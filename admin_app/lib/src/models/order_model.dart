@@ -87,15 +87,26 @@ class OrderModel {
     int? sequenceNo,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool clearCustomerName = false,
+    bool clearTableNo = false,
+    bool clearNote = false,
+    bool clearDeliveryAddress = false,
+    bool clearMobileNumber = false,
   }) {
     return OrderModel(
       id: id ?? this.id,
       orderNo: orderNo ?? this.orderNo,
-      customerName: customerName ?? this.customerName,
-      tableNo: tableNo ?? this.tableNo,
-      note: note ?? this.note,
-      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
-      mobileNumber: mobileNumber ?? this.mobileNumber,
+      customerName: clearCustomerName
+          ? null
+          : (customerName ?? this.customerName),
+      tableNo: clearTableNo ? null : (tableNo ?? this.tableNo),
+      note: clearNote ? null : (note ?? this.note),
+      deliveryAddress: clearDeliveryAddress
+          ? null
+          : (deliveryAddress ?? this.deliveryAddress),
+      mobileNumber: clearMobileNumber
+          ? null
+          : (mobileNumber ?? this.mobileNumber),
       createdByAccountId: createdByAccountId ?? this.createdByAccountId,
       createdByRole: createdByRole ?? this.createdByRole,
       serviceType: serviceType ?? this.serviceType,

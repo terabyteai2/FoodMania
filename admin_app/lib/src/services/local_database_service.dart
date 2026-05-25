@@ -305,9 +305,7 @@ class LocalDatabaseService {
     );
     if (orderRows.isEmpty) return const <OrderModel>[];
 
-    final orderIds = <String>[
-      for (final row in orderRows) row['id'] as String,
-    ];
+    final orderIds = <String>[for (final row in orderRows) row['id'] as String];
     final itemsByOrderId = await _getOrderItemsForIds(db, orderIds);
     return [
       for (final row in orderRows)
@@ -596,6 +594,77 @@ class LocalDatabaseService {
           entityType: 'order_status',
           entityId: id,
           action: 'status_update',
+          payload: updated.toJson(),
+        );
+      }
+      order = updated;
+    });
+    _emitChange();
+    return order;
+  }
+
+  Future<OrderModel> updateOrderDetails(
+    String id, {
+    OrderServiceType? serviceType,
+    String? tableNo,
+    String? note,
+    String? customerName,
+    String? deliveryAddress,
+    String? mobileNumber,
+    bool createSyncEvent = true,
+  }) async {
+    final db = await _db;
+    late OrderModel order;
+    String? clean(String? value) {
+      final text = value?.trim();
+      return text == null || text.isEmpty ? null : text;
+    }
+
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw DatabaseValidationException('Order was not found.');
+      }
+      final currentItems = await _getOrderItemsWithExecutor(txn, id);
+      final current = OrderModel.fromMap(rows.first, items: currentItems);
+      final nextTable = clean(tableNo);
+      final nextNote = clean(note);
+      final nextCustomer = clean(customerName);
+      final nextAddress = clean(deliveryAddress);
+      final nextMobile = clean(mobileNumber);
+      final updated = current.copyWith(
+        serviceType: serviceType,
+        tableNo: nextTable,
+        note: nextNote,
+        customerName: nextCustomer,
+        deliveryAddress: nextAddress,
+        mobileNumber: nextMobile,
+        clearTableNo: nextTable == null,
+        clearNote: nextNote == null,
+        clearCustomerName: nextCustomer == null,
+        clearDeliveryAddress: nextAddress == null,
+        clearMobileNumber: nextMobile == null,
+        syncStatus: createSyncEvent ? SyncStatus.pending : current.syncStatus,
+        version: current.version + 1,
+        updatedAt: DateTime.now(),
+      );
+      await txn.update(
+        'orders',
+        updated.toMap(),
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (createSyncEvent) {
+        await _insertSyncEvent(
+          txn,
+          entityType: 'order_details',
+          entityId: id,
+          action: 'details_update',
           payload: updated.toJson(),
         );
       }
@@ -1359,7 +1428,9 @@ class LocalDatabaseService {
       );
       return;
     }
-    if (event.entityType == 'order' || event.entityType == 'order_status') {
+    if (event.entityType == 'order' ||
+        event.entityType == 'order_status' ||
+        event.entityType == 'order_details') {
       await db.update(
         'orders',
         {'syncStatus': status.value},

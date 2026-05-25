@@ -123,6 +123,16 @@ class AppStrings {
   String get facebookPageAccessTokenHelper => isBn
       ? 'সেভ করার পর token backend-এ hidden থাকবে।'
       : 'After saving, the token stays hidden on the backend.';
+  String get connectFacebookPage =>
+      isBn ? 'Facebook দিয়ে কানেক্ট করুন' : 'Connect with Facebook';
+  String get reconnectFacebookPage =>
+      isBn ? 'Facebook Page আবার কানেক্ট করুন' : 'Reconnect Facebook Page';
+  String get facebookLoginTitle => isBn ? 'Facebook Login' : 'Facebook Login';
+  String get facebookLoginComplete =>
+      isBn ? 'Facebook Page কানেক্ট হয়েছে' : 'Facebook Page connected';
+  String get facebookLoginFailed => isBn
+      ? 'Facebook Login সম্পন্ন হয়নি'
+      : 'Facebook Login was not completed';
   String get facebookBotEnabled => isBn ? 'Bot চালু' : 'Bot enabled';
   String get facebookOrderingEnabled =>
       isBn ? 'ডেলিভারি অর্ডার চালু' : 'Delivery ordering enabled';

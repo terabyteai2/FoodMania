@@ -7,7 +7,7 @@ class ServerConfig {
     required this.outletName,
     this.publicSlug = '',
     this.tableCount = 10,
-    this.customerMenuTheme = 'napoli_trattoria',
+    this.customerMenuTheme = 'sultans_hearth',
   });
 
   final String serverId;

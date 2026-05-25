@@ -398,7 +398,7 @@ class PosAppController extends ChangeNotifier {
         publicSlug: preferences.getString(_publicSlugKey) ?? '',
         tableCount: preferences.getInt(_tableCountKey) ?? 10,
         customerMenuTheme:
-            preferences.getString(_customerMenuThemeKey) ?? 'napoli_trattoria',
+            preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
       );
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
@@ -620,7 +620,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> startFreeTrial() async {
     final preferences = await SharedPreferences.getInstance();
-    final ends = DateTime.now().add(const Duration(days: 30));
+    final ends = DateTime.now().add(const Duration(days: 7));
     subscriptionState = 'trial';
     trialEndsAt = ends;
     pendingOnboardingLanding = true;
@@ -670,14 +670,20 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> saveLocalSetup({
     required String restaurantName,
+    String? managerName,
     required int tableCount,
   }) async {
     final cleanRestaurantName = restaurantName.trim();
+    final cleanManagerName = managerName?.trim() ?? '';
     final cleanOutletName = cleanRestaurantName;
     final cleanTableCount = tableCount.clamp(1, 200);
+    if (cleanManagerName.isNotEmpty) {
+      accountDisplayName = cleanManagerName;
+    }
     if (phoneSignupToken != null && phoneSignupToken!.isNotEmpty) {
       final ok = await completeManagerPhoneSignup(
         restaurantName: cleanRestaurantName,
+        managerName: cleanManagerName,
         outletName: cleanOutletName,
         tableCount: cleanTableCount,
       );
@@ -702,7 +708,10 @@ class PosAppController extends ChangeNotifier {
         await _provisionTenantInternal(
           restaurantName: cleanRestaurantName,
           outletName: cleanOutletName,
+          managerName: cleanManagerName,
         );
+        await startFreeTrial();
+        await clearOnboardingPaymentRequired();
       } catch (error) {
         lastError = error.toString();
       }
@@ -1088,6 +1097,37 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  Future<FacebookChatbotOAuthStart?> startFacebookChatbotOAuth() async {
+    if (!isManager) {
+      lastError = 'Manager access is required.';
+      notifyListeners();
+      return null;
+    }
+    if (!cloudConfig.canSync) {
+      lastError = 'Cloud sync must be connected before configuring Messenger.';
+      notifyListeners();
+      return null;
+    }
+    try {
+      facebookChatbotLoading = true;
+      facebookChatbotError = null;
+      notifyListeners();
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      return await cloudApiService.startFacebookChatbotOAuth();
+    } catch (error) {
+      final message = _userVisibleError(error);
+      facebookChatbotError = message;
+      lastError = message;
+      return null;
+    } finally {
+      facebookChatbotLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> saveFacebookChatbotConfig({
     required String pageAccessToken,
     required bool isEnabled,
@@ -1410,6 +1450,7 @@ class PosAppController extends ChangeNotifier {
   Future<bool> completeManagerPhoneSignup({
     required String restaurantName,
     required int tableCount,
+    String? managerName,
     String? outletName,
   }) async {
     return _runBusy(() async {
@@ -1423,6 +1464,7 @@ class PosAppController extends ChangeNotifier {
       final result = await cloudApiService.completeManagerPhoneSignup(
         signupToken: token,
         restaurantName: restaurantName,
+        managerName: managerName,
         tableCount: tableCount,
         outletName: outletName,
         serverId: serverConfig.serverId,
@@ -1430,7 +1472,8 @@ class PosAppController extends ChangeNotifier {
       );
       phoneSignupToken = null;
       await _finishPhoneAuthenticatedLogin(result);
-      await markOnboardingPaymentRequired();
+      await startFreeTrial();
+      await clearOnboardingPaymentRequired();
     });
   }
 
@@ -2553,6 +2596,32 @@ class PosAppController extends ChangeNotifier {
     unawaited(syncService.syncNow());
   }
 
+  Future<void> updateOrderDetails(
+    String id, {
+    required OrderServiceType serviceType,
+    String? tableNo,
+    String? note,
+    String? customerName,
+    String? deliveryAddress,
+    String? mobileNumber,
+  }) async {
+    await database.updateOrderDetails(
+      id,
+      serviceType: serviceType,
+      tableNo: tableNo,
+      note: note,
+      customerName: customerName,
+      deliveryAddress: deliveryAddress,
+      mobileNumber: mobileNumber,
+    );
+    unawaited(syncService.syncNow());
+  }
+
+  Future<void> deleteOrder(String id) async {
+    await database.updateOrderStatus(id, OrderStatus.cancelled);
+    unawaited(syncService.syncNow());
+  }
+
   Future<bool> testCloud() async {
     var cloudOk = false;
     final actionOk = await _runBusy(() async {
@@ -2740,6 +2809,7 @@ class PosAppController extends ChangeNotifier {
           restaurantName: restaurantName,
           outletName: outletName,
           language: language,
+          orderDetailsUrl: _orderDetailsUrl(order),
         )
         .then((ok) async {
           if (!orderPrinterSideEffectsEnabled) {
@@ -2786,6 +2856,7 @@ class PosAppController extends ChangeNotifier {
       restaurantName: restaurantName,
       outletName: outletName,
       language: language,
+      orderDetailsUrl: _orderDetailsUrl(order),
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
@@ -2852,6 +2923,20 @@ class PosAppController extends ChangeNotifier {
     );
     await database.upsertNotification(notification);
     notifications = await database.getNotifications();
+    final bulkCutoff = DateTime.now().subtract(const Duration(minutes: 2));
+    final bulkCount = notifications
+        .where(
+          (n) =>
+              n.type == type &&
+              n.title == title &&
+              n.actionTarget == actionTarget &&
+              n.createdAt.isAfter(bulkCutoff),
+        )
+        .length;
+    final displayTitle = bulkCount > 4
+        ? _bulkNotificationTitle(type, bulkCount)
+        : title;
+    final displayBody = bulkCount > 4 ? body : body;
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     final inForeground =
         lifecycle == AppLifecycleState.resumed && isAppForeground;
@@ -2869,8 +2954,8 @@ class PosAppController extends ChangeNotifier {
       unawaited(
         systemNotifications.show(
           id: notificationId,
-          title: title,
-          body: body,
+          title: displayTitle,
+          body: displayBody,
           payload: actionTarget,
           type: type,
           playSound: soundOn,
@@ -2878,6 +2963,24 @@ class PosAppController extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  String _bulkNotificationTitle(PosNotificationType type, int count) {
+    final number = count.toString();
+    switch (type) {
+      case PosNotificationType.acceptedOrder:
+        return '$number order accepted';
+      case PosNotificationType.pendingOrder:
+        return '$number new orders';
+      default:
+        return '$number notifications';
+    }
+  }
+
+  String? _orderDetailsUrl(OrderModel order) {
+    final base = cloudConfig.baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (base.isEmpty || order.id.trim().isEmpty) return null;
+    return '$base/customer/orders/${order.id}';
   }
 
   Future<void> markNotificationRead(String id) async {
@@ -3319,6 +3422,7 @@ class PosAppController extends ChangeNotifier {
   Future<void> _provisionTenantInternal({
     required String restaurantName,
     required String outletName,
+    String? managerName,
   }) async {
     final cleanRestaurantName = restaurantName.trim();
     final cleanOutletName = outletName.trim().isEmpty
@@ -3335,6 +3439,7 @@ class PosAppController extends ChangeNotifier {
     final tenant = await cloudApiService.bootstrapTenant(
       serverId: serverConfig.serverId,
       restaurantName: cleanRestaurantName,
+      managerName: managerName,
       outletName: cleanOutletName,
       tableCount: serverConfig.tableCount,
       restaurantId: serverConfig.restaurantId,

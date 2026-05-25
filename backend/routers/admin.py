@@ -627,7 +627,7 @@ async def phone_complete_manager_signup(
         role=MANAGER,
         phone=phone,
         phone_verified_at=datetime.now(timezone.utc),
-        display_name=None,
+        display_name=(body.managerName or "").strip() or None,
         auth_provider="phone",
         is_active=True,
         invite_status=None,

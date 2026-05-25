@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Outlet, OutletSubscription, UddoktaPaySession
 
-PLAN_DAYS = {"monthly": 30, "annual": 365}
+TRIAL_DAYS = 7
+PLAN_DAYS = {"trial": TRIAL_DAYS, "monthly": 30, "annual": 365}
 
 
 def _now() -> datetime:
@@ -157,10 +158,10 @@ async def get_or_create_subscription(db: AsyncSession, outlet_id: str) -> Outlet
     now = _now()
     sub = OutletSubscription(
         outlet_id=outlet_id,
-        plan="monthly",
-        status="pending",
+        plan="trial",
+        status="active",
         starts_at=now,
-        expires_at=None,
+        expires_at=now + timedelta(days=TRIAL_DAYS),
     )
     db.add(sub)
     await db.flush()

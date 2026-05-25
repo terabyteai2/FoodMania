@@ -124,15 +124,29 @@ async def _ensure_outlet_theme_column(conn) -> None:
         try:
             await conn.execute(
                 text(
-                    "ALTER TABLE outlets ADD COLUMN menu_theme VARCHAR DEFAULT 'napoli_trattoria'"
+                    "ALTER TABLE outlets ADD COLUMN menu_theme VARCHAR DEFAULT 'sultans_hearth'"
                 )
             )
         except Exception:
             pass
+        await conn.execute(
+            text(
+                "UPDATE outlets SET menu_theme = 'sultans_hearth' "
+                "WHERE menu_theme IS NULL OR menu_theme NOT IN "
+                "('sultans_hearth', 'brick', 'lantern', 'marble')"
+            )
+        )
         return
     await conn.execute(
         text(
-            "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS menu_theme VARCHAR DEFAULT 'napoli_trattoria'"
+            "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS menu_theme VARCHAR DEFAULT 'sultans_hearth'"
+        )
+    )
+    await conn.execute(
+        text(
+            "UPDATE outlets SET menu_theme = 'sultans_hearth' "
+            "WHERE menu_theme IS NULL OR menu_theme NOT IN "
+            "('sultans_hearth', 'brick', 'lantern', 'marble')"
         )
     )
 
@@ -177,6 +191,7 @@ async def _ensure_order_columns(conn) -> None:
         ("service_type", "VARCHAR"),
         ("covers", "INTEGER"),
         ("payment_method", "VARCHAR"),
+        ("table_no", "VARCHAR"),
         ("customer_name", "TEXT"),
         ("delivery_address", "TEXT"),
         ("mobile_number", "VARCHAR"),

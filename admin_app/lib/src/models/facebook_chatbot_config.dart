@@ -34,3 +34,25 @@ class FacebookChatbotConfig {
     );
   }
 }
+
+class FacebookChatbotOAuthStart {
+  const FacebookChatbotOAuthStart({
+    required this.authorizationUrl,
+    required this.expiresInSeconds,
+  });
+
+  final String authorizationUrl;
+  final int expiresInSeconds;
+
+  static FacebookChatbotOAuthStart fromJson(Map<String, Object?> json) {
+    final data = json['data'] is Map
+        ? Map<String, Object?>.from(json['data'] as Map)
+        : json;
+    return FacebookChatbotOAuthStart(
+      authorizationUrl: data['authorizationUrl']?.toString().trim() ?? '',
+      expiresInSeconds: data['expiresInSeconds'] is num
+          ? (data['expiresInSeconds'] as num).toInt()
+          : int.tryParse('${data['expiresInSeconds']}') ?? 0,
+    );
+  }
+}

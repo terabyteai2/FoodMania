@@ -26,17 +26,23 @@ MAX_MENU_SCAN_PAGE_BYTES = 1200 * 1024
 
 ALLOWED_MENU_THEMES = frozenset(
     {
-        "napoli_trattoria",
-        "tuscan_herb",
-        "amalfi_breeze",
-        "milano_roast",
         "sultans_hearth",
-        "charcoal_lodge",
-        "bengal_bistro",
-        "grand_mughal",
+        "brick",
+        "lantern",
+        "marble",
     }
 )
-DEFAULT_MENU_THEME = "napoli_trattoria"
+DEFAULT_MENU_THEME = "sultans_hearth"
+
+
+def _normalize_menu_theme(value: str | None) -> str:
+    theme = (value or DEFAULT_MENU_THEME).strip() or DEFAULT_MENU_THEME
+    if theme not in ALLOWED_MENU_THEMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown menu theme '{theme}'.",
+        )
+    return theme
 
 
 def _decode_tags(raw: str | None) -> list[str]:
@@ -510,17 +516,14 @@ async def update_outlet_media(
         outlet.video_url = body.videoUrl
 
     if "menuTheme" in fields_set:
-        theme = body.menuTheme or DEFAULT_MENU_THEME
-        if theme not in ALLOWED_MENU_THEMES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown menu theme '{theme}'.",
-            )
-        outlet.menu_theme = theme
+        outlet.menu_theme = _normalize_menu_theme(body.menuTheme)
 
     await db.commit()
 
     if video_changed and previous_url and previous_url != body.videoUrl:
         storage.delete_by_url(previous_url)
 
-    return ok({"videoUrl": outlet.video_url, "menuTheme": outlet.menu_theme or DEFAULT_MENU_THEME})
+    return ok({
+        "videoUrl": outlet.video_url,
+        "menuTheme": outlet.menu_theme if outlet.menu_theme in ALLOWED_MENU_THEMES else DEFAULT_MENU_THEME,
+    })

@@ -6,7 +6,7 @@
     <title>Menu</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Hind+Siliguri:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400..800;1,9..144,400..800&family=Hind+Siliguri:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800&display=swap" rel="stylesheet" />
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -29,10 +29,22 @@
       @keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
       @keyframes slideUp { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
       @keyframes glow    { 0%,100% { opacity:.6; } 50% { opacity:1; } }
+      @keyframes cartPop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 70% { transform: scale(.95); } 100% { transform: scale(1); } }
+      @keyframes goldShimmer { 0% { box-shadow: inset 0 0 0 1px rgba(201,162,75,0); } 100% { box-shadow: inset 0 0 0 1px rgba(201,162,75,.65); } }
+      @keyframes starSpin { to { transform: rotate(360deg); } }
 
       .fade-up  { animation: fadeUp  .4s cubic-bezier(.22,.68,0,1.2) both; }
       .fade-in  { animation: fadeIn  .3s ease both; }
       .slide-up { animation: slideUp .35s cubic-bezier(.22,.68,0,1.2) both; }
+      .hearth-cart-pop { animation: cartPop .42s cubic-bezier(.34,1.56,.64,1) both; }
+      .hearth-star-spin { animation: starSpin 6s linear infinite; }
+      .hearth-card:focus-visible,
+      .hearth-card:hover { box-shadow: inset 0 0 0 1px rgba(201,162,75,.55); }
+      .template-card-lift:hover,
+      .template-card-lift:focus-visible { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(42,36,32,.12); }
+      .template-cart-pop { animation: cartPop .42s cubic-bezier(.34,1.56,.64,1) both; }
+      .template-nav-pulse { animation: tealPulse 2s ease-in-out infinite; }
+      @keyframes tealPulse { 0%,100% { box-shadow: 0 2px 0 rgba(95,184,196,.05); } 50% { box-shadow: 0 2px 0 rgba(95,184,196,.45); } }
     </style>
   </head>
   <body>

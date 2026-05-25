@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
 
 import '../../app_controller.dart';
@@ -22,6 +23,8 @@ import '../../services/printer_service.dart';
 import '../reports/reports_screen.dart';
 import 'customer_menu_themes.dart';
 import 'qr_pdf_screen.dart';
+
+const bool _showFacebookChatbotSettings = false;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -225,13 +228,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.business_outlined,
                   onTap: _openYourRestaurantInfo,
                 ),
-                _SettingActionData(
-                  title: text.facebookMessengerBot,
-                  subtitle: text.facebookMessengerBotSubtitle,
-                  icon: Icons.chat_bubble_outline_rounded,
-                  trailing: _facebookBotTrailing(app, text),
-                  onTap: _openFacebookChatbot,
-                ),
+                if (_showFacebookChatbotSettings)
+                  _SettingActionData(
+                    title: text.facebookMessengerBot,
+                    subtitle: text.facebookMessengerBotSubtitle,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    trailing: _facebookBotTrailing(app, text),
+                    onTap: _openFacebookChatbot,
+                  ),
                 _SettingActionData(
                   title: text.staffAccounts,
                   subtitle: text.staffAccountsSubtitle,
@@ -1210,7 +1214,6 @@ class _FacebookChatbotSettingsPage extends StatefulWidget {
 
 class _FacebookChatbotSettingsPageState
     extends State<_FacebookChatbotSettingsPage> {
-  final TextEditingController _tokenController = TextEditingController();
   bool _enabled = true;
   bool _orderingEnabled = true;
   bool _loadRequested = false;
@@ -1237,12 +1240,6 @@ class _FacebookChatbotSettingsPageState
         }
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _tokenController.dispose();
-    super.dispose();
   }
 
   @override
@@ -1281,13 +1278,16 @@ class _FacebookChatbotSettingsPageState
           ],
         ),
         SizedBox(height: 12),
-        TfField(
-          label: text.facebookPageAccessToken,
-          controller: _tokenController,
-          hint: text.facebookPageAccessTokenHint,
-          hintHelper: text.facebookPageAccessTokenHelper,
-          obscure: true,
+        TfButton(
+          label: config != null && config.isConfigured
+              ? text.reconnectFacebookPage
+              : text.connectFacebookPage,
+          icon: Icons.login_rounded,
+          busy: app.facebookChatbotLoading,
+          fullWidth: true,
+          onPressed: app.facebookChatbotLoading ? null : _connectWithFacebook,
         ),
+        SizedBox(height: 8),
         _FacebookToggleRow(
           label: text.facebookBotEnabled,
           value: _enabled,
@@ -1331,9 +1331,51 @@ class _FacebookChatbotSettingsPageState
           icon: Icons.check_rounded,
           busy: app.busy,
           fullWidth: true,
-          onPressed: app.busy ? null : _save,
+          onPressed: app.busy || config == null || !config.isConfigured
+              ? null
+              : _save,
         ),
       ],
+    );
+  }
+
+  Future<void> _connectWithFacebook() async {
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final start = await app.startFacebookChatbotOAuth();
+    if (!mounted) return;
+    final url = start?.authorizationUrl.trim() ?? '';
+    if (url.isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: TfText(
+            app.facebookChatbotError ??
+                app.lastError ??
+                app.strings.facebookLoginFailed,
+          ),
+        ),
+      );
+      return;
+    }
+    final connected = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => _FacebookOAuthWebViewPage(initialUrl: url),
+        fullscreenDialog: true,
+      ),
+    );
+    if (!mounted) return;
+    if (connected == true) {
+      await app.loadFacebookChatbotConfig();
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: TfText(
+          connected == true
+              ? app.strings.facebookLoginComplete
+              : app.strings.facebookLoginFailed,
+        ),
+      ),
     );
   }
 
@@ -1341,12 +1383,11 @@ class _FacebookChatbotSettingsPageState
     final app = AppScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final ok = await app.saveFacebookChatbotConfig(
-      pageAccessToken: _tokenController.text,
+      pageAccessToken: '',
       isEnabled: _enabled,
       orderingEnabled: _orderingEnabled,
     );
     if (!mounted) return;
-    if (ok) _tokenController.clear();
     messenger.showSnackBar(
       SnackBar(
         content: TfText(
@@ -1362,6 +1403,134 @@ class _FacebookChatbotSettingsPageState
     final clean = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
     if (clean.isEmpty) return '';
     return '$clean/webhooks/facebook';
+  }
+}
+
+const _kFacebookOAuthUserAgent =
+    'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+
+class _FacebookOAuthWebViewPage extends StatefulWidget {
+  const _FacebookOAuthWebViewPage({required this.initialUrl});
+
+  final String initialUrl;
+
+  @override
+  State<_FacebookOAuthWebViewPage> createState() =>
+      _FacebookOAuthWebViewPageState();
+}
+
+class _FacebookOAuthWebViewPageState extends State<_FacebookOAuthWebViewPage> {
+  WebViewController? _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  Future<void> _start() async {
+    final initialUri = Uri.tryParse(widget.initialUrl);
+    if (initialUri == null) {
+      setState(() => _error = 'Facebook Login URL is invalid.');
+      return;
+    }
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setUserAgent(_kFacebookOAuthUserAgent)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            final handled = _handleDoneUrl(request.url);
+            return handled
+                ? NavigationDecision.prevent
+                : NavigationDecision.navigate;
+          },
+          onPageFinished: _handleDoneUrl,
+          onWebResourceError: (error) {
+            if (!mounted || error.isForMainFrame != true) return;
+            setState(() {
+              _error = 'Could not load Facebook Login (${error.description}).';
+            });
+          },
+        ),
+      );
+    setState(() => _controller = controller);
+    await controller.loadRequest(initialUri);
+  }
+
+  bool _handleDoneUrl(String rawUrl) {
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || uri.path != '/admin/chatbot/facebook/oauth/done') {
+      return false;
+    }
+    final success = uri.queryParameters['status'] == 'success';
+    if (success) {
+      if (mounted) Navigator.pop(context, true);
+      return true;
+    }
+    if (mounted) {
+      setState(() {
+        _error =
+            uri.queryParameters['message'] ??
+            AppScope.of(context).strings.facebookLoginFailed;
+      });
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final error = _error;
+    return AppScaffold(
+      title: text.facebookLoginTitle,
+      showDatePill: false,
+      showBackButton: true,
+      pinHeader: true,
+      fillBody: true,
+      child: Column(
+        children: [
+          if (error != null && error.isNotEmpty) ...[
+            TfCard(
+              color: PosColors.dangerSoft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: PosColors.danger,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: TfText(
+                      error,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 10),
+          ],
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(PosRadii.md),
+              child: ColoredBox(
+                color: PosColors.surface,
+                child: _controller == null
+                    ? TfLoading(message: text.facebookLoginTitle)
+                    : WebViewWidget(controller: _controller!),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -27,7 +27,7 @@ async def test_customer_info_returns_default_menu_theme():
         info = await client.get(f"/customer/{outlet_id}/info")
 
     assert info.status_code == 200
-    assert info.json()["data"]["menuTheme"] == "napoli_trattoria"
+    assert info.json()["data"]["menuTheme"] == "sultans_hearth"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -40,13 +40,13 @@ async def test_patch_media_updates_menu_theme():
         patch = await client.patch(
             f"/outlets/{outlet_id}/media",
             headers=headers,
-            json={"menuTheme": "tuscan_herb"},
+            json={"menuTheme": "brick"},
         )
         info = await client.get(f"/customer/{outlet_id}/info")
 
     assert patch.status_code == 200
-    assert patch.json()["data"]["menuTheme"] == "tuscan_herb"
-    assert info.json()["data"]["menuTheme"] == "tuscan_herb"
+    assert patch.json()["data"]["menuTheme"] == "brick"
+    assert info.json()["data"]["menuTheme"] == "brick"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -82,9 +82,9 @@ async def test_patch_media_theme_only_preserves_video_url():
         theme_only = await client.patch(
             f"/outlets/{outlet_id}/media",
             headers=headers,
-            json={"menuTheme": "milano_roast"},
+            json={"menuTheme": "lantern"},
         )
 
     assert theme_only.status_code == 200
-    assert theme_only.json()["data"]["menuTheme"] == "milano_roast"
+    assert theme_only.json()["data"]["menuTheme"] == "lantern"
     assert theme_only.json()["data"]["videoUrl"] == "https://example.com/clip.mp4"

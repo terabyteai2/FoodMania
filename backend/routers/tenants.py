@@ -8,6 +8,7 @@ from client_api_base import client_visible_api_base
 from database import get_db
 from models import Outlet, Restaurant
 from schemas import BootstrapRequest, ok
+from subscription_service import get_or_create_subscription
 
 router = APIRouter()
 
@@ -58,6 +59,8 @@ async def bootstrap_tenant(
             table_count=body.tableCount or 10,
         )
         db.add(outlet)
+        await db.flush()
+        await get_or_create_subscription(db, outlet.id)
         await db.commit()
         await db.refresh(outlet)
         await db.refresh(restaurant)

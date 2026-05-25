@@ -274,21 +274,16 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.byType(TextField).first, 'Scan Cafe');
-    await tester.enterText(find.byType(TextField).at(1), 'Moon Ahmed');
+    await tester.enterText(find.byType(TextField).first, 'Moon Ahmed');
     await tester.pump();
     expect(find.text('Continue'), findsOneWidget);
 
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Scan Cafe');
+    await tester.pump();
 
-    await tester.tap(find.text('Open dashboard'));
+    await tester.tap(find.text('Create restaurant'));
     for (var i = 0; i < 10 && !provisioned; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }

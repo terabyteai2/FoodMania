@@ -1,8 +1,11 @@
 import hashlib
+import html
 import hmac
 import json
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_device_payload
@@ -11,6 +14,8 @@ from database import get_db
 from routers.admin import _current_account
 from schemas import FacebookChatbotConfigRequest, ok
 from services.facebook_chatbot import (
+    complete_facebook_oauth,
+    create_facebook_oauth_url,
     get_facebook_config,
     handle_facebook_webhook,
     save_facebook_config,
@@ -75,6 +80,109 @@ async def update_facebook_chatbot_config(
         ordering_enabled=body.orderingEnabled,
     )
     return ok(data)
+
+
+@router.post("/admin/chatbot/facebook/oauth/start")
+async def start_facebook_chatbot_oauth(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_account(payload, db, require_manager=True)
+    return ok(create_facebook_oauth_url(outlet_id=account.outlet_id, account_id=account.id))
+
+
+@router.get("/admin/chatbot/facebook/oauth/callback", include_in_schema=False)
+async def facebook_chatbot_oauth_callback(
+    code: str | None = Query(None),
+    state: str | None = Query(None),
+    error: str | None = Query(None),
+    error_description: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    if error:
+        return _facebook_oauth_done_redirect(error_description or error, success=False)
+    if not code or not state:
+        return _facebook_oauth_done_redirect("Facebook Login did not return a code.", success=False)
+    try:
+        data = await complete_facebook_oauth(db=db, state_token=state, code=code)
+    except HTTPException as exc:
+        return _facebook_oauth_done_redirect(str(exc.detail), success=False)
+    message = data.get("pageName") or data.get("pageId") or "Facebook Page connected."
+    return _facebook_oauth_done_redirect(str(message), success=True)
+
+
+@router.get("/admin/chatbot/facebook/oauth/done", include_in_schema=False)
+async def facebook_chatbot_oauth_done(
+    status_value: str = Query("error", alias="status"),
+    message: str = "",
+):
+    success = status_value == "success"
+    title = "Facebook Messenger connected" if success else "Facebook connection failed"
+    body = (
+        "Your Facebook Page is connected. Return to Terafoods to continue."
+        if success
+        else (message or "Facebook Login could not be completed.")
+    )
+    color = "#3D7A5A" if success else "#A32D2D"
+    escaped_title = html.escape(title)
+    escaped_body = html.escape(body)
+    return HTMLResponse(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escaped_title}</title>
+  <style>
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #F7F4EE;
+      color: #1C1A17;
+    }}
+    main {{
+      width: min(440px, calc(100vw - 32px));
+      background: #FFFFFF;
+      border: 1px solid #E8E4DC;
+      border-radius: 12px;
+      padding: 24px;
+    }}
+    .mark {{
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: {color};
+      color: #FFFFFF;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }}
+    h1 {{ font-size: 22px; margin: 0 0 8px; font-weight: 600; }}
+    p {{ font-size: 15px; line-height: 1.5; margin: 0; color: #55514A; }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark">{"OK" if success else "!"}</div>
+    <h1>{escaped_title}</h1>
+    <p>{escaped_body}</p>
+  </main>
+</body>
+</html>"""
+    )
+
+
+def _facebook_oauth_done_redirect(message: str, *, success: bool) -> RedirectResponse:
+    params = urlencode({"status": "success" if success else "error", "message": message})
+    return RedirectResponse(
+        url=f"/admin/chatbot/facebook/oauth/done?{params}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 def _verify_signature(raw_body: bytes, signature: str | None) -> None:

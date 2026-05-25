@@ -45,19 +45,19 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('settings exposes Facebook Messenger chatbot setup', (
+  testWidgets('settings hides Facebook Messenger chatbot setup', (
     tester,
   ) async {
     final controller = PosAppController()..language = AppLanguage.en;
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
-    expect(find.text('Facebook Messenger bot'), findsOneWidget);
+    expect(find.text('Facebook Messenger bot'), findsNothing);
     expect(
       find.text(
         'Answer menu questions and take delivery orders from Messenger.',
       ),
-      findsOneWidget,
+      findsNothing,
     );
 
     controller.dispose();

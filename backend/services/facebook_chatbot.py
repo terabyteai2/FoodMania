@@ -1,14 +1,18 @@
 import json
 import logging
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, status
+from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from auth import ALGORITHM
 from config import settings
 from models import ChatbotConversation, ChatbotIntegration, MenuItem, Outlet
 from services.customer_orders import (
@@ -21,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 FACEBOOK_PROVIDER = "facebook"
 FACEBOOK_ORDER_SOURCE = "facebook_messenger"
+FACEBOOK_OAUTH_STATE_TYPE = "facebook_chatbot_oauth"
+FACEBOOK_OAUTH_CALLBACK_PATH = "/admin/chatbot/facebook/oauth/callback"
 GRAPH_TIMEOUT_SECONDS = 8.0
 GROQ_TIMEOUT_SECONDS = 30.0
 MAX_CONTEXT_MENU_ITEMS = 80
@@ -74,6 +80,233 @@ async def get_facebook_config(db: AsyncSession, outlet_id: str) -> dict:
     return integration_to_config(integration)
 
 
+def _graph_version() -> str:
+    return settings.META_GRAPH_API_VERSION.strip() or "v24.0"
+
+
+def _graph_url(path: str) -> str:
+    clean_path = path if path.startswith("/") else f"/{path}"
+    return f"https://graph.facebook.com/{_graph_version()}{clean_path}"
+
+
+def _public_base_url() -> str:
+    base = settings.BASE_URL.strip().rstrip("/")
+    if not base:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="BASE_URL is required for Facebook Login.",
+        )
+    return base
+
+
+def facebook_oauth_redirect_uri() -> str:
+    return f"{_public_base_url()}{FACEBOOK_OAUTH_CALLBACK_PATH}"
+
+
+def _require_facebook_app_config() -> tuple[str, str]:
+    app_id = settings.FACEBOOK_APP_ID.strip()
+    app_secret = settings.FACEBOOK_APP_SECRET.strip()
+    if not app_id or not app_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Facebook app credentials are not configured.",
+        )
+    return app_id, app_secret
+
+
+def _facebook_login_scopes() -> str:
+    scopes = [scope.strip() for scope in settings.FACEBOOK_LOGIN_SCOPES.split(",")]
+    scopes = [scope for scope in scopes if scope]
+    if not scopes:
+        scopes = ["pages_show_list", "pages_manage_metadata", "pages_messaging"]
+    return ",".join(scopes)
+
+
+def create_facebook_oauth_url(*, outlet_id: str, account_id: str) -> dict:
+    app_id, _ = _require_facebook_app_config()
+    expires_in = max(60, settings.FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES * 60)
+    expire = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    state = jwt.encode(
+        {
+            "type": FACEBOOK_OAUTH_STATE_TYPE,
+            "sub": outlet_id,
+            "account_id": account_id,
+            "nonce": str(uuid.uuid4()),
+            "exp": expire,
+        },
+        settings.SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+    params = {
+        "client_id": app_id,
+        "redirect_uri": facebook_oauth_redirect_uri(),
+        "response_type": "code",
+        "scope": _facebook_login_scopes(),
+        "state": state,
+        "auth_type": "rerequest",
+    }
+    url = f"https://www.facebook.com/{_graph_version()}/dialog/oauth?{urlencode(params)}"
+    return {"authorizationUrl": url, "expiresInSeconds": expires_in}
+
+
+def _decode_facebook_oauth_state(raw_state: str) -> dict[str, Any]:
+    try:
+        payload = jwt.decode(raw_state, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != FACEBOOK_OAUTH_STATE_TYPE:
+            raise ValueError("Invalid state token type.")
+        outlet_id = str(payload.get("sub") or "").strip()
+        if not outlet_id:
+            raise ValueError("Missing outlet in state token.")
+        return payload
+    except (JWTError, ValueError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook Login state is invalid or expired.",
+        ) from error
+
+
+def _facebook_error_detail(payload: Any, fallback: str) -> str:
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or "").strip()
+            if message:
+                return message
+    return fallback
+
+
+async def _graph_get(path: str, params: dict[str, str], fallback: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=GRAPH_TIMEOUT_SECONDS) as client:
+            response = await client.get(_graph_url(path), params=params)
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=fallback) from error
+    payload = response.json() if response.content else {}
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_facebook_error_detail(payload, fallback),
+        )
+    return payload if isinstance(payload, dict) else {}
+
+
+async def _graph_post(path: str, params: dict[str, str], fallback: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=GRAPH_TIMEOUT_SECONDS) as client:
+            response = await client.post(_graph_url(path), params=params)
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=fallback) from error
+    payload = response.json() if response.content else {}
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_facebook_error_detail(payload, fallback),
+        )
+    return payload if isinstance(payload, dict) else {}
+
+
+async def _exchange_code_for_user_token(code: str) -> str:
+    app_id, app_secret = _require_facebook_app_config()
+    payload = await _graph_get(
+        "/oauth/access_token",
+        {
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "redirect_uri": facebook_oauth_redirect_uri(),
+            "code": code,
+        },
+        "Could not finish Facebook Login.",
+    )
+    token = str(payload.get("access_token") or "").strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook Login did not return a user access token.",
+        )
+    return token
+
+
+async def _exchange_long_lived_user_token(short_token: str) -> str:
+    app_id, app_secret = _require_facebook_app_config()
+    payload = await _graph_get(
+        "/oauth/access_token",
+        {
+            "grant_type": "fb_exchange_token",
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "fb_exchange_token": short_token,
+        },
+        "Could not create a long-lived Facebook token.",
+    )
+    return str(payload.get("access_token") or "").strip() or short_token
+
+
+async def _fetch_facebook_pages(user_access_token: str) -> list[dict[str, Any]]:
+    payload = await _graph_get(
+        "/me/accounts",
+        {
+            "fields": "id,name,access_token",
+            "access_token": user_access_token,
+        },
+        "Could not read Facebook Pages for this account.",
+    )
+    pages = payload.get("data")
+    if not isinstance(pages, list):
+        return []
+    return [page for page in pages if isinstance(page, dict)]
+
+
+def _select_facebook_page(pages: list[dict[str, Any]]) -> dict[str, Any]:
+    for page in pages:
+        page_id = str(page.get("id") or "").strip()
+        token = str(page.get("access_token") or "").strip()
+        if page_id and token:
+            return {
+                "pageId": page_id,
+                "pageName": str(page.get("name") or "").strip() or None,
+                "pageAccessToken": token,
+            }
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Facebook did not return an authorized Page access token.",
+    )
+
+
+async def _subscribe_facebook_page(page_id: str, page_access_token: str) -> None:
+    await _graph_post(
+        f"/{page_id}/subscribed_apps",
+        {
+            "subscribed_fields": "messages,messaging_postbacks",
+            "access_token": page_access_token,
+        },
+        "Could not subscribe this Facebook Page to Messenger webhooks.",
+    )
+
+
+async def complete_facebook_oauth(
+    *,
+    db: AsyncSession,
+    state_token: str,
+    code: str,
+) -> dict:
+    state_payload = _decode_facebook_oauth_state(state_token)
+    outlet_id = str(state_payload["sub"]).strip()
+    short_token = await _exchange_code_for_user_token(code.strip())
+    user_token = await _exchange_long_lived_user_token(short_token)
+    page = _select_facebook_page(await _fetch_facebook_pages(user_token))
+    await _ensure_facebook_page_available(db, outlet_id, page["pageId"])
+    await _subscribe_facebook_page(page["pageId"], page["pageAccessToken"])
+    return await save_facebook_page_credentials(
+        db=db,
+        outlet_id=outlet_id,
+        page_id=page["pageId"],
+        page_name=page["pageName"],
+        page_access_token=page["pageAccessToken"],
+        is_enabled=True,
+        ordering_enabled=True,
+    )
+
+
 async def resolve_facebook_page(token: str) -> dict:
     clean = token.strip()
     if not clean:
@@ -110,6 +343,27 @@ async def resolve_facebook_page(token: str) -> dict:
     return {"pageId": page_id, "pageName": str(payload.get("name") or "").strip() or None}
 
 
+async def _ensure_facebook_page_available(
+    db: AsyncSession,
+    outlet_id: str,
+    page_id: str,
+) -> None:
+    existing_page = (
+        await db.execute(
+            select(ChatbotIntegration).where(
+                ChatbotIntegration.provider == FACEBOOK_PROVIDER,
+                ChatbotIntegration.page_id == page_id,
+                ChatbotIntegration.outlet_id != outlet_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_page is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That Facebook Page is already connected to another outlet.",
+        )
+
+
 async def save_facebook_config(
     *,
     db: AsyncSession,
@@ -128,24 +382,17 @@ async def save_facebook_config(
     ).scalar_one_or_none()
 
     token = (page_access_token or "").strip()
-    resolved: dict | None = None
     if token:
         resolved = await resolve_facebook_page(token)
-        page_id = resolved["pageId"]
-        existing_page = (
-            await db.execute(
-                select(ChatbotIntegration).where(
-                    ChatbotIntegration.provider == FACEBOOK_PROVIDER,
-                    ChatbotIntegration.page_id == page_id,
-                    ChatbotIntegration.outlet_id != outlet_id,
-                )
-            )
-        ).scalar_one_or_none()
-        if existing_page is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="That Facebook Page is already connected to another outlet.",
-            )
+        return await save_facebook_page_credentials(
+            db=db,
+            outlet_id=outlet_id,
+            page_id=resolved["pageId"],
+            page_name=resolved["pageName"],
+            page_access_token=token,
+            is_enabled=is_enabled,
+            ordering_enabled=ordering_enabled,
+        )
     elif integration is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -153,24 +400,60 @@ async def save_facebook_config(
         )
 
     now = datetime.now(timezone.utc)
+    integration.is_enabled = is_enabled
+    integration.ordering_enabled = ordering_enabled
+    integration.updated_at = now
+    await db.commit()
+    await db.refresh(integration)
+    return integration_to_config(integration)
+
+
+async def save_facebook_page_credentials(
+    *,
+    db: AsyncSession,
+    outlet_id: str,
+    page_id: str,
+    page_name: str | None,
+    page_access_token: str,
+    is_enabled: bool,
+    ordering_enabled: bool,
+) -> dict:
+    clean_page_id = page_id.strip()
+    clean_token = page_access_token.strip()
+    if not clean_page_id or not clean_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook did not return a valid Page token.",
+        )
+
+    integration = (
+        await db.execute(
+            select(ChatbotIntegration).where(
+                ChatbotIntegration.provider == FACEBOOK_PROVIDER,
+                ChatbotIntegration.outlet_id == outlet_id,
+            )
+        )
+    ).scalar_one_or_none()
+    await _ensure_facebook_page_available(db, outlet_id, clean_page_id)
+
+    now = datetime.now(timezone.utc)
     if integration is None:
         integration = ChatbotIntegration(
             outlet_id=outlet_id,
             provider=FACEBOOK_PROVIDER,
-            page_id=resolved["pageId"],
-            page_name=resolved["pageName"],
-            page_access_token=token,
+            page_id=clean_page_id,
+            page_name=(page_name or "").strip() or None,
+            page_access_token=clean_token,
             is_enabled=is_enabled,
             ordering_enabled=ordering_enabled,
             updated_at=now,
         )
         db.add(integration)
     else:
-        if resolved is not None:
-            integration.page_id = resolved["pageId"]
-            integration.page_name = resolved["pageName"]
-            integration.page_access_token = token
-            integration.last_error = None
+        integration.page_id = clean_page_id
+        integration.page_name = (page_name or "").strip() or None
+        integration.page_access_token = clean_token
+        integration.last_error = None
         integration.is_enabled = is_enabled
         integration.ordering_enabled = ordering_enabled
         integration.updated_at = now

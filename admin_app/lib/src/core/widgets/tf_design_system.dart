@@ -977,6 +977,8 @@ class TfField extends StatelessWidget {
     this.obscure = false,
     this.maxLines = 1,
     this.onChanged,
+    this.onSubmitted,
+    this.textInputAction,
     this.hintHelper,
     this.errorText, // Added primitive support for handling form invalidation feedback logic
     this.inputFormatters,
@@ -995,6 +997,8 @@ class TfField extends StatelessWidget {
   final bool obscure;
   final int maxLines;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final TextInputAction? textInputAction;
   final String? hintHelper;
   final String? errorText;
   final List<TextInputFormatter>? inputFormatters;
@@ -1028,7 +1032,9 @@ class TfField extends StatelessWidget {
             obscureText: obscure,
             maxLines: obscure ? 1 : maxLines,
             keyboardType: keyboardType,
+            textInputAction: textInputAction,
             onChanged: onChanged,
+            onSubmitted: onSubmitted,
             inputFormatters: inputFormatters,
             style: TextStyle(
               fontFamily: tfFontFamily(context),

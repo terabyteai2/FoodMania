@@ -1,4 +1,5 @@
 import uuid
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -87,6 +88,97 @@ async def test_manager_can_save_facebook_chatbot_config(monkeypatch):
     assert saved.json()["data"]["tokenPreview"] == "page…oken"
     assert "page-token" not in saved.text
     assert fetched.json()["data"]["pageName"] == "Test Page"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_manager_can_start_facebook_chatbot_oauth(monkeypatch):
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_ID", "app-123")
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_SECRET", "secret-123")
+    monkeypatch.setattr(facebook_chatbot.settings, "BASE_URL", "https://api.example.test")
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-oauth-start")
+        response = await client.post("/admin/chatbot/facebook/oauth/start", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    parsed = urlparse(data["authorizationUrl"])
+    params = parse_qs(parsed.query)
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "www.facebook.com"
+    assert parsed.path == "/v24.0/dialog/oauth"
+    assert params["client_id"] == ["app-123"]
+    assert params["redirect_uri"] == [
+        "https://api.example.test/admin/chatbot/facebook/oauth/callback"
+    ]
+    assert set(params["scope"][0].split(",")) >= {
+        "pages_show_list",
+        "pages_manage_metadata",
+        "pages_messaging",
+    }
+    assert params["state"][0]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_facebook_oauth_callback_saves_page_token(monkeypatch):
+    page_id = f"oauth-page-{uuid.uuid4()}"
+    subscribed = []
+
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_ID", "app-123")
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_SECRET", "secret-123")
+    monkeypatch.setattr(facebook_chatbot.settings, "BASE_URL", "https://api.example.test")
+
+    async def fake_exchange_code(code: str):
+        assert code == "auth-code"
+        return "short-user-token"
+
+    async def fake_long_lived(token: str):
+        assert token == "short-user-token"
+        return "long-user-token"
+
+    async def fake_pages(token: str):
+        assert token == "long-user-token"
+        return [
+            {
+                "id": page_id,
+                "name": "OAuth Cafe",
+                "access_token": "oauth-page-token",
+            }
+        ]
+
+    async def fake_subscribe(page: str, token: str):
+        subscribed.append((page, token))
+
+    monkeypatch.setattr(facebook_chatbot, "_exchange_code_for_user_token", fake_exchange_code)
+    monkeypatch.setattr(facebook_chatbot, "_exchange_long_lived_user_token", fake_long_lived)
+    monkeypatch.setattr(facebook_chatbot, "_fetch_facebook_pages", fake_pages)
+    monkeypatch.setattr(facebook_chatbot, "_subscribe_facebook_page", fake_subscribe)
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-oauth-callback")
+        started = await client.post("/admin/chatbot/facebook/oauth/start", headers=headers)
+        state = parse_qs(urlparse(started.json()["data"]["authorizationUrl"]).query)["state"][0]
+        callback = await client.get(
+            "/admin/chatbot/facebook/oauth/callback",
+            params={"code": "auth-code", "state": state},
+        )
+        fetched = await client.get("/admin/chatbot/facebook", headers=headers)
+
+    assert callback.status_code == 303
+    assert "status=success" in callback.headers["location"]
+    assert subscribed == [(page_id, "oauth-page-token")]
+    config = fetched.json()["data"]
+    assert config["isConfigured"] is True
+    assert config["isEnabled"] is True
+    assert config["orderingEnabled"] is True
+    assert config["pageId"] == page_id
+    assert config["pageName"] == "OAuth Cafe"
+    assert config["tokenPreview"] == "oaut…oken"
+    assert "oauth-page-token" not in fetched.text
 
 
 @pytest.mark.asyncio(loop_scope="session")

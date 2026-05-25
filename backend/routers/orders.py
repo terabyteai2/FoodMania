@@ -8,7 +8,7 @@ from auth import get_current_device_payload, get_current_outlet_id
 from database import get_db
 from models import MenuItem, Order
 from routers.ws import manager
-from schemas import OrderPayload, OrderStatusUpdate, ok
+from schemas import OrderDetailsUpdate, OrderPayload, OrderStatusUpdate, ok
 from routers.menu import _require_manager_scan_access
 from services.customer_orders import order_to_dict
 from services.order_history_import import OrderHistoryCsvError, parse_order_history_csv
@@ -153,6 +153,7 @@ async def push_order(
         service_type=body.serviceType,
         covers=body.covers,
         payment_method=body.paymentMethod,
+        table_no=(body.tableNo or "").strip() or None,
         items=await _normalized_order_items(outlet_id, body, db),
         notes=body.notes,
         customer_name=(body.customerName or "").strip() or None,
@@ -278,4 +279,67 @@ async def update_order_status(
     await db.refresh(order)
 
     await manager.broadcast(outlet_id, {"type": "order_status_updated", "data": _order_to_dict(order)})
+    return ok(_order_to_dict(order))
+
+
+@router.patch("/outlets/{outlet_id}/orders/{order_id}")
+async def update_order_details(
+    outlet_id: str,
+    order_id: str,
+    body: OrderDetailsUpdate,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    order = (
+        await db.execute(
+            select(Order).where((Order.id == order_id) & (Order.outlet_id == outlet_id))
+        )
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    if body.serviceType is not None:
+        order.service_type = (body.serviceType or "").strip() or None
+    if body.tableNo is not None:
+        order.table_no = (body.tableNo or "").strip() or None
+    if body.notes is not None:
+        order.notes = (body.notes or "").strip() or None
+    if body.customerName is not None:
+        order.customer_name = (body.customerName or "").strip() or None
+    if body.deliveryAddress is not None:
+        order.delivery_address = (body.deliveryAddress or "").strip() or None
+    if body.mobileNumber is not None:
+        order.mobile_number = (body.mobileNumber or "").strip() or None
+    order.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(order)
+
+    await manager.broadcast(outlet_id, {"type": "order_updated", "data": _order_to_dict(order)})
+    return ok(_order_to_dict(order))
+
+
+@router.delete("/outlets/{outlet_id}/orders/{order_id}")
+async def delete_order(
+    outlet_id: str,
+    order_id: str,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    order = (
+        await db.execute(
+            select(Order).where((Order.id == order_id) & (Order.outlet_id == outlet_id))
+        )
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    order.status = "cancelled"
+    order.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(order)
+
+    await manager.broadcast(outlet_id, {"type": "order_deleted", "data": _order_to_dict(order)})
     return ok(_order_to_dict(order))

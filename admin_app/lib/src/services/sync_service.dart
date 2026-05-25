@@ -320,6 +320,9 @@ class SyncService {
         }
         await _cloudApi.pushOrderStatus(event.entityId, status);
         return;
+      case 'order_details':
+        await _cloudApi.pushOrderDetails(_orderFromPayload(payload));
+        return;
       case 'server_config':
         await _cloudApi.registerDevice();
         return;
@@ -477,7 +480,10 @@ class SyncService {
         return;
       }
 
-      if (type == 'order_created' || type == 'order_status_updated') {
+      if (type == 'order_created' ||
+          type == 'order_status_updated' ||
+          type == 'order_updated' ||
+          type == 'order_deleted') {
         final order = _orderFromPayload(
           Map<String, Object?>.from(data),
           sourceFallback: OrderSource.cloud,

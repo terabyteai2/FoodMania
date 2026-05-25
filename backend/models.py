@@ -40,7 +40,7 @@ class Outlet(Base):
     banner_url: Mapped[str | None] = mapped_column(Text)
     video_url: Mapped[str | None] = mapped_column(Text)
     gallery_images: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
-    menu_theme: Mapped[str] = mapped_column(String, default="napoli_trattoria")
+    menu_theme: Mapped[str] = mapped_column(String, default="sultans_hearth")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="outlets")
@@ -132,6 +132,7 @@ class Order(Base):
     service_type: Mapped[str | None] = mapped_column(String, nullable=True)
     covers: Mapped[int | None] = mapped_column(Integer, nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String, nullable=True)
+    table_no: Mapped[str | None] = mapped_column(String, nullable=True)
     items: Mapped[dict] = mapped_column(JSONB, default=list)
     notes: Mapped[str | None] = mapped_column(Text)
     customer_name: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -162,8 +163,8 @@ class OutletSubscription(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), unique=True, nullable=False)
-    plan: Mapped[str] = mapped_column(String, default="monthly")
-    status: Mapped[str] = mapped_column(String, default="trial")
+    plan: Mapped[str] = mapped_column(String, default="trial")
+    status: Mapped[str] = mapped_column(String, default="active")
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_payment_session_id: Mapped[str | None] = mapped_column(String, nullable=True)

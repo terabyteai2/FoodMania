@@ -27,6 +27,18 @@ void main() {
     expect(config.tokenPreview, 'EAA…abcd');
   });
 
+  test('FacebookChatbotOAuthStart parses backend response', () {
+    final start = FacebookChatbotOAuthStart.fromJson({
+      'data': {
+        'authorizationUrl': 'https://facebook.example/oauth',
+        'expiresInSeconds': 900,
+      },
+    });
+
+    expect(start.authorizationUrl, 'https://facebook.example/oauth');
+    expect(start.expiresInSeconds, 900);
+  });
+
   test('CloudApiService updates Facebook chatbot config with PUT', () async {
     late http.Request captured;
     final service = CloudApiService(
@@ -76,5 +88,47 @@ void main() {
     expect(captured.url.path, '/admin/chatbot/facebook');
     expect(captured.headers['Authorization'], 'Bearer device-token');
     expect(jsonDecode(captured.body)['pageAccessToken'], 'page-token');
+  });
+
+  test('CloudApiService starts Facebook OAuth with POST', () async {
+    late http.Request captured;
+    final service = CloudApiService(
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({
+            'data': {
+              'authorizationUrl': 'https://facebook.example/oauth',
+              'expiresInSeconds': 900,
+            },
+            'error': null,
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+    service.configure(
+      cloudConfig: CloudConfig(
+        baseUrl: 'https://api.example.com',
+        enabled: true,
+        deviceToken: 'device-token',
+        autoSyncIntervalSeconds: 30,
+      ),
+      serverConfig: ServerConfig(
+        serverId: 'server-1',
+        restaurantId: 'restaurant-1',
+        outletId: 'outlet-1',
+        restaurantName: 'Cafe',
+        outletName: 'Cafe',
+      ),
+    );
+
+    final start = await service.startFacebookChatbotOAuth();
+
+    expect(start.authorizationUrl, 'https://facebook.example/oauth');
+    expect(captured.method, 'POST');
+    expect(captured.url.path, '/admin/chatbot/facebook/oauth/start');
+    expect(captured.headers['Authorization'], 'Bearer device-token');
   });
 }

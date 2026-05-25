@@ -5,21 +5,17 @@ import 'package:local_pos/src/features/settings/customer_menu_themes.dart';
 // Must stay in lockstep with ALLOWED_MENU_THEMES in backend/routers/menu.py
 // and the keys in customer_menu/frontend/src/themes/index.js.
 const _expectedSlugs = <String>{
-  'napoli_trattoria',
-  'tuscan_herb',
-  'amalfi_breeze',
-  'milano_roast',
   'sultans_hearth',
-  'charcoal_lodge',
-  'bengal_bistro',
-  'grand_mughal',
+  'brick',
+  'lantern',
+  'marble',
 };
 
 void main() {
-  test('exposes exactly the eight expected themes with unique slugs', () {
-    expect(customerMenuThemes, hasLength(8));
+  test('exposes exactly the four expected themes with unique slugs', () {
+    expect(customerMenuThemes, hasLength(4));
     final slugs = customerMenuThemes.map((t) => t.slug).toSet();
-    expect(slugs, hasLength(8));
+    expect(slugs, hasLength(4));
     expect(slugs, equals(_expectedSlugs));
   });
 
@@ -31,7 +27,7 @@ void main() {
   });
 
   test('default slug matches the registry default', () {
-    expect(defaultCustomerMenuTheme, 'napoli_trattoria');
+    expect(defaultCustomerMenuTheme, 'sultans_hearth');
     expect(customerMenuThemes.first.slug, defaultCustomerMenuTheme);
   });
 
@@ -39,6 +35,6 @@ void main() {
     expect(resolveCustomerMenuTheme(null).slug, defaultCustomerMenuTheme);
     expect(resolveCustomerMenuTheme('not_a_theme').slug,
         defaultCustomerMenuTheme);
-    expect(resolveCustomerMenuTheme('tuscan_herb').slug, 'tuscan_herb');
+    expect(resolveCustomerMenuTheme('brick').slug, 'brick');
   });
 }

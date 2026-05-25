@@ -2,87 +2,8 @@
 // backend/routers/menu.py and customer_menu_themes.dart in the admin app.
 
 import React, { createContext, useContext, useMemo } from 'react'
-
-// ── Tokens ─────────────────────────────────────────────────────────────────────
-// Each theme exposes the same shape so render code can read tokens uniformly:
-//   palette: { bg, bgWarm, bgCard, ink, inkSoft, inkFaint, ember, amber, line }
-//   fonts:   { display, body, mono?, accent? }
-//   hero:    { mode, brandCase, ctaShape, ctaTextColor, decor? }
-//   menu:    { layout, cardBg?, categoryStyle, accent? }
-//   divider: string token (used by Hero and section dividers in MenuList)
-
-const NAPOLI = {
-  slug: 'napoli_trattoria',
-  palette: {
-    bg: '#1c1410', bgWarm: '#241914', bgCard: '#2b1f18',
-    ink: '#fff3e0', inkSoft: 'rgba(255,243,224,.65)', inkFaint: 'rgba(255,243,224,.4)',
-    ember: '#ff6a3d', amber: '#ffb547',
-    line: 'rgba(255,243,224,.12)',
-  },
-  fonts: {
-    display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
-    body: '"Hind Siliguri", system-ui, -apple-system, sans-serif',
-    mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-    accent: '"Cormorant Garamond", "Anton", serif',
-  },
-  hero: { mode: 'video-vignette', brandCase: 'upper', ctaShape: 'pill', ctaTextColor: '#1a0c08', decor: 'flour-dust' },
-  menu: { layout: 'grid-2col', categoryStyle: 'underline-display' },
-  divider: 'flour-dust',
-}
-
-const TUSCAN = {
-  slug: 'tuscan_herb',
-  palette: {
-    bg: '#F4ECDC', bgWarm: '#EFE5D0', bgCard: '#FBF6EA',
-    ink: '#2C2A1F', inkSoft: 'rgba(44,42,31,.65)', inkFaint: 'rgba(44,42,31,.4)',
-    ember: '#C97A5A', amber: '#8FA382',
-    line: 'rgba(44,42,31,.16)',
-  },
-  fonts: {
-    display: '"Fraunces", "Lora", Georgia, serif',
-    body: '"Hind Siliguri", system-ui, sans-serif',
-    accent: '"Caveat", "Petit Formal Script", cursive',
-  },
-  hero: { mode: 'sepia-torn', brandCase: 'mixed-italic', ctaShape: 'flat', ctaTextColor: '#FBF6EA', decor: 'rosemary' },
-  menu: { layout: 'cookbook-2col', categoryStyle: 'serif-rule', accent: '#5A1F26' },
-  divider: 'rosemary',
-}
-
-const AMALFI = {
-  slug: 'amalfi_breeze',
-  palette: {
-    bg: '#FBFAF5', bgWarm: '#EAF1F5', bgCard: 'rgba(255,255,255,.55)',
-    ink: '#1B2A3B', inkSoft: 'rgba(27,42,59,.62)', inkFaint: 'rgba(27,42,59,.4)',
-    ember: '#E89A8A', amber: '#F5D547',
-    line: 'rgba(27,42,59,.14)',
-  },
-  fonts: {
-    display: '"General Sans", "Söhne", "Inter Tight", sans-serif',
-    body: '"Hind Siliguri", system-ui, sans-serif',
-    accent: '"Recoleta", "Boska", "Fraunces", serif',
-  },
-  hero: { mode: 'frosted-glass', brandCase: 'mixed', ctaShape: 'pill-white', ctaTextColor: '#2E6F8E', decor: 'lemon-slice' },
-  menu: { layout: 'frosted-2col', categoryStyle: 'chip-row', accent: '#2E6F8E' },
-  divider: 'lemon-slice',
-}
-
-const MILANO = {
-  slug: 'milano_roast',
-  palette: {
-    bg: '#FAF7F2', bgWarm: '#F2EBDD', bgCard: '#FFFFFF',
-    ink: '#15110D', inkSoft: 'rgba(21,17,13,.62)', inkFaint: 'rgba(21,17,13,.4)',
-    ember: '#3B2A1F', amber: '#B89556',
-    line: 'rgba(21,17,13,.18)',
-  },
-  fonts: {
-    display: '"Futura", "GT America", "Inter Tight", sans-serif',
-    body: '"Hind Siliguri", system-ui, sans-serif',
-    mono: '"JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace',
-  },
-  hero: { mode: 'video-vignette-light', brandCase: 'upper-tracked', ctaShape: 'outline', ctaTextColor: '#15110D', decor: 'brass-rule' },
-  menu: { layout: 'leader-dots', categoryStyle: 'caps-rule' },
-  divider: 'leader-dots',
-}
+import sultansHearthOverrides from './sultans_hearth/index.jsx'
+import { brickOverrides, lanternOverrides, marbleOverrides } from './modern_templates/index.jsx'
 
 const SULTANS = {
   slug: 'sultans_hearth',
@@ -102,79 +23,73 @@ const SULTANS = {
   divider: 'arabesque-star',
 }
 
-const CHARCOAL = {
-  slug: 'charcoal_lodge',
+const BRICK = {
+  slug: 'brick',
   palette: {
-    bg: '#E8E2D4', bgWarm: '#D6CFBE', bgCard: '#1C1C1E',
-    ink: '#1C1C1E', inkSoft: 'rgba(28,28,30,.65)', inkFaint: 'rgba(28,28,30,.4)',
-    ember: '#8B2828', amber: '#A0814D',
-    line: 'rgba(28,28,30,.22)',
+    bg: '#F4EBDC', bgWarm: '#EDE0C9', bgCard: '#FFFFFF',
+    ink: '#2A2420', inkSoft: '#6B5E4F', inkFaint: 'rgba(107,94,79,.55)',
+    ember: '#E89A4A', amber: '#E8B547',
+    line: '#D9CCB5',
   },
   fonts: {
-    display: '"Playfair Display", "Ogg", Georgia, serif',
-    body: '"Hind Siliguri", system-ui, sans-serif',
-    mono: '"Space Mono", "Major Mono Display", ui-monospace, monospace',
+    display: '"Anton", sans-serif',
+    body: '"Inter", "Hind Siliguri", system-ui, sans-serif',
+    accent: '"Bebas Neue", sans-serif',
   },
-  hero: { mode: 'stamped-leather', brandCase: 'upper-stamped', ctaShape: 'hard-rect', ctaTextColor: '#E8E2D4', decor: 'sear-cross' },
-  menu: { layout: 'butcher-slate', categoryStyle: 'caps-brass', accent: '#A0814D' },
-  divider: 'brass-hairline',
+  hero: { mode: 'golden-cafe', brandCase: 'upper-tight', ctaShape: 'pill', ctaTextColor: '#2A2420', decor: 'dashed-brick' },
+  menu: { layout: 'bright-cafe-list', categoryStyle: 'pill-row', accent: '#E89A4A' },
+  divider: 'dashed-ember',
 }
 
-const BENGAL = {
-  slug: 'bengal_bistro',
+const LANTERN = {
+  slug: 'lantern',
   palette: {
-    bg: '#F5F2EB', bgWarm: '#EDE8DC', bgCard: '#FFFFFF',
-    ink: '#2C3E66', inkSoft: 'rgba(44,62,102,.65)', inkFaint: 'rgba(44,62,102,.42)',
-    ember: '#D9A431', amber: '#7BA88C',
-    line: 'rgba(44,62,102,.18)',
+    bg: '#14181A', bgWarm: '#1F2628', bgCard: '#1F2628',
+    ink: '#EDE8DD', inkSoft: '#8A9095', inkFaint: 'rgba(138,144,149,.52)',
+    ember: '#E8744A', amber: '#5FB8C4',
+    line: '#2A3235',
   },
   fonts: {
-    display: '"Fraunces", "Tiempos Text", "Lora", serif',
-    body: '"Hind Siliguri", system-ui, sans-serif',
-    accent: '"Hind Siliguri", system-ui, sans-serif',
+    display: '"Bodoni Moda", serif',
+    body: '"Inter", "Hind Siliguri", system-ui, sans-serif',
+    accent: '"Bodoni Moda", serif',
   },
-  hero: { mode: 'magazine-overhead', brandCase: 'mixed-stacked-bn', ctaShape: 'pill-mustard', ctaTextColor: '#2C3E66', decor: 'mustard-dot' },
-  menu: { layout: 'magazine-bilingual', categoryStyle: 'pill-indigo', accent: '#D9A431' },
-  divider: 'mustard-dot',
+  hero: { mode: 'neon-bistro', brandCase: 'mixed', ctaShape: 'soft-rect', ctaTextColor: '#14181A', decor: 'teal-rule' },
+  menu: { layout: 'editorial-list', categoryStyle: 'underline-tabs', accent: '#5FB8C4' },
+  divider: 'teal-dot-rule',
 }
 
-const MUGHAL = {
-  slug: 'grand_mughal',
+const MARBLE = {
+  slug: 'marble',
   palette: {
-    bg: '#3A1F3D', bgWarm: '#321A35', bgCard: '#451F47',
-    ink: '#F4EEDF', inkSoft: 'rgba(244,238,223,.7)', inkFaint: 'rgba(244,238,223,.42)',
-    ember: '#E8A33D', amber: '#B8923A',
-    line: 'rgba(184,146,58,.36)',
+    bg: '#FBF8F2', bgWarm: '#F2EDE3', bgCard: '#FFFFFF',
+    ink: '#3B2A1F', inkSoft: '#6B5E50', inkFaint: 'rgba(107,94,80,.52)',
+    ember: '#3B2A1F', amber: '#B89556',
+    line: '#E8E0D2',
   },
   fonts: {
-    display: '"Cormorant SC", "Trajan Pro", "Cinzel", serif',
-    body: '"Hind Siliguri", system-ui, sans-serif',
-    accent: '"Cormorant Garamond", serif',
+    display: '"Fraunces", serif',
+    body: '"Inter", "Hind Siliguri", system-ui, sans-serif',
+    accent: '"Fraunces", serif',
   },
-  hero: { mode: 'gold-frame-saffron', brandCase: 'serif-upper', ctaShape: 'gold-bordered', ctaTextColor: '#3A1F3D', decor: 'gold-flourish' },
-  menu: { layout: 'manuscript-frame', categoryStyle: 'serif-flourish', accent: '#E8A33D' },
-  divider: 'gold-rule',
+  hero: { mode: 'high-key-bakery', brandCase: 'mixed', ctaShape: 'restrained-rect', ctaTextColor: '#FBF8F2', decor: 'brass-dot' },
+  menu: { layout: 'airy-bakery-list', categoryStyle: 'text-tabs', accent: '#B89556' },
+  divider: 'brass-dot',
 }
 
 export const THEMES = {
-  napoli_trattoria: NAPOLI,
-  tuscan_herb: TUSCAN,
-  amalfi_breeze: AMALFI,
-  milano_roast: MILANO,
   sultans_hearth: SULTANS,
-  charcoal_lodge: CHARCOAL,
-  bengal_bistro: BENGAL,
-  grand_mughal: MUGHAL,
+  brick: BRICK,
+  lantern: LANTERN,
+  marble: MARBLE,
 }
 
-export const DEFAULT_THEME_SLUG = 'napoli_trattoria'
+export const DEFAULT_THEME_SLUG = 'sultans_hearth'
 
 export function resolveTheme(slug) {
   return THEMES[slug] || THEMES[DEFAULT_THEME_SLUG]
 }
 
-// Flattened legacy view: keeps `T.bg`, `T.ember`, `T.display`, etc. working
-// in all existing component code without per-call refactors.
 function flattenTokens(theme) {
   return {
     ...theme.palette,
@@ -189,25 +104,33 @@ function flattenTokens(theme) {
   }
 }
 
-const ThemeContext = createContext(flattenTokens(NAPOLI))
+const ThemeContext = createContext(flattenTokens(SULTANS))
 
 export function ThemeProvider({ slug, children }) {
   const value = useMemo(() => flattenTokens(resolveTheme(slug)), [slug])
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
-// Hook that returns the flattened tokens. Existing components renaming
-// `const T = ...` → `const T = useTokens()` works without other edits.
 export function useTokens() {
   return useContext(ThemeContext)
 }
 
-// Where the user drops their per-theme placeholder media. Files don't have
-// to exist — Hero falls back to a generated pattern when absent.
+export const THEME_OVERRIDES = {
+  sultans_hearth: sultansHearthOverrides,
+  brick: brickOverrides,
+  lantern: lanternOverrides,
+  marble: marbleOverrides,
+}
+
+export function resolveOverrides(slug) {
+  return THEME_OVERRIDES[slug] || null
+}
+
 export function themeAssetPaths(slug) {
   const safe = THEMES[slug] ? slug : DEFAULT_THEME_SLUG
+  const basename = safe === 'sultans_hearth' ? 'hearth' : safe
   return {
-    placeholderVideo: `/themes/${safe}/hero-placeholder.mp4`,
-    placeholderImage: `/themes/${safe}/hero-placeholder.jpg`,
+    placeholderVideo: `/uploads/template_placeholders/${basename}.mp4`,
+    placeholderImage: `/uploads/template_placeholders/${basename}.png`,
   }
 }

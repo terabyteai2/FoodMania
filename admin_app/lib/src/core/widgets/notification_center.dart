@@ -928,14 +928,12 @@ void showTopNotificationToast(
               title: title,
               body: body,
               acceptLabel: text.acceptAction,
-              laterLabel: text.laterAction,
               onAccept: onOpen == null
                   ? null
                   : () {
                       close();
                       onOpen();
                     },
-              onLater: close,
             ),
           ),
         ),
@@ -951,17 +949,13 @@ class _TopToastCard extends StatelessWidget {
     required this.title,
     required this.body,
     required this.acceptLabel,
-    required this.laterLabel,
     required this.onAccept,
-    required this.onLater,
   });
 
   final String title;
   final String body;
   final String acceptLabel;
-  final String laterLabel;
   final VoidCallback? onAccept;
-  final VoidCallback onLater;
 
   @override
   Widget build(BuildContext context) {
@@ -1023,20 +1017,8 @@ class _TopToastCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (onAccept != null)
-                _ToastButton(
-                  label: acceptLabel,
-                  onTap: onAccept!,
-                  filled: true,
-                ),
-              const SizedBox(height: 4),
-              _ToastButton(label: laterLabel, onTap: onLater, filled: false),
-            ],
-          ),
+          if (onAccept != null)
+            _ToastButton(label: acceptLabel, onTap: onAccept!, filled: true),
         ],
       ),
     );

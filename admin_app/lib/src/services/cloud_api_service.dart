@@ -647,6 +647,7 @@ class CloudApiService {
   Future<TenantBootstrapResult> bootstrapTenant({
     required String serverId,
     required String restaurantName,
+    String? managerName,
     required String outletName,
     required int tableCount,
     String? restaurantId,
@@ -662,6 +663,8 @@ class CloudApiService {
       body: {
         'serverId': serverId,
         'restaurantName': restaurantName,
+        if (managerName?.trim().isNotEmpty == true)
+          'managerName': managerName!.trim(),
         'outletName': outletName,
         'tableCount': tableCount.clamp(1, 200),
         if (restaurantId?.trim().isNotEmpty == true)
@@ -733,6 +736,7 @@ class CloudApiService {
   Future<AdminLoginResult> completeManagerPhoneSignup({
     required String signupToken,
     required String restaurantName,
+    String? managerName,
     required int tableCount,
     String? outletName,
     String? serverId,
@@ -748,6 +752,8 @@ class CloudApiService {
       body: {
         'signupToken': signupToken,
         'restaurantName': restaurantName.trim(),
+        if (managerName?.trim().isNotEmpty == true)
+          'managerName': managerName!.trim(),
         'tableCount': tableCount.clamp(1, 200),
         if (outletName?.trim().isNotEmpty == true)
           'outletName': outletName!.trim(),
@@ -917,6 +923,15 @@ class CloudApiService {
     }
     final response = await _sendJson('GET', uri);
     return FacebookChatbotConfig.fromJson(response);
+  }
+
+  Future<FacebookChatbotOAuthStart> startFacebookChatbotOAuth() async {
+    final uri = _uri('/admin/chatbot/facebook/oauth/start');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson('POST', uri);
+    return FacebookChatbotOAuthStart.fromJson(response);
   }
 
   Future<FacebookChatbotConfig> updateFacebookChatbotConfig({
@@ -1435,6 +1450,7 @@ class CloudApiService {
       'totalAmount': order.total,
       'items': order.items.map((item) => item.toJson()).toList(growable: false),
       'notes': order.note,
+      'tableNo': order.tableNo,
       'customerName': order.customerName,
       'deliveryAddress': order.deliveryAddress,
       'mobileNumber': order.mobileNumber,
@@ -1480,6 +1496,28 @@ class CloudApiService {
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
       },
       idempotencyKey: 'order-status-$orderId-${status.value}',
+    );
+  }
+
+  Future<Map<String, Object?>> pushOrderDetails(OrderModel order) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/orders/${order.id}');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    return _sendJson(
+      'PATCH',
+      uri,
+      body: {
+        'serviceType': order.serviceType?.value,
+        'tableNo': order.tableNo,
+        'notes': order.note,
+        'customerName': order.customerName,
+        'deliveryAddress': order.deliveryAddress,
+        'mobileNumber': order.mobileNumber,
+        'updatedAt': order.updatedAt.toUtc().toIso8601String(),
+      },
+      idempotencyKey: 'order-details-${order.id}-${order.version}',
     );
   }
 
