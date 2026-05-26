@@ -66,8 +66,9 @@ class SystemNotificationService {
       await _plugin.initialize(settings);
       _systemDefaultSoundUri = await _fetchSystemDefaultSoundUri();
       _ready = true;
+      debugPrint('[QB-NOTIF] local notification service initialized');
     } catch (error, stack) {
-      debugPrint('SystemNotificationService init failed: $error\n$stack');
+      debugPrint('[QB-NOTIF] local notification init failed: $error\n$stack');
     }
   }
 
@@ -80,9 +81,13 @@ class SystemNotificationService {
     var granted = true;
     if (Platform.isAndroid) {
       final status = await Permission.notification.status;
+      debugPrint('[QB-NOTIF] android notification permission=${status.name}');
       if (!status.isGranted) {
         final result = await Permission.notification.request();
         granted = result.isGranted;
+        debugPrint(
+          '[QB-NOTIF] android notification permission request=${result.name}',
+        );
       }
       await _ensureAndroidPermission();
       if (granted) {
@@ -92,6 +97,7 @@ class SystemNotificationService {
     if (granted) {
       await _ensureChannels();
     }
+    debugPrint('[QB-NOTIF] local notification access granted=$granted');
     return granted;
   }
 
@@ -259,8 +265,12 @@ class SystemNotificationService {
     );
     try {
       await _plugin.show(id, title, body, details, payload: payload);
+      debugPrint(
+        '[QB-NOTIF] local notification shown id=$id type=${type.name} '
+        'title=$title payload=${payload ?? ''}',
+      );
     } catch (error, stack) {
-      debugPrint('SystemNotificationService show failed: $error\n$stack');
+      debugPrint('[QB-NOTIF] local notification show failed: $error\n$stack');
     }
   }
 
@@ -312,6 +322,7 @@ class SystemNotificationService {
     if (!_ready) return;
     try {
       await _plugin.cancelAll();
+      debugPrint('[QB-NOTIF] local notifications cancelled');
     } catch (_) {}
   }
 

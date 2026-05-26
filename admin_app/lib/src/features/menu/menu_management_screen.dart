@@ -98,6 +98,12 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         paused,
                       ),
                       trailing: [
+                        if (app.isManager)
+                          TfIconButton(
+                            icon: TfNavIcon.settings,
+                            tooltip: text.isBn ? 'মেনু সেটিংস' : 'Menu settings',
+                            onPressed: () => _openMenuSettings(context),
+                          ),
                         HeaderLanguageButton(),
                         HeaderNotificationBell(
                           onNavigateToOrders:
@@ -251,6 +257,51 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   Future<void> _applyBulkDiscount(BuildContext context) async {
     final app = AppScope.of(context);
+    final selected = app.menuItems
+        .where((item) => _selectedItemIds.contains(item.id))
+        .toList(growable: false);
+    await _applyDiscountToItems(context, selected, clearSelection: true);
+  }
+
+  Future<void> _openMenuSettings(BuildContext context) async {
+    final app = AppScope.of(context);
+    final action = await showModalBottomSheet<_MenuSettingsAction>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MenuSettingsSheet(
+        allCount: app.menuItems.length,
+        selectedCount: _selectedItemIds.length,
+      ),
+    );
+    if (action == null || !context.mounted) return;
+    final selected = app.menuItems
+        .where((item) => _selectedItemIds.contains(item.id))
+        .toList(growable: false);
+    final targetItems = action.target == _MenuSettingsTarget.selected
+        ? selected
+        : app.menuItems;
+    if (targetItems.isEmpty) return;
+    if (action.clearOnly) {
+      await _applyDiscountResultToItems(
+        context,
+        targetItems,
+        const _BulkDiscountResult(mode: _DiscountMode.none, value: null),
+        clearSelection: action.target == _MenuSettingsTarget.selected,
+      );
+    } else {
+      await _applyDiscountToItems(
+        context,
+        targetItems,
+        clearSelection: action.target == _MenuSettingsTarget.selected,
+      );
+    }
+  }
+
+  Future<void> _applyDiscountToItems(
+    BuildContext context,
+    List<MenuItem> items, {
+    required bool clearSelection,
+  }) async {
     final result = await showModalBottomSheet<_BulkDiscountResult>(
       context: context,
       isScrollControlled: true,
@@ -258,10 +309,23 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       builder: (_) => const _BulkDiscountSheet(),
     );
     if (result == null) return;
-    final selected = app.menuItems
-        .where((item) => _selectedItemIds.contains(item.id))
-        .toList(growable: false);
-    for (final item in selected) {
+    if (!context.mounted) return;
+    await _applyDiscountResultToItems(
+      context,
+      items,
+      result,
+      clearSelection: clearSelection,
+    );
+  }
+
+  Future<void> _applyDiscountResultToItems(
+    BuildContext context,
+    List<MenuItem> items,
+    _BulkDiscountResult result, {
+    required bool clearSelection,
+  }) async {
+    final app = AppScope.of(context);
+    for (final item in items) {
       final extras = item.extras.copyWith(
         discountPercent: result.mode == _DiscountMode.percent
             ? result.value
@@ -290,7 +354,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       );
     }
     await app.syncNow();
-    if (mounted) setState(_selectedItemIds.clear);
+    if (mounted && clearSelection) setState(_selectedItemIds.clear);
   }
 
   Future<List<PickedMenuScanPage>> _pickMenuScanPages(
@@ -668,6 +732,120 @@ class _CategoryStrip extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+enum _MenuSettingsTarget { selected, all }
+
+class _MenuSettingsAction {
+  const _MenuSettingsAction({required this.target, required this.clearOnly});
+
+  final _MenuSettingsTarget target;
+  final bool clearOnly;
+}
+
+class _MenuSettingsSheet extends StatelessWidget {
+  const _MenuSettingsSheet({
+    required this.allCount,
+    required this.selectedCount,
+  });
+
+  final int allCount;
+  final int selectedCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final hasSelected = selectedCount > 0;
+    void close(_MenuSettingsTarget target, bool clearOnly) {
+      Navigator.of(context).pop(
+        _MenuSettingsAction(target: target, clearOnly: clearOnly),
+      );
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: PosColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TfText(
+                text.isBn ? 'মেনু সেটিংস' : 'Menu settings',
+                style: TextStyle(
+                  fontFamily: tfFontFamily(context),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.slate,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TfText(
+                text.isBn
+                    ? 'ডিসকাউন্ট নির্বাচিত আইটেম বা সব আইটেমে প্রয়োগ করুন।'
+                    : 'Apply or clear discounts for selected items or the full menu.',
+                style: TextStyle(
+                  color: PosColors.muted,
+                  fontSize: 12.5,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  TfButton(
+                    label: text.isBn
+                        ? 'নির্বাচিত আইটেমে ডিসকাউন্ট'
+                        : 'Discount selected',
+                    icon: Icons.local_offer_outlined,
+                    onPressed: hasSelected
+                        ? () => close(_MenuSettingsTarget.selected, false)
+                        : null,
+                    fullWidth: false,
+                  ),
+                  TfButton(
+                    label: text.isBn ? 'সব আইটেমে ডিসকাউন্ট' : 'Discount all',
+                    icon: Icons.sell_outlined,
+                    onPressed: allCount > 0
+                        ? () => close(_MenuSettingsTarget.all, false)
+                        : null,
+                    fullWidth: false,
+                  ),
+                  TfButton(
+                    label: text.isBn
+                        ? 'নির্বাচিত ডিসকাউন্ট মুছুন'
+                        : 'Clear selected',
+                    icon: Icons.clear_all_rounded,
+                    onPressed: hasSelected
+                        ? () => close(_MenuSettingsTarget.selected, true)
+                        : null,
+                    variant: TfButtonVariant.paper,
+                    fullWidth: false,
+                  ),
+                  TfButton(
+                    label: text.isBn ? 'সব ডিসকাউন্ট মুছুন' : 'Clear all',
+                    icon: Icons.layers_clear_rounded,
+                    onPressed: allCount > 0
+                        ? () => close(_MenuSettingsTarget.all, true)
+                        : null,
+                    variant: TfButtonVariant.paper,
+                    fullWidth: false,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

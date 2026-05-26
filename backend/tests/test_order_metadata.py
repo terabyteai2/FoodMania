@@ -189,6 +189,16 @@ async def test_customer_delivery_order_persists_contact_info():
                 "tableNo": "3",
             },
         )
+        table_order = await client.post(
+            f"/customer/{outlet_id}/orders",
+            json={
+                "items": [
+                    {"menuItemId": menu_item_id, "name": "Burger", "qty": 1, "price": 300}
+                ],
+                "orderType": "dine_in",
+                "tableNo": "7",
+            },
+        )
 
     assert ok.status_code == 200
     body = ok.json()["data"]
@@ -213,3 +223,11 @@ async def test_customer_delivery_order_persists_contact_info():
 
     assert stale_dine_in.status_code == 422
     assert "Delivery requires" in stale_dine_in.json()["detail"]
+
+    assert table_order.status_code == 200
+    table_body = table_order.json()["data"]
+    assert table_body["serviceType"] == "dine_in"
+    assert table_body["tableNo"] == "7"
+    assert table_body["customerName"] is None
+    assert table_body["deliveryAddress"] is None
+    assert table_body["mobileNumber"] is None

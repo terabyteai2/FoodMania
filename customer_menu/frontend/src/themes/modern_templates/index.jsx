@@ -115,8 +115,6 @@ function makeOverrides(C) {
     const videoUrl = info?.videoUrl || assets.placeholderVideo
     const name = info?.restaurantNameEn || info?.restaurantName || 'Restaurant'
     const nameBn = info?.restaurantNameBn
-    const outlet = info?.outletNameBn && lang === 'bn' ? info.outletNameBn : info?.outletName
-    const initial = (name[0] || 'R').toUpperCase()
 
     useEffect(() => {
       if (!videoUrl || prefersReducedMotion() || isDataSaver() || !heroRef.current) return
@@ -159,19 +157,13 @@ function makeOverrides(C) {
           position: 'absolute', inset: 0, zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center',
           padding: 'calc(env(safe-area-inset-top) + 72px) 24px calc(env(safe-area-inset-bottom) + 26px)', textAlign: 'center',
         }}>
-          <div style={{ height: 'min(8vh, 60px)' }} />
-          <div style={{
-            width: 72, height: 72, borderRadius: 36, display: 'grid', placeItems: 'center',
-            background: C.medallionBg, color: C.medallionText, border: C.medallionBorder,
-            boxShadow: C.medallionShadow, fontFamily: C.brand, fontSize: 36, fontWeight: 700, lineHeight: 1,
-          }}>{initial}</div>
+          <div style={{ height: 'min(10vh, 76px)' }} />
           <h1 style={{
-            margin: '18px 0 0', maxWidth: 520, fontFamily: langFont(lang, C.brand), fontSize: C.brandSize,
+            margin: 0, maxWidth: 520, fontFamily: langFont(lang, C.brand), fontSize: C.brandSize,
             fontWeight: C.brandWeight, color: C.heroTitle, letterSpacing: C.brandSpacing,
             textTransform: C.brandTransform, lineHeight: 1.02, textShadow: C.titleShadow,
           }}>{name}</h1>
           {nameBn && <div style={{ marginTop: 8, fontFamily: '"Hind Siliguri", system-ui, sans-serif', fontSize: 'clamp(18px, 5vw, 24px)', color: C.heroTitle }}>{nameBn}</div>}
-          {outlet && <div style={{ marginTop: 12, fontFamily: langFont(lang, C.body), fontStyle: C.taglineItalic && lang !== 'bn' ? 'italic' : 'normal', fontSize: 13, color: C.heroSub }}>{outlet}</div>}
           <div style={{ flex: 1 }} />
           <button type="button" onClick={onSeeMenu} style={{
             width: '100%', maxWidth: 460, height: C.ctaHeight, borderRadius: C.ctaRadius,
@@ -263,8 +255,10 @@ function makeOverrides(C) {
 
   function ItemCard({ item, qty, onAdd, onRemove, onOpenDetail }) {
     const lang = useLang()
-    const nameEn = pick(item, 'name', 'en') || item.name
-    const nameBn = item.nameBn || ''
+    const primaryName = pick(item, 'name', lang) || item.nameEn || item.name || item.nameBn
+    const secondaryName = lang === 'bn'
+      ? (item.nameEn || item.name || '')
+      : (item.nameBn || '')
     const description = pick(item, 'description', lang)
     const badge = tagFor(item, C.badges)
     const spice = C.showSpice ? spiceLevelFor(item) : 0
@@ -290,18 +284,18 @@ function makeOverrides(C) {
                 margin: 0, fontFamily: langFont(lang, C.itemNameFont), fontSize: C.itemNameSize, fontWeight: C.itemNameWeight,
                 color: C.itemNameColor, lineHeight: 1.18, overflow: 'hidden', textOverflow: 'ellipsis',
                 textTransform: lang === 'bn' ? 'none' : C.itemNameTransform,
-              }}>{nameEn}</h3>
+              }}>{primaryName}</h3>
               {badge && <span style={{ padding: C.badgePadding, borderRadius: 999, background: C.badgeBg, color: C.badgeText, fontFamily: langFont(lang, C.badgeFont), fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{badge}</span>}
               <SpiceDots level={spice} />
             </div>
-            {nameBn && <div style={{ marginTop: 2, fontFamily: '"Hind Siliguri", system-ui, sans-serif', fontSize: C.bnSize, color: C.muted, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameBn}</div>}
+            {secondaryName && secondaryName !== primaryName && <div style={{ marginTop: 2, fontFamily: '"Hind Siliguri", system-ui, sans-serif', fontSize: C.bnSize, color: C.muted, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{secondaryName}</div>}
             {description && <p style={{ margin: '6px 0 0', fontFamily: langFont(lang, C.body), fontSize: 13, lineHeight: 1.38, color: C.muted, display: '-webkit-box', WebkitLineClamp: C.descLines, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{description}</p>}
           </div>
           <div style={{ marginTop: 9, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <div style={{ fontFamily: C.priceFont, fontSize: C.priceSize, fontWeight: 800, color: C.priceColor, whiteSpace: 'nowrap' }}>{taka(item.price)}</div>
             <div onClick={e => e.stopPropagation()}>
               {qty === 0 ? (
-                <button type="button" onClick={onAdd} aria-label={`${t('add', lang)} ${nameEn}`} style={{
+                <button type="button" onClick={onAdd} aria-label={`${t('add', lang)} ${primaryName}`} style={{
                   width: C.addSize, height: C.addSize, borderRadius: C.addRadius, border: 'none', background: C.addBg, color: C.addText,
                   fontSize: 22, lineHeight: 1, fontWeight: 800, display: 'grid', placeItems: 'center', cursor: 'pointer',
                 }}>+</button>
@@ -527,6 +521,11 @@ function makeOverrides(C) {
     const lang = useLang()
     const media = buildMedia(item)
     const current = media[0]
+    const primaryName = pick(item, 'name', lang) || item.nameEn || item.name || item.nameBn
+    const secondaryName = lang === 'bn'
+      ? (item.nameEn || item.name || '')
+      : (item.nameBn || '')
+    const description = pick(item, 'description', lang)
     const videoRef = useRef(null)
     useEffect(() => {
       function onKey(e) { if (e.key === 'Escape') onClose() }
@@ -546,11 +545,11 @@ function makeOverrides(C) {
           </div>
           <div style={{ padding: '20px 22px 24px', overflowY: 'auto', flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-              <h2 style={{ margin: 0, fontFamily: langFont(lang, C.heading), fontSize: 27, fontStyle: C.categoryItalic && lang !== 'bn' ? 'italic' : 'normal', color: C.ink, lineHeight: 1.15 }}>{pick(item, 'name', 'en') || item.name}</h2>
+              <h2 style={{ margin: 0, fontFamily: langFont(lang, C.heading), fontSize: 27, fontStyle: C.categoryItalic && lang !== 'bn' ? 'italic' : 'normal', color: C.ink, lineHeight: 1.15 }}>{primaryName}</h2>
               <div style={{ fontFamily: C.priceFont, color: C.priceColor, fontWeight: 800, fontSize: 22 }}>{taka(item.price)}</div>
             </div>
-            {item.nameBn && <div style={{ marginTop: 5, color: C.muted, fontFamily: '"Hind Siliguri", system-ui, sans-serif', fontSize: 16 }}>{item.nameBn}</div>}
-            {pick(item, 'description', lang) && <p style={{ margin: '18px 0 0', color: C.muted, fontFamily: langFont(lang, C.body), fontSize: 15, lineHeight: 1.55 }}>{pick(item, 'description', lang)}</p>}
+            {secondaryName && secondaryName !== primaryName && <div style={{ marginTop: 5, color: C.muted, fontFamily: '"Hind Siliguri", system-ui, sans-serif', fontSize: 16 }}>{secondaryName}</div>}
+            {description && <p style={{ margin: '18px 0 0', color: C.muted, fontFamily: langFont(lang, C.body), fontSize: 15, lineHeight: 1.55 }}>{description}</p>}
           </div>
           <footer style={{ display: 'flex', gap: 12, padding: '12px 16px calc(env(safe-area-inset-bottom) + 16px)', borderTop: `1px solid ${C.line}`, background: C.footerBg }}>
             {qty > 0 && <div style={{ display: 'inline-flex', alignItems: 'center', height: 56, borderRadius: C.ctaRadius, border: `1px solid ${C.line}`, background: C.surface }}>

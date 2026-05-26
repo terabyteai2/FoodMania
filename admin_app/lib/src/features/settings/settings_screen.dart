@@ -2901,6 +2901,12 @@ class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
   void _rebuild() => setState(() {});
 
   String get _menuUrl {
+    final app = AppScope.of(context);
+    final slug = app.serverConfig.publicSlug.trim().toLowerCase();
+    if (slug.isNotEmpty &&
+        RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$').hasMatch(slug)) {
+      return 'https://$slug.quickbytes.buzz';
+    }
     final base = widget.urlController.text.trim().replaceAll(
       RegExp(r'/+$'),
       '',

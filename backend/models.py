@@ -84,6 +84,9 @@ class Device(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
     server_id: Mapped[str] = mapped_column(String, nullable=False)
+    fcm_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    push_platform: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     outlet: Mapped[Outlet] = relationship(back_populates="devices")

@@ -39,8 +39,10 @@ export default function HearthItemSheet({ item, qty, onAdd, onRemove, onClose })
 
   if (!item) return null
 
-  const nameEn = pick(item, 'name', 'en') || item.name
-  const nameBn = item.nameBn || ''
+  const primaryName = pick(item, 'name', lang) || item.nameEn || item.name || item.nameBn
+  const secondaryName = lang === 'bn'
+    ? (item.nameEn || item.name || '')
+    : (item.nameBn || '')
   const description = pick(item, 'description', lang)
   const spice = spiceLevelFor(item)
 
@@ -56,7 +58,7 @@ export default function HearthItemSheet({ item, qty, onAdd, onRemove, onClose })
       }}
       role="dialog"
       aria-modal="true"
-      aria-label={nameEn}
+      aria-label={primaryName}
     >
       <div
         className="slide-up"
@@ -136,12 +138,14 @@ export default function HearthItemSheet({ item, qty, onAdd, onRemove, onClose })
           }}>
             <h2 style={{
               margin: 0,
-              fontFamily: '"Cormorant Garamond", serif',
-              fontStyle: 'italic',
-              fontWeight: 500,
+              fontFamily: lang === 'bn'
+                ? '"Hind Siliguri", system-ui, sans-serif'
+                : '"Cormorant Garamond", serif',
+              fontStyle: lang === 'bn' ? 'normal' : 'italic',
+              fontWeight: lang === 'bn' ? 600 : 500,
               fontSize: 26, lineHeight: 1.15,
               color: '#F4EEDF',
-            }}>{nameEn}</h2>
+            }}>{primaryName}</h2>
             <div style={{
               fontFamily: '"Cinzel", serif',
               fontWeight: 600,
@@ -154,14 +158,14 @@ export default function HearthItemSheet({ item, qty, onAdd, onRemove, onClose })
             </div>
           </div>
 
-          {nameBn && (
+          {secondaryName && secondaryName !== primaryName && (
             <div style={{
               marginTop: 4,
               fontFamily: '"Hind Siliguri", system-ui, sans-serif',
               fontSize: 17,
               color: '#A89580',
               fontWeight: 600,
-            }}>{nameBn}</div>
+            }}>{secondaryName}</div>
           )}
 
           {spice > 0 && (

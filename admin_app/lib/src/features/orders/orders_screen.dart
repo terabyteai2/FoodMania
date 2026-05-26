@@ -127,6 +127,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       otherLabel: text.acceptedTab,
       otherTabIndex: 1,
       searchActive: searchQuery.isNotEmpty,
+      allowOtherShortcut: false,
     );
     final acceptedShortcut = _emptyShortcut(
       context: context,
@@ -137,6 +138,7 @@ class _OrdersScreenState extends State<OrdersScreen>
       otherLabel: text.pendingTab,
       otherTabIndex: 0,
       searchActive: searchQuery.isNotEmpty,
+      allowOtherShortcut: true,
     );
     _syncTabWithPendingOrders(pendingOrders.length, acceptedOrders.length);
     final hasAnyOpenOrders =
@@ -302,6 +304,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     required String otherLabel,
     required int otherTabIndex,
     required bool searchActive,
+    required bool allowOtherShortcut,
   }) {
     if (currentFiltered.isNotEmpty) return null;
     final text = AppScope.of(context).strings;
@@ -317,7 +320,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         onTap: () => setState(() => _filters = OrderListFilters.none),
       );
     }
-    if (otherFiltered.isNotEmpty) {
+    if (allowOtherShortcut && otherFiltered.isNotEmpty) {
       return _EmptyShortcut(
         label: text.viewOtherOrdersInstead(otherLabel),
         onTap: () => _tabs.animateTo(otherTabIndex),
@@ -455,6 +458,16 @@ class _OrdersScreenState extends State<OrdersScreen>
       deliveryAddress: result.deliveryAddress,
       mobileNumber: result.mobileNumber,
     );
+    if (result.itemsChanged && result.items != null && result.items!.isNotEmpty) {
+      try {
+        await app.updateOrderItems(order.id, result.items!);
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: TfText('$error')),
+        );
+      }
+    }
   }
 }
 
@@ -813,33 +826,62 @@ class _OrderList extends StatelessWidget {
     }
 
     final itemCount = orders.length + (_showFooter ? 1 : 0);
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (!_showFooter || loadingMore) return false;
-        if (notification is ScrollUpdateNotification) {
-          final metrics = notification.metrics;
-          if (metrics.maxScrollExtent - metrics.pixels < 600) {
-            onLoadMore?.call();
-          }
-        }
-        return false;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useGrid = constraints.maxWidth >= 700;
+        final notification = NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (!_showFooter || loadingMore) return false;
+            if (notification is ScrollUpdateNotification) {
+              final metrics = notification.metrics;
+              if (metrics.maxScrollExtent - metrics.pixels < 600) {
+                onLoadMore?.call();
+              }
+            }
+            return false;
+          },
+          child: useGrid
+              ? GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 480,
+                    mainAxisExtent: 170,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: itemCount,
+                  itemBuilder: (_, i) {
+                    if (_showFooter && i == orders.length) {
+                      return _LoadMoreFooter(loading: loadingMore);
+                    }
+                    return _OrderCard(
+                      order: orders[i],
+                      onPrint: () => onPrint(orders[i]),
+                      onEdit: onEdit == null ? null : () => onEdit!(orders[i]),
+                      onStatus: (s) => onStatus(orders[i], s),
+                    );
+                  },
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                  itemCount: itemCount,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    if (_showFooter && i == orders.length) {
+                      return _LoadMoreFooter(loading: loadingMore);
+                    }
+                    return _OrderCard(
+                      order: orders[i],
+                      onPrint: () => onPrint(orders[i]),
+                      onEdit: onEdit == null ? null : () => onEdit!(orders[i]),
+                      onStatus: (s) => onStatus(orders[i], s),
+                    );
+                  },
+                ),
+        );
+        return notification;
       },
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-        itemCount: itemCount,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (_, i) {
-          if (_showFooter && i == orders.length) {
-            return _LoadMoreFooter(loading: loadingMore);
-          }
-          return _OrderCard(
-            order: orders[i],
-            onPrint: () => onPrint(orders[i]),
-            onEdit: onEdit == null ? null : () => onEdit!(orders[i]),
-            onStatus: (s) => onStatus(orders[i], s),
-          );
-        },
-      ),
     );
   }
 }
@@ -1358,6 +1400,8 @@ class _OrderEditResult {
     this.customerName,
     this.deliveryAddress,
     this.mobileNumber,
+    this.items,
+    this.itemsChanged = false,
     this.delete = false,
   });
 
@@ -1367,6 +1411,8 @@ class _OrderEditResult {
   final String? customerName;
   final String? deliveryAddress;
   final String? mobileNumber;
+  final List<OrderRequestItem>? items;
+  final bool itemsChanged;
   final bool delete;
 }
 
@@ -1387,6 +1433,15 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   late final TextEditingController _addressCtrl;
   late final TextEditingController _phoneCtrl;
 
+  // Working copy of the order's items, keyed by menuItemId.
+  final Map<String, int> _itemQty = <String, int>{};
+  // Names + unit prices for currently-tracked items, used when the menu item
+  // is no longer available (e.g. deleted) so we can still show the line.
+  final Map<String, ({String name, double price})> _itemMeta =
+      <String, ({String name, double price})>{};
+  late final Map<String, int> _originalItemQty;
+  bool _itemsDirty = false;
+
   @override
   void initState() {
     super.initState();
@@ -1397,6 +1452,11 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
     _nameCtrl = TextEditingController(text: order.customerName ?? '');
     _addressCtrl = TextEditingController(text: order.deliveryAddress ?? '');
     _phoneCtrl = TextEditingController(text: order.mobileNumber ?? '');
+    for (final item in order.items) {
+      _itemQty[item.menuItemId] = (_itemQty[item.menuItemId] ?? 0) + item.qty;
+      _itemMeta[item.menuItemId] = (name: item.name, price: item.price);
+    }
+    _originalItemQty = Map<String, int>.from(_itemQty);
   }
 
   @override
@@ -1412,6 +1472,69 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   String? _clean(TextEditingController controller) {
     final value = controller.text.trim();
     return value.isEmpty ? null : value;
+  }
+
+  bool _detectItemsDirty() {
+    if (_itemQty.length != _originalItemQty.length) return true;
+    for (final entry in _itemQty.entries) {
+      if (_originalItemQty[entry.key] != entry.value) return true;
+    }
+    return false;
+  }
+
+  void _changeQty(String menuItemId, int delta) {
+    final current = _itemQty[menuItemId] ?? 0;
+    final next = current + delta;
+    setState(() {
+      if (next <= 0) {
+        _itemQty.remove(menuItemId);
+      } else {
+        _itemQty[menuItemId] = next;
+      }
+      _itemsDirty = _detectItemsDirty();
+    });
+  }
+
+  Future<void> _addItemFlow(BuildContext context) async {
+    final app = AppScope.of(context);
+    final available = app.menuItems
+        .where((m) => m.isAvailable)
+        .toList(growable: false);
+    if (available.isEmpty) return;
+    final picked = await showModalBottomSheet<MenuItem>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MenuItemPickerSheet(menuItems: available),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _itemQty[picked.id] = (_itemQty[picked.id] ?? 0) + 1;
+      _itemMeta[picked.id] = (name: picked.name, price: picked.price);
+      _itemsDirty = _detectItemsDirty();
+    });
+  }
+
+  ({String name, double price}) _metaFor(BuildContext context, String menuItemId) {
+    final cached = _itemMeta[menuItemId];
+    if (cached != null) return cached;
+    final app = AppScope.of(context);
+    for (final menu in app.menuItems) {
+      if (menu.id == menuItemId) {
+        return (name: menu.name, price: menu.price);
+      }
+    }
+    return (name: menuItemId, price: 0);
+  }
+
+  double get _runningTotal {
+    var sum = 0.0;
+    for (final entry in _itemQty.entries) {
+      final meta = _itemMeta[entry.key];
+      if (meta == null) continue;
+      sum += meta.price * entry.value;
+    }
+    return sum;
   }
 
   @override
@@ -1490,6 +1613,109 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                   maxLines: 3,
                 ),
               ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TfText(
+                      text.isBn ? 'আইটেম' : 'Items',
+                      style: TextStyle(
+                        fontFamily: tfFontFamily(context),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.slate,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _addItemFlow(context),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: TfText(text.isBn ? 'যোগ করুন' : 'Add item'),
+                  ),
+                ],
+              ),
+              if (_itemQty.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: TfText(
+                    text.isBn
+                        ? 'কোনো আইটেম নেই — যোগ করুন'
+                        : 'No items — add at least one',
+                    style: const TextStyle(color: PosColors.muted),
+                  ),
+                ),
+              for (final entry in _itemQty.entries)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TfText(
+                              _metaFor(context, entry.key).name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: PosColors.slate,
+                              ),
+                            ),
+                            TfText(
+                              _metaFor(context, entry.key).price.toStringAsFixed(2),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: PosColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: () => _changeQty(entry.key, -1),
+                      ),
+                      SizedBox(
+                        width: 28,
+                        child: TfText(
+                          '${entry.value}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () => _changeQty(entry.key, 1),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_itemQty.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TfText(
+                        text.isBn ? 'মোট' : 'Total',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      TfText(
+                        _runningTotal.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
@@ -1510,23 +1736,160 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                     child: TfButton(
                       label: text.isBn ? 'সেভ' : 'Save',
                       icon: TfNavIcon.check,
-                      onPressed: () => Navigator.of(context).pop(
-                        _OrderEditResult(
-                          serviceType: _serviceType,
-                          tableNo: _serviceType == OrderServiceType.dineIn
-                              ? _clean(_tableCtrl)
-                              : null,
-                          note: _clean(_noteCtrl),
-                          customerName: isDelivery ? _clean(_nameCtrl) : null,
-                          deliveryAddress: isDelivery
-                              ? _clean(_addressCtrl)
-                              : null,
-                          mobileNumber: isDelivery ? _clean(_phoneCtrl) : null,
-                        ),
-                      ),
+                      onPressed: _itemQty.isEmpty
+                          ? null
+                          : () {
+                              final items = _itemQty.entries
+                                  .map(
+                                    (e) => OrderRequestItem(
+                                      menuItemId: e.key,
+                                      qty: e.value,
+                                    ),
+                                  )
+                                  .toList(growable: false);
+                              Navigator.of(context).pop(
+                                _OrderEditResult(
+                                  serviceType: _serviceType,
+                                  tableNo:
+                                      _serviceType == OrderServiceType.dineIn
+                                          ? _clean(_tableCtrl)
+                                          : null,
+                                  note: _clean(_noteCtrl),
+                                  customerName:
+                                      isDelivery ? _clean(_nameCtrl) : null,
+                                  deliveryAddress: isDelivery
+                                      ? _clean(_addressCtrl)
+                                      : null,
+                                  mobileNumber:
+                                      isDelivery ? _clean(_phoneCtrl) : null,
+                                  items: items,
+                                  itemsChanged: _itemsDirty,
+                                ),
+                              );
+                            },
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Menu item picker (used by edit-order sheet to add new lines)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MenuItemPickerSheet extends StatefulWidget {
+  const _MenuItemPickerSheet({required this.menuItems});
+
+  final List<MenuItem> menuItems;
+
+  @override
+  State<_MenuItemPickerSheet> createState() => _MenuItemPickerSheetState();
+}
+
+class _MenuItemPickerSheetState extends State<_MenuItemPickerSheet> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final query = _query.trim().toLowerCase();
+    final filtered = widget.menuItems.where((item) {
+      if (query.isEmpty) return true;
+      final searchable = [
+        item.name,
+        item.nameEn,
+        item.nameBn,
+        item.category,
+      ].whereType<String>().join(' ').toLowerCase();
+      return searchable.contains(query);
+    }).toList(growable: false);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: PosColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TfText(
+                        text.isBn ? 'আইটেম যোগ করুন' : 'Add item',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.slate,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: text.isBn ? 'খুঁজুন' : 'Search',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 18),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = filtered[index];
+                    return ListTile(
+                      title: TfText(item.name),
+                      subtitle: item.category.isEmpty
+                          ? null
+                          : TfText(
+                              item.category,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: PosColors.muted,
+                              ),
+                            ),
+                      trailing: TfText(
+                        item.price.toStringAsFixed(2),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      onTap: () => Navigator.of(context).pop(item),
+                    );
+                  },
+                ),
               ),
             ],
           ),

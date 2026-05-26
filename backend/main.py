@@ -195,6 +195,18 @@ async def serve_menu_spa(full_path: str):
     return JSONResponse(status_code=503, content={"error": "Customer menu not built yet. Run: bash build_frontend.sh"})
 
 
+@app.get("/tableorder/{full_path:path}", include_in_schema=False)
+async def serve_table_order_spa(full_path: str):
+    """Serve the customer React SPA for table QR routes."""
+    index = FRONTEND_DIST / "index.html"
+    if index.exists():
+        return FileResponse(
+            str(index),
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
+    return JSONResponse(status_code=503, content={"error": "Customer menu not built yet. Run: bash build_frontend.sh"})
+
+
 @app.get("/", include_in_schema=False)
 async def serve_root():
     """Redirect root to docs in dev; serve index.html if built."""

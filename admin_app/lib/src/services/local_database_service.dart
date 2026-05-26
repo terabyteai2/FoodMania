@@ -674,6 +674,110 @@ class LocalDatabaseService {
     return order;
   }
 
+  Future<OrderModel> updateOrderItems(
+    String id,
+    List<OrderRequestItem> requestedItems, {
+    bool createSyncEvent = true,
+  }) async {
+    if (requestedItems.isEmpty) {
+      throw DatabaseValidationException(
+        'Order must contain at least one item.',
+      );
+    }
+    final db = await _db;
+    late OrderModel order;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw DatabaseValidationException('Order was not found.');
+      }
+      final currentItems = await _getOrderItemsWithExecutor(txn, id);
+      final current = OrderModel.fromMap(rows.first, items: currentItems);
+
+      final currentItemsByMenuId = <String, OrderItem>{
+        for (final item in currentItems) item.menuItemId: item,
+      };
+
+      final newItems = <OrderItem>[];
+      var subtotal = 0.0;
+      for (final request in requestedItems) {
+        if (request.qty <= 0) {
+          throw DatabaseValidationException(
+            'Item quantity must be greater than zero.',
+          );
+        }
+        final menuRows = await txn.query(
+          'menu_items',
+          where: 'id = ? AND deletedAt IS NULL',
+          whereArgs: [request.menuItemId],
+          limit: 1,
+        );
+        if (menuRows.isEmpty) {
+          throw DatabaseValidationException(
+            'Menu item ${request.menuItemId} was not found.',
+          );
+        }
+        final menuItem = MenuItem.fromMap(menuRows.first);
+        final lineTotal = menuItem.price * request.qty;
+        subtotal += lineTotal;
+        final existing = currentItemsByMenuId[menuItem.id];
+        newItems.add(
+          OrderItem(
+            id: existing?.id ?? _uuid.v4(),
+            orderId: id,
+            menuItemId: menuItem.id,
+            name: menuItem.name,
+            nameEn: menuItem.nameEn,
+            nameBn: menuItem.nameBn,
+            qty: request.qty,
+            price: menuItem.price,
+            lineTotal: lineTotal,
+          ),
+        );
+      }
+
+      final roundedSubtotal = _roundMoney(subtotal);
+      final total = roundedSubtotal;
+
+      final updated = current.copyWith(
+        items: newItems,
+        subtotal: roundedSubtotal,
+        total: total,
+        syncStatus: createSyncEvent ? SyncStatus.pending : current.syncStatus,
+        version: current.version + 1,
+        updatedAt: DateTime.now(),
+      );
+
+      await txn.update(
+        'orders',
+        updated.toMap(),
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete('order_items', where: 'orderId = ?', whereArgs: [id]);
+      for (final item in newItems) {
+        await txn.insert('order_items', item.toMap());
+      }
+      if (createSyncEvent) {
+        await _insertSyncEvent(
+          txn,
+          entityType: 'order_items',
+          entityId: id,
+          action: 'items_update',
+          payload: updated.toJson(),
+        );
+      }
+      order = updated;
+    });
+    _emitChange();
+    return order;
+  }
+
   Future<void> queueServerConfigSync({
     required String serverId,
     required Map<String, Object?> payload,

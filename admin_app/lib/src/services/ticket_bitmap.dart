@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:qr/qr.dart';
 
 import '../core/widgets/tf_design_system.dart';
 
@@ -80,13 +81,14 @@ class TicketBitmapRenderer {
   static int get debugPrintableWidth => _width.toInt();
 
   static Future<Uint8List> render(TicketCopyData data) async {
-    final dynamicRows = data.items.length * 76;
+    final dynamicRows = data.items.length * 58;
     final optionalRows =
         (data.customerName?.trim().isNotEmpty == true ? 32 : 0) +
         (data.deliveryAddress?.trim().isNotEmpty == true ? 64 : 0) +
         (data.mobileNumber?.trim().isNotEmpty == true ? 32 : 0) +
         (data.note?.trim().isNotEmpty == true ? 80 : 0);
-    final height = (300 + dynamicRows + optionalRows).toDouble();
+    final qrRows = data.orderDetailsUrl?.trim().isNotEmpty == true ? 168 : 0;
+    final height = (430 + dynamicRows + optionalRows + qrRows).toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
@@ -95,20 +97,28 @@ class TicketBitmapRenderer {
     );
 
     var y = 0.0;
-    y = _headerRow(canvas, data.orderTypeLabel, data.orderNumberDisplay, y);
     y = _text(
       canvas,
-      data.restaurantName,
-      y,
-      fontSize: 30,
+      data.orderNumberDisplay,
+      y + 8,
+      fontSize: 82,
       weight: FontWeight.w700,
       align: TextAlign.center,
     );
-    if (data.orderDetailsUrl?.trim().isNotEmpty == true) {
-      y = _text(canvas, 'Scan QR for full details', y, fontSize: 16);
+    y = _serviceBox(canvas, data.orderTypeLabel.toUpperCase(), y + 4);
+    y = _text(canvas, data.dateLine, y + 8, fontSize: 20, align: TextAlign.center);
+    y = _ornament(canvas, y + 8);
+    y = _text(
+      canvas,
+      data.restaurantName,
+      y + 6,
+      fontSize: 44,
+      weight: FontWeight.w700,
+      align: TextAlign.center,
+    );
+    if (data.tableLine.trim().isNotEmpty) {
+      y = _text(canvas, data.tableLine, y, fontSize: 18, align: TextAlign.center);
     }
-    y = _text(canvas, data.copyLabel, y, fontSize: 22, weight: FontWeight.w500);
-    y = _text(canvas, data.dateLine, y, fontSize: 18);
     if (data.customerName?.trim().isNotEmpty == true) {
       y = _text(
         canvas,
@@ -130,20 +140,20 @@ class TicketBitmapRenderer {
         y,
       );
     }
-    y = _rule(canvas, y + 4);
+    y = _ornament(canvas, y + 8);
 
     for (final item in data.items) {
       y = _itemRow(canvas, item, y);
     }
 
-    y = _rule(canvas, y + 4);
+    y = _rule(canvas, y + 8);
     y = _row(
       canvas,
-      '${data.totalLabel} -',
+      data.totalLabel,
       data.totalAmount,
       y,
-      fontSize: 25,
-      weight: FontWeight.w500,
+      fontSize: 27,
+      weight: FontWeight.w700,
     );
     if (data.note?.trim().isNotEmpty == true) {
       y = _text(
@@ -151,6 +161,19 @@ class TicketBitmapRenderer {
         '${data.noteLabel}: ${data.note!.trim()}',
         y + 6,
         fontSize: 21,
+      );
+    }
+    final qrUrl = data.orderDetailsUrl?.trim();
+    if (qrUrl != null && qrUrl.isNotEmpty) {
+      y = _ornament(canvas, y + 8);
+      y = _drawQrCentered(canvas, qrUrl, y + 4);
+      y = _text(
+        canvas,
+        'SCAN FOR LIVE ORDER DETAILS',
+        y + 6,
+        fontSize: 17,
+        weight: FontWeight.w700,
+        align: TextAlign.center,
       );
     }
 
@@ -163,6 +186,81 @@ class TicketBitmapRenderer {
     return png.buffer.asUint8List();
   }
 
+  static double _serviceBox(Canvas canvas, String value, double y) {
+    final painter = _painter(
+      value,
+      fontSize: 20,
+      weight: FontWeight.w700,
+      align: TextAlign.center,
+      maxLines: 1,
+    )..layout(maxWidth: _width - (_padding * 2) - 40);
+    final width = painter.width + 34;
+    final height = painter.height + 14;
+    final rect = Rect.fromLTWH((_width - width) / 2, y, width, height);
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(4)),
+      paint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(4)),
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    painter.paint(canvas, Offset((_width - painter.width) / 2, y + 7));
+    return y + height + 6;
+  }
+
+  static double _ornament(Canvas canvas, double y) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 1.4;
+    final center = _width / 2;
+    canvas.drawLine(Offset(_padding, y + 8), Offset(center - 28, y + 8), paint);
+    canvas.drawLine(Offset(center + 28, y + 8), Offset(_width - _padding, y + 8), paint);
+    final star = _painter('✦', fontSize: 18, weight: FontWeight.w500)
+      ..layout(maxWidth: 24);
+    star.paint(canvas, Offset(center - (star.width / 2), y));
+    return y + 24;
+  }
+
+  static double _drawQrCentered(Canvas canvas, String data, double y) {
+    try {
+      final qrCode = QrCode.fromData(
+        data: data,
+        errorCorrectLevel: QrErrorCorrectLevel.L,
+      );
+      final qrImage = QrImage(qrCode);
+      const targetPx = 116;
+      final modules = qrImage.moduleCount;
+      final modulePx = (targetPx / modules).floor().clamp(1, 6);
+      final qrSizePx = modules * modulePx;
+      final left = (_width - qrSizePx) / 2;
+      final paint = Paint()..color = Colors.black;
+      for (var row = 0; row < modules; row++) {
+        for (var col = 0; col < modules; col++) {
+          if (!qrImage.isDark(row, col)) continue;
+          canvas.drawRect(
+            Rect.fromLTWH(
+              left + col * modulePx.toDouble(),
+              y + row * modulePx.toDouble(),
+              modulePx.toDouble(),
+              modulePx.toDouble(),
+            ),
+            paint,
+          );
+        }
+      }
+      return y + qrSizePx + 4;
+    } catch (_) {
+      return y;
+    }
+  }
+
   static double _rule(Canvas canvas, double y) {
     canvas.drawLine(
       Offset(_padding, y),
@@ -172,34 +270,6 @@ class TicketBitmapRenderer {
         ..strokeWidth = 1.5,
     );
     return y + 14;
-  }
-
-  static double _headerRow(
-    Canvas canvas,
-    String orderType,
-    String orderNumber,
-    double y,
-  ) {
-    final columnWidth = (_width - (_padding * 2)) / 3;
-    final left = _painter(orderType, fontSize: 18, weight: FontWeight.w600)
-      ..layout(maxWidth: columnWidth);
-    final center = _painter(
-      orderNumber,
-      fontSize: 24,
-      weight: FontWeight.w600,
-      align: TextAlign.center,
-    )..layout(maxWidth: columnWidth);
-    final right = _painter('QR', fontSize: 18, weight: FontWeight.w600)
-      ..layout(maxWidth: columnWidth);
-    left.paint(canvas, Offset(_padding, y + 4));
-    center.paint(canvas, Offset((_width - center.width) / 2, y));
-    right.paint(canvas, Offset(_width - _padding - right.width, y + 4));
-    final h = [
-      left.height,
-      center.height,
-      right.height,
-    ].reduce((a, b) => a > b ? a : b);
-    return y + h + 6;
   }
 
   static double _text(
@@ -262,12 +332,10 @@ class TicketBitmapRenderer {
 
   static double _itemRow(Canvas canvas, TicketLineItem item, double y) {
     final totalWidth = _width - (_padding * 2);
-    const amountWidth = 96.0;
+    const amountWidth = 98.0;
     const qtyWidth = 42.0;
-    const hyphenWidth = 10.0;
-    const gap = 5.0;
-    final nameWidth =
-        totalWidth - amountWidth - qtyWidth - (hyphenWidth * 2) - (gap * 4);
+    const gap = 8.0;
+    final nameWidth = totalWidth - amountWidth - qtyWidth - (gap * 2);
     final name = _painter(
       '${item.index}. ${item.name}',
       fontSize: 20,
@@ -288,16 +356,10 @@ class TicketBitmapRenderer {
       align: TextAlign.right,
       maxLines: 1,
     )..layout(maxWidth: amountWidth);
-    final dash = _painter('-', fontSize: 20, weight: FontWeight.w500)
-      ..layout(maxWidth: hyphenWidth);
 
     name.paint(canvas, Offset(_padding, y));
-    final dashOneX = _padding + nameWidth + gap;
-    dash.paint(canvas, Offset(dashOneX, y));
-    final qtyX = dashOneX + hyphenWidth + gap;
+    final qtyX = _padding + nameWidth + gap;
     qty.paint(canvas, Offset(qtyX, y));
-    final dashTwoX = qtyX + qtyWidth + gap;
-    dash.paint(canvas, Offset(dashTwoX, y));
     amount.paint(canvas, Offset(_width - _padding - amount.width, y));
     final rowHeight = [
       name.height,

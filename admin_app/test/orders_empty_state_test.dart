@@ -151,7 +151,7 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('empty pending tab links to accepted orders when available', (
+  testWidgets('empty pending tab does not link to accepted orders', (
     tester,
   ) async {
     final controller = _controller()
@@ -163,7 +163,7 @@ void main() {
     await tester.tap(find.text('Pending'));
     await tester.pumpAndSettle();
 
-    expect(find.text('View accepted orders instead'), findsOneWidget);
+    expect(find.text('View accepted orders instead'), findsNothing);
     expect(find.text('New order'), findsOneWidget);
     expect(find.byTooltip('New order'), findsOneWidget);
     expect(
@@ -172,11 +172,6 @@ void main() {
           .overlaps(tester.getRect(find.byTooltip('New order'))),
       isFalse,
     );
-
-    await tester.tap(find.text('View accepted orders instead'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('#1'), findsOneWidget);
 
     controller.dispose();
   });

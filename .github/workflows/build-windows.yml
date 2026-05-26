@@ -1,0 +1,50 @@
+name: build-windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, MVP]
+    paths:
+      - 'admin_app/**'
+      - '.github/workflows/build-windows.yml'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: admin_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: >
+          flutter build windows --release
+          --dart-define=POS_CLOUD_API_URL=https://quickbytes.buzz
+          --dart-define=POS_NGROK_DOMAIN=quickbytes.buzz
+          --dart-define=POS_REQUIRE_BKASH_GATE=false
+
+      - name: Zip release output
+        shell: pwsh
+        run: |
+          $src = 'build\windows\x64\runner\Release'
+          if (-not (Test-Path $src)) { $src = 'build\windows\runner\Release' }
+          Compress-Archive -Path "$src\*" -DestinationPath terafoods-pos-windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terafoods-pos-windows
+          path: admin_app/terafoods-pos-windows.zip
+          if-no-files-found: error

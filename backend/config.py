@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     BASE_URL: str = "http://localhost:8000"
     GOOGLE_CLIENT_IDS: str = ""
     GOOGLE_GEOCODING_API_KEY: str = ""
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
+    FIREBASE_SERVICE_ACCOUNT_FILE: str = ""
 
     NGROK_AUTHTOKEN: str = ""
     NGROK_STATIC_DOMAIN: str = ""

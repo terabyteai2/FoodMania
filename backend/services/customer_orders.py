@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Order, Outlet
 from routers.ws import manager
+from services.push_notifications import send_order_push
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,8 @@ async def create_delivery_order(
     note: str | None = None,
     source: str = "customer_web",
     created_by_role: str = "customer",
+    service_type: str = "delivery",
+    table_no: str | None = None,
     broadcast: bool = True,
 ) -> Order:
     if not lines:
@@ -109,10 +112,26 @@ async def create_delivery_order(
             detail="Order must contain at least one item",
         )
 
+    normalized_type = (service_type or "delivery").strip().lower().replace("-", "_")
+    if normalized_type in {"dinein", "table", "table_order"}:
+        normalized_type = "dine_in"
+    if normalized_type not in {"delivery", "dine_in"}:
+        normalized_type = "delivery"
+
+    clean_table = (table_no or "").strip() or None
     clean_name = (customer_name or "").strip() or None
     clean_address = (delivery_address or "").strip() or None
     clean_mobile = (mobile_number or "").strip() or None
-    if not (clean_name and clean_address and clean_mobile):
+    if normalized_type == "dine_in":
+        if not clean_table:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Table order requires tableNo",
+            )
+        clean_name = None
+        clean_address = None
+        clean_mobile = None
+    elif not (clean_name and clean_address and clean_mobile):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Delivery requires name, address, and mobile number",
@@ -129,7 +148,8 @@ async def create_delivery_order(
         subtotal=totals["subtotal"],
         vat_rate_percent=totals["vatRatePercent"],
         vat_amount=totals["vatAmount"],
-        service_type="delivery",
+        service_type=normalized_type,
+        table_no=clean_table,
         items=_line_payload(lines),
         notes=note,
         customer_name=clean_name,
@@ -155,5 +175,11 @@ async def create_delivery_order(
         await manager.broadcast(
             outlet.id,
             {"type": "order_created", "data": order_to_dict(order)},
+        )
+        await send_order_push(
+            db=db,
+            outlet_id=outlet.id,
+            event_type="order_created",
+            order=order,
         )
     return order

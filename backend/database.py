@@ -24,6 +24,7 @@ async def create_tables() -> None:
         await _ensure_auth_columns(conn)
         await _ensure_menu_columns(conn)
         await _ensure_order_columns(conn)
+        await _ensure_device_push_columns(conn)
         await _ensure_platform_columns(conn)
         await _ensure_outlet_theme_column(conn)
     await seed_platform_admin()
@@ -115,6 +116,30 @@ async def _ensure_platform_columns(conn) -> None:
     ]
     for statement in statements:
         await conn.execute(text(statement))
+
+
+async def _ensure_device_push_columns(conn) -> None:
+    """Compatibility migration for admin-app push registrations."""
+    dialect = conn.dialect.name
+    columns = [
+        ("fcm_token", "TEXT"),
+        ("push_platform", "VARCHAR"),
+        ("last_seen_at", "TIMESTAMP" if dialect == "sqlite" else "TIMESTAMPTZ"),
+    ]
+    if dialect == "sqlite":
+        for column, column_type in columns:
+            try:
+                await conn.execute(
+                    text(f"ALTER TABLE devices ADD COLUMN {column} {column_type}")
+                )
+            except Exception:
+                pass
+        return
+
+    for column, column_type in columns:
+        await conn.execute(
+            text(f"ALTER TABLE devices ADD COLUMN IF NOT EXISTS {column} {column_type}")
+        )
 
 
 async def _ensure_outlet_theme_column(conn) -> None:

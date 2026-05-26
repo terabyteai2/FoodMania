@@ -1137,23 +1137,35 @@ class CloudApiService {
     return BkashPaymentSession.fromJson(response);
   }
 
-  Future<Map<String, Object?>> registerDevice() async {
+  Future<Map<String, Object?>> registerDevice({
+    String? fcmToken,
+    String? pushPlatform,
+  }) async {
     final config = _requireServerConfig();
     final uri = _uri('/devices/register');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    final body = <String, Object?>{
+      'serverId': config.serverId,
+      'restaurantId': config.restaurantId,
+      'outletId': config.outletId,
+      'restaurantName': config.restaurantName,
+      'outletName': config.outletName,
+      'tableCount': config.tableCount.clamp(1, 200),
+    };
+    final cleanFcmToken = fcmToken?.trim() ?? '';
+    final cleanPushPlatform = pushPlatform?.trim() ?? '';
+    if (cleanFcmToken.isNotEmpty) {
+      body['fcmToken'] = cleanFcmToken;
+    }
+    if (cleanPushPlatform.isNotEmpty) {
+      body['pushPlatform'] = cleanPushPlatform;
+    }
     return _sendJson(
       'POST',
       uri,
-      body: {
-        'serverId': config.serverId,
-        'restaurantId': config.restaurantId,
-        'outletId': config.outletId,
-        'restaurantName': config.restaurantName,
-        'outletName': config.outletName,
-        'tableCount': config.tableCount.clamp(1, 200),
-      },
+      body: body,
       idempotencyKey: 'device-${config.serverId}',
     );
   }
@@ -1496,6 +1508,29 @@ class CloudApiService {
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
       },
       idempotencyKey: 'order-status-$orderId-${status.value}',
+    );
+  }
+
+  Future<Map<String, Object?>> pushOrderItems(OrderModel order) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/orders/${order.id}/items',
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    return _sendJson(
+      'PATCH',
+      uri,
+      body: {
+        'items': order.items.map((item) => item.toJson()).toList(growable: false),
+        'subtotal': order.subtotal,
+        'totalAmount': order.total,
+        'vatRatePercent': order.vatRatePercent,
+        'vatAmount': order.vatAmount,
+        'updatedAt': order.updatedAt.toUtc().toIso8601String(),
+      },
+      idempotencyKey: 'order-items-${order.id}-${order.version}',
     );
   }
 

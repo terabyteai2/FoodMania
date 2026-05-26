@@ -8,7 +8,6 @@ import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_scope.dart';
-import '../../core/constants/cloud_defaults.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
 
@@ -20,33 +19,24 @@ class QrPdfScreen extends StatefulWidget {
 }
 
 class _QrPdfScreenState extends State<QrPdfScreen> {
-  final _urlCtrl = TextEditingController();
   bool _printing = false;
   bool _saving = false;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_urlCtrl.text.isEmpty) {
-      final app = AppScope.of(context);
-      final outletId = app.serverConfig.outletId.trim();
-      _urlCtrl.text = CloudDefaults.customerMenuUrl(
-        baseUrl: app.cloudConfig.baseUrl.isNotEmpty
-            ? app.cloudConfig.baseUrl
-            : CloudDefaults.defaultPublicApiBase,
-        outletId: outletId,
-        publicSlug: app.serverConfig.publicSlug,
-      );
+  String? _slug(BuildContext context) {
+    final slug = AppScope.of(context).serverConfig.publicSlug.trim().toLowerCase();
+    if (RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$').hasMatch(slug)) {
+      return slug;
     }
+    return null;
   }
 
-  @override
-  void dispose() {
-    _urlCtrl.dispose();
-    super.dispose();
+  int _tableCount(BuildContext context) {
+    return AppScope.of(context).serverConfig.tableCount.clamp(1, 200);
   }
 
-  String get _qrUrl => _urlCtrl.text.trim().replaceAll(RegExp(r'/+$'), '');
+  String _tableUrl(String slug, int tableNo) {
+    return 'https://$slug.quickbytes.buzz/tableorder/$tableNo';
+  }
 
   Future<Uint8List> _qrBytes(String data) async {
     final painter = QrPainter(
@@ -62,156 +52,151 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
         color: ui.Color(0xFF1A1A2E),
       ),
     );
-    final image = await painter.toImage(512);
+    final image = await painter.toImage(420);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData!.buffer.asUint8List();
   }
 
   Future<Uint8List> _buildPdfBytes() async {
-    final url = _qrUrl;
     final app = AppScope.of(context);
-    final restaurantName = app.serverConfig.restaurantName.isEmpty
+    final slug = _slug(context);
+    if (slug == null) {
+      throw StateError('Set a public menu slug before exporting table QR codes.');
+    }
+    final restaurantName = app.serverConfig.restaurantName.trim().isEmpty
         ? 'Restaurant'
-        : app.serverConfig.restaurantName;
-    final outletName = app.serverConfig.outletName;
+        : app.serverConfig.restaurantName.trim();
+    final outletName = app.serverConfig.outletName.trim();
+    final tableCount = _tableCount(context);
+    final rows = await Future.wait(
+      List.generate(tableCount, (index) async {
+        final tableNo = index + 1;
+        final url = _tableUrl(slug, tableNo);
+        return _TableQrPdfEntry(
+          tableNo: tableNo,
+          url: url,
+          image: pw.MemoryImage(await _qrBytes(url)),
+        );
+      }),
+    );
 
-    final qrBytes = await _qrBytes(url);
-    final qrImage = pw.MemoryImage(qrBytes);
-
-    const gold = PdfColor.fromInt(0xFFE8C547);
-    const dark = PdfColor.fromInt(0xFF1A1A2E);
-    const subtle = PdfColor.fromInt(0xFF6B7280);
-    const bg = PdfColor.fromInt(0xFFFFFBF0);
-    const line = PdfColor.fromInt(0xFFE5E7EB);
+    const dark = PdfColor.fromInt(0xFF162033);
+    const muted = PdfColor.fromInt(0xFF596275);
+    const line = PdfColor.fromInt(0xFFE2E8F0);
+    const accent = PdfColor.fromInt(0xFFE28714);
 
     final doc = pw.Document();
     doc.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
-        build: (_) => pw.Center(
-          child: pw.Container(
-            width: 340,
-            decoration: pw.BoxDecoration(
-              color: PdfColors.white,
-              border: pw.Border.all(color: line, width: 2),
-              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(20)),
-            ),
-            padding: const pw.EdgeInsets.symmetric(
-              horizontal: 32,
-              vertical: 36,
-            ),
-            child: pw.Column(
-              mainAxisSize: pw.MainAxisSize.min,
-              crossAxisAlignment: pw.CrossAxisAlignment.center,
-              children: [
-                pw.Container(
-                  width: 56,
-                  height: 56,
-                  decoration: pw.BoxDecoration(
-                    color: gold,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(14),
-                    ),
-                  ),
-                  child: pw.Center(
-                    child: pw.Text(
-                      restaurantName.isNotEmpty
-                          ? restaurantName[0].toUpperCase()
-                          : 'R',
+        margin: const pw.EdgeInsets.fromLTRB(32, 28, 32, 32),
+        build: (_) => [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      restaurantName,
                       style: pw.TextStyle(
-                        fontSize: 28,
+                        fontSize: 22,
                         fontWeight: pw.FontWeight.bold,
                         color: dark,
                       ),
                     ),
-                  ),
+                    if (outletName.isNotEmpty) ...[
+                      pw.SizedBox(height: 3),
+                      pw.Text(
+                        outletName,
+                        style: const pw.TextStyle(fontSize: 10, color: muted),
+                      ),
+                    ],
+                  ],
                 ),
-                pw.SizedBox(height: 14),
-                pw.Text(
-                  restaurantName,
-                  textAlign: pw.TextAlign.center,
+              ),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: accent, width: 1.3),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                ),
+                child: pw.Text(
+                  '$tableCount TABLE QR CODES',
                   style: pw.TextStyle(
-                    fontSize: 20,
+                    fontSize: 9,
                     fontWeight: pw.FontWeight.bold,
                     color: dark,
                   ),
                 ),
-                if (outletName.isNotEmpty) ...[
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    outletName,
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(fontSize: 11, color: subtle),
-                  ),
-                ],
-                pw.SizedBox(height: 24),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 18),
+          pw.Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: [
+              for (final entry in rows)
                 pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: pw.BoxDecoration(
-                    color: bg,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(10),
-                    ),
-                    border: pw.Border.all(color: gold, width: 1.5),
-                  ),
-                  child: pw.Text(
-                    'স্ক্যান করে অর্ডার করুন  ·  Scan to Order',
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(
-                      fontSize: 11,
-                      fontWeight: pw.FontWeight.bold,
-                      color: dark,
-                    ),
-                  ),
-                ),
-                pw.SizedBox(height: 24),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(16),
+                  width: 244,
+                  padding: const pw.EdgeInsets.all(14),
                   decoration: pw.BoxDecoration(
                     color: PdfColors.white,
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(12),
-                    ),
-                    border: pw.Border.all(color: line, width: 1.5),
+                    border: pw.Border.all(color: line),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
                   ),
-                  child: pw.Image(
-                    qrImage,
-                    width: 200,
-                    height: 200,
-                    fit: pw.BoxFit.contain,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Text(
+                        'TABLE ${entry.tableNo}',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                          color: dark,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Image(entry.image, width: 126, height: 126),
+                      pw.SizedBox(height: 8),
+                      pw.Text(
+                        'Scan to order from this table',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: dark,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        entry.url,
+                        textAlign: pw.TextAlign.center,
+                        maxLines: 2,
+                        style: const pw.TextStyle(fontSize: 6.5, color: muted),
+                      ),
+                    ],
                   ),
                 ),
-                pw.SizedBox(height: 16),
-                pw.Text(
-                  url,
-                  textAlign: pw.TextAlign.center,
-                  style: pw.TextStyle(fontSize: 8, color: subtle),
-                ),
-              ],
-            ),
+            ],
           ),
-        ),
+        ],
       ),
     );
     return doc.save();
   }
 
   Future<void> _print() async {
-    if (_printing || _saving || _qrUrl.isEmpty) return;
+    if (_printing || _saving || _slug(context) == null) return;
     setState(() => _printing = true);
     try {
-      final app = AppScope.of(context);
-      final restaurantName = app.serverConfig.restaurantName.isEmpty
-          ? 'Restaurant'
-          : app.serverConfig.restaurantName;
       final bytes = await _buildPdfBytes();
       if (!mounted) return;
       await Printing.layoutPdf(
-        name: '${restaurantName.replaceAll(' ', '_')}_Menu_QR',
+        name: 'table_qr_codes',
         onLayout: (_) async => bytes,
       );
     } finally {
@@ -220,18 +205,18 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
   }
 
   Future<void> _savePdf() async {
-    if (_printing || _saving || _qrUrl.isEmpty) return;
+    if (_printing || _saving || _slug(context) == null) return;
     setState(() => _saving = true);
     try {
       final app = AppScope.of(context);
-      final restaurantName = app.serverConfig.restaurantName.isEmpty
+      final restaurantName = app.serverConfig.restaurantName.trim().isEmpty
           ? 'Restaurant'
-          : app.serverConfig.restaurantName;
+          : app.serverConfig.restaurantName.trim();
       final bytes = await _buildPdfBytes();
       if (!mounted) return;
       await Printing.sharePdf(
         bytes: bytes,
-        filename: '${restaurantName.replaceAll(' ', '_')}_Menu_QR.pdf',
+        filename: '${restaurantName.replaceAll(' ', '_')}_Table_QR_Codes.pdf',
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -242,9 +227,8 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
-    final restaurantName = app.serverConfig.restaurantName.isEmpty
-        ? 'Restaurant'
-        : app.serverConfig.restaurantName;
+    final slug = _slug(context);
+    final tableCount = _tableCount(context);
     final busy = _printing || _saving;
 
     return Scaffold(
@@ -263,100 +247,141 @@ class _QrPdfScreenState extends State<QrPdfScreen> {
         ),
         iconTheme: IconThemeData(color: PosColors.slate),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── URL field ───────────────────────────────────────────────
-                _UrlField(
-                  controller: _urlCtrl,
-                  onChanged: () => setState(() {}),
-                ),
-                const SizedBox(height: 24),
-
-                // ── Full-width live QR preview ───────────────────────────────
-                _QrPreviewCard(url: _qrUrl, restaurantName: restaurantName),
-                const SizedBox(height: 28),
-
-                // ── Action buttons ───────────────────────────────────────────
-                Row(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 980
+              ? 4
+              : constraints.maxWidth >= 720
+                  ? 3
+                  : constraints.maxWidth >= 460
+                      ? 2
+                      : 1;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: _ActionButton(
-                        label: 'Print',
-                        icon: Icons.print_rounded,
-                        busy: _printing,
-                        enabled: !busy && _qrUrl.isNotEmpty,
-                        onPressed: _print,
-                      ),
+                    _QrHeader(
+                      slug: slug,
+                      tableCount: tableCount,
+                      onPrint: _print,
+                      onSave: _savePdf,
+                      printing: _printing,
+                      saving: _saving,
+                      busy: busy,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _ActionButton(
-                        label: 'Save as PDF',
-                        icon: Icons.picture_as_pdf_rounded,
-                        busy: _saving,
-                        enabled: !busy && _qrUrl.isNotEmpty,
-                        onPressed: _savePdf,
-                        outlined: true,
+                    const SizedBox(height: 18),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: tableCount,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        mainAxisExtent: 238,
                       ),
+                      itemBuilder: (context, index) {
+                        final tableNo = index + 1;
+                        return _TableQrCard(
+                          tableNo: tableNo,
+                          url: slug == null ? null : _tableUrl(slug, tableNo),
+                        );
+                      },
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 }
 
-// ── URL field card ────────────────────────────────────────────────────────────
+class _QrHeader extends StatelessWidget {
+  const _QrHeader({
+    required this.slug,
+    required this.tableCount,
+    required this.onPrint,
+    required this.onSave,
+    required this.printing,
+    required this.saving,
+    required this.busy,
+  });
 
-class _UrlField extends StatelessWidget {
-  const _UrlField({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final VoidCallback onChanged;
+  final String? slug;
+  final int tableCount;
+  final VoidCallback onPrint;
+  final VoidCallback onSave;
+  final bool printing;
+  final bool saving;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final disabled = slug == null;
     return TfCard(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
         children: [
-          TfText(
-            text.orderingUrl,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 12.5,
-              color: PosColors.slate,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TfText(
+                  disabled
+                      ? 'Set the public menu URL to generate table QR codes.'
+                      : '$tableCount table codes use $slug.quickbytes.buzz',
+                  style: TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                TfText(
+                  disabled
+                      ? 'Open Public URL settings and save a slug first. IP-based links are not used for table QR exports.'
+                      : 'Each table links directly to its own no-form table order page.',
+                  style: TextStyle(
+                    color: PosColors.muted,
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.url,
-            textInputAction: TextInputAction.done,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 13.5,
-              color: PosColors.slate,
-            ),
-            decoration: InputDecoration(
-              hintText: text.orderingUrlHint,
-              prefixIcon: const Icon(Icons.link_rounded),
-              isDense: true,
-            ),
-            onChanged: (_) => onChanged(),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              TfButton(
+                label: 'Print',
+                icon: TfNavIcon.printer,
+                busy: printing,
+                onPressed: disabled || busy ? null : onPrint,
+                size: TfButtonSize.lg,
+              ),
+              TfButton(
+                label: 'Save PDF',
+                icon: Icons.picture_as_pdf_rounded,
+                busy: saving,
+                onPressed: disabled || busy ? null : onSave,
+                variant: TfButtonVariant.paper,
+                size: TfButtonSize.lg,
+              ),
+            ],
           ),
         ],
       ),
@@ -364,156 +389,88 @@ class _UrlField extends StatelessWidget {
   }
 }
 
-// ── Live QR preview ───────────────────────────────────────────────────────────
+class _TableQrCard extends StatelessWidget {
+  const _TableQrCard({required this.tableNo, required this.url});
 
-class _QrPreviewCard extends StatelessWidget {
-  const _QrPreviewCard({required this.url, required this.restaurantName});
-
-  final String url;
-  final String restaurantName;
+  final int tableNo;
+  final String? url;
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final qrSize = (screenWidth - 80).clamp(200.0, 400.0);
-
-    return SizedBox(
-      width: double.infinity,
-      child: TfCard(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-        child: Column(
-          children: [
-            // Restaurant name
-            TfText(
-              restaurantName,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 20,
-                color: PosColors.slate,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // "Scan to Order" pill
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: PosColors.primarySoft,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: PosColors.primary, width: 1.5),
-              ),
-              child: TfText(
-                'স্ক্যান করে অর্ডার করুন  ·  Scan to Order',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: PosColors.primaryDark,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // QR code — live, large
-            if (url.isEmpty)
-              SizedBox(
-                width: qrSize,
-                height: qrSize,
-                child: Center(
-                  child: Icon(
-                    Icons.qr_code_2_rounded,
-                    size: qrSize * 0.5,
-                    color: PosColors.line,
-                  ),
-                ),
-              )
-            else
-              Container(
-                width: qrSize,
-                height: qrSize,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: PosColors.line, width: 1.5),
-                ),
-                child: QrImageView(
-                  data: url,
-                  version: QrVersions.auto,
-                  gapless: true,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: PosColors.slate,
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: PosColors.slate,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 14),
-
-            // URL chip below QR
-            if (url.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: PosColors.background,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: PosColors.line),
-                ),
+    final enabled = url != null;
+    return TfCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
                 child: TfText(
-                  url,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
+                  'Table $tableNo',
                   style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w400,
-                    color: PosColors.muted,
+                    color: PosColors.slate,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
-          ],
-        ),
+              Icon(
+                enabled ? Icons.qr_code_2_rounded : Icons.link_off_rounded,
+                color: enabled ? PosColors.primaryDark : PosColors.muted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Center(
+              child: enabled
+                  ? QrImageView(
+                      data: url!,
+                      version: QrVersions.auto,
+                      gapless: true,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: PosColors.slate,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: PosColors.slate,
+                      ),
+                    )
+                  : Icon(
+                      Icons.qr_code_2_rounded,
+                      size: 82,
+                      color: PosColors.line,
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TfText(
+            url ?? 'Public slug required',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: enabled ? PosColors.muted : PosColors.danger,
+              fontSize: 10.5,
+              height: 1.25,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Action button ─────────────────────────────────────────────────────────────
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.busy,
-    required this.enabled,
-    required this.onPressed,
-    this.outlined = false,
+class _TableQrPdfEntry {
+  const _TableQrPdfEntry({
+    required this.tableNo,
+    required this.url,
+    required this.image,
   });
 
-  final String label;
-  final IconData icon;
-  final bool busy;
-  final bool enabled;
-  final VoidCallback onPressed;
-  final bool outlined;
-
-  @override
-  Widget build(BuildContext context) {
-    return TfButton(
-      label: label,
-      icon: icon,
-      busy: busy,
-      onPressed: enabled ? onPressed : null,
-      variant: outlined ? TfButtonVariant.paper : TfButtonVariant.primary,
-      size: TfButtonSize.lg,
-    );
-  }
+  final int tableNo;
+  final String url;
+  final pw.ImageProvider image;
 }

@@ -394,25 +394,40 @@ class _SummaryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TfCard(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TfSectionHeader(label: label, padding: EdgeInsets.zero),
-          const SizedBox(height: 4),
-          TfText(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
-              color: PosColors.slate,
-              height: 1.05,
-              letterSpacing: -0.3,
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 72),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.4,
+                color: PosColors.muted,
+                height: 1.3,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            TfText(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: PosColors.slate,
+                height: 1.05,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -434,30 +449,41 @@ class _LossTile extends StatelessWidget {
         ? '৳0'
         : '${hasLoss ? '−' : '+'}${tfFormatCurrency(context, loss.abs())}';
     return TfCard(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
       color: fill,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TfSectionHeader(
-            label: text.unexplainedLossToday,
-            color: color,
-            padding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 4),
-          TfText(
-            amount,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
-              color: color,
-              height: 1.05,
-              letterSpacing: -0.3,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 72),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              text.unexplainedLossToday.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.4,
+                color: color,
+                height: 1.3,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            TfText(
+              amount,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: color,
+                height: 1.05,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

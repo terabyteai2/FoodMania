@@ -20,6 +20,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -44,6 +45,7 @@ class MainActivity : FlutterActivity() {
         private const val DEFAULT_CHANNEL_ID = "pos_orders_default_v2"
         private const val ACTION_USB_PERMISSION =
             "com.terabyteai.foodmania.posadmin.USB_PRINTER_PERMISSION"
+        private const val PRINTER_TAG = "QB-PRINTER"
     }
 
     private data class UsbPrinterTarget(
@@ -66,6 +68,7 @@ class MainActivity : FlutterActivity() {
             val pending = pendingUsbPrint ?: return
             pendingUsbPrint = null
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+            Log.i(PRINTER_TAG, "USB permission result granted=$granted bytes=${pending.bytes.size}")
             if (!granted) {
                 pending.result.success(false)
                 return
@@ -180,8 +183,11 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "hasPrinter" -> {
                         try {
-                            result.success(findUsbPrinterTarget() != null)
-                        } catch (_: Exception) {
+                            val target = findUsbPrinterTarget()
+                            Log.i(PRINTER_TAG, "hasPrinter=${target != null} target=${target?.let { describeTarget(it) } ?: "none"}")
+                            result.success(target != null)
+                        } catch (error: Exception) {
+                            Log.w(PRINTER_TAG, "hasPrinter failed", error)
                             result.success(false)
                         }
                     }
@@ -210,10 +216,16 @@ class MainActivity : FlutterActivity() {
 
     private fun printUsbPrinterBytes(bytes: ByteArray, result: MethodChannel.Result) {
         val manager = getSystemService(USB_SERVICE) as UsbManager
+        Log.i(PRINTER_TAG, "printBytes request bytes=${bytes.size} devices=${manager.deviceList.size}")
         val target = findUsbPrinterTarget() ?: run {
+            Log.w(PRINTER_TAG, "printBytes no USB printer target")
             result.success(false)
             return
         }
+        Log.i(
+            PRINTER_TAG,
+            "printBytes target=${describeTarget(target)} hasPermission=${manager.hasPermission(target.device)}"
+        )
         if (manager.hasPermission(target.device)) {
             try {
                 result.success(writeUsbPrinterBytes(bytes))
@@ -238,6 +250,7 @@ class MainActivity : FlutterActivity() {
             }
         val intent = Intent(ACTION_USB_PERMISSION).setPackage(packageName)
         val permissionIntent = PendingIntent.getBroadcast(this, 0, intent, flags)
+        Log.i(PRINTER_TAG, "requesting USB permission for ${describeDevice(target.device)}")
         manager.requestPermission(target.device, permissionIntent)
     }
 
@@ -255,12 +268,22 @@ class MainActivity : FlutterActivity() {
 
     private fun writeUsbPrinterBytes(bytes: ByteArray): Boolean {
         val manager = getSystemService(USB_SERVICE) as UsbManager
-        val target = findUsbPrinterTarget() ?: return false
-        if (!manager.hasPermission(target.device)) return false
-        val connection = manager.openDevice(target.device) ?: return false
+        val target = findUsbPrinterTarget() ?: run {
+            Log.w(PRINTER_TAG, "write failed: no target")
+            return false
+        }
+        if (!manager.hasPermission(target.device)) {
+            Log.w(PRINTER_TAG, "write failed: no permission for ${describeDevice(target.device)}")
+            return false
+        }
+        val connection = manager.openDevice(target.device) ?: run {
+            Log.w(PRINTER_TAG, "write failed: openDevice returned null for ${describeDevice(target.device)}")
+            return false
+        }
         return try {
-            connection.claimInterface(target.usbInterface, true) &&
-                writeBulkBytes(connection, target.endpoint, bytes)
+            val claimed = connection.claimInterface(target.usbInterface, true)
+            Log.i(PRINTER_TAG, "claimInterface=$claimed ${describeTarget(target)}")
+            claimed && writeBulkBytes(connection, target.endpoint, bytes)
         } finally {
             try {
                 connection.releaseInterface(target.usbInterface)
@@ -276,27 +299,46 @@ class MainActivity : FlutterActivity() {
     ): Boolean {
         var offset = 0
         val chunkSize = minOf(4096, maxOf(64, endpoint.maxPacketSize * 16))
+        Log.i(PRINTER_TAG, "bulk write start bytes=${bytes.size} chunkSize=$chunkSize maxPacket=${endpoint.maxPacketSize}")
         while (offset < bytes.size) {
             val length = minOf(chunkSize, bytes.size - offset)
             val written = connection.bulkTransfer(endpoint, bytes, offset, length, 3000)
-            if (written <= 0) return false
+            if (written <= 0) {
+                Log.w(PRINTER_TAG, "bulk write failed offset=$offset requested=$length written=$written")
+                return false
+            }
             offset += written
         }
+        Log.i(PRINTER_TAG, "bulk write complete bytes=$offset")
         return true
     }
 
     private fun findUsbPrinterTarget(): UsbPrinterTarget? {
         val manager = getSystemService(USB_SERVICE) as UsbManager
+        manager.deviceList.values.forEach { device ->
+            Log.i(PRINTER_TAG, "USB device ${describeDevice(device)} interfaces=${device.interfaceCount}")
+            for (i in 0 until device.interfaceCount) {
+                Log.i(PRINTER_TAG, "  iface[$i]=${describeInterface(device.getInterface(i))}")
+            }
+        }
         val targets = manager.deviceList.values.mapNotNull { device ->
             findUsbPrinterTarget(device)
         }
         if (targets.isNotEmpty()) {
-            return targets.sortedByDescending { targetScore(it.device, it.usbInterface) }.first()
+            val target = targets.sortedByDescending { targetScore(it.device, it.usbInterface) }.first()
+            Log.i(PRINTER_TAG, "selected printer-class target ${describeTarget(target)}")
+            return target
         }
         val bulkOutTargets = manager.deviceList.values.mapNotNull { device ->
             findAnyBulkOutTarget(device)
         }
-        return if (bulkOutTargets.size == 1) bulkOutTargets.first() else null
+        val fallback = bulkOutTargets.sortedByDescending {
+            targetScore(it.device, it.usbInterface)
+        }.firstOrNull()
+        if (fallback != null) {
+            Log.i(PRINTER_TAG, "selected bulk-out fallback ${describeTarget(fallback)} candidates=${bulkOutTargets.size}")
+        }
+        return fallback
     }
 
     private fun findUsbPrinterTarget(device: UsbDevice): UsbPrinterTarget? {
@@ -372,6 +414,18 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun describeTarget(target: UsbPrinterTarget): String {
+        return "${describeDevice(target.device)} ${describeInterface(target.usbInterface)} endpoint=${target.endpoint.endpointNumber}/${target.endpoint.maxPacketSize}"
+    }
+
+    private fun describeDevice(device: UsbDevice): String {
+        return "vid=${device.vendorId} pid=${device.productId} name=${safeDeviceName { device.productName } ?: safeDeviceName { device.deviceName } ?: "unknown"}"
+    }
+
+    private fun describeInterface(usbInterface: UsbInterface): String {
+        return "class=${usbInterface.interfaceClass} subclass=${usbInterface.interfaceSubclass} protocol=${usbInterface.interfaceProtocol} endpoints=${usbInterface.endpointCount}"
     }
 
     private fun runtimeInfo(): Map<String, Any> {

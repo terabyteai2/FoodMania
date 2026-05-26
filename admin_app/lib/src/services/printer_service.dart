@@ -220,6 +220,9 @@ class PrinterService {
   Future<void> initialize() async {
     final preferences = await SharedPreferences.getInstance();
     final usbAvailable = await _hasUsbPrinter();
+    if (kDebugMode) {
+      debugPrint('[QB-PRINTER] initialize usbAvailable=$usbAvailable');
+    }
     _printedOrderIds
       ..clear()
       ..addAll(preferences.getStringList(_printedOrderIdsKey) ?? []);
@@ -459,27 +462,6 @@ class PrinterService {
           'Printing manager copy of ${order.orderNo} failed.',
         );
       }
-      final customerCopyBytes = await _buildBitmapCopyBytes(
-        generator,
-        order,
-        labels: labels,
-        isManagerCopy: false,
-        restaurantName: restaurantName,
-        outletName: outletName,
-        orderDetailsUrl: orderDetailsUrl,
-      );
-      final okCustomer = await _writeBytes(customerCopyBytes);
-      _debugPrintWriteResult(
-        order,
-        copyKind: 'customer',
-        byteCount: customerCopyBytes.length,
-        ok: okCustomer,
-      );
-      if (!okCustomer) {
-        throw PrinterException(
-          'Printing customer copy of ${order.orderNo} failed.',
-        );
-      }
 
       if (markAsPrinted) {
         await markOrderPrinted(order);
@@ -619,16 +601,12 @@ class PrinterService {
     // clean luminance values instead of antialiased RGBA noise.
     final grayscale = img.grayscale(decoded);
 
-    final detailsUrl = orderDetailsUrl?.trim();
+    // The QR code is rendered inline into the receipt bitmap (top-right
+    // corner) by [TicketBitmapRenderer]. We deliberately do NOT use the
+    // ESC/POS `qrcode` command here because many thermal printers ignore the
+    // size byte and render a huge QR regardless of [QRSize.size1].
     final bytes = <int>[
       ...generator.reset(),
-      if (detailsUrl != null && detailsUrl.isNotEmpty) ...[
-        ...generator.qrcode(
-          detailsUrl,
-          align: PosAlign.right,
-          size: QRSize.size4,
-        ),
-      ],
       ...generator.imageRaster(grayscale, align: PosAlign.center),
     ];
     _debugPrintRasterResult(
@@ -686,35 +664,31 @@ class PrinterService {
     required bool isManagerCopy,
     required String restaurantName,
   }) {
-    final copyLabel = isManagerCopy ? labels.managerCopy : labels.customerCopy;
+    final tableRaw = order.tableNo ?? labels.takeaway;
     buffer
-      ..writeln(
-        _twoCol(
-          labels.orderNo(order.displaySequence),
-          _shortText(restaurantName, 18),
-        ),
-      )
-      ..writeln(copyLabel)
+      ..writeln(labels.orderNo(order.displaySequence))
+      ..writeln('[${_orderTypeLabel(order, labels).toUpperCase()}]')
       ..writeln(labels.formatDate(order.createdAt))
+      ..writeln(_separator('='))
+      ..writeln(_shortText(restaurantName, _ticketWidth))
+      ..writeln(labels.tableLabel(tableRaw))
       ..writeln(_separator('-'));
     for (var i = 0; i < order.items.length; i++) {
       final item = order.items[i];
       buffer.writeln(
-        _itemLine(
-          '${labels.digits('${i + 1}')}. ${labels.itemName(item)}',
-          labels.qtyText(item.qty),
-          labels.money(_lineTotalFor(item)),
-        ),
+        '${labels.digits('${i + 1}')}. ${_shortText(labels.itemName(item), 18)} '
+        '${labels.qtyText(item.qty)} ${labels.money(_lineTotalFor(item))}',
       );
     }
     buffer
       ..writeln(_separator('-'))
       ..writeln(
         _twoCol(
-          '${labels.totalVatIncluded} -',
+          labels.totalVatIncluded,
           labels.money(_orderTotalFor(order)),
         ),
-      );
+      )
+      ..writeln('SCAN FOR LIVE ORDER DETAILS');
   }
 
   double _lineTotalFor(OrderItem item) {
@@ -837,18 +811,6 @@ class PrinterService {
     return '$cleanLeft${' ' * gap}$cleanRight';
   }
 
-  String _itemLine(String name, String qty, String total) {
-    final cleanTotal = _shortText(total, 8);
-    final cleanQty = _shortText(qty, 3);
-    final nameWidth = _ticketWidth - cleanQty.length - cleanTotal.length - 7;
-    final cleanName = _shortText(name, nameWidth);
-    final used = cleanName.length + cleanQty.length + cleanTotal.length + 7;
-    final gap = _ticketWidth - used;
-    final leftGap = gap >= 2 ? 2 : gap;
-    final rightGap = gap - leftGap;
-    return '$cleanName${' ' * leftGap}- $cleanQty - ${' ' * rightGap}$cleanTotal';
-  }
-
   /// Lightweight check before auto-printing a batch of orders (no print, no busy).
   Future<String?> preflightBlockReason() async {
     if (await _hasUsbPrinter()) {
@@ -939,7 +901,15 @@ class PrinterService {
   }
 
   Future<bool> _writeBytes(List<int> bytes) async {
-    if (await _hasUsbPrinter()) {
+    final usbAvailableBeforeWrite = await _hasUsbPrinter();
+    if (kDebugMode) {
+      debugPrint(
+        '[QB-PRINTER] write start bytes=${bytes.length} '
+        'usbAvailable=$usbAvailableBeforeWrite '
+        'btSelected=${_state.selectedPrinterAddress?.isNotEmpty == true}',
+      );
+    }
+    if (usbAvailableBeforeWrite) {
       final usbOk = await _writeUsbBytes(bytes);
       if (usbOk) {
         _emit(
@@ -950,6 +920,17 @@ class PrinterService {
           ),
         );
         return true;
+      }
+      if (_state.selectedPrinterAddress?.trim().isEmpty ?? true) {
+        _emit(
+          _state.copyWith(
+            usbPrinterAvailable: true,
+            connected: false,
+            lastError:
+                'USB printer was detected, but the Type-C write failed. Replug the printer and retry the test print.',
+          ),
+        );
+        return false;
       }
       if (kDebugMode) {
         debugPrint('[QB-PRINTER] USB write failed; trying Bluetooth fallback.');
@@ -971,25 +952,37 @@ class PrinterService {
 
   Future<bool> _hasUsbPrinter() async {
     if (!Platform.isAndroid) return false;
-    try {
-      return await _usbPrinterChannel
-              .invokeMethod<bool>('hasPrinter')
-              .timeout(const Duration(milliseconds: 700)) ??
-          false;
-    } catch (_) {
-      return false;
+    // Retry once with a longer window — Android USB host can take >700 ms to
+    // enumerate a freshly-plugged Type-C printer on some devices.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final result = await _usbPrinterChannel
+                .invokeMethod<bool>('hasPrinter')
+                .timeout(const Duration(milliseconds: 1500)) ??
+            false;
+        if (result) return true;
+        if (attempt == 0) await Future<void>.delayed(const Duration(milliseconds: 500));
+      } catch (error) {
+        if (kDebugMode) debugPrint('[QB-PRINTER] USB probe attempt=$attempt error: $error');
+        if (attempt == 0) await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
     }
+    return false;
   }
 
   Future<bool> _writeUsbBytes(List<int> bytes) async {
     if (!Platform.isAndroid) return false;
     try {
-      return await _usbPrinterChannel
+      final ok = await _usbPrinterChannel
               .invokeMethod<bool>('printBytes', {
                 'bytes': Uint8List.fromList(bytes),
               })
               .timeout(const Duration(seconds: 60)) ??
           false;
+      if (kDebugMode) {
+        debugPrint('[QB-PRINTER] USB write result ok=$ok bytes=${bytes.length}');
+      }
+      return ok;
     } catch (error) {
       if (kDebugMode) debugPrint('[QB-PRINTER] USB write error: $error');
       return false;
@@ -1019,7 +1012,7 @@ class PrinterService {
           lastError: _friendlyError(error),
         ),
       );
-      if (kDebugMode) debugPrint('Printer error: $error');
+      if (kDebugMode) debugPrint('[QB-PRINTER] error: $error');
       return false;
     } finally {
       final usbAvailable = await _hasUsbPrinter();

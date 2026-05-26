@@ -2,6 +2,7 @@
 
 import html
 import json
+import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -21,6 +22,7 @@ from services.customer_orders import (
 from services.menu_placeholders import infer_icon_key, resolve_placeholder_url
 
 router = APIRouter(prefix="/customer", tags=["customer"])
+logger = logging.getLogger("quickbytes.customer")
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -275,7 +277,18 @@ async def reverse_geocode_customer_location(
 ):
     """Return a formatted address for a customer-provided browser location."""
     await _get_outlet(outlet_id, db)
+    logger.info(
+        "[QB-CUSTOMER-GEO] reverse request outlet=%s lat=%.6f lng=%.6f",
+        outlet_id,
+        body.lat,
+        body.lng,
+    )
     address = await _reverse_geocode_address(body.lat, body.lng)
+    logger.info(
+        "[QB-CUSTOMER-GEO] reverse success outlet=%s address_len=%s",
+        outlet_id,
+        len(address),
+    )
     return {"address": address}
 
 
@@ -296,6 +309,7 @@ async def place_customer_order(
         )
         for item in body.items
     ]
+    order_type = (body.orderType or "delivery").strip().lower()
     order = await create_delivery_order(
         db=db,
         outlet=outlet,
@@ -304,6 +318,8 @@ async def place_customer_order(
         delivery_address=body.deliveryAddress,
         mobile_number=body.mobileNumber,
         note=body.note,
+        service_type=order_type,
+        table_no=body.tableNo,
     )
     return _ok(public_order_response(order))
 

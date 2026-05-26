@@ -53,10 +53,6 @@ export default function HearthHero({ info, onSeeMenu }) {
 
   const nameEn = info?.restaurantNameEn || info?.restaurantName || 'Restaurant'
   const nameBn = info?.restaurantNameBn
-  const initial = (nameEn[0] || 'R').toUpperCase()
-  const outletName = info?.outletNameBn && lang === 'bn'
-    ? info.outletNameBn
-    : (info?.outletName || '')
 
   function handleSeeMenu(e) {
     e.preventDefault()
@@ -70,7 +66,7 @@ export default function HearthHero({ info, onSeeMenu }) {
         position: 'relative',
         width: '100%',
         height: '100svh',
-        minHeight: 560,
+	        minHeight: 520,
         overflow: 'hidden',
         background: T.bg,
         color: T.ink,
@@ -173,102 +169,28 @@ export default function HearthHero({ info, onSeeMenu }) {
       <div style={{
         position: 'absolute', inset: 0, zIndex: 3,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'flex-end',
         padding: '0 24px',
-        paddingTop: 'calc(env(safe-area-inset-top) + 64px)',
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 32px)',
       }}>
-        {/* Top spacer to push medallion roughly into upper third */}
-        <div style={{ height: 'min(8vh, 60px)' }} />
-
-        {/* Medallion */}
-        <div style={{
-          position: 'relative',
-          width: 72, height: 72,
-          borderRadius: 36,
-          background: '#2A1F1A',
-          border: `1.5px solid #C9A24B`,
-          display: 'grid', placeItems: 'center',
-          boxShadow: '0 12px 36px rgba(0,0,0,.55), inset 0 0 24px rgba(201,162,75,.18)',
-          marginBottom: 18,
-        }}>
-          {/* Faint star behind initial */}
-          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', opacity: .55 }}>
-            <StarOrnament size={56} stroke="#4A3A2E" strokeWidth={1} withDot={false} />
-          </div>
-          <span style={{
-            position: 'relative',
-            fontFamily: '"Cinzel", serif',
-            fontWeight: 600,
-            fontSize: 34, lineHeight: 1,
-            color: '#E8A33D',
-            letterSpacing: '.04em',
-            textShadow: '0 2px 10px rgba(0,0,0,.6)',
-          }}>{initial}</span>
-        </div>
-
-        {/* Brand name (stacked en + bn) */}
-        <h1 style={{
-          margin: 0,
-          fontFamily: '"Cinzel", serif',
-          fontWeight: 600,
-          fontSize: 'clamp(32px, 9vw, 44px)',
-          color: '#E8A33D',
-          letterSpacing: '.08em',
-          textTransform: 'uppercase',
-          textAlign: 'center',
-          lineHeight: 1.05,
-          textShadow: '0 2px 12px rgba(0,0,0,.7)',
-        }}>{nameEn}</h1>
-
-        {nameBn && (
-          <div style={{
-            marginTop: 6,
-            fontFamily: '"Hind Siliguri", system-ui, sans-serif',
-            fontWeight: 600,
-            fontSize: 'clamp(19px, 5.4vw, 26px)',
-            color: '#E8A33D',
-            opacity: .92,
-            textAlign: 'center',
-            lineHeight: 1.1,
-          }}>{nameBn}</div>
-        )}
-
-        {/* Tagline / outlet name */}
-        {outletName && (
-          <div style={{
-            marginTop: 12,
-            fontFamily: lang === 'bn'
-              ? '"Hind Siliguri", system-ui, sans-serif'
-              : '"Cormorant Garamond", serif',
-            fontStyle: lang === 'bn' ? 'normal' : 'italic',
-            fontSize: 14,
-            color: '#A89580',
-            letterSpacing: '.05em',
-            textAlign: 'center',
-          }}>{outletName}</div>
-        )}
-
-        {/* Spacer pushes CTA to ~24% from bottom */}
-        <div style={{ flex: 1 }} />
-
         {/* Star divider above CTA */}
         <div style={{ marginBottom: 18, opacity: .9 }}>
           <StarOrnament size={22} stroke="#C9A24B" />
         </div>
 
-        {/* CTA — rectangular, NOT pill */}
+        {/* CTA — rectangular, clearly visible, dark shadow for contrast */}
         <button
           type="button"
           onClick={handleSeeMenu}
           style={{
             width: '100%',
             maxWidth: 460,
-            height: 56,
+            height: 58,
             borderRadius: 12,
             background: '#E8A33D',
             color: '#1A1410',
             border: 'none',
-            boxShadow: 'inset 0 0 0 1px #C9A24B, 0 14px 38px rgba(232,163,61,.32)',
+            boxShadow: '0 4px 32px rgba(0,0,0,.55), inset 0 0 0 1.5px #C9A24B',
             fontFamily: '"Cinzel", serif',
             fontWeight: 700,
             fontSize: 15,
@@ -277,7 +199,6 @@ export default function HearthHero({ info, onSeeMenu }) {
             cursor: 'pointer',
             WebkitTapHighlightColor: 'transparent',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            marginBottom: 'calc(8svh)',
           }}
         >
           <span>{t('seeMenu', lang)}</span>

@@ -45,6 +45,7 @@ import 'services/cloud_realtime_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_database_service.dart';
 import 'services/printer_service.dart';
+import 'services/push_notification_service.dart';
 import 'services/sync_service.dart';
 import 'services/system_notification_service.dart';
 
@@ -110,6 +111,7 @@ class PosAppController extends ChangeNotifier {
     ConnectivityService? connectivityService,
     SyncService? syncService,
     SystemNotificationService? systemNotifications,
+    PushNotificationService? pushNotificationService,
   }) : database = database ?? LocalDatabaseService(),
        printerService = printerService ?? PrinterService(),
        cloudApiService = cloudApiService ?? CloudApiService(),
@@ -117,7 +119,9 @@ class PosAppController extends ChangeNotifier {
        appUpdateInstaller = appUpdateInstaller ?? AppUpdateInstallerService(),
        connectivityService = connectivityService ?? ConnectivityService(),
        systemNotifications =
-           systemNotifications ?? SystemNotificationService() {
+           systemNotifications ?? SystemNotificationService(),
+       pushNotificationService =
+           pushNotificationService ?? PushNotificationService() {
     this.syncService =
         syncService ??
         SyncService(
@@ -136,6 +140,7 @@ class PosAppController extends ChangeNotifier {
   final AppUpdateInstallerService appUpdateInstaller;
   final ConnectivityService connectivityService;
   final SystemNotificationService systemNotifications;
+  final PushNotificationService pushNotificationService;
   late final SyncService syncService;
 
   final Uuid _uuid = Uuid();
@@ -168,6 +173,11 @@ class PosAppController extends ChangeNotifier {
 
   /// Set when Bluetooth/printer is unavailable — blocks auto-print for all orders.
   String? _autoPrintInfrastructureBlocked;
+  String? _lastFcmToken;
+  String _lastPushPlatform = 'unknown';
+  String? _registeredFcmToken;
+  String? _registeredPushOutletId;
+  bool _pushNotificationsStarted = false;
 
   /// One in-app alert per infrastructure error message (e.g. Bluetooth off).
   final BoundedStringSet _alertedPrintFailureReasons = BoundedStringSet(
@@ -314,17 +324,15 @@ class PosAppController extends ChangeNotifier {
       cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl;
   bool get isManager => accountRole.isManager;
 
-  /// Temporary kill switch for order-triggered printer side effects.
-  ///
-  /// Pending/accepted order notifications still fire; printer preflight,
-  /// auto-print, and printer success/failure alerts are paused for now.
-  bool get orderPrinterSideEffectsEnabled => false;
+  /// Order-triggered printer side effects (auto-print + preflight + alerts).
+  bool get orderPrinterSideEffectsEnabled => true;
 
   int get unreadNotificationCount =>
       notifications.where((notification) => !notification.isRead).length;
 
   Future<void> onResumed() async {
     isAppForeground = true;
+    debugPrint('[QB-NOTIF] lifecycle=resumed');
     // Resuming clears any stale OS notifications that the user has obviously
     // seen by virtue of opening the app.
     unawaited(systemNotifications.cancelAll());
@@ -345,6 +353,7 @@ class PosAppController extends ChangeNotifier {
 
   void onPaused() {
     isAppForeground = false;
+    debugPrint('[QB-NOTIF] lifecycle=background');
   }
 
   Future<void> initialize() async {
@@ -503,6 +512,7 @@ class PosAppController extends ChangeNotifier {
         cloudConfig: cloudConfig,
         serverConfig: serverConfig,
       );
+      unawaited(_startPushNotifications());
       // One-time heal for installs that copied another outlet's SQLite file
       // into this tenant's DB before the isolation fix shipped.
       await _healTenantDataIfNeeded(preferences);
@@ -2184,6 +2194,8 @@ class PosAppController extends ChangeNotifier {
     _appUpdateWaitingForPermission = null;
     appUpdateError = null;
     appUpdateStatus = '';
+    _registeredFcmToken = null;
+    _registeredPushOutletId = null;
     _clearOrderAlertTracking();
     // Stop the notification sound if it is mid-playback so the audio buffer
     // is released along with the rest of the per-session state.
@@ -2617,6 +2629,14 @@ class PosAppController extends ChangeNotifier {
     unawaited(syncService.syncNow());
   }
 
+  Future<void> updateOrderItems(
+    String id,
+    List<OrderRequestItem> items,
+  ) async {
+    await database.updateOrderItems(id, items);
+    unawaited(syncService.syncNow());
+  }
+
   Future<void> deleteOrder(String id) async {
     await database.updateOrderStatus(id, OrderStatus.cancelled);
     unawaited(syncService.syncNow());
@@ -2697,10 +2717,63 @@ class PosAppController extends ChangeNotifier {
           cloudConfig: cloudConfig,
           serverConfig: serverConfig,
         );
-        await cloudApiService.registerDevice();
+        await cloudApiService.registerDevice(
+          fcmToken: _lastFcmToken,
+          pushPlatform: _lastPushPlatform,
+        );
       } catch (error) {
         debugPrint('[QB-TABLES] could not sync table count: $error');
       }
+    }
+  }
+
+  Future<void> _startPushNotifications() async {
+    if (_pushNotificationsStarted) return;
+    _pushNotificationsStarted = true;
+    debugPrint('[QB-NOTIF] starting FCM diagnostics');
+    await pushNotificationService.initialize(
+      systemNotifications: systemNotifications,
+      onToken: _registerPushToken,
+    );
+  }
+
+  Future<void> _registerPushToken(String token, String platform) async {
+    _lastFcmToken = token;
+    _lastPushPlatform = platform;
+    await _retryPushRegistrationIfReady();
+  }
+
+  Future<void> _retryPushRegistrationIfReady() async {
+    final token = (_lastFcmToken ?? pushNotificationService.token)?.trim() ?? '';
+    if (token.isEmpty) return;
+    final outletId = serverConfig.outletId.trim();
+    if (!cloudConfig.canSync || outletId.isEmpty) {
+      debugPrint(
+        '[QB-NOTIF] FCM token registration deferred '
+        'cloudReady=${cloudConfig.canSync} outlet=$outletId',
+      );
+      return;
+    }
+    if (_registeredFcmToken == token && _registeredPushOutletId == outletId) {
+      return;
+    }
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final response = await cloudApiService.registerDevice(
+        fcmToken: token,
+        pushPlatform: _lastPushPlatform,
+      );
+      _registeredFcmToken = token;
+      _registeredPushOutletId = outletId;
+      debugPrint(
+        '[QB-NOTIF] FCM token registered outlet=$outletId '
+        'response=$response',
+      );
+    } catch (error) {
+      debugPrint('[QB-NOTIF] FCM token registration failed: $error');
     }
   }
 
@@ -2912,35 +2985,45 @@ class PosAppController extends ChangeNotifier {
         return;
       }
     }
+    final bulkCutoff = DateTime.now().subtract(const Duration(minutes: 2));
+    final bulkCount = notifications
+            .where(
+              (n) =>
+                  n.type == type &&
+                  n.actionTarget == actionTarget &&
+                  n.createdAt.isAfter(bulkCutoff),
+            )
+            .length +
+        1;
+    final displayTitle = bulkCount > 1
+        ? _bulkNotificationTitle(type, bulkCount)
+        : title;
+    final displayBody = body;
+    if (bulkCount > 1) {
+      debugPrint(
+        '[QB-NOTIF] bulk notification type=${type.name} count=$bulkCount '
+        'title=$displayTitle',
+      );
+    }
     final notification = PosNotification(
       id: _uuid.v4(),
       type: type,
-      title: title,
-      body: body,
+      title: displayTitle,
+      body: displayBody,
       orderId: orderId,
       actionTarget: actionTarget,
       createdAt: DateTime.now(),
     );
     await database.upsertNotification(notification);
     notifications = await database.getNotifications();
-    final bulkCutoff = DateTime.now().subtract(const Duration(minutes: 2));
-    final bulkCount = notifications
-        .where(
-          (n) =>
-              n.type == type &&
-              n.title == title &&
-              n.actionTarget == actionTarget &&
-              n.createdAt.isAfter(bulkCutoff),
-        )
-        .length;
-    final displayTitle = bulkCount > 4
-        ? _bulkNotificationTitle(type, bulkCount)
-        : title;
-    final displayBody = bulkCount > 4 ? body : body;
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     final inForeground =
         lifecycle == AppLifecycleState.resumed && isAppForeground;
     final soundOn = playSound && notificationSoundEnabled;
+    debugPrint(
+      '[QB-NOTIF] add type=${type.name} foreground=$inForeground '
+      'sound=$soundOn order=${orderId ?? ''} title=$displayTitle',
+    );
 
     if (inForeground) {
       // Foreground: in-app toast (see MainShell) + asset sound.
@@ -2967,11 +3050,12 @@ class PosAppController extends ChangeNotifier {
 
   String _bulkNotificationTitle(PosNotificationType type, int count) {
     final number = count.toString();
+    final orderWord = count == 1 ? 'order' : 'orders';
     switch (type) {
       case PosNotificationType.acceptedOrder:
-        return '$number order accepted';
+        return '$number $orderWord accepted';
       case PosNotificationType.pendingOrder:
-        return '$number new orders';
+        return count == 1 ? '$number new order' : '$number new orders';
       default:
         return '$number notifications';
     }
@@ -3256,14 +3340,24 @@ class PosAppController extends ChangeNotifier {
         }
       }
 
-      if (status == OrderStatus.accepted || status == OrderStatus.served) {
+      final isAcceptedNow =
+          status == OrderStatus.accepted || status == OrderStatus.served;
+      // [_alertedAcceptedOrderIds] is seeded at startup with every order that
+      // was already accepted/served, and is also added-to whenever we fire an
+      // "order accepted" alert. So treating membership as "we've already
+      // handled this acceptance" gives us a single dedup signal that survives
+      // both app restarts (via the seed) and intra-session reloads (via the
+      // notification-side add below).
+      final alreadyHandled = _alertedAcceptedOrderIds.contains(id);
+
+      if (isAcceptedNow) {
         final becameAccepted =
             !wasKnown ||
             previousStatus == OrderStatus.pending ||
             (previousStatus != null &&
                 previousStatus != OrderStatus.accepted &&
                 previousStatus != OrderStatus.served);
-        if (becameAccepted && !_alertedAcceptedOrderIds.contains(id)) {
+        if (becameAccepted && !alreadyHandled) {
           _alertedAcceptedOrderIds.add(id);
           await addNotification(
             type: PosNotificationType.acceptedOrder,
@@ -3275,7 +3369,14 @@ class PosAppController extends ChangeNotifier {
         }
       }
 
-      if (orderPrinterSideEffectsEnabled) {
+      // Auto-print only when this acceptance is new — i.e. the order was not
+      // in accepted/served status at startup, and we haven't already fired an
+      // alert for this acceptance during this session. That excludes:
+      //   - historical orders that were already accepted when the app opened,
+      //   - reloads / debounced re-runs of the same accepted order.
+      // [printerService.hasPrintedOrder] gives a second-layer dedup inside
+      // [_printAcceptedOrderIfNeeded] for the same-tick case.
+      if (orderPrinterSideEffectsEnabled && isAcceptedNow && !alreadyHandled) {
         await _printAcceptedOrderIfNeeded(order);
       }
     }
@@ -3337,6 +3438,7 @@ class PosAppController extends ChangeNotifier {
     }
     unawaited(syncService.dispose());
     unawaited(printerService.dispose());
+    unawaited(pushNotificationService.dispose());
     unawaited(_notificationPlayer.dispose());
     appUpdateInstaller.close();
     cloudApiService.close();
@@ -3406,6 +3508,7 @@ class PosAppController extends ChangeNotifier {
       _customerMenuThemeKey,
       serverConfig.customerMenuTheme,
     );
+    unawaited(_retryPushRegistrationIfReady());
   }
 
   Future<void> _persistAccountAuth() async {

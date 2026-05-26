@@ -32,6 +32,8 @@ async def test_table_count_round_trips_through_bootstrap_and_device_register():
                 "restaurantName": data["restaurantName"],
                 "outletName": data["outletName"],
                 "tableCount": 31,
+                "fcmToken": "fcm-token-for-tests",
+                "pushPlatform": "android",
             },
         )
 
@@ -40,3 +42,5 @@ async def test_table_count_round_trips_through_bootstrap_and_device_register():
     assert data["tableCount"] == 24
     assert registered.status_code == 200
     assert registered.json()["data"]["tableCount"] == 31
+    assert registered.json()["data"]["pushRegistered"] is True
+    assert registered.json()["data"]["pushPlatform"] == "android"

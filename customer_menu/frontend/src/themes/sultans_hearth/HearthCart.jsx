@@ -88,7 +88,7 @@ export default function HearthCart({
   cart, items, note, onNote,
   delivery, onDelivery,
   onAdd, onRemove, onBack, onPlace,
-  submitting, info, outletId,
+  submitting, info, outletId, isTableOrder = false, tableNo = '',
 }) {
   const T = useTokens()
   const lang = useLang()
@@ -99,7 +99,7 @@ export default function HearthCart({
     })
     .filter(Boolean)
   const total = cartTotal(cart, items)
-  const deliveryReady =
+  const deliveryReady = isTableOrder ||
     delivery.name.trim() &&
     delivery.address.trim() &&
     delivery.mobile.trim().length >= 7
@@ -111,10 +111,10 @@ export default function HearthCart({
 
   useEffect(() => {
     mountedRef.current = true
-    detectAddress()
+    if (!isTableOrder) detectAddress()
     return () => { mountedRef.current = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isTableOrder])
 
   async function detectAddress() {
     if (!outletId || outletId === '__demo__') {
@@ -220,8 +220,10 @@ export default function HearthCart({
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: '6px 0 0' }}>
             {cartItems.map((item, i) => {
-              const nameEn = pick(item, 'name', 'en') || item.name
-              const nameBn = item.nameBn || ''
+              const primaryName = pick(item, 'name', lang) || item.nameEn || item.name || item.nameBn
+              const secondaryName = lang === 'bn'
+                ? (item.nameEn || item.name || '')
+                : (item.nameBn || '')
               return (
                 <li
                   key={item.id}
@@ -255,13 +257,13 @@ export default function HearthCart({
                       fontSize: 16, lineHeight: 1.2,
                       color: COLOR_IVORY,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{nameEn}</div>
-                    {nameBn && (
+                    }}>{primaryName}</div>
+                    {secondaryName && secondaryName !== primaryName && (
                       <div style={{
                         fontFamily: '"Hind Siliguri", system-ui, sans-serif',
                         fontSize: 13, color: COLOR_MUTED,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>{nameBn}</div>
+                      }}>{secondaryName}</div>
                     )}
                     <div style={{
                       marginTop: 6,
@@ -312,78 +314,95 @@ export default function HearthCart({
           </ul>
         )}
 
-        {/* Divider */}
         <div style={{ margin: '20px 0 6px' }}><StarDivider /></div>
 
-        {/* Customer details */}
-        <section style={{ marginTop: 10 }}>
-          <h2 style={{
-            margin: '0 0 14px',
+        {isTableOrder ? (
+          <section style={{
+            marginTop: 12,
+            padding: '14px 16px',
+            border: `1px solid ${COLOR_LINE}`,
+            borderRadius: 12,
+            color: COLOR_SAFF,
+            background: 'rgba(201,162,75,.10)',
             fontFamily: lang === 'bn'
               ? '"Hind Siliguri", system-ui, sans-serif'
               : '"Cinzel", serif',
-            fontWeight: 600,
-            fontSize: 14,
-            letterSpacing: lang === 'bn' ? '.02em' : '.22em',
             textTransform: lang === 'bn' ? 'none' : 'uppercase',
-            color: COLOR_GOLD,
+            letterSpacing: lang === 'bn' ? '.02em' : '.16em',
             textAlign: 'center',
-          }}>{t('yourDetails', lang)}</h2>
+          }}>
+            {lang === 'bn' ? `টেবিল ${tableNo}` : `Table ${tableNo}`}
+          </section>
+        ) : (
+          <section style={{ marginTop: 10 }}>
+            <h2 style={{
+              margin: '0 0 14px',
+              fontFamily: lang === 'bn'
+                ? '"Hind Siliguri", system-ui, sans-serif'
+                : '"Cinzel", serif',
+              fontWeight: 600,
+              fontSize: 14,
+              letterSpacing: lang === 'bn' ? '.02em' : '.22em',
+              textTransform: lang === 'bn' ? 'none' : 'uppercase',
+              color: COLOR_GOLD,
+              textAlign: 'center',
+            }}>{t('yourDetails', lang)}</h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <Field
-              lang={lang}
-              label={t('name', lang)}
-              value={delivery.name}
-              onChange={v => onDelivery(d => ({ ...d, name: v }))}
-              autoComplete="name"
-            />
-            <Field
-              lang={lang}
-              label={t('mobile', lang)}
-              value={delivery.mobile}
-              onChange={v => onDelivery(d => ({ ...d, mobile: v }))}
-              type="tel"
-              autoComplete="tel"
-            />
-            <Field
-              lang={lang}
-              label={t('address', lang)}
-              value={delivery.address}
-              onChange={v => onDelivery(d => ({ ...d, address: v }))}
-              autoComplete="street-address"
-              multiline
-            />
-            {geo.status === 'locating' || geo.status === 'geocoding' ? (
-              <div style={{
-                fontSize: 12, color: COLOR_MUTED,
-                fontStyle: 'italic', marginTop: -8,
-              }}>{t('detectingAddress', lang)}</div>
-            ) : geo.status === 'ready' && geo.address && geo.address !== delivery.address ? (
-              <button
-                type="button"
-                onClick={() => onDelivery(d => ({ ...d, address: geo.address }))}
-                style={{
-                  marginTop: -8, alignSelf: 'flex-start',
-                  background: 'transparent', border: `1px solid ${COLOR_GOLD}`,
-                  color: COLOR_SAFF, padding: '6px 12px', borderRadius: 14,
-                  fontFamily: '"Cinzel", serif', fontSize: 11,
-                  letterSpacing: '.14em', textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-              >{t('useDetected', lang)}</button>
-            ) : null}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field
+                lang={lang}
+                label={t('name', lang)}
+                value={delivery.name}
+                onChange={v => onDelivery(d => ({ ...d, name: v }))}
+                autoComplete="name"
+              />
+              <Field
+                lang={lang}
+                label={t('mobile', lang)}
+                value={delivery.mobile}
+                onChange={v => onDelivery(d => ({ ...d, mobile: v }))}
+                type="tel"
+                autoComplete="tel"
+              />
+              <Field
+                lang={lang}
+                label={t('address', lang)}
+                value={delivery.address}
+                onChange={v => onDelivery(d => ({ ...d, address: v }))}
+                autoComplete="street-address"
+                multiline
+              />
+              {geo.status === 'locating' || geo.status === 'geocoding' ? (
+                <div style={{
+                  fontSize: 12, color: COLOR_MUTED,
+                  fontStyle: 'italic', marginTop: -8,
+                }}>{t('detectingAddress', lang)}</div>
+              ) : geo.status === 'ready' && geo.address && geo.address !== delivery.address ? (
+                <button
+                  type="button"
+                  onClick={() => onDelivery(d => ({ ...d, address: geo.address }))}
+                  style={{
+                    marginTop: -8, alignSelf: 'flex-start',
+                    background: 'transparent', border: `1px solid ${COLOR_GOLD}`,
+                    color: COLOR_SAFF, padding: '6px 12px', borderRadius: 14,
+                    fontFamily: '"Cinzel", serif', fontSize: 11,
+                    letterSpacing: '.14em', textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >{t('useDetected', lang)}</button>
+              ) : null}
 
-            <Field
-              lang={lang}
-              label={t('note', lang)}
-              value={note}
-              onChange={onNote}
-              multiline
-            />
-          </div>
-        </section>
+              <Field
+                lang={lang}
+                label={t('note', lang)}
+                value={note}
+                onChange={onNote}
+                multiline
+              />
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Sticky bottom total + place order */}

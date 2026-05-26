@@ -323,6 +323,9 @@ class SyncService {
       case 'order_details':
         await _cloudApi.pushOrderDetails(_orderFromPayload(payload));
         return;
+      case 'order_items':
+        await _cloudApi.pushOrderItems(_orderFromPayload(payload));
+        return;
       case 'server_config':
         await _cloudApi.registerDevice();
         return;

@@ -224,21 +224,34 @@ const DEMO_ITEMS = [
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function getOutletId() {
+function getRouteContext() {
   const host = window.location.hostname.toLowerCase()
   const rootDomain = 'quickbytes.buzz'
+  const p = new URLSearchParams(window.location.search)
+  const parts = window.location.pathname.split('/').filter(Boolean)
+  const tableIdx = parts.indexOf('tableorder')
+  const tableNo = tableIdx !== -1 && parts[tableIdx + 1]
+    ? decodeURIComponent(parts[tableIdx + 1]).trim()
+    : ''
+  const tableMode = tableNo.length > 0
   if (host.endsWith(`.${rootDomain}`)) {
     const subdomain = host.slice(0, -rootDomain.length - 1).split('.')[0]
-    if (subdomain && subdomain !== 'www') return subdomain
+    if (subdomain && subdomain !== 'www') {
+      return { outletId: subdomain, tableNo, tableMode }
+    }
   }
 
-  const p = new URLSearchParams(window.location.search)
-  if (p.get('demo') === '1') return '__demo__'
-  if (p.get('outlet')) return p.get('outlet')
-  const parts = window.location.pathname.split('/').filter(Boolean)
+  if (p.get('demo') === '1') return { outletId: '__demo__', tableNo, tableMode }
+  if (p.get('outlet')) return { outletId: p.get('outlet'), tableNo, tableMode }
   const idx = parts.indexOf('menu')
-  if (idx !== -1 && parts[idx + 1]) return parts[idx + 1]
-  return parts[parts.length - 1] || null
+  if (idx !== -1 && parts[idx + 1]) {
+    return { outletId: parts[idx + 1], tableNo, tableMode }
+  }
+  return { outletId: parts[parts.length - 1] || null, tableNo, tableMode }
+}
+
+function getOutletId() {
+  return getRouteContext().outletId
 }
 
 export function cartTotal(cart, items) {
@@ -249,6 +262,11 @@ export function cartTotal(cart, items) {
 }
 export function cartCount(cart) { return Object.values(cart).reduce((s, q) => s + q, 0) }
 export function taka(n) { return '৳' + Math.round(n).toLocaleString('en-BD') }
+
+export function localizedItemName(item, lang = 'en') {
+  if (lang === 'bn' && item?.nameBn) return item.nameBn
+  return item?.nameEn || item?.name || item?.nameBn || 'Item'
+}
 
 export function buildMedia(item) {
   const media = []
@@ -351,16 +369,26 @@ export function loadGoogleMapsApi() {
 
 export function getBrowserPosition() {
   if (!navigator.geolocation) {
+    console.info('[QB-CUSTOMER-GEO] geolocation unavailable')
     return Promise.reject(new Error('Location is not available in this browser.'))
   }
+  console.info('[QB-CUSTOMER-GEO] browser location request started')
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      position => resolve({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      }),
+      position => {
+        const result = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        }
+        console.info('[QB-CUSTOMER-GEO] browser location success', result)
+        resolve(result)
+      },
       error => {
         const denied = error.code === error.PERMISSION_DENIED
+        console.info('[QB-CUSTOMER-GEO] browser location failed', {
+          code: error.code,
+          message: error.message,
+        })
         reject(new Error(denied ? 'Location permission was denied.' : 'Could not detect your location.'))
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 },
@@ -370,8 +398,10 @@ export function getBrowserPosition() {
 
 export async function reverseGeocodePosition(position, outletId) {
   if (!outletId || outletId === '__demo__') {
+    console.info('[QB-CUSTOMER-GEO] reverse geocode skipped', { outletId })
     throw new Error('Address lookup is not available for this menu.')
   }
+  console.info('[QB-CUSTOMER-GEO] reverse geocode request', { outletId, position })
   const res = await fetch(`${API_BASE}/customer/${encodeURIComponent(outletId)}/geocode/reverse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -385,17 +415,22 @@ export async function reverseGeocodePosition(position, outletId) {
     // Keep the clearer status error below.
   }
   if (!res.ok) {
+    console.info('[QB-CUSTOMER-GEO] reverse geocode failed', { status: res.status, body })
     throw new Error(body?.detail || body?.error || 'Could not detect address.')
   }
   const data = body?.ok === true ? body.data : body?.data ?? body
   const address = data?.address?.trim()
   if (!address) throw new Error('No address found near this location.')
+  console.info('[QB-CUSTOMER-GEO] reverse geocode success', { address })
   return address
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const outletId = getOutletId()
+  const routeContext = getRouteContext()
+  const outletId = routeContext.outletId
+  const tableNo = routeContext.tableNo
+  const isTableOrder = routeContext.tableMode
   const [phase, setPhase]       = useState('loading')
   const [info, setInfo]         = useState(null)
   const [items, setItems]       = useState([])
@@ -483,18 +518,32 @@ export default function App() {
       return
     }
     try {
+      const lang = new URLSearchParams(window.location.search).get('lang') === 'bn'
+        ? 'bn'
+        : 'en'
       const orderItems = Object.entries(cart).map(([id, qty]) => {
         const item = items.find(i => i.id === id)
-        return { menuItemId: id, name: item.name, qty, price: item.price }
+        return {
+          menuItemId: id,
+          name: localizedItemName(item, lang),
+          qty,
+          price: item.price,
+        }
       })
-      const payload = {
-        items: orderItems,
-        note: note || null,
-        orderType: 'delivery',
-        customerName: delivery.name.trim(),
-        deliveryAddress: delivery.address.trim(),
-        mobileNumber: delivery.mobile.trim(),
-      }
+      const payload = isTableOrder
+        ? {
+            items: orderItems,
+            orderType: 'dine_in',
+            tableNo,
+          }
+        : {
+            items: orderItems,
+            note: note || null,
+            orderType: 'delivery',
+            customerName: delivery.name.trim(),
+            deliveryAddress: delivery.address.trim(),
+            mobileNumber: delivery.mobile.trim(),
+          }
       const res = await fetch(`${API_BASE}/customer/${outletId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,7 +554,7 @@ export default function App() {
       const orderData = unwrapApi(data)
       setLastCart(Object.entries(cart).map(([id, qty]) => {
         const item = items.find(i => i.id === id)
-        return { name: item.name, qty, price: item.price }
+        return { name: localizedItemName(item, lang), qty, price: item.price }
       }))
       setOrderRef(orderData)
       setPhase('success')
@@ -539,12 +588,14 @@ export default function App() {
         delivery={delivery} onDelivery={setDelivery}
         onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
         onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
+        isTableOrder={isTableOrder} tableNo={tableNo}
       />
     ) : (
       <CartScreen cart={cart} items={items} note={note} onNote={setNote}
         delivery={delivery} onDelivery={setDelivery}
         onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
-        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId} />
+        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
+        isTableOrder={isTableOrder} tableNo={tableNo} />
     )
   } else if (overrides) {
     // For themes that ship a single-page Storefront (e.g. Hearth),
@@ -950,7 +1001,10 @@ function MenuHero({ info }) {
 // ── Menu Card (2-col grid) ────────────────────────────────────────────────────
 function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
   const T = useTokens()
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const hasImage = !!item.imageUrl
+  const displayName = localizedItemName(item, lang)
+  const description = lang === 'bn' && item.descriptionBn ? item.descriptionBn : item.description
 
   return (
     <div
@@ -1029,12 +1083,12 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
           fontFamily: T.display, fontSize: 14, fontWeight: 700, lineHeight: 1.05,
           textTransform: 'uppercase', color: '#fff',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{item.name}</div>
-        {item.description && (
+        }}>{displayName}</div>
+        {description && (
           <div style={{
             fontSize: 10, color: T.inkSoft, marginTop: 3,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{item.description}</div>
+          }}>{description}</div>
         )}
         <div style={{ flex: 1 }} />
         <div style={{
@@ -1048,6 +1102,7 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
 // ── Item Detail Sheet ─────────────────────────────────────────────────────────
 function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
   const T = useTokens()
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const media = buildMedia(item)
   const videoRef = useRef(null)
   const current = media[0]
@@ -1061,6 +1116,9 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  const displayName = localizedItemName(item, lang)
+  const description = lang === 'bn' && item.descriptionBn ? item.descriptionBn : item.description
 
   return (
     <div
@@ -1124,10 +1182,10 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
           <div style={{
             fontFamily: T.display, fontSize: 26, lineHeight: .92, textTransform: 'uppercase',
             color: '#fff', fontWeight: 800, letterSpacing: '-.01em',
-          }}>{item.name}</div>
-          {item.description && (
+          }}>{displayName}</div>
+          {description && (
             <div style={{ marginTop: 10, fontSize: 13, color: T.inkSoft, lineHeight: 1.55 }}>
-              {item.description}
+              {description}
             </div>
           )}
           <div style={{
@@ -1184,13 +1242,14 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
 }
 
 // ── Cart Screen ───────────────────────────────────────────────────────────────
-function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, onRemove, onBack, onPlace, submitting, info, outletId }) {
+function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, onRemove, onBack, onPlace, submitting, info, outletId, isTableOrder = false, tableNo = '' }) {
   const T = useTokens()
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
     .filter(Boolean)
   const total = cartTotal(cart, items)
-  const deliveryReady = delivery.name.trim() && delivery.address.trim() && delivery.mobile.trim().length >= 7
+  const deliveryReady = isTableOrder || (delivery.name.trim() && delivery.address.trim() && delivery.mobile.trim().length >= 7)
   const [geo, setGeo] = useState({ status: 'idle', address: '', position: null, error: '' })
   const mountedRef = useRef(true)
   const addressRef = useRef(delivery.address)
@@ -1201,9 +1260,9 @@ function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, on
 
   useEffect(() => {
     mountedRef.current = true
-    detectAddress()
+    if (!isTableOrder) detectAddress()
     return () => { mountedRef.current = false }
-  }, [])
+  }, [isTableOrder])
 
   function setGeoIfMounted(next) {
     if (!mountedRef.current) return
@@ -1290,7 +1349,7 @@ function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, on
               <div style={{
                 fontFamily: T.display, fontSize: 16, textTransform: 'uppercase',
                 color: '#fff', fontWeight: 700, lineHeight: 1.1,
-              }}>{item.name}</div>
+              }}>{localizedItemName(item, lang)}</div>
               <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{taka(item.price)} each</div>
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{
@@ -1313,76 +1372,87 @@ function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, on
         {/* Divider */}
         <div style={{ height: 1, background: T.line, margin: '12px 0' }} />
 
-        {/* Delivery Details */}
-        <div style={{ marginTop: 4, marginBottom: 16 }}>
+        {isTableOrder ? (
           <div style={{
-            fontFamily: T.display, fontSize: 13, color: T.amber,
-            letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
-          }}>Delivery Details</div>
-        </div>
-
-        {/* Delivery Form */}
-        <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input
-            type="text"
-            placeholder="Full name"
-            value={delivery.name}
-            onChange={e => onDelivery({ ...delivery, name: e.target.value })}
-            style={{
-              width: '100%', padding: '12px 14px', borderRadius: 10,
-              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
-              fontSize: 14, fontFamily: T.body, outline: 'none',
-            }}
-          />
-          <AddressAssistSection
-            geo={geo}
-            currentAddress={delivery.address}
-            onRetry={detectAddress}
-            onUseAddress={() => onDelivery({ ...delivery, address: geo.address })}
-          />
-          <textarea
-            placeholder="Delivery address"
-            rows={2}
-            value={delivery.address}
-            onChange={e => onDelivery({ ...delivery, address: e.target.value })}
-            style={{
-              width: '100%', padding: '12px 14px', borderRadius: 10,
-              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
-              fontSize: 14, fontFamily: T.body, resize: 'none', outline: 'none',
-            }}
-          />
-          <input
-            type="tel"
-            inputMode="tel"
-            placeholder="Mobile number"
-            value={delivery.mobile}
-            onChange={e => onDelivery({ ...delivery, mobile: e.target.value })}
-            style={{
-              width: '100%', padding: '12px 14px', borderRadius: 10,
-              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
-              fontSize: 14, fontFamily: T.body, outline: 'none',
-            }}
-          />
-        </div>
-
-        {/* Note */}
-        <div style={{ marginTop: 4 }}>
-          <div style={{
-            fontFamily: T.display, fontSize: 13, color: T.amber,
-            letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
-          }}>Note for kitchen</div>
-          <textarea
-            style={{
-              width: '100%', padding: '12px 14px', borderRadius: 10,
-              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
-              fontSize: 13, fontFamily: T.body, resize: 'none', outline: 'none',
-            }}
-            placeholder="e.g. no onion, extra spicy · বিশেষ নির্দেশনা"
-            value={note}
-            onChange={e => onNote(e.target.value)}
-            rows={3}
-          />
-        </div>
+            margin: '14px 0 16px',
+            padding: '14px 16px',
+            border: `1px solid ${T.line}`,
+            borderRadius: 12,
+            background: 'rgba(255,181,71,.10)',
+            color: T.amber,
+            fontFamily: T.display,
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+          }}>Table {tableNo}</div>
+        ) : (
+          <>
+            <div style={{ marginTop: 4, marginBottom: 16 }}>
+              <div style={{
+                fontFamily: T.display, fontSize: 13, color: T.amber,
+                letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+              }}>Delivery Details</div>
+            </div>
+            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                type="text"
+                placeholder="Full name"
+                value={delivery.name}
+                onChange={e => onDelivery({ ...delivery, name: e.target.value })}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 14, fontFamily: T.body, outline: 'none',
+                }}
+              />
+              <AddressAssistSection
+                geo={geo}
+                currentAddress={delivery.address}
+                onRetry={detectAddress}
+                onUseAddress={() => onDelivery({ ...delivery, address: geo.address })}
+              />
+              <textarea
+                placeholder="Delivery address"
+                rows={2}
+                value={delivery.address}
+                onChange={e => onDelivery({ ...delivery, address: e.target.value })}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 14, fontFamily: T.body, resize: 'none', outline: 'none',
+                }}
+              />
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="Mobile number"
+                value={delivery.mobile}
+                onChange={e => onDelivery({ ...delivery, mobile: e.target.value })}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 14, fontFamily: T.body, outline: 'none',
+                }}
+              />
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <div style={{
+                fontFamily: T.display, fontSize: 13, color: T.amber,
+                letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+              }}>Note for kitchen</div>
+              <textarea
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 13, fontFamily: T.body, resize: 'none', outline: 'none',
+                }}
+                placeholder="e.g. no onion, extra spicy · বিশেষ নির্দেশনা"
+                value={note}
+                onChange={e => onNote(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </>
+        )}
 
         {/* Total */}
         <div style={{ marginTop: 12, padding: '14px 0', borderTop: `1px solid ${T.line}` }}>

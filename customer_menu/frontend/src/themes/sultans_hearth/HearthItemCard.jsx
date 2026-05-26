@@ -43,8 +43,10 @@ function PriceTag({ amount }) {
 export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetail }) {
   const T = useTokens()
   const lang = useLang()
-  const nameEn = pick(item, 'name', 'en') || item.name
-  const nameBn = item.nameBn || ''
+  const primaryName = pick(item, 'name', lang) || item.nameEn || item.name || item.nameBn
+  const secondaryName = lang === 'bn'
+    ? (item.nameEn || item.name || '')
+    : (item.nameBn || '')
   const description = pick(item, 'description', lang)
   const spice = spiceLevelFor(item)
   const hasImage = !!item.imageUrl
@@ -102,15 +104,17 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
           }}>
             <h3 style={{
               margin: 0,
-              fontFamily: '"Cormorant Garamond", serif',
-              fontStyle: 'italic',
-              fontWeight: 500,
+              fontFamily: lang === 'bn'
+                ? '"Hind Siliguri", system-ui, sans-serif'
+                : '"Cormorant Garamond", serif',
+              fontStyle: lang === 'bn' ? 'normal' : 'italic',
+              fontWeight: lang === 'bn' ? 600 : 500,
               fontSize: 17,
               lineHeight: 1.2,
               color: '#F4EEDF',
               minWidth: 0,
               overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{nameEn}</h3>
+            }}>{primaryName}</h3>
             {spice > 0 && (
               <span aria-label={`Spice level ${spice} of 3`} style={{
                 display: 'inline-flex', alignItems: 'center',
@@ -123,7 +127,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
             )}
           </div>
 
-          {nameBn && (
+          {secondaryName && secondaryName !== primaryName && (
             <div style={{
               marginTop: 2,
               fontFamily: '"Hind Siliguri", system-ui, sans-serif',
@@ -131,7 +135,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
               color: '#A89580',
               lineHeight: 1.25,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{nameBn}</div>
+            }}>{secondaryName}</div>
           )}
 
           {description && (
@@ -162,7 +166,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
               <button
                 type="button"
                 onClick={onAdd}
-                aria-label={`${t('add', lang)} ${nameEn}`}
+                aria-label={`${t('add', lang)} ${primaryName}`}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
                   border: 'none',
@@ -188,7 +192,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
                 <button
                   type="button"
                   onClick={onRemove}
-                  aria-label={`${t('remove', lang)} ${nameEn}`}
+                  aria-label={`${t('remove', lang)} ${primaryName}`}
                   style={{
                     width: 32, height: 36,
                     background: 'transparent', border: 'none',
@@ -200,7 +204,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
                 <button
                   type="button"
                   onClick={onAdd}
-                  aria-label={`${t('add', lang)} ${nameEn}`}
+                  aria-label={`${t('add', lang)} ${primaryName}`}
                   style={{
                     width: 32, height: 36,
                     background: 'transparent', border: 'none',

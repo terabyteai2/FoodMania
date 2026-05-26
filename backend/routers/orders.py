@@ -8,10 +8,17 @@ from auth import get_current_device_payload, get_current_outlet_id
 from database import get_db
 from models import MenuItem, Order
 from routers.ws import manager
-from schemas import OrderDetailsUpdate, OrderPayload, OrderStatusUpdate, ok
+from schemas import (
+    OrderDetailsUpdate,
+    OrderItemsUpdate,
+    OrderPayload,
+    OrderStatusUpdate,
+    ok,
+)
 from routers.menu import _require_manager_scan_access
 from services.customer_orders import order_to_dict
 from services.order_history_import import OrderHistoryCsvError, parse_order_history_csv
+from services.push_notifications import send_order_push
 
 router = APIRouter()
 
@@ -37,12 +44,12 @@ def _clean_text(value: object) -> str:
     return str(value or "").strip()
 
 
-async def _normalized_order_items(
+async def _normalize_items_list(
     outlet_id: str,
-    body: OrderPayload,
+    raw_items: list[dict],
     db: AsyncSession,
 ) -> list[dict]:
-    items = [item.model_dump(exclude_none=True) for item in body.items]
+    items = raw_items
     menu_ids = {
         menu_id
         for item in items
@@ -154,7 +161,11 @@ async def push_order(
         covers=body.covers,
         payment_method=body.paymentMethod,
         table_no=(body.tableNo or "").strip() or None,
-        items=await _normalized_order_items(outlet_id, body, db),
+        items=await _normalize_items_list(
+            outlet_id,
+            [item.model_dump(exclude_none=True) for item in body.items],
+            db,
+        ),
         notes=body.notes,
         customer_name=(body.customerName or "").strip() or None,
         delivery_address=(body.deliveryAddress or "").strip() or None,
@@ -169,6 +180,12 @@ async def push_order(
     await db.refresh(order)
 
     await manager.broadcast(outlet_id, {"type": "order_created", "data": _order_to_dict(order)})
+    await send_order_push(
+        db=db,
+        outlet_id=outlet_id,
+        event_type="order_created",
+        order=order,
+    )
     return ok(_order_to_dict(order))
 
 
@@ -279,6 +296,12 @@ async def update_order_status(
     await db.refresh(order)
 
     await manager.broadcast(outlet_id, {"type": "order_status_updated", "data": _order_to_dict(order)})
+    await send_order_push(
+        db=db,
+        outlet_id=outlet_id,
+        event_type="order_status_updated",
+        order=order,
+    )
     return ok(_order_to_dict(order))
 
 
@@ -312,6 +335,52 @@ async def update_order_details(
         order.delivery_address = (body.deliveryAddress or "").strip() or None
     if body.mobileNumber is not None:
         order.mobile_number = (body.mobileNumber or "").strip() or None
+    order.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(order)
+
+    await manager.broadcast(outlet_id, {"type": "order_updated", "data": _order_to_dict(order)})
+    return ok(_order_to_dict(order))
+
+
+@router.patch("/outlets/{outlet_id}/orders/{order_id}/items")
+async def update_order_items(
+    outlet_id: str,
+    order_id: str,
+    body: OrderItemsUpdate,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    order = (
+        await db.execute(
+            select(Order).where((Order.id == order_id) & (Order.outlet_id == outlet_id))
+        )
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    if not body.items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order must contain at least one item.",
+        )
+
+    normalized = await _normalize_items_list(
+        outlet_id,
+        [item.model_dump(exclude_none=True) for item in body.items],
+        db,
+    )
+    order.items = normalized
+    if body.subtotal is not None:
+        order.subtotal = body.subtotal
+    if body.totalAmount is not None:
+        order.total_amount = body.totalAmount
+    if body.vatRatePercent is not None:
+        order.vat_rate_percent = body.vatRatePercent
+    if body.vatAmount is not None:
+        order.vat_amount = body.vatAmount
     order.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(order)

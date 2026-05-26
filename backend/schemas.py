@@ -147,6 +147,8 @@ class DeviceRegisterRequest(BaseModel):
     restaurantName: str
     outletName: str
     tableCount: int | None = Field(default=None, ge=1, le=200)
+    fcmToken: str | None = None
+    pushPlatform: str | None = None
 
 
 # ── Menu ──────────────────────────────────────────────────────────────────────
@@ -292,6 +294,15 @@ class OrderDetailsUpdate(BaseModel):
     customerName: str | None = None
     deliveryAddress: str | None = None
     mobileNumber: str | None = None
+    updatedAt: str | None = None
+
+
+class OrderItemsUpdate(BaseModel):
+    items: list[OrderLineItemPayload] = Field(default_factory=list)
+    subtotal: float | None = None
+    totalAmount: float | None = None
+    vatRatePercent: float | None = None
+    vatAmount: float | None = None
     updatedAt: str | None = None
 
 
