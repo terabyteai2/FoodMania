@@ -50,6 +50,10 @@ ENGLISH_WORDS = {
     "have", "hello", "hi", "is", "menu", "order", "please", "thanks",
     "the", "want", "what", "yes", "you",
 }
+ENGLISH_SENTENCE_WORDS = {
+    "can", "do", "have", "hello", "hi", "is", "please", "thanks", "the",
+    "want", "what", "yes", "you",
+}
 BANGLISH_DISALLOWED_OPENERS = ("hey", "sure", "hello", "hi", "great", "awesome", "wonderful")
 BANGLISH_ENGLISH_MARKERS = {
     "are", "can", "choose", "do", "have", "help", "like", "menu", "order",
@@ -657,6 +661,7 @@ async def _handle_event(
         return
 
     conversation = await _get_conversation(db, integration, psid)
+    await _ensure_customer_profile(conversation, integration)
     conversation.last_user_message = text
     try:
         reply = await _chatbot_reply(db, integration, conversation, text)
@@ -734,6 +739,58 @@ async def _get_conversation(
     return conversation
 
 
+async def _ensure_customer_profile(
+    conversation: ChatbotConversation,
+    integration: ChatbotIntegration,
+) -> None:
+    state = _normalize_state(conversation.state_json)
+    if state["profileFetched"]:
+        return
+    profile = await _fetch_facebook_customer_profile(integration, conversation.psid)
+    state["profileName"] = str(profile.get("name") or "").strip()
+    state["profileHonorific"] = _profile_honorific(profile.get("gender"))
+    state["profileFetched"] = True
+    conversation.state_json = state
+
+
+async def _fetch_facebook_customer_profile(
+    integration: ChatbotIntegration,
+    psid: str,
+) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(timeout=GRAPH_TIMEOUT_SECONDS) as client:
+            for fields in ("name,first_name,last_name,gender", "name,first_name,last_name"):
+                response = await client.get(
+                    _graph_url(f"/{psid}"),
+                    params={
+                        "fields": fields,
+                        "access_token": integration.page_access_token,
+                    },
+                )
+                if response.status_code >= 400 and "gender" in fields:
+                    continue
+                response.raise_for_status()
+                payload = response.json()
+                return payload if isinstance(payload, dict) else {}
+    except (httpx.HTTPError, ValueError) as error:
+        logger.warning(
+            "facebook customer profile lookup failed page=%s psid=%s error=%s",
+            integration.page_id,
+            psid,
+            error,
+        )
+        return {}
+
+
+def _profile_honorific(gender: Any) -> str:
+    clean = str(gender or "").strip().lower()
+    if clean == "male":
+        return "Sir"
+    if clean == "female":
+        return "Madam"
+    return ""
+
+
 def _append_history(conversation: ChatbotConversation, role: str, content: str) -> None:
     """Ring-buffer: keep the last MAX_HISTORY_STORE turns in state_json['history']."""
     state = _normalize_state(conversation.state_json)
@@ -770,6 +827,9 @@ async def _chatbot_reply(
     outlet = integration.outlet
     menu_items = await _available_menu_items(db, outlet.id)
     state = _normalize_state(conversation.state_json)
+    state["restaurantDisplayName"] = (
+        outlet.restaurant.name if outlet.restaurant else outlet.name
+    )
     reply_style = _detect_reply_style(user_text)
     if state["awaitingConfirmation"] and _is_affirmative_confirmation(user_text):
         state, state_reply = await _apply_order_action(
@@ -782,7 +842,7 @@ async def _chatbot_reply(
         )
         conversation.state_json = state
         if state_reply:
-            return state_reply
+            return _personalize_reply(state_reply, state, force_address=True)
     resolved_selection = _resolve_numbered_selection(
         user_text,
         conversation.last_bot_message,
@@ -809,7 +869,7 @@ async def _chatbot_reply(
         conversation.state_json = state
         if not reply:
             raise ChatbotError("Groq returned an empty chatbot reply.")
-        return reply
+        return _personalize_reply(reply, state)
 
     state, state_reply = await _apply_order_action(
         db=db,
@@ -821,10 +881,10 @@ async def _chatbot_reply(
     )
     conversation.state_json = state
     if state_reply:
-        return state_reply
+        reply = state_reply
     if not reply:
         raise ChatbotError("Groq returned an empty chatbot reply.")
-    return reply
+    return _personalize_reply(reply, state)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1020,6 +1080,31 @@ def _resolve_numbered_selection(
 
 def _normalized_menu_name(value: str) -> str:
     return re.sub(r"[^a-z0-9\u0980-\u09ff]+", "", value.lower())
+
+
+def _personalize_reply(reply: str, state: dict, *, force_address: bool = False) -> str:
+    count = _safe_int(state.get("botReplyCount"), fallback=0)
+    state["botReplyCount"] = count + 1
+    if not state.get("greetingSent"):
+        state["greetingSent"] = True
+        restaurant = str(state.get("restaurantDisplayName") or "Restaurant").strip()
+        customer = _customer_address(state)
+        suffix = f" {customer}" if customer else ""
+        return (
+            f"Assalamualaikum, {restaurant} theke bolchi. "
+            f"Kivabe sahajjo korte pari{suffix}?\n\n{reply}"
+        )
+    if force_address or (count + 1) % 3 == 0:
+        customer = _customer_address(state)
+        if customer:
+            return f"{reply}\n\n{customer}"
+    return reply
+
+
+def _customer_address(state: dict) -> str:
+    name = str(state.get("profileName") or "").strip()
+    honorific = str(state.get("profileHonorific") or "").strip()
+    return " ".join(part for part in (name, honorific) if part)
 
 
 def _is_affirmative_confirmation(text: str) -> bool:
@@ -1361,7 +1446,7 @@ def _confirmation_reply(
             f"মোট: {total_str}\n"
             f"নাম: {name} | মোবাইল: {mobile}\n"
             f"ঠিকানা: {address}\n\n"
-            "কনফার্ম করতে হ্যাঁ লিখুন।"
+            "আপনি কি অর্ডারটি নিশ্চিত করবেন?"
         )
     if reply_style == REPLY_STYLE_EN:
         return (
@@ -1369,14 +1454,14 @@ def _confirmation_reply(
             f"Total: {total_str}\n"
             f"Name: {name} | Mobile: {mobile}\n"
             f"Address: {address}\n\n"
-            "Reply yes to confirm."
+            "Would you like to confirm the order?"
         )
     return (
         f"Order-ta ektu check koren:\n{item_lines}\n"
         f"Total: {total_str}\n"
         f"Naam: {name} | Mobile: {mobile}\n"
         f"Address: {address}\n\n"
-        "Confirm korte 'hae' likhun."
+        "Apni ki order-ta confirm korben?"
     )
 
 
@@ -1426,7 +1511,7 @@ def _detect_reply_style(text: str) -> str:
     words = set(re.findall(r"[a-z]+", text.lower()))
     if words & BANGLISH_WORDS:
         return REPLY_STYLE_BANGLISH
-    if words & ENGLISH_WORDS:
+    if words & ENGLISH_SENTENCE_WORDS:
         return REPLY_STYLE_EN
     return REPLY_STYLE_BANGLISH
 
@@ -1503,6 +1588,12 @@ def _normalize_state(value: Any) -> dict:
         "deliveryAddress": str(state.get("deliveryAddress") or "").strip(),
         "awaitingConfirmation": bool(state.get("awaitingConfirmation")),
         "selectedMenuItemId": str(state.get("selectedMenuItemId") or "").strip(),
+        "profileName": str(state.get("profileName") or "").strip(),
+        "profileHonorific": str(state.get("profileHonorific") or "").strip(),
+        "profileFetched": bool(state.get("profileFetched")),
+        "restaurantDisplayName": str(state.get("restaurantDisplayName") or "").strip(),
+        "greetingSent": bool(state.get("greetingSent")),
+        "botReplyCount": _safe_int(state.get("botReplyCount"), fallback=0),
         "history": state.get("history") if isinstance(state.get("history"), list) else [],
     }
 
@@ -1515,6 +1606,12 @@ def _empty_state() -> dict:
         "deliveryAddress": "",
         "awaitingConfirmation": False,
         "selectedMenuItemId": "",
+        "profileName": "",
+        "profileHonorific": "",
+        "profileFetched": False,
+        "restaurantDisplayName": "",
+        "greetingSent": False,
+        "botReplyCount": 0,
         "history": [],
     }
 

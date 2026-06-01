@@ -19,6 +19,7 @@ def test_facebook_chatbot_detects_latest_message_reply_style():
     assert facebook_chatbot._detect_reply_style("burger pawa jabe?") == "banglish"
     assert facebook_chatbot._detect_reply_style("Do you have burgers?") == "en"
     assert facebook_chatbot._detect_reply_style("বার্গার পাওয়া যাবে?") == "bn"
+    assert facebook_chatbot._detect_reply_style("2 burger") == "banglish"
     assert facebook_chatbot._detect_reply_style("12345") == "banglish"
 
 
@@ -95,15 +96,54 @@ def test_facebook_chatbot_backend_replies_follow_reply_style():
     assert "cancel kore dilam" in facebook_chatbot._localized_reply("cancel", "banglish")
     assert "বাতিল" in facebook_chatbot._localized_reply("cancel", "bn")
     assert "cancelled" in facebook_chatbot._localized_reply("cancel", "en")
-    assert "Confirm korte 'hae' likhun" in facebook_chatbot._confirmation_reply(
+    assert "Apni ki order-ta confirm korben?" in facebook_chatbot._confirmation_reply(
         lines, {"total": 252}, state, "banglish"
     )
-    assert "কনফার্ম করতে হ্যাঁ লিখুন" in facebook_chatbot._confirmation_reply(
+    assert "আপনি কি অর্ডারটি নিশ্চিত করবেন?" in facebook_chatbot._confirmation_reply(
         lines, {"total": 252}, state, "bn"
     )
-    assert "Reply yes" in facebook_chatbot._confirmation_reply(
+    assert "Would you like to confirm the order?" in facebook_chatbot._confirmation_reply(
         lines, {"total": 252}, state, "en"
     )
+
+
+def test_facebook_chatbot_personalizes_greeting_and_periodic_replies():
+    state = facebook_chatbot._empty_state()
+    state.update(
+        {
+            "restaurantDisplayName": "Helium",
+            "profileName": "Nadia",
+            "profileHonorific": "Madam",
+        }
+    )
+
+    assert facebook_chatbot._personalize_reply("Burger ache.", state) == (
+        "Assalamualaikum, Helium theke bolchi. "
+        "Kivabe sahajjo korte pari Nadia Madam?\n\nBurger ache."
+    )
+    assert facebook_chatbot._personalize_reply("Kon burger-ta neben?", state) == (
+        "Kon burger-ta neben?"
+    )
+    assert facebook_chatbot._personalize_reply("Koyta neben?", state) == (
+        "Koyta neben?\n\nNadia Madam"
+    )
+
+
+def test_facebook_chatbot_uses_neutral_name_when_gender_is_unavailable():
+    state = facebook_chatbot._empty_state()
+    state.update({"restaurantDisplayName": "Helium", "profileName": "Moon"})
+
+    reply = facebook_chatbot._personalize_reply("Ki order korben?", state)
+
+    assert "Moon?" in reply
+    assert "Sir" not in reply
+    assert "Madam" not in reply
+
+
+def test_facebook_chatbot_maps_facebook_gender_to_honorific():
+    assert facebook_chatbot._profile_honorific("male") == "Sir"
+    assert facebook_chatbot._profile_honorific("female") == "Madam"
+    assert facebook_chatbot._profile_honorific(None) == ""
 
 
 @pytest.mark.asyncio
@@ -443,9 +483,13 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
     async def fake_send(_integration, psid: str, text: str):
         sent_messages.append((psid, text))
 
+    async def fake_profile(_integration, _psid: str):
+        return {"name": "Nadia", "gender": "female"}
+
     monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
     monkeypatch.setattr(facebook_chatbot, "_chat_with_groq", fake_groq)
     monkeypatch.setattr(facebook_chatbot, "_send_message", fake_send)
+    monkeypatch.setattr(facebook_chatbot, "_fetch_facebook_customer_profile", fake_profile)
 
     await create_tables()
     transport = ASGITransport(app=app)
@@ -506,7 +550,7 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
 
     assert draft.status_code == 200
     assert confirm.status_code == 200
-    assert "Reply yes" in sent_messages[0][1]
+    assert "Apni ki order-ta confirm korben?" in sent_messages[0][1]
     body = orders.json()["data"]
     messenger_order = next(order for order in body if order["source"] == "facebook_messenger")
     assert messenger_order["customerName"] == "Nadia"
