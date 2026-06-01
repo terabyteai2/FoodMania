@@ -659,7 +659,7 @@ async def _handle_event(
         integration.last_error = None
     except Exception as error:
         logger.exception("facebook chatbot failed page=%s psid=%s", integration.page_id, psid)
-        reply = "Ami ekjon AI ChatBot. Amake ektu bujhiye bolun, ki order korte chan?"
+        reply = "Ami ekjon AI ChatBot.  Arektu bujhiye bolun, kindly"
         integration.last_error = str(error)[:800]
 
     # persist bot reply into history before saving
@@ -843,50 +843,100 @@ async def _chat_with_groq(
         }, ensure_ascii=False),
     })
 
-    try:
-        async with httpx.AsyncClient(timeout=GROQ_TIMEOUT_SECONDS) as client:
-            for attempt in range(2):
-                if attempt:
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            "Rewrite your previous JSON reply. Keep the same factual meaning and "
-                            "order object, but strictly follow replyStyle. For banglish, write only "
-                            "natural Roman Bangla like the customer — short, warm, no English sentences, "
-                            "no greetings like Hey/Sure/Hello, no emoji. Return JSON only."
-                        ),
-                    })
-                response = await client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "messages": messages,
-                        "temperature": 0.25,
-                        "max_completion_tokens": 800,
-                        "response_format": {"type": "json_object"},
-                    },
-                )
-                response.raise_for_status()
-                payload = response.json()
-                content = (
-                    ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
-                    if isinstance(payload, dict) else None
-                )
-                if not isinstance(content, str) or not content.strip():
-                    raise ChatbotError("Groq returned an empty chatbot response.")
-                parsed = _parse_json_object(content)
-                reply = str(parsed.get("reply") or "").strip()
-                if not _reply_needs_rewrite(reply, reply_style):
-                    return parsed
-                messages.append({"role": "assistant", "content": content})
-    except httpx.HTTPError as error:
-        raise ChatbotError("Groq chatbot request failed.") from error
-
+    async with httpx.AsyncClient(timeout=GROQ_TIMEOUT_SECONDS) as client:
+        for attempt in range(2):
+            if attempt:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Rewrite your previous JSON reply. Keep the same factual meaning and "
+                        "order object, but strictly follow replyStyle. For banglish, write only "
+                        "natural Roman Bangla like the customer — short, warm, no English sentences, "
+                        "no greetings like Hey/Sure/Hello, no emoji. Return JSON only."
+                    ),
+                })
+            payload = await _chat_completion_with_fallback(
+                client=client,
+                groq_api_key=api_key,
+                groq_model=model,
+                messages=messages,
+            )
+            content = (
+                ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
+                if isinstance(payload, dict) else None
+            )
+            if not isinstance(content, str) or not content.strip():
+                raise ChatbotError("Groq returned an empty chatbot response.")
+            parsed = _parse_json_object(content)
+            reply = str(parsed.get("reply") or "").strip()
+            if not _reply_needs_rewrite(reply, reply_style):
+                return parsed
+            messages.append({"role": "assistant", "content": content})
     raise ChatbotError("Groq chatbot reply did not follow the requested language style.")
+
+
+async def _chat_completion_with_fallback(
+    *,
+    client: httpx.AsyncClient,
+    groq_api_key: str,
+    groq_model: str,
+    messages: list[dict],
+) -> dict:
+    providers = [
+        (
+            "groq",
+            "https://api.groq.com/openai/v1/chat/completions",
+            groq_api_key,
+            groq_model,
+        ),
+    ]
+    openrouter_key = settings.OPENROUTER_API_KEY.strip()
+    openrouter_model = settings.CHATBOT_OPENROUTER_MODEL.strip()
+    if openrouter_key and openrouter_model:
+        providers.append(
+            (
+                "openrouter",
+                "https://openrouter.ai/api/v1/chat/completions",
+                openrouter_key,
+                openrouter_model,
+            )
+        )
+
+    errors = []
+    for provider, url, api_key, model in providers:
+        try:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.25,
+                    "max_completion_tokens": 800,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, dict):
+                return payload
+            raise ChatbotError(f"{provider} returned a malformed response.")
+        except (httpx.HTTPError, ValueError, ChatbotError) as error:
+            body = ""
+            if isinstance(error, httpx.HTTPStatusError):
+                body = error.response.text[:1000]
+            logger.warning(
+                "facebook chatbot provider failed provider=%s model=%s error=%s body=%s",
+                provider,
+                model,
+                error,
+                body,
+            )
+            errors.append(f"{provider}: {error}")
+    raise ChatbotError("Chatbot providers failed: " + "; ".join(errors))
 
 
 def _state_for_llm(state: dict) -> dict:

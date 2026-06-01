@@ -5,6 +5,7 @@ import uuid
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+import httpx
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -103,6 +104,38 @@ def test_facebook_chatbot_backend_replies_follow_reply_style():
     assert "Reply yes" in facebook_chatbot._confirmation_reply(
         lines, {"total": 252}, state, "en"
     )
+
+
+@pytest.mark.asyncio
+async def test_facebook_chatbot_uses_openrouter_when_groq_is_rate_limited(monkeypatch):
+    monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEY", "openrouter-key")
+    monkeypatch.setattr(facebook_chatbot.settings, "CHATBOT_OPENROUTER_MODEL", "openai/gpt-5-mini")
+    calls = []
+
+    class FakeClient:
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs["json"]["model"]))
+            request = httpx.Request("POST", url)
+            if "groq.com" in url:
+                return httpx.Response(429, request=request, json={"error": {"message": "rate limit"}})
+            return httpx.Response(
+                200,
+                request=request,
+                json={"choices": [{"message": {"content": '{"reply":"Thik ache"}'}}]},
+            )
+
+    payload = await facebook_chatbot._chat_completion_with_fallback(
+        client=FakeClient(),
+        groq_api_key="groq-key",
+        groq_model="openai/gpt-oss-20b",
+        messages=[{"role": "user", "content": "hello"}],
+    )
+
+    assert payload["choices"][0]["message"]["content"] == '{"reply":"Thik ache"}'
+    assert calls == [
+        ("https://api.groq.com/openai/v1/chat/completions", "openai/gpt-oss-20b"),
+        ("https://openrouter.ai/api/v1/chat/completions", "openai/gpt-5-mini"),
+    ]
 
 
 def _signed_json(payload: dict, secret: str) -> tuple[bytes, dict]:
