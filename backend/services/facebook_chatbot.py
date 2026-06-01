@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -31,6 +32,18 @@ GRAPH_TIMEOUT_SECONDS = 8.0
 GROQ_TIMEOUT_SECONDS = 30.0
 MAX_CONTEXT_MENU_ITEMS = 80
 MAX_REPLY_CHARS = 1900
+REPLY_STYLE_BANGLISH = "banglish"
+REPLY_STYLE_BN = "bn"
+REPLY_STYLE_EN = "en"
+BANGLISH_WORDS = {
+    "ami", "apni", "ase", "ache", "bolen", "chai", "chan", "daw", "den",
+    "hae", "hobe", "jabe", "khete", "ki", "lagbe", "nibo", "pawa",
+}
+ENGLISH_WORDS = {
+    "address", "available", "burger", "can", "cancel", "delivery", "do",
+    "have", "hello", "hi", "is", "menu", "order", "please", "thanks",
+    "the", "want", "what", "yes", "you",
+}
 
 
 class ChatbotError(RuntimeError):
@@ -609,7 +622,7 @@ async def _handle_event(
         await _send_message(
             integration,
             psid,
-            "Please send a text message so I can help with the menu or delivery order.",
+            "Menu ba delivery order niye help korte amake ekta text message pathan.",
         )
         return
 
@@ -688,28 +701,31 @@ async def _chatbot_reply(
     outlet = integration.outlet
     menu_items = await _available_menu_items(db, outlet.id)
     state = _normalize_state(conversation.state_json)
+    reply_style = _detect_reply_style(user_text)
     model_payload = await _chat_with_groq(
         outlet=outlet,
         menu_items=menu_items,
         state=state,
         user_text=user_text,
         ordering_enabled=integration.ordering_enabled,
+        reply_style=reply_style,
     )
     reply = str(model_payload.get("reply") or "").strip()
     order_action = model_payload.get("order") if isinstance(model_payload.get("order"), dict) else {}
 
     if not integration.ordering_enabled:
         conversation.state_json = state
-        return reply or _menu_link_reply(outlet)
+        return reply or _menu_link_reply(outlet, reply_style)
 
     state, state_reply = await _apply_order_action(
         db=db,
         outlet=outlet,
         state=state,
         action=order_action,
+        reply_style=reply_style,
     )
     conversation.state_json = state
-    return state_reply or reply or "I can help with menu questions and delivery orders."
+    return state_reply or reply or _localized_reply("general", reply_style)
 
 
 async def _chat_with_groq(
@@ -719,14 +735,17 @@ async def _chat_with_groq(
     state: dict,
     user_text: str,
     ordering_enabled: bool,
+    reply_style: str,
 ) -> dict:
     api_key = settings.GROQ_API_KEY.strip()
     model = settings.CHATBOT_GROQ_MODEL.strip()
     if not api_key or not model:
         return {
-            "reply": (
-                f"Thanks for messaging {outlet.name}. AI chat is not configured yet. "
-                f"You can order here: {_menu_link(outlet)}"
+            "reply": _localized_reply(
+                "not_configured",
+                reply_style,
+                outlet_name=outlet.name,
+                menu_link=_menu_link(outlet),
             ),
             "order": {"intent": "none"},
         }
@@ -738,6 +757,7 @@ async def _chat_with_groq(
             "restaurant": context,
             "conversationState": state,
             "customerMessage": user_text,
+            "replyStyle": reply_style,
         }, ensure_ascii=False)},
     ]
     try:
@@ -773,8 +793,16 @@ async def _chat_with_groq(
 
 def _system_prompt() -> str:
     return (
-        "You are the restaurant's Facebook Messenger assistant. Reply briefly and warmly. "
-        "Use only the provided restaurant/menu context. The only order type is delivery. "
+        "You are a friendly restaurant staff member chatting naturally on Facebook Messenger. "
+        "Sound human, casual, warm, and organized, not formal or robotic. Keep each reply short "
+        "and usually ask only one clear question at a time. Follow the provided replyStyle: use "
+        "natural Roman Bangla for banglish, Bengali script for bn, and English for en. Banglish "
+        "is the default. Safely mirror the customer's tone, but do not copy typos, confusing "
+        "shorthand, or offensive language. Use only the provided restaurant/menu context and "
+        "never invent an item, price, availability, or order detail. The only order type is delivery. "
+        "If a customer asks vaguely about a category such as burgers and the exact item is unclear, "
+        "reply conversationally and ask what kind they want. Do not list options unless asked. "
+        "Do not add a menuItemId to an order until the customer's exact menu item is clear. "
         "Collect menu item ids, quantities, customerName, mobileNumber, and deliveryAddress. "
         "Never create an order immediately after collecting details; first summarize the cart "
         "and ask the customer to confirm. When the customer explicitly confirms, set "
@@ -829,16 +857,17 @@ async def _apply_order_action(
     outlet: Outlet,
     state: dict,
     action: dict,
+    reply_style: str = REPLY_STYLE_BANGLISH,
 ) -> tuple[dict, str | None]:
     intent = str(action.get("intent") or "none").strip().lower()
     if intent == "cancel":
-        return _empty_state(), "No problem, I cancelled the draft order. What else can I help with?"
+        return _empty_state(), _localized_reply("cancel", reply_style)
 
     state = _merge_state(state, action)
     lines, issue = await _validated_lines(db, outlet.id, state)
     if issue:
         state["awaitingConfirmation"] = False
-        return state, issue
+        return state, _localized_reply("unavailable", reply_style)
     if not lines:
         return state, None
 
@@ -863,17 +892,21 @@ async def _apply_order_action(
             created_by_role="customer",
         )
         return _empty_state(), (
-            "Order confirmed. "
-            f"Your order number is #{order.serial_number}. Total: ৳{float(order.total_amount):.0f}."
+            _localized_reply(
+                "success",
+                reply_style,
+                serial=order.serial_number,
+                total=float(order.total_amount),
+            )
         )
 
     if confirmed and not awaiting:
         state["awaitingConfirmation"] = True
-        return state, _confirmation_reply(lines, totals, state)
+        return state, _confirmation_reply(lines, totals, state, reply_style)
 
     if has_details:
         state["awaitingConfirmation"] = True
-        return state, _confirmation_reply(lines, totals, state)
+        return state, _confirmation_reply(lines, totals, state, reply_style)
 
     state["awaitingConfirmation"] = False
     missing = [
@@ -886,7 +919,7 @@ async def _apply_order_action(
         if not str(state.get(key) or "").strip()
     ]
     if missing:
-        return state, "Please share your " + ", ".join(missing) + " for delivery."
+        return state, _missing_details_reply(missing, reply_style)
     return state, None
 
 
@@ -957,14 +990,82 @@ async def _validated_lines(
     return lines, None
 
 
-def _confirmation_reply(lines: list[DeliveryOrderLine], totals: dict, state: dict) -> str:
+def _confirmation_reply(
+    lines: list[DeliveryOrderLine], totals: dict, state: dict, reply_style: str
+) -> str:
     item_text = ", ".join(f"{line.qty} x {line.name}" for line in lines)
+    if reply_style == REPLY_STYLE_BN:
+        return (
+            f"আপনার ডেলিভারি অর্ডারটি একটু মিলিয়ে নিন: {item_text}। "
+            f"নাম: {state.get('customerName')}। মোবাইল: {state.get('mobileNumber')}। "
+            f"ঠিকানা: {state.get('deliveryAddress')}। মোট: ৳{totals['total']:.0f}। "
+            "অর্ডার দিতে হ্যাঁ লিখুন।"
+        )
+    if reply_style == REPLY_STYLE_EN:
+        return (
+            f"Please confirm your delivery order: {item_text}. "
+            f"Name: {state.get('customerName')}. Mobile: {state.get('mobileNumber')}. "
+            f"Address: {state.get('deliveryAddress')}. Total: ৳{totals['total']:.0f}. "
+            "Reply yes to place the order."
+        )
     return (
-        f"Please confirm your delivery order: {item_text}. "
+        f"Apnar delivery order-ta ektu miliye nin: {item_text}. "
         f"Name: {state.get('customerName')}. Mobile: {state.get('mobileNumber')}. "
         f"Address: {state.get('deliveryAddress')}. Total: ৳{totals['total']:.0f}. "
-        "Reply yes to place the order."
+        "Order korte hae likhun."
     )
+
+
+def _detect_reply_style(text: str) -> str:
+    if re.search(r"[\u0980-\u09ff]", text):
+        return REPLY_STYLE_BN
+    words = set(re.findall(r"[a-z]+", text.lower()))
+    if words & BANGLISH_WORDS:
+        return REPLY_STYLE_BANGLISH
+    if words & ENGLISH_WORDS:
+        return REPLY_STYLE_EN
+    return REPLY_STYLE_BANGLISH
+
+
+def _missing_details_reply(missing: list[str], reply_style: str) -> str:
+    if reply_style == REPLY_STYLE_BN:
+        labels = {"name": "নাম", "mobile number": "মোবাইল নম্বর", "delivery address": "ডেলিভারি ঠিকানা"}
+        return "ডেলিভারির জন্য আপনার " + ", ".join(labels[item] for item in missing) + " দিন।"
+    if reply_style == REPLY_STYLE_EN:
+        return "Please share your " + ", ".join(missing) + " for delivery."
+    labels = {"name": "name", "mobile number": "mobile number", "delivery address": "delivery address"}
+    return "Delivery-r jonno apnar " + ", ".join(labels[item] for item in missing) + " din."
+
+
+def _localized_reply(kind: str, reply_style: str, **values: Any) -> str:
+    replies = {
+        "cancel": {
+            REPLY_STYLE_BANGLISH: "Thik ache, draft order-ta cancel kore dilam. Ar kichu lagbe?",
+            REPLY_STYLE_BN: "ঠিক আছে, খসড়া অর্ডারটি বাতিল করে দিলাম। আর কিছু লাগবে?",
+            REPLY_STYLE_EN: "No problem, I cancelled the draft order. What else can I help with?",
+        },
+        "unavailable": {
+            REPLY_STYLE_BANGLISH: "Selected item-er moddhe kichu ekhon available nei. Current menu theke arekta choose korben?",
+            REPLY_STYLE_BN: "বাছাই করা কিছু আইটেম এখন পাওয়া যাচ্ছে না। বর্তমান মেনু থেকে আরেকটি বেছে নেবেন?",
+            REPLY_STYLE_EN: "Some selected items are no longer available. Please choose from the current menu.",
+        },
+        "success": {
+            REPLY_STYLE_BANGLISH: "Order confirm hoye geche. Apnar order number #{serial}. Total: ৳{total:.0f}.",
+            REPLY_STYLE_BN: "অর্ডার নিশ্চিত হয়েছে। আপনার অর্ডার নম্বর #{serial}। মোট: ৳{total:.0f}।",
+            REPLY_STYLE_EN: "Order confirmed. Your order number is #{serial}. Total: ৳{total:.0f}.",
+        },
+        "general": {
+            REPLY_STYLE_BANGLISH: "Menu ba delivery order niye apnake help korte pari. Ki khete chan?",
+            REPLY_STYLE_BN: "মেনু বা ডেলিভারি অর্ডার নিয়ে আপনাকে সাহায্য করতে পারি। কী খেতে চান?",
+            REPLY_STYLE_EN: "I can help with menu questions and delivery orders. What would you like?",
+        },
+        "not_configured": {
+            REPLY_STYLE_BANGLISH: "{outlet_name}-e message korar jonno thanks. AI chat ekhono configure kora hoyni. Ekhane order korte paren: {menu_link}",
+            REPLY_STYLE_BN: "{outlet_name}-এ মেসেজ করার জন্য ধন্যবাদ। AI chat এখনো চালু করা হয়নি। এখানে অর্ডার করতে পারেন: {menu_link}",
+            REPLY_STYLE_EN: "Thanks for messaging {outlet_name}. AI chat is not configured yet. You can order here: {menu_link}",
+        },
+    }
+    return replies[kind][reply_style].format(**values)
 
 
 async def _send_message(integration: ChatbotIntegration, psid: str, text: str) -> None:
@@ -1038,5 +1139,10 @@ def _menu_link(outlet: Outlet) -> str:
     return f"{settings.BASE_URL.rstrip('/')}/menu/{outlet.id}"
 
 
-def _menu_link_reply(outlet: Outlet) -> str:
-    return f"You can view the menu and order here: {_menu_link(outlet)}"
+def _menu_link_reply(outlet: Outlet, reply_style: str = REPLY_STYLE_BANGLISH) -> str:
+    link = _menu_link(outlet)
+    if reply_style == REPLY_STYLE_BN:
+        return f"এখানে মেনু দেখে অর্ডার করতে পারেন: {link}"
+    if reply_style == REPLY_STYLE_EN:
+        return f"You can view the menu and order here: {link}"
+    return f"Ekhane menu dekhe order korte paren: {link}"

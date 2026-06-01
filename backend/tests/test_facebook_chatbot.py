@@ -14,6 +14,57 @@ from models import AdminAccount
 from services import facebook_chatbot
 
 
+def test_facebook_chatbot_detects_latest_message_reply_style():
+    assert facebook_chatbot._detect_reply_style("burger pawa jabe?") == "banglish"
+    assert facebook_chatbot._detect_reply_style("Do you have burgers?") == "en"
+    assert facebook_chatbot._detect_reply_style("বার্গার পাওয়া যাবে?") == "bn"
+    assert facebook_chatbot._detect_reply_style("12345") == "banglish"
+
+
+def test_facebook_chatbot_prompt_requires_human_style_and_exact_menu_item():
+    prompt = facebook_chatbot._system_prompt()
+
+    assert "Sound human, casual, warm, and organized" in prompt
+    assert "Banglish is the default" in prompt
+    assert "Do not list options unless asked" in prompt
+    assert "Do not add a menuItemId" in prompt
+
+
+def test_facebook_chatbot_backend_replies_follow_reply_style():
+    missing = ["name", "mobile number", "delivery address"]
+    lines = [
+        facebook_chatbot.DeliveryOrderLine(
+            menu_item_id="burger-1",
+            name="Burger",
+            qty=2,
+            price=120,
+        )
+    ]
+    state = {
+        "customerName": "Nadia",
+        "mobileNumber": "01700000000",
+        "deliveryAddress": "Road 1",
+    }
+
+    assert facebook_chatbot._missing_details_reply(missing, "banglish").startswith(
+        "Delivery-r jonno"
+    )
+    assert facebook_chatbot._missing_details_reply(missing, "en").startswith("Please share")
+    assert facebook_chatbot._missing_details_reply(missing, "bn").startswith("ডেলিভারির জন্য")
+    assert "cancel kore dilam" in facebook_chatbot._localized_reply("cancel", "banglish")
+    assert "বাতিল" in facebook_chatbot._localized_reply("cancel", "bn")
+    assert "cancelled" in facebook_chatbot._localized_reply("cancel", "en")
+    assert "Order korte hae likhun" in facebook_chatbot._confirmation_reply(
+        lines, {"total": 252}, state, "banglish"
+    )
+    assert "অর্ডার দিতে হ্যাঁ লিখুন" in facebook_chatbot._confirmation_reply(
+        lines, {"total": 252}, state, "bn"
+    )
+    assert "Reply yes" in facebook_chatbot._confirmation_reply(
+        lines, {"total": 252}, state, "en"
+    )
+
+
 def _signed_json(payload: dict, secret: str) -> tuple[bytes, dict]:
     raw = json.dumps(payload).encode("utf-8")
     digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
