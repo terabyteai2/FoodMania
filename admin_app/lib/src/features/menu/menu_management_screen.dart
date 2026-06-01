@@ -104,7 +104,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             tooltip: text.isBn ? 'মেনু সেটিংস' : 'Menu settings',
                             onPressed: () => _openMenuSettings(context),
                           ),
-                        HeaderLanguageButton(),
+                        HeaderModeButton(),
                         HeaderNotificationBell(
                           onNavigateToOrders:
                               widget.onNavigateToOrders ?? () {},

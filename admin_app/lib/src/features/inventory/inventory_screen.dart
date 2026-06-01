@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../app_scope.dart';
+import '../../core/enums/business_tier.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/notification_center.dart';
@@ -39,7 +42,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final app = AppScope.of(context);
     final text = app.strings;
     final summary = app.inventorySummary;
-    final varianceOn = app.varianceTrackingEnabled;
+    final tier = TierScope.of(context);
 
     if (!_firstLoadKicked) {
       _firstLoadKicked = true;
@@ -48,76 +51,42 @@ class _InventoryScreenState extends State<InventoryScreen> {
       });
     }
 
-    return Scaffold(
-      backgroundColor: PosColors.background,
-      body: SafeArea(
-        bottom: false,
-        child: RefreshIndicator(
-          color: PosColors.primaryDark,
-          backgroundColor: PosColors.primary,
-          onRefresh: () async {
-            await app.refreshInventory();
-            await app.refreshInventorySummary();
-          },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: _Header(
-                  text: text,
-                  summary: summary,
-                  varianceOn: varianceOn,
-                  onNavigateToOrders: widget.onNavigateToOrders ?? () {},
-                  onNavigateToTarget: widget.onNavigateToTarget,
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: _InventorySummaryBand(
-                  text: text,
-                  summary: summary,
-                  varianceOn: varianceOn,
-                ),
-              ),
-              if (summary != null && summary.categories.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _CategoryChips(
-                    summary: summary,
-                    selected: _selectedCategory,
-                    onSelected: (key) =>
-                        setState(() => _selectedCategory = key),
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: _ColumnHeader(text: text, varianceOn: varianceOn),
-              ),
-              if (summary == null)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 60),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                )
-              else
-                _ItemSliverList(
-                  summary: summary,
-                  selectedCategory: _selectedCategory,
-                  text: text,
-                  varianceOn: varianceOn,
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: 110)),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _InventoryActionBar(text: text),
+    // Tier-specific home screens
+    if (tier == BusinessTier.simple) {
+      return _InvSimple(
+        app: app,
+        text: text,
+        summary: summary,
+        onNavigateToOrders: widget.onNavigateToOrders ?? () {},
+        onNavigateToTarget: widget.onNavigateToTarget,
+      );
+    }
+    if (tier == BusinessTier.advanced || tier == BusinessTier.enterprise) {
+      return _InvAdvanced(
+        app: app,
+        text: text,
+        summary: summary,
+        onNavigateToOrders: widget.onNavigateToOrders ?? () {},
+        onNavigateToTarget: widget.onNavigateToTarget,
+      );
+    }
+
+    return _InvStandard(
+      app: app,
+      text: text,
+      summary: summary,
+      selectedCategory: _selectedCategory,
+      onCategorySelected: (key) => setState(() => _selectedCategory = key),
+      onNavigateToOrders: widget.onNavigateToOrders ?? () {},
+      onNavigateToTarget: widget.onNavigateToTarget,
     );
   }
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
+// Legacy standard widgets stay available while the redesign settles.
+// ignore: unused_element
 class _Header extends StatelessWidget {
   const _Header({
     required this.text,
@@ -191,7 +160,7 @@ class _Header extends StatelessWidget {
             onPressed: () => _showMoreMenu(context, text),
           ),
           const SizedBox(width: 6),
-          const HeaderLanguageButton(),
+          const HeaderModeButton(),
           const SizedBox(width: 6),
           HeaderNotificationBell(
             onNavigateToOrders: onNavigateToOrders,
@@ -308,6 +277,7 @@ class _MoreMenuRow extends StatelessWidget {
 
 // ── Stock value card ──────────────────────────────────────────────────────────
 
+// ignore: unused_element
 class _InventorySummaryBand extends StatelessWidget {
   const _InventorySummaryBand({
     required this.text,
@@ -778,6 +748,7 @@ class _StockStatusOkCard extends StatelessWidget {
 
 // ── Category chips ────────────────────────────────────────────────────────────
 
+// ignore: unused_element
 class _CategoryChips extends StatelessWidget {
   const _CategoryChips({
     required this.summary,
@@ -816,6 +787,7 @@ class _CategoryChips extends StatelessWidget {
 
 // ── Table header + rows ───────────────────────────────────────────────────────
 
+// ignore: unused_element
 class _ColumnHeader extends StatelessWidget {
   const _ColumnHeader({required this.text, required this.varianceOn});
 
@@ -869,6 +841,7 @@ class _ColumnHeader extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _ItemSliverList extends StatelessWidget {
   const _ItemSliverList({
     required this.summary,
@@ -1166,6 +1139,7 @@ class _VarianceBadge extends StatelessWidget {
 
 // ── FAB ──────────────────────────────────────────────────────────────────────
 
+// ignore: unused_element
 class _InventoryActionBar extends StatelessWidget {
   const _InventoryActionBar({required this.text});
 
@@ -1809,4 +1783,1875 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIER 2 — Standard inventory (small dine-in)
+// KPI trio · category filter · top movers · table-style stock list
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _InvStandard extends StatelessWidget {
+  const _InvStandard({
+    required this.app,
+    required this.text,
+    required this.summary,
+    required this.selectedCategory,
+    required this.onCategorySelected,
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
+
+  final dynamic app;
+  final AppStrings text;
+  final InventorySummary? summary;
+  final String selectedCategory;
+  final ValueChanged<String> onCategorySelected;
+  final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = summary?.items ?? const <InventorySummaryItem>[];
+    final movers = [...items]
+      ..sort((a, b) => b.todaySpendBdt.compareTo(a.todaySpendBdt));
+    final filtered = selectedCategory == 'all'
+        ? items
+        : items
+              .where((item) => item.category == selectedCategory)
+              .toList(growable: false);
+    final stockValue = summary?.stockValueBdt ?? 0;
+    final usedToday = items.fold<double>(
+      0,
+      (sum, item) => sum + item.todaySpendBdt,
+    );
+    final variance = summary?.varianceTodayBdt ?? 0;
+    final alerts = summary?.alerts ?? 0;
+
+    return Scaffold(
+      backgroundColor: PosColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          color: PosColors.primaryDark,
+          backgroundColor: PosColors.primary,
+          onRefresh: () async {
+            await app.refreshInventory();
+            await app.refreshInventorySummary();
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 120),
+            children: [
+              _InvHomeHeader(
+                text: text,
+                itemCount: items.length,
+                alerts: alerts,
+                onMore: () => _showMoreMenu(context, text),
+                onNavigateToOrders: onNavigateToOrders,
+                onNavigateToTarget: onNavigateToTarget,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: _StandardKpiStrip(
+                  stockValue: stockValue,
+                  usedToday: usedToday,
+                  variance: variance,
+                  itemCount: items.length,
+                  isBn: text.isBn,
+                ),
+              ),
+              if (summary != null && summary!.categories.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: _StandardCategoryStrip(
+                    categories: summary!.categories,
+                    selected: selectedCategory,
+                    onSelected: onCategorySelected,
+                  ),
+                ),
+              if (movers.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: _StandardMovers(
+                    items: movers.take(3).toList(),
+                    isBn: text.isBn,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
+                child: _StandardItemsCard(items: filtered, text: text),
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _InvBottomActions(text: text, app: app),
+    );
+  }
+}
+
+class _InvHomeHeader extends StatelessWidget {
+  const _InvHomeHeader({
+    required this.text,
+    required this.itemCount,
+    required this.alerts,
+    required this.onMore,
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
+
+  final AppStrings text;
+  final int itemCount;
+  final int alerts;
+  final VoidCallback onMore;
+  final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TfText(
+                  text.inventory,
+                  style: const TextStyle(
+                    color: PosColors.primaryDark,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TfText(
+                  text.isBn
+                      ? '${tfFormatNumber(context, itemCount)} টি আইটেম · ${text.alertsCount(alerts)}'
+                      : '$itemCount items · ${text.alertsCount(alerts)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: alerts > 0 ? PosColors.danger : PosColors.muted,
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const HeaderModeButton(),
+          const SizedBox(width: 6),
+          TfIconButton(
+            icon: Icons.more_horiz_rounded,
+            tooltip: text.isBn ? 'আরও অপশন' : 'More options',
+            onPressed: onMore,
+          ),
+          const SizedBox(width: 6),
+          HeaderNotificationBell(
+            onNavigateToOrders: onNavigateToOrders,
+            onNavigateToTarget: onNavigateToTarget,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StandardKpiStrip extends StatelessWidget {
+  const _StandardKpiStrip({
+    required this.stockValue,
+    required this.usedToday,
+    required this.variance,
+    required this.itemCount,
+    required this.isBn,
+  });
+
+  final double stockValue;
+  final double usedToday;
+  final double variance;
+  final int itemCount;
+  final bool isBn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line, width: 0.5),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              flex: 11,
+              child: _StandardKpiCell(
+                label: isBn ? 'স্টক মূল্য' : 'STOCK VALUE',
+                value: tfFormatCurrency(context, stockValue),
+                detail: isBn ? '$itemCount টি SKU' : '$itemCount SKUs',
+              ),
+            ),
+            const VerticalDivider(width: 0.5, thickness: 0.5),
+            Expanded(
+              flex: 10,
+              child: _StandardKpiCell(
+                label: isBn ? 'আজ ব্যবহার' : 'USED TODAY',
+                value: tfFormatCurrency(context, usedToday),
+                detail: usedToday > 0
+                    ? (isBn ? 'আজ' : 'TODAY')
+                    : (isBn ? 'ব্যবহার নেই' : 'NO USAGE'),
+                detailColor: usedToday > 0
+                    ? PosColors.success
+                    : PosColors.mutedSoft,
+                detailFill: usedToday > 0
+                    ? PosColors.successSoft
+                    : PosColors.surfaceSunk,
+              ),
+            ),
+            const VerticalDivider(width: 0.5, thickness: 0.5),
+            Expanded(
+              flex: 10,
+              child: _StandardKpiCell(
+                label: isBn ? 'ভ্যারিয়েন্স' : 'VARIANCE',
+                value: variance == 0
+                    ? '৳0'
+                    : '${variance < 0 ? '−' : '+'}${tfFormatCurrency(context, variance.abs())}',
+                valueColor: variance < 0
+                    ? PosColors.danger
+                    : PosColors.mutedSoft,
+                detail: variance < 0
+                    ? (isBn ? 'আজ ক্ষতি' : 'LOSS TODAY')
+                    : (isBn ? 'আজ ক্ষতি নেই' : 'NO LOSS TODAY'),
+                detailColor: variance < 0
+                    ? PosColors.danger
+                    : PosColors.mutedSoft,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StandardKpiCell extends StatelessWidget {
+  const _StandardKpiCell({
+    required this.label,
+    required this.value,
+    required this.detail,
+    this.valueColor = PosColors.primaryDark,
+    this.detailColor = PosColors.mutedSoft,
+    this.detailFill,
+  });
+
+  final String label;
+  final String value;
+  final String detail;
+  final Color valueColor;
+  final Color detailColor;
+  final Color? detailFill;
+
+  @override
+  Widget build(BuildContext context) {
+    final detailText = Text(
+      detail,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: detailColor,
+        fontSize: 9.5,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.25,
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 14, 10, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: PosColors.muted,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.7,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TfText(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              height: 1,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 7),
+          if (detailFill == null)
+            detailText
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: detailFill,
+                borderRadius: BorderRadius.circular(PosRadii.pill),
+              ),
+              child: detailText,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StandardCategoryStrip extends StatelessWidget {
+  const _StandardCategoryStrip({
+    required this.categories,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<InventoryCategoryBucket> categories;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: categories.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final active = category.key == selected;
+          return Material(
+            color: active ? PosColors.primarySoft : PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.pill),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(PosRadii.pill),
+              onTap: () => onSelected(category.key),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(PosRadii.pill),
+                  border: active
+                      ? null
+                      : Border.all(color: PosColors.line, width: 0.5),
+                ),
+                alignment: Alignment.center,
+                child: TfText(
+                  '${textForCategory(category, tfIsBn(context))}  ${tfFormatNumber(context, category.count)}',
+                  style: TextStyle(
+                    color: active ? PosColors.primaryDark : PosColors.inkSoft,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String textForCategory(InventoryCategoryBucket category, bool isBn) {
+    if (isBn && category.labelBn.trim().isNotEmpty) return category.labelBn;
+    return category.labelEn;
+  }
+}
+
+class _StandardMovers extends StatelessWidget {
+  const _StandardMovers({required this.items, required this.isBn});
+
+  final List<InventorySummaryItem> items;
+  final bool isBn;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxSpend = items.fold<double>(
+      0,
+      (max, item) => item.todaySpendBdt > max ? item.todaySpendBdt : max,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InventoryEyebrow(isBn ? 'আজকের দ্রুত ব্যবহার' : 'TOP MOVERS · TODAY'),
+        const SizedBox(height: 10),
+        _InventoryOutlinedCard(
+          child: Column(
+            children: [
+              for (var index = 0; index < items.length; index++)
+                _InvMoverRow(
+                  rank: index + 1,
+                  name: items[index].nameEn,
+                  qty:
+                      '${_compactQty(items[index].todayOut)} ${items[index].unit}',
+                  rev: tfFormatCurrency(context, items[index].todaySpendBdt),
+                  pct: maxSpend <= 0
+                      ? 0
+                      : (items[index].todaySpendBdt / maxSpend).clamp(0, 1),
+                  showBorder: index > 0,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StandardItemsCard extends StatelessWidget {
+  const _StandardItemsCard({required this.items, required this.text});
+
+  final List<InventorySummaryItem> items;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _InventoryEyebrow(text.isBn ? 'সব আইটেম' : 'ALL ITEMS'),
+            const Spacer(),
+            _InventoryEyebrow(text.isBn ? 'মজুদ · আজ' : 'ON HAND · TODAY'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _InventoryOutlinedCard(
+          child: items.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: TfText(
+                    text.noMatchingItems,
+                    style: const TextStyle(
+                      color: PosColors.muted,
+                      fontSize: 13,
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    _StandardItemsHeader(isBn: text.isBn),
+                    for (var index = 0; index < items.length; index++)
+                      _StandardItemRow(
+                        item: items[index],
+                        text: text,
+                        showBorder: index > 0,
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StandardItemsHeader extends StatelessWidget {
+  const _StandardItemsHeader({required this.isBn});
+
+  final bool isBn;
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+      color: PosColors.muted,
+      fontSize: 9.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.7,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      color: PosColors.surfaceSunk,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 17,
+            child: Text(isBn ? 'আইটেম' : 'ITEM', style: style),
+          ),
+          Expanded(
+            flex: 10,
+            child: Text(
+              isBn ? 'মজুদ' : 'ON HAND',
+              textAlign: TextAlign.end,
+              style: style,
+            ),
+          ),
+          Expanded(
+            flex: 9,
+            child: Text(
+              isBn ? 'আজ' : 'TODAY',
+              textAlign: TextAlign.end,
+              style: style,
+            ),
+          ),
+          Expanded(
+            flex: 7,
+            child: Text(
+              isBn ? 'অবস্থা' : 'STATUS',
+              textAlign: TextAlign.end,
+              style: style,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StandardItemRow extends StatelessWidget {
+  const _StandardItemRow({
+    required this.item,
+    required this.text,
+    required this.showBorder,
+  });
+
+  final InventorySummaryItem item;
+  final AppStrings text;
+  final bool showBorder;
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryName = InventoryItem.localizedNameParts(
+      nameEn: item.nameEn,
+      nameBn: item.nameBn,
+      language: text.language,
+    );
+    final secondaryName = text.isBn ? item.nameEn : item.nameBn;
+    final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
+    return InkWell(
+      onTap: () => _openInventoryCountSheet(context, item),
+      child: Container(
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          border: showBorder
+              ? const Border(top: BorderSide(color: PosColors.line, width: 0.5))
+              : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 17,
+              child: Row(
+                children: [
+                  _InventoryAvatar(name: primaryName),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TfText(
+                          primaryName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: PosColors.primaryDark,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            height: 1.15,
+                          ),
+                        ),
+                        if (secondaryName.trim().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          TfText(
+                            secondaryName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: PosColors.muted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 10,
+              child: _InventoryQty(
+                value: item.onHand,
+                unit: unit,
+                textAlign: TextAlign.end,
+              ),
+            ),
+            Expanded(
+              flex: 9,
+              child: _InventoryQty(
+                value: item.todayOut <= 0 ? null : -item.todayOut,
+                unit: unit,
+                textAlign: TextAlign.end,
+                mutedWhenEmpty: true,
+              ),
+            ),
+            Expanded(
+              flex: 7,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: item.isLow || item.isOut
+                    ? _InventoryStatusPill(item: item, text: text)
+                    : const _InventoryQuietStatus(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InventoryOutlinedCard extends StatelessWidget {
+  const _InventoryOutlinedCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      child: Container(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(PosRadii.md),
+          border: Border.all(color: PosColors.line, width: 0.5),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _InventoryEyebrow extends StatelessWidget {
+  const _InventoryEyebrow(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: const TextStyle(
+        color: PosColors.muted,
+        fontSize: 10.5,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.7,
+      ),
+    );
+  }
+}
+
+class _InventoryAvatar extends StatelessWidget {
+  const _InventoryAvatar({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: PosColors.primaryWash,
+        borderRadius: BorderRadius.circular(PosRadii.sm),
+      ),
+      alignment: Alignment.center,
+      child: TfText(
+        name.trim().isEmpty ? '?' : name.trim().characters.first.toUpperCase(),
+        style: const TextStyle(
+          color: PosColors.primaryDark,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _InventoryQty extends StatelessWidget {
+  const _InventoryQty({
+    required this.value,
+    required this.unit,
+    required this.textAlign,
+    this.mutedWhenEmpty = false,
+  });
+
+  final double? value;
+  final String unit;
+  final TextAlign textAlign;
+  final bool mutedWhenEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = value == null;
+    final color = empty && mutedWhenEmpty
+        ? PosColors.mutedSoft
+        : PosColors.primaryDark;
+    return TfText(
+      empty
+          ? '—'
+          : '${value! < 0 ? '−' : ''}${_compactQty(value!.abs())} $unit',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: textAlign,
+      style: TextStyle(
+        color: color,
+        fontSize: empty ? 13 : 12.5,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+class _InventoryStatusPill extends StatelessWidget {
+  const _InventoryStatusPill({required this.item, required this.text});
+
+  final InventorySummaryItem item;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    final out = item.isOut;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: out ? PosColors.dangerSoft : PosColors.warningSoft,
+        borderRadius: BorderRadius.circular(PosRadii.xs),
+      ),
+      child: TfText(
+        out ? text.statusOut : text.statusLow,
+        style: TextStyle(
+          color: out ? PosColors.danger : PosColors.warning,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _InventoryQuietStatus extends StatelessWidget {
+  const _InventoryQuietStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: const BoxDecoration(
+        color: PosColors.mutedSoft,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+void _openInventoryCountSheet(
+  BuildContext context,
+  InventorySummaryItem summary,
+) {
+  final app = AppScope.of(context);
+  final live = app.inventoryItems.firstWhere(
+    (item) => item.id == summary.id,
+    orElse: () => InventoryItem(
+      id: summary.id,
+      name: summary.nameEn,
+      category: summary.category,
+      unit: summary.unit,
+      quantity: summary.onHand,
+      minThreshold: summary.minThreshold,
+      costPerUnit: summary.costPerUnit,
+      notes: '',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    ),
+  );
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _QuickCountSheet(item: live, text: app.strings),
+  ).then((_) => app.refreshInventorySummary());
+}
+
+String _compactQty(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value.toStringAsFixed(1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIER 1 — Simple inventory (counter / juice bar)
+// KPI duo · top movers · stock-in + count CTAs
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _InvSimple extends StatelessWidget {
+  const _InvSimple({
+    required this.app,
+    required this.text,
+    required this.summary,
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
+
+  final dynamic app;
+  final AppStrings text;
+  final InventorySummary? summary;
+  final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = summary?.items ?? [];
+    final stockValue = summary?.stockValueBdt ?? 0.0;
+    final usedToday = items.fold<double>(0, (s, i) => s + i.todaySpendBdt);
+    final moneyFmt = NumberFormat('#,##0', 'en');
+
+    return Scaffold(
+      backgroundColor: PosColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          color: PosColors.primaryDark,
+          backgroundColor: PosColors.primary,
+          onRefresh: () async {
+            await app.refreshInventorySummary();
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 120),
+            children: [
+              // App bar
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TfText(
+                            text.inventory,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              color: PosColors.primaryDark,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${items.length} items · counter',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: PosColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const HeaderModeButton(),
+                  ],
+                ),
+              ),
+
+              // KPI duo — Stock value | Used today
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: PosColors.surface,
+                    borderRadius: BorderRadius.circular(PosRadii.md),
+                    border: Border.all(color: PosColors.line, width: 0.5),
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'STOCK VALUE',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: PosColors.mutedSoft,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '৳${moneyFmt.format(stockValue)}',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    color: PosColors.primaryDark,
+                                    letterSpacing: -0.5,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${items.length} SKUs',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: PosColors.mutedSoft,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Container(width: 0.5, color: PosColors.line),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'USED TODAY',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: PosColors.mutedSoft,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '৳${moneyFmt.format(usedToday)}',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    color: PosColors.primaryDark,
+                                    letterSpacing: -0.5,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: PosColors.successSoft,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'vs avg',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: PosColors.success,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Top movers
+              if (items.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'TOP MOVERS · TODAY',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.mutedSoft,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: PosColors.surface,
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          border: Border.all(color: PosColors.line, width: 0.5),
+                        ),
+                        child: Column(
+                          children: [
+                            for (int i = 0; i < items.take(4).length; i++)
+                              _InvMoverRow(
+                                rank: i + 1,
+                                name: items[i].nameEn,
+                                qty:
+                                    '${items[i].onHand.toStringAsFixed(1)} ${items[i].unit}',
+                                rev:
+                                    '৳${moneyFmt.format(items[i].todaySpendBdt)}',
+                                pct:
+                                    items.isNotEmpty &&
+                                        items.first.todaySpendBdt > 0
+                                    ? (items[i].todaySpendBdt /
+                                              items.first.todaySpendBdt)
+                                          .clamp(0, 1)
+                                    : 0,
+                                showBorder: i > 0,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _InvBottomActions(text: text, app: app),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIER 3 — Advanced inventory (full-service)
+// 3-KPI strip · reorder · reconciliation · menu costing
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _InvAdvanced extends StatelessWidget {
+  const _InvAdvanced({
+    required this.app,
+    required this.text,
+    required this.summary,
+    required this.onNavigateToOrders,
+    required this.onNavigateToTarget,
+  });
+
+  final dynamic app;
+  final AppStrings text;
+  final InventorySummary? summary;
+  final VoidCallback onNavigateToOrders;
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = summary?.items ?? [];
+    final stockValue = summary?.stockValueBdt ?? 0.0;
+    final alerts = summary?.alerts ?? 0;
+    final lowItems = items.where((i) => i.isLow).toList();
+    final outItems = items.where((i) => i.isOut).toList();
+    final reorderItems = items
+        .where((i) => i.isLow || i.isOut)
+        .take(3)
+        .toList();
+    final moneyFmt = NumberFormat('#,##0', 'en');
+    final healthOk = items.length - lowItems.length - outItems.length;
+
+    return Scaffold(
+      backgroundColor: PosColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          color: PosColors.primaryDark,
+          backgroundColor: PosColors.primary,
+          onRefresh: () async {
+            await app.refreshInventory();
+            await app.refreshInventorySummary();
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 120),
+            children: [
+              // App bar
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TfText(
+                            text.inventory,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              color: PosColors.primaryDark,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${items.length} SKUs${alerts > 0 ? " · $alerts alerts" : ""}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: alerts > 0
+                                  ? PosColors.danger
+                                  : PosColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const HeaderModeButton(),
+                    const SizedBox(width: 6),
+                    TfIconButton(
+                      icon: Icons.search_rounded,
+                      tooltip: text.searchInventory,
+                      onPressed: () {},
+                    ),
+                    const SizedBox(width: 6),
+                    HeaderNotificationBell(
+                      onNavigateToOrders: onNavigateToOrders,
+                      onNavigateToTarget: onNavigateToTarget,
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3-KPI strip — Stock value | Health | Food cost
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: PosColors.surface,
+                    borderRadius: BorderRadius.circular(PosRadii.md),
+                    border: Border.all(color: PosColors.line, width: 0.5),
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 11,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'STOCK VALUE',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: PosColors.mutedSoft,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '৳${moneyFmt.format(stockValue)}',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                    color: PosColors.primaryDark,
+                                    letterSpacing: -0.5,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${items.length} SKUs',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: PosColors.mutedSoft,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Container(width: 0.5, color: PosColors.line),
+                        Expanded(
+                          flex: 10,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'HEALTH',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: PosColors.mutedSoft,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    Text(
+                                      '$healthOk',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w600,
+                                        color: PosColors.primaryDark,
+                                        letterSpacing: -0.5,
+                                        height: 1.0,
+                                      ),
+                                    ),
+                                    Text(
+                                      '/${items.length}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: PosColors.mutedSoft,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                if (lowItems.isNotEmpty || outItems.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: PosColors.warningSoft,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      '${lowItems.length} LOW · ${outItems.length} OUT',
+                                      style: const TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: PosColors.warning,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  const Text(
+                                    'All stocked',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: PosColors.success,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Container(width: 0.5, color: PosColors.line),
+                        Expanded(
+                          flex: 10,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'FOOD COST',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: PosColors.mutedSoft,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '—',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                    color: PosColors.primaryDark,
+                                    letterSpacing: -0.5,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: PosColors.successSoft,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    '▼ target',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: PosColors.success,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Reorder suggestions
+              if (reorderItems.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'REORDER · 7-DAY USAGE',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: PosColors.mutedSoft,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${reorderItems.length} items',
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: PosColors.mutedSoft,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: PosColors.surface,
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          border: Border.all(color: PosColors.line, width: 0.5),
+                        ),
+                        child: Column(
+                          children: [
+                            for (int i = 0; i < reorderItems.length; i++)
+                              _ReorderRow(
+                                item: reorderItems[i],
+                                showBorder: i > 0,
+                                moneyFmt: moneyFmt,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // All items list (same as standard but without category filter for T3)
+              if (items.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'ALL ITEMS',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: PosColors.mutedSoft,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                          const Spacer(),
+                          const Text(
+                            'On hand · today',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              color: PosColors.mutedSoft,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: PosColors.surface,
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          border: Border.all(color: PosColors.line, width: 0.5),
+                        ),
+                        child: Column(
+                          children: [
+                            // Column header
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: PosColors.surfaceSunk,
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(PosRadii.md),
+                                ),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Expanded(
+                                    flex: 17,
+                                    child: Text(
+                                      'ITEM',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: PosColors.mutedSoft,
+                                        letterSpacing: 0.7,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 10,
+                                    child: Text(
+                                      'ON HAND',
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: PosColors.mutedSoft,
+                                        letterSpacing: 0.7,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 7,
+                                    child: Text(
+                                      'STATUS',
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: PosColors.mutedSoft,
+                                        letterSpacing: 0.7,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            for (int i = 0; i < items.length; i++)
+                              _AdvancedItemRow(
+                                item: items[i],
+                                showBorder: i > 0,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _InvBottomActions(text: text, app: app),
+    );
+  }
+}
+
+// Shared inventory row components
+
+class _InvMoverRow extends StatelessWidget {
+  const _InvMoverRow({
+    required this.rank,
+    required this.name,
+    required this.qty,
+    required this.rev,
+    required this.pct,
+    required this.showBorder,
+  });
+
+  final int rank;
+  final String name;
+  final String qty;
+  final String rev;
+  final double pct;
+  final bool showBorder;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    decoration: BoxDecoration(
+      border: showBorder
+          ? const Border(top: BorderSide(color: PosColors.line, width: 0.5))
+          : null,
+    ),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 20,
+          child: Text(
+            rank.toString().padLeft(2, '0'),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: PosColors.mutedSoft,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.primaryDark,
+                    ),
+                  ),
+                  Text(
+                    rev,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.primaryDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: pct,
+                        backgroundColor: PosColors.surfaceSunk,
+                        color: PosColors.inkSoft,
+                        minHeight: 3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    qty,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.mutedSoft,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ReorderRow extends StatelessWidget {
+  const _ReorderRow({
+    required this.item,
+    required this.showBorder,
+    required this.moneyFmt,
+  });
+
+  final InventorySummaryItem item;
+  final bool showBorder;
+  final NumberFormat moneyFmt;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOut = item.isOut;
+    final bgColor = isOut ? PosColors.dangerSoft : PosColors.warningSoft;
+    final fgColor = isOut ? PosColors.danger : PosColors.warning;
+    final label = isOut ? 'OUT' : 'LOW';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        border: showBorder
+            ? const Border(top: BorderSide(color: PosColors.line, width: 0.5))
+            : null,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: PosColors.surfaceSunk,
+              borderRadius: BorderRadius.circular(PosRadii.sm),
+            ),
+            child: Center(
+              child: Text(
+                item.nameEn.substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.primaryDark,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      item.nameEn,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: fgColor,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'on hand ${item.onHand.toStringAsFixed(1)} ${item.unit}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: PosColors.mutedSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'Reorder',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'TAP TO ORDER',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: PosColors.primary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdvancedItemRow extends StatelessWidget {
+  const _AdvancedItemRow({required this.item, required this.showBorder});
+
+  final InventorySummaryItem item;
+  final bool showBorder;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = item.isOut
+        ? PosColors.danger
+        : item.isLow
+        ? PosColors.warning
+        : PosColors.mutedSoft;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        border: showBorder
+            ? const Border(top: BorderSide(color: PosColors.line, width: 0.5))
+            : null,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 17,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.nameEn,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.primaryDark,
+                    height: 1.15,
+                  ),
+                ),
+                if (item.nameBn.isNotEmpty)
+                  Text(
+                    item.nameBn,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: PosColors.mutedSoft,
+                      fontFamily: 'Hind Siliguri',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 10,
+            child: Text(
+              '${item.onHand.toStringAsFixed(1)} ${item.unit}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: PosColors.primaryDark,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 7,
+            child: item.isLow || item.isOut
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: item.isOut
+                            ? PosColors.dangerSoft
+                            : PosColors.warningSoft,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        item.isOut ? 'OUT' : 'LOW',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  )
+                : Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: PosColors.mutedSoft,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Bottom action bar — Stock in + Start count
+class _InvBottomActions extends StatelessWidget {
+  const _InvBottomActions({required this.text, required this.app});
+  final AppStrings text;
+  final dynamic app;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: TfButton(
+            label: text.stockIn,
+            icon: Icons.add,
+            variant: TfButtonVariant.primary,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StockInScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TfButton(
+            label: text.endOfDayCount,
+            icon: Icons.fact_check_outlined,
+            variant: TfButtonVariant.dark,
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) =>
+                  _EndOfDaySheet(text: app.strings, items: app.inventoryItems),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

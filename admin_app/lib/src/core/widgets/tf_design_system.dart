@@ -46,7 +46,7 @@ String tfPick(BuildContext context, {required String en, String? bn}) {
 }
 
 const String tfEnglishFontFamily = 'Inter';
-const String tfBanglaFontFamily = 'Noto Sans Bengali';
+const String tfBanglaFontFamily = 'Hind Siliguri';
 const double tfBanglaMinLineHeight = 1.36;
 
 /// Dynamic Font Family utility ensuring baseline synchronization.
@@ -184,7 +184,7 @@ class TfMoney extends StatelessWidget {
         style ??
         TextStyle(
           fontSize: 16,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           color: PosColors.slate,
           fontFamily: tfFontFamily(context),
         );
@@ -241,7 +241,7 @@ class TfTextPair extends StatelessWidget {
         const TextStyle(
           color: PosColors.slate,
           fontSize: 14,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         );
 
     return TfText(text, textAlign: textAlign, style: style);
@@ -295,7 +295,7 @@ class TfAppBar extends StatelessWidget {
                     fontFamily: tfFontFamily(context),
                     color: PosColors.slate,
                     fontSize: 22,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                     height: 1.1,
                     letterSpacing: 0,
                   ),
@@ -364,7 +364,7 @@ class TfButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final disabled = onPressed == null;
     final colors = switch (variant) {
-      TfButtonVariant.primary => (PosColors.primary, PosColors.primaryDark),
+      TfButtonVariant.primary => (PosColors.primary, PosColors.accentInk),
       TfButtonVariant.dark => (PosColors.primaryDark, Colors.white),
       TfButtonVariant.ghost => (Colors.transparent, PosColors.slate),
       TfButtonVariant.paper => (PosColors.surface, PosColors.slate),
@@ -439,7 +439,7 @@ class TfButton extends StatelessWidget {
                     style: TextStyle(
                       color: disabled ? PosColors.muted : colors.$2,
                       fontSize: fontSize,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -485,7 +485,7 @@ class TfCard extends StatelessWidget {
       clipBehavior: clip ? Clip.antiAlias : Clip.none,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(PosRadii.md),
         border: Border.all(color: PosColors.line, width: 0.5),
       ),
       child: padded ? Padding(padding: padding, child: child) : child,
@@ -554,7 +554,7 @@ class TfChip extends StatelessWidget {
                 style: TextStyle(
                   color: active ? Colors.white : PosColors.slate,
                   fontSize: small ? 12 : 13,
-                  fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ],
@@ -607,7 +607,7 @@ class TfStatusBadge extends StatelessWidget {
           fontFamily: tfFontFamily(context),
           color: spec.$2,
           fontSize: 11,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           letterSpacing: tfIsBn(context) ? 0 : 0.2,
         ),
       ),
@@ -707,7 +707,7 @@ class TfIconButton extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       fontFamily: 'Inter',
                     ),
                   ),
@@ -833,7 +833,7 @@ class TfBottomNav extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: selected
-                                ? FontWeight.w500
+                                ? FontWeight.w600
                                 : FontWeight.w400,
                             color: selected ? PosColors.slate : PosColors.muted,
                             height: 1,
@@ -947,7 +947,7 @@ class TfSectionHeader extends StatelessWidget {
               style: TextStyle(
                 fontFamily: tfFontFamily(context),
                 fontSize: 11,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 letterSpacing: tfIsBn(context) ? 0 : 0.5,
                 color: color,
               ),
@@ -1021,7 +1021,7 @@ class TfField extends StatelessWidget {
               style: TextStyle(
                 fontFamily: tfFontFamily(context),
                 fontSize: 13,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 color: PosColors.slate,
               ),
             ),
@@ -1103,7 +1103,7 @@ class TfSearchField extends StatelessWidget {
           fontFamily: tfFontFamily(context),
           color: PosColors.slate,
           fontSize: 13,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
         cursorColor: PosColors.primary,
         decoration: InputDecoration(
@@ -1201,7 +1201,7 @@ class TfTabs extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: selected
-                              ? FontWeight.w500
+                              ? FontWeight.w600
                               : FontWeight.w400,
                           color: selected ? Colors.white : PosColors.slate,
                         ),
@@ -1223,7 +1223,7 @@ class TfTabs extends StatelessWidget {
                             '${it.count}',
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                               color: selected
                                   ? PosColors.primaryDark
                                   : PosColors.muted,
@@ -1280,7 +1280,7 @@ class TfEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 color: PosColors.slate,
               ),
             ),
@@ -1373,7 +1373,7 @@ class TfOfflineBanner extends StatelessWidget {
             ),
             style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
               color: PosColors.primaryDark,
             ),
           ),
@@ -1448,7 +1448,7 @@ class TfConfirmSheet extends StatelessWidget {
               tfPick(context, en: title, bn: titleBn),
               style: const TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
                 color: PosColors.slate,
               ),
             ),

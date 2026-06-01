@@ -1,6 +1,8 @@
 
+/* BEGIN USAGE */
 // DesignCanvas.jsx — Figma-ish design canvas wrapper
 // Warm gray grid bg + Sections + Artboards + PostIt notes.
+// Exports (to window): DesignCanvas, DCSection, DCArtboard, DCPostIt.
 // Artboards are reorderable (grip-drag), deletable, labels/titles are
 // inline-editable, and any artboard can be opened in a fullscreen focus
 // overlay (←/→/Esc). State persists to a .design-canvas.state.json sidecar
@@ -13,6 +15,11 @@
 //       <DCArtboard id="b" label="B · Minimal" width={260} height={480}>…</DCArtboard>
 //     </DCSection>
 //   </DesignCanvas>
+//
+// Artboards are static design frames, not scroll regions — never use
+// height: 100% + overflow: auto/scroll on inner elements; size each artboard
+// to fit its content (explicit pixel height, or let it grow).
+/* END USAGE */
 
 const DC = {
   bg: '#f0eee9',
@@ -109,6 +116,17 @@ if (typeof document !== 'undefined' && !document.getElementById('dc-styles')) {
 
 const DCCtx = React.createContext(null);
 
+// Recursively unwrap React.Fragment so <>…</> grouping doesn't hide
+// DCSection/DCArtboard children from the type-based walks below.
+function dcFlatten(children) {
+  const out = [];
+  React.Children.forEach(children, (c) => {
+    if (c && c.type === React.Fragment) out.push(...dcFlatten(c.props.children));
+    else out.push(c);
+  });
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────
 // DesignCanvas — stateful wrapper around the pan/zoom viewport.
 // Owns runtime state (per-section order, renamed titles/labels, hidden
@@ -158,19 +176,19 @@ function DesignCanvas({ children, minScale, maxScale, style }) {
   }, [state.sections]);
 
   // Build registries synchronously from children so FocusOverlay can read
-  // them in the same render. Only direct DCSection > DCArtboard children are
-  // walked — wrapping them in other elements opts out of focus/reorder.
+  // them in the same render. Fragments are flattened; wrapping in other
+  // elements still opts out of focus/reorder.
   const registry = {};     // slotId -> { sectionId, artboard }
   const sectionMeta = {};  // sectionId -> { title, subtitle, slotIds[] }
   const sectionOrder = [];
-  React.Children.forEach(children, (sec) => {
+  dcFlatten(children).forEach((sec) => {
     if (!sec || sec.type !== DCSection) return;
     const sid = sec.props.id ?? sec.props.title;
     if (!sid) return;
     sectionOrder.push(sid);
     const persisted = state.sections[sid] || {};
     const abs = [];
-    React.Children.forEach(sec.props.children, (ab) => {
+    dcFlatten(sec.props.children).forEach((ab) => {
       if (!ab || ab.type !== DCArtboard) return;
       const aid = ab.props.id ?? ab.props.label;
       if (aid) abs.push([aid, ab]);
@@ -299,11 +317,30 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
       const t = tf.current;
       const next = Math.min(maxScale, Math.max(minScale, t.scale * factor));
       const k = next / t.scale;
+      // --dc-inv-zoom consumers (.dc-sectionhead's CSS zoom, each section's
+      // marginBottom) reflow on every scale change, vertically shifting the
+      // world layout — so a world point mathematically pinned under the cursor
+      // drifts as you zoom (content creeps up on zoom-in, down on zoom-out).
+      // Anchor the DOM element under the cursor instead: record its screen Y,
+      // apply the transform + --dc-inv-zoom, then cancel whatever vertical
+      // drift the reflow introduced so it stays put on screen.
+      let marker = null, markerY0 = 0;
+      if (k !== 1) {
+        const hit = document.elementFromPoint(cx, cy);
+        marker = hit && hit.closest ? hit.closest('[data-dc-slot],[data-dc-section]') : null;
+        if (marker) markerY0 = marker.getBoundingClientRect().top;
+      }
       // keep the world point under the cursor fixed
       t.x = px - (px - t.x) * k;
       t.y = py - (py - t.y) * k;
       t.scale = next;
       apply();
+      if (marker) {
+        // A pure zoom around (cx, cy) maps screen Y → cy + (Y - cy) * k. Any
+        // departure after the --dc-inv-zoom reflow is the layout drift.
+        const drift = marker.getBoundingClientRect().top - (cy + (markerY0 - cy) * k);
+        if (Math.abs(drift) > 0.1) { t.y -= drift; apply(); }
+      }
     };
 
     // Mouse-wheel vs trackpad-scroll heuristic. A physical wheel sends
@@ -464,7 +501,7 @@ function DCViewport({ children, minScale = 0.1, maxScale = 8, style = {} }) {
 function DCSection({ id, title, subtitle, children, gap = 48 }) {
   const ctx = React.useContext(DCCtx);
   const sid = id ?? title;
-  const all = React.Children.toArray(children);
+  const all = React.Children.toArray(dcFlatten(children));
   const artboards = all.filter((c) => c && c.type === DCArtboard);
   const rest = all.filter((c) => !(c && c.type === DCArtboard));
   const sec = (ctx && sid && ctx.section(sid)) || {};
@@ -729,7 +766,7 @@ function DCArtboardFrame({ sectionId, artboard, label, order, onRename, onReorde
 
   return (
     <div ref={ref} data-dc-slot={id} style={{ position: 'relative', flexShrink: 0 }}>
-      <div className="dc-header" style={{ color: DC.label }} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="dc-header" data-omelette-chrome="" style={{ color: DC.label }} onPointerDown={(e) => e.stopPropagation()}>
         <div className="dc-labelrow">
           <div className="dc-grip" onPointerDown={onGripDown} title="Drag to reorder">
             <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor"><circle cx="2" cy="2" r="1.1"/><circle cx="7" cy="2" r="1.1"/><circle cx="2" cy="6.5" r="1.1"/><circle cx="7" cy="6.5" r="1.1"/><circle cx="2" cy="11" r="1.1"/><circle cx="7" cy="11" r="1.1"/></svg>

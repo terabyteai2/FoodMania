@@ -104,6 +104,7 @@ class MenuItem(Base):
     description_en: Mapped[str | None] = mapped_column(Text)
     description_bn: Mapped[str | None] = mapped_column(Text)
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    cost_price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     category: Mapped[str | None] = mapped_column(Text)
     category_en: Mapped[str | None] = mapped_column(Text)
     category_bn: Mapped[str | None] = mapped_column(Text)

@@ -89,7 +89,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 10,
+      version: 11,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -981,6 +981,7 @@ class LocalDatabaseService {
         categoryEn TEXT NOT NULL DEFAULT '',
         categoryBn TEXT NOT NULL DEFAULT '',
         price REAL NOT NULL,
+        costPrice REAL,
         imageUrl TEXT,
         isAvailable INTEGER NOT NULL,
         preparationTimeMinutes INTEGER,
@@ -1132,6 +1133,13 @@ class LocalDatabaseService {
     if (oldVersion < 10) {
       await _migrateOrdersDeliveryV10(db);
     }
+    if (oldVersion < 11) {
+      await _migrateMenuCostPriceV11(db);
+    }
+  }
+
+  Future<void> _migrateMenuCostPriceV11(Database db) async {
+    await _addColumnIfMissing(db, 'menu_items', 'costPrice', 'costPrice REAL');
   }
 
   Future<void> _migrateOrdersDeliveryV10(Database db) async {
@@ -1267,6 +1275,7 @@ class LocalDatabaseService {
     );
     await _addColumnIfMissing(db, 'menu_items', 'deletedAt', 'deletedAt TEXT');
     await _migrateMenuBilingualV7(db);
+    await _migrateMenuCostPriceV11(db);
     await _addColumnIfMissing(
       db,
       'orders',

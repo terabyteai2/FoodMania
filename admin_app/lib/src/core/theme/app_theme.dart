@@ -2,74 +2,119 @@ import 'package:flutter/material.dart';
 
 enum PosThemeTone { dark, light }
 
+// ---------------------------------------------------------------------------
+// PosColors — Deep Plum design system
+// Accent (#4C1D5E) covers ≤ 5% of any screen. 95% remains near-monochrome.
+// Dominance Rule: one full-saturation accent per viewport.
+// ---------------------------------------------------------------------------
 class PosColors {
-  static const Color primary = Color(0xFFF5C127);
-  static const Color primarySoft = Color(0xFFFEF1C5);
-  static const Color primaryWash = Color(0xFFFFF9E0);
-  static const Color primaryDark = Color(0xFF1C1A17);
-  static const Color primaryGlow = Color(0xFFF5C127);
+  // Accent — Deep Plum (≤ 5% of viewport per Dominance Rule)
+  static const Color primary = Color(0xFF4C1D5E);      // accent — CTAs, FAB, focused states
+  static const Color primaryDeep = Color(0xFF351244);  // accentDeep — pressed states
+  static const Color primaryMid = Color(0xFF6B3080);   // accentMid — secondary CTAs
+  static const Color primarySoft = Color(0xFFE8D8F0);  // accentSoft — selected backgrounds
+  static const Color primaryWash = Color(0xFFF4EDF8);  // accentWash — hover tints only
+  static const Color accentInk = Color(0xFFFFFFFF);    // text/icons on accent surfaces
 
-  static const Color background = Color(0xFFF7F4EE);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceWarm = Color(0xFFF7F4EE);
-  static const Color surfaceTinted = Color(0xFFFFF9E0);
+  // Ink — Violet-black (tonally related to accent)
+  static const Color primaryDark = Color(0xFF16101E);  // ink — primary text, headings
+  static const Color inkSoft = Color(0xFF2D2438);      // inkSoft — secondary emphasis
 
-  static const Color slate = Color(0xFF1C1A17);
-  static const Color slateSoft = Color(0xFF1C1A17);
-  static const Color muted = Color(0xFF888780);
-  static const Color mutedSoft = Color(0xFFE8E4DC);
+  // Scaffold — Neutral-cool violet base
+  static const Color background = Color(0xFFF8F8FA);   // paper — scaffold background
+  static const Color surface = Color(0xFFFFFFFF);      // surface — cards, sheets, inputs
+  static const Color surfaceSunk = Color(0xFFF1F1F5);  // surfaceSunk — search wells, fills
 
-  static const Color success = Color(0xFF3D7A5A);
-  static const Color successSoft = Color(0xFFEAF4EE);
+  // Secondary text
+  static const Color muted = Color(0xFF635B6E);        // muted — secondary text, helpers
+  static const Color mutedSoft = Color(0xFFA097AB);    // mutedSoft — captions only
 
-  // Semantic fix: Changed warning color to distinct amber-orange to separate it from Primary Yellow
-  static const Color warning = Color(0xFFE28714);
-  static const Color warningSoft = Color(0xFFFFF3E0);
+  // Borders
+  static const Color line = Color(0xFFE2DDE8);         // line — 0.5px default borders
+  static const Color lineStrong = Color(0xFFCAC3D4);   // lineStrong — active/focused
 
-  static const Color danger = Color(0xFFA32D2D);
-  static const Color dangerSoft = Color(0xFFFCEBEB);
-  static const Color info = Color(0xFF888780);
-  static const Color purple = Color(0xFF888780);
+  // Signals — functional only, never decorative
+  static const Color success = Color(0xFF15803D);
+  static const Color successSoft = Color(0xFFDCFCE7);
+  static const Color warning = Color(0xFFB45309);
+  static const Color warningSoft = Color(0xFFFEF3C7);
+  static const Color danger = Color(0xFF7F1D1D);
+  static const Color dangerSoft = Color(0xFFFEE2E2);
+  static const Color urgent = Color(0xFF9A3412);       // late orders, expedite signals
+  static const Color urgentSoft = Color(0xFFFFEDD5);
 
-  static const Color coral = Color(0xFFE88060);
-  static const Color coralSoft = Color(0xFFFBE4DB);
-  static const Color coralWash = Color(0xFFFDEFE9);
-
+  // ---------------------------------------------------------------------------
+  // Aliases — kept for backward compatibility with existing screens
+  // ---------------------------------------------------------------------------
   static const Color accent = primary;
-  static const Color accentSoft = primaryWash;
-  static const Color line = Color(0xFFE8E4DC);
-  static const Color lineStrong = Color(0xFFE8E4DC);
+  static const Color accentSoft = primarySoft;
+  static const Color accentDeep = primaryDeep;
+  static const Color accentMid = primaryMid;
+  static const Color accentWash = primaryWash;
+  static const Color slate = primaryDark;          // ink alias
+  static const Color slateSoft = inkSoft;
+  static const Color primaryGlow = primary;
+  static const Color surfaceWarm = background;
+  static const Color surfaceTinted = surface;
+  static const Color info = muted;
+  static const Color coral = urgent;               // coral → urgent
+  static const Color coralSoft = urgentSoft;
+  static const Color coralWash = urgentSoft;
+  // purple kept neutral
+  static const Color purple = muted;
 
   static PosThemeTone get tone => PosThemeTone.light;
-
   static void setTone(PosThemeTone tone) {}
 }
 
+// ---------------------------------------------------------------------------
+// PosSpacing — 6-step spatial scale
+// ---------------------------------------------------------------------------
+class PosSpacing {
+  static const double sp1 = 4;
+  static const double sp2 = 8;
+  static const double sp3 = 12;
+  static const double sp4 = 16;
+  static const double sp5 = 24;
+  static const double sp6 = 32;
+}
+
+// ---------------------------------------------------------------------------
+// PosRadii
+// ---------------------------------------------------------------------------
 class PosRadii {
-  static const double xs = 8;
-  static const double sm = 12;
-  static const double md = 12;
-  static const double lg = 12;
-  static const double xl = 12;
+  static const double xs = 6;    // badges, signal chips
+  static const double sm = 10;   // inputs, small buttons, tags
+  static const double md = 14;   // cards, sheets, dialogs
+  static const double lg = 14;   // alias → md
+  static const double xl = 14;   // alias → md
   static const double pill = 999;
 }
 
+// ---------------------------------------------------------------------------
+// PosShadows — cast in violet-black rgb(22,16,30), blur ≤ 12px
+// ---------------------------------------------------------------------------
 class PosShadows {
-  static const List<BoxShadow> card = [];
-  // 1px Flat Rule: single-layer, low-blur drop shadow (blur <= 8) for budget GPU compatibility.
+  // Stat tiles, KPI cards on surface
+  static const List<BoxShadow> soft = [
+    BoxShadow(color: Color(0x0D16101E), blurRadius: 2, offset: Offset(0, 1)),
+  ];
+  // Raised cards, FAB, active list items
+  static const List<BoxShadow> glow = [
+    BoxShadow(color: Color(0x1216101E), blurRadius: 12, offset: Offset(0, 4)),
+  ];
+  // Sticky CTAs, bottom sheets, dialogs
   static const List<BoxShadow> raised = [
-    BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x1716101E), blurRadius: 24, offset: Offset(0, 8)),
   ];
 
-  // Optimization: Budget-GPU friendly alternative avoiding costly multi-layer heavy blurs
-  static const List<BoxShadow> glow = [
-    BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 4)),
-  ];
+  // Alias used in older screens
+  static const List<BoxShadow> card = soft;
 }
 
 class PosGradients {
   static const LinearGradient brand = LinearGradient(
-    colors: [PosColors.primary, PosColors.primary],
+    colors: [PosColors.primary, PosColors.primaryDeep],
   );
 
   static const LinearGradient brandDeep = LinearGradient(
@@ -98,19 +143,19 @@ class AppTheme {
 
     const colorScheme = ColorScheme.light(
       primary: PosColors.primary,
-      onPrimary: PosColors.primaryDark,
+      onPrimary: PosColors.accentInk,
       secondary: PosColors.primaryDark,
       onSecondary: Colors.white,
       surface: PosColors.surface,
-      onSurface: PosColors.slate,
+      onSurface: PosColors.primaryDark,
       error: PosColors.danger,
       onError: Colors.white,
     );
 
     final baseText = TextStyle(
       fontFamily: 'Inter',
-      fontFamilyFallback: const ['Noto Sans Bengali'],
-      color: PosColors.slate,
+      fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
+      color: PosColors.primaryDark,
       fontWeight: FontWeight.w400,
       letterSpacing: 0,
     );
@@ -120,59 +165,70 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: PosColors.background,
       fontFamily: 'Inter',
-      fontFamilyFallback: const ['Noto Sans Bengali'],
+      fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       textTheme: TextTheme(
+        // Display — hero metrics, one per screen
         displaySmall: baseText.copyWith(
-          fontSize: s(28),
-          fontWeight: FontWeight.w500,
-          height: 1.06,
-          letterSpacing: 0,
+          fontSize: s(36),
+          fontWeight: FontWeight.w700,
+          height: 1.05,
+          letterSpacing: -0.03 * 36,
         ),
         headlineMedium: baseText.copyWith(
-          fontSize: s(24),
-          fontWeight: FontWeight.w500,
-          height: 1.1,
-          letterSpacing: 0,
+          fontSize: s(28),
+          fontWeight: FontWeight.w700,
+          height: 1.06,
+          letterSpacing: -0.03 * 28,
         ),
+        // Title — card headers, section headers
         titleLarge: baseText.copyWith(
           fontSize: s(18),
-          fontWeight: FontWeight.w500,
-          height: 1.18,
-          letterSpacing: 0,
+          fontWeight: FontWeight.w600,
+          height: 1.25,
+          letterSpacing: -0.01 * 18,
         ),
         titleMedium: baseText.copyWith(
           fontSize: s(15),
-          fontWeight: FontWeight.w500,
-          height: 1.22,
+          fontWeight: FontWeight.w600,
+          height: 1.30,
+          letterSpacing: -0.01 * 15,
         ),
         titleSmall: baseText.copyWith(
           fontSize: s(13),
-          fontWeight: FontWeight.w500,
-          height: 1.22,
+          fontWeight: FontWeight.w600,
+          height: 1.30,
         ),
-        bodyLarge: baseText.copyWith(fontSize: s(15), height: 1.4),
+        // Body — readable content
+        bodyLarge: baseText.copyWith(fontSize: s(15), height: 1.55),
         bodyMedium: baseText.copyWith(
           fontSize: s(14),
           color: PosColors.muted,
-          height: 1.4,
+          height: 1.50,
         ),
         bodySmall: baseText.copyWith(
           fontSize: s(12),
           color: PosColors.muted,
-          height: 1.3,
+          height: 1.45,
         ),
+        // Label — buttons, tab labels
         labelLarge: baseText.copyWith(
           fontSize: s(14),
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+        ),
+        labelSmall: baseText.copyWith(
+          fontSize: s(11),
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.07 * 11,
         ),
       ),
       appBarTheme: const AppBarTheme(
         elevation: 0,
         centerTitle: false,
         backgroundColor: PosColors.background,
-        foregroundColor: PosColors.slate,
+        foregroundColor: PosColors.primaryDark,
         surfaceTintColor: Colors.transparent,
       ),
       cardTheme: CardThemeData(
@@ -182,7 +238,7 @@ class AppTheme {
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderRadius: BorderRadius.circular(PosRadii.md),
           side: const BorderSide(color: PosColors.line, width: 0.5),
         ),
       ),
@@ -199,7 +255,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(PosRadii.sm),
-          borderSide: const BorderSide(color: PosColors.primaryDark, width: 1),
+          borderSide: const BorderSide(color: PosColors.lineStrong, width: 1),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(PosRadii.sm),
@@ -223,48 +279,48 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: _buttonStyle(
           background: PosColors.primary,
-          foreground: PosColors.primaryDark,
-          height: s(42),
-          radius: PosRadii.sm,
+          foreground: PosColors.accentInk,
+          height: s(50),
+          radius: PosRadii.md,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: _buttonStyle(
           background: PosColors.primary,
-          foreground: PosColors.primaryDark,
-          height: s(42),
-          radius: PosRadii.sm,
+          foreground: PosColors.accentInk,
+          height: s(50),
+          radius: PosRadii.md,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: Size(s(44), s(42)),
-          foregroundColor: PosColors.slate,
+          foregroundColor: PosColors.primaryDark,
           backgroundColor: Colors.transparent,
-          side: const BorderSide(color: PosColors.line, width: 0.5),
+          side: const BorderSide(color: PosColors.lineStrong, width: 0.5),
           padding: EdgeInsets.symmetric(horizontal: s(14), vertical: s(10)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PosRadii.sm),
           ),
           textStyle: TextStyle(
             fontSize: s(14),
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
             letterSpacing: 0,
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: PosColors.primaryDark,
-          textStyle: const TextStyle(fontWeight: FontWeight.w500),
+          foregroundColor: PosColors.primary,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          foregroundColor: PosColors.slate,
-          minimumSize: const Size(38, 38),
+          foregroundColor: PosColors.primaryDark,
+          minimumSize: const Size(44, 44),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(PosRadii.sm),
           ),
         ),
       ),
@@ -273,34 +329,37 @@ class AppTheme {
         backgroundColor: PosColors.surface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: Colors.transparent,
+        indicatorColor: PosColors.primarySoft,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(PosRadii.xs),
+        ),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
             fontSize: s(11),
-            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-            color: selected ? PosColors.slate : PosColors.muted,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? PosColors.primaryDark : PosColors.mutedSoft,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: s(22),
-            color: selected ? PosColors.slate : PosColors.muted,
+            color: selected ? PosColors.primaryDark : PosColors.mutedSoft,
           );
         }),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: PosColors.surface,
-        selectedIconTheme: IconThemeData(color: PosColors.slate, size: s(21)),
-        unselectedIconTheme: IconThemeData(color: PosColors.muted, size: s(20)),
+        selectedIconTheme: IconThemeData(color: PosColors.primaryDark, size: s(21)),
+        unselectedIconTheme: IconThemeData(color: PosColors.mutedSoft, size: s(20)),
         selectedLabelTextStyle: TextStyle(
-          color: PosColors.slate,
-          fontWeight: FontWeight.w500,
+          color: PosColors.primaryDark,
+          fontWeight: FontWeight.w600,
           fontSize: s(12),
         ),
         unselectedLabelTextStyle: TextStyle(
-          color: PosColors.muted,
+          color: PosColors.mutedSoft,
           fontWeight: FontWeight.w400,
           fontSize: s(12),
         ),
@@ -317,7 +376,7 @@ class AppTheme {
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
                 ? Colors.white
-                : PosColors.slate,
+                : PosColors.primaryDark,
           ),
           side: WidgetStateProperty.all(
             const BorderSide(color: PosColors.line, width: 0.5),
@@ -328,7 +387,7 @@ class AppTheme {
             ),
           ),
           textStyle: WidgetStateProperty.all(
-            const TextStyle(fontWeight: FontWeight.w500),
+            const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -339,10 +398,10 @@ class AppTheme {
         labelStyle: const TextStyle(
           fontWeight: FontWeight.w400,
           fontSize: 13,
-          color: PosColors.slate,
+          color: PosColors.primaryDark,
         ),
         secondaryLabelStyle: const TextStyle(
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
           color: Colors.white,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -353,7 +412,7 @@ class AppTheme {
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? PosColors.primaryDark
+              ? PosColors.accentInk
               : PosColors.muted,
         ),
         trackColor: WidgetStateProperty.resolveWith(
@@ -373,22 +432,22 @@ class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderRadius: BorderRadius.circular(PosRadii.md),
           side: const BorderSide(color: PosColors.line, width: 0.5),
         ),
         titleTextStyle: const TextStyle(
           fontFamily: 'Inter',
-          fontFamilyFallback: ['Noto Sans Bengali'],
+          fontFamilyFallback: ['Hind Siliguri', 'Noto Sans Bengali'],
           fontSize: 18,
-          fontWeight: FontWeight.w500,
-          color: PosColors.slate,
+          fontWeight: FontWeight.w600,
+          color: PosColors.primaryDark,
         ),
         contentTextStyle: const TextStyle(
           fontFamily: 'Inter',
-          fontFamilyFallback: ['Noto Sans Bengali'],
+          fontFamilyFallback: ['Hind Siliguri', 'Noto Sans Bengali'],
           fontSize: 14,
           color: PosColors.muted,
-          height: 1.45,
+          height: 1.50,
         ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
@@ -399,7 +458,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.md)),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -416,24 +475,24 @@ class AppTheme {
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: PosColors.primaryDark,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(PosRadii.xs),
         ),
         textStyle: const TextStyle(color: Colors.white, fontSize: 12),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: PosColors.primaryDark,
+        color: PosColors.primary,
         linearTrackColor: PosColors.line,
         circularTrackColor: PosColors.line,
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: PosColors.primary,
         inactiveTrackColor: PosColors.line,
-        thumbColor: PosColors.primaryDark,
+        thumbColor: PosColors.primaryDeep,
         overlayColor: PosColors.primary.withValues(alpha: 0.12),
         valueIndicatorColor: PosColors.primaryDark,
         valueIndicatorTextStyle: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -456,8 +515,8 @@ class AppTheme {
         borderRadius: BorderRadius.circular(radius),
       ),
       textStyle: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
         letterSpacing: 0,
       ),
     );

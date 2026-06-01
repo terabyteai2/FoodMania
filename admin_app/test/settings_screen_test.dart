@@ -28,6 +28,28 @@ Widget _scoped(PosAppController controller, Widget child) {
 }
 
 void main() {
+  testWidgets('language selector lives in settings', (tester) async {
+    final controller = PosAppController()..language = AppLanguage.en;
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+
+    await tester.scrollUntilVisible(
+      find.text('Language'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Language'), findsOneWidget);
+    await tester.tap(find.text('Language'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose app display language.'), findsOneWidget);
+    expect(find.text('বাংলা'), findsOneWidget);
+    expect(find.text('English'), findsWidgets);
+
+    controller.dispose();
+  });
+
   testWidgets('import order history setting is localized in Bangla', (
     tester,
   ) async {

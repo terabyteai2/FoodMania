@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 
 import 'core/constants/cloud_defaults.dart';
 import 'core/constants/google_auth_defaults.dart';
+import 'core/enums/business_tier.dart';
 import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
 import 'core/utils/bounded_string_set.dart';
@@ -223,6 +224,7 @@ class PosAppController extends ChangeNotifier {
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
   double uiScale = 1.06;
+  BusinessTier businessTier = BusinessTier.standard;
   String? lastError;
   bool demoManagerLoginEnabled = false;
   String phoneOtpMode = 'unconfigured';
@@ -388,6 +390,9 @@ class PosAppController extends ChangeNotifier {
       uiScale = (preferences.getDouble(_uiScaleKey) ?? 1.06)
           .clamp(minUiScale, maxUiScale)
           .toDouble();
+      businessTier = BusinessTier.fromString(
+        preferences.getString(_businessTierKey),
+      );
       final storedRestaurantName =
           preferences.getString(_restaurantNameKey) ?? '';
       final storedOutletName = preferences.getString(_outletNameKey) ?? '';
@@ -2728,6 +2733,14 @@ class PosAppController extends ChangeNotifier {
     await preferences.setDouble(_uiScaleKey, uiScale);
   }
 
+  Future<void> setBusinessTier(BusinessTier tier) async {
+    if (businessTier == tier) return;
+    businessTier = tier;
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_businessTierKey, tier.key);
+  }
+
   Future<void> updateTableCount(int count) async {
     final clamped = count.clamp(1, 200);
     if (serverConfig.tableCount == clamped) return;
@@ -3694,6 +3707,7 @@ class PosAppController extends ChangeNotifier {
   static final String _cloudSyncEnabledKey = 'local_pos_cloud_sync_enabled';
   static final String _autoSyncIntervalKey = 'local_pos_auto_sync_interval';
   static final String _uiScaleKey = 'local_pos_ui_scale';
+  static final String _businessTierKey = 'local_pos_business_tier';
   static final String _languageKey = 'local_pos_language';
   static final String _languagePreferenceSetKey =
       'local_pos_language_preference_set';

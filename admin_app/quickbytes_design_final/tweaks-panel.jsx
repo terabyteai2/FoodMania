@@ -1,6 +1,9 @@
 
+/* BEGIN USAGE */
 // tweaks-panel.jsx
 // Reusable Tweaks shell + form-control helpers.
+// Exports (to window): useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider,
+//   TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton.
 //
 // Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
 // posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
@@ -44,6 +47,13 @@
 //     );
 //   }
 //
+// TweakRadio is the segmented control for 2–3 short options (auto-falls-back to
+// TweakSelect past ~16/~10 chars per label); reach for TweakSelect directly when
+// options are many or long. For color tweaks always curate 3-4 options rather than
+// a free picker; an option can also be a whole 2–5 color palette (the stored value
+// is the array). The Tweak* controls are a floor, not a ceiling — build custom
+// controls inside the panel if a tweak calls for UI they don't cover.
+/* END USAGE */
 // ─────────────────────────────────────────────────────────────────────────────
 
 const __TWEAKS_STYLE = `
@@ -81,7 +91,7 @@ const __TWEAKS_STYLE = `
     color:rgba(41,38,27,.45);padding:10px 0 0}
   .twk-sect:first-child{padding-top:0}
 
-  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
     border:.5px solid rgba(0,0,0,.1);border-radius:7px;
     background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
   .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
@@ -115,7 +125,7 @@ const __TWEAKS_STYLE = `
     background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
   .twk-toggle[data-on="1"] i{transform:translateX(14px)}
 
-  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+  .twk-num{display:flex;align-items:center;box-sizing:border-box;min-width:0;height:26px;padding:0 0 0 8px;
     border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
   .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
     user-select:none;padding-right:8px}
@@ -183,42 +193,9 @@ function useTweaks(defaults) {
 // The close button posts __edit_mode_dismissed so the host's toolbar toggle
 // flips off in lockstep; the host echoes __deactivate_edit_mode back which
 // is what actually hides the panel.
-function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+function TweaksPanel({ title = 'Tweaks', children }) {
   const [open, setOpen] = React.useState(false);
   const dragRef = React.useRef(null);
-  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
-  // toggle drives the deck's per-viewer _railVisible via window message;
-  // state is mirrored from the same localStorage key the deck reads so
-  // the control reflects reality across reloads. The mechanism is the
-  // message — authors who want custom placement can post it directly
-  // and pass noDeckControls to suppress this one.
-  const hasDeckStage = React.useMemo(
-    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
-    [],
-  );
-  // Hide the toggle until the host has actually enabled the rail (the
-  // __omelette_rail_enabled window message, posted only when the
-  // omelette_deck_rail_enabled flag is on for this user). The initial read
-  // covers TweaksPanel mounting after the message already arrived; the
-  // listener covers the common case of mounting first.
-  const [railEnabled, setRailEnabled] = React.useState(
-    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
-  );
-  React.useEffect(() => {
-    if (!hasDeckStage || railEnabled) return undefined;
-    const onMsg = (e) => {
-      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
-    };
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-  }, [hasDeckStage, railEnabled]);
-  const [railVisible, setRailVisible] = React.useState(() => {
-    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
-  });
-  const toggleRail = (on) => {
-    setRailVisible(on);
-    window.postMessage({ type: '__deck_rail_visible', on }, '*');
-  };
   const offsetRef = React.useRef({ x: 16, y: 16 });
   const PAD = 16;
 
@@ -290,7 +267,7 @@ function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
   return (
     <>
       <style>{__TWEAKS_STYLE}</style>
-      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+      <div ref={dragRef} className="twk-panel" data-omelette-chrome=""
            style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
         <div className="twk-hd" onMouseDown={onDragStart}>
           <b>{title}</b>
@@ -300,11 +277,6 @@ function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
         </div>
         <div className="twk-body">
           {children}
-          {hasDeckStage && railEnabled && !noDeckControls && (
-            <TweakSection label="Deck">
-              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
-            </TweakSection>
-          )}
         </div>
       </div>
     </>

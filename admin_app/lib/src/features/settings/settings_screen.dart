@@ -197,6 +197,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.tune_rounded,
                   onTap: _openDisplaySettings,
                 ),
+                _SettingActionData(
+                  title: text.languageLabel,
+                  subtitle: text.languageSubtitle,
+                  icon: Icons.translate_rounded,
+                  trailing: app.language.label,
+                  onTap: _openLanguageSettings,
+                ),
               ],
             ),
             _SettingsGroupData(
@@ -295,6 +302,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.tune_rounded,
                   onTap: _openDisplaySettings,
                 ),
+                _SettingActionData(
+                  title: text.languageLabel,
+                  subtitle: text.languageSubtitle,
+                  icon: Icons.translate_rounded,
+                  trailing: app.language.label,
+                  onTap: _openLanguageSettings,
+                ),
               ],
             ),
             _SettingsGroupData(
@@ -351,7 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? 'সেটিংস · v2.2.1'
                           : 'Settings · v2.2.1',
                       trailing: [
-                        HeaderLanguageButton(),
+                        HeaderModeButton(),
                         HeaderNotificationBell(
                           onNavigateToOrders:
                               widget.onNavigateToOrders ?? () {},
@@ -487,6 +501,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _openLanguageSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const _LanguageSettingsPage(),
       ),
     );
   }
@@ -2201,7 +2223,6 @@ class _LanguageCard extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
 class _LanguageSettingsPage extends StatelessWidget {
   const _LanguageSettingsPage();
 

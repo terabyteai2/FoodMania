@@ -48,7 +48,8 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     Clipboard.setData(ClipboardData(text: lines.toString()));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: TfText(          text.isBn
+        content: TfText(
+          text.isBn
               ? 'রিপোর্ট ক্লিপবোর্ডে কপি হয়েছে'
               : 'Report copied to clipboard',
         ),
@@ -371,13 +372,29 @@ class _ReorderCta extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
-            color: PosColors.primary,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: PosShadows.glow,
+            color: PosColors.warningSoft,
+            borderRadius: BorderRadius.circular(PosRadii.md),
+            border: Border.all(
+              color: PosColors.warning.withValues(alpha: 0.35),
+              width: 0.5,
+            ),
           ),
           child: Row(
             children: [
-              Icon(Icons.local_shipping_outlined, color: PosColors.primaryDark),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: PosColors.warning,
+                  borderRadius: BorderRadius.circular(PosRadii.xs),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.local_shipping_outlined,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -385,20 +402,20 @@ class _ReorderCta extends StatelessWidget {
                   children: [
                     TfSectionHeader(
                       label: text.reorderSuggestion,
-                      color: PosColors.primaryDark.withValues(alpha: 0.7),
+                      color: PosColors.warning,
                       padding: EdgeInsets.zero,
                     ),
                     TfText(
                       suggestion.ctaEn,
                       style: TextStyle(
-                        color: PosColors.primaryDark,
-                        fontWeight: FontWeight.w500,
+                        color: PosColors.inkSoft,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: PosColors.primaryDark),
+              const Icon(Icons.chevron_right, color: PosColors.warning),
             ],
           ),
         ),

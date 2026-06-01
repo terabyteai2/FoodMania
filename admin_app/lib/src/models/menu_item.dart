@@ -13,6 +13,7 @@ class MenuItem {
     required this.isAvailable,
     required this.createdAt,
     required this.updatedAt,
+    this.costPrice,
     this.nameEn = '',
     this.nameBn = '',
     this.descriptionEn = '',
@@ -38,6 +39,10 @@ class MenuItem {
   final String categoryEn;
   final String categoryBn;
   final double price;
+
+  /// Owner-entered ingredient cost; null when unset. Drives Review-tab
+  /// food-cost % / margin. Preserved on sync so it isn't wiped by round-trips.
+  final double? costPrice;
   final String? imageUrl;
   final bool isAvailable;
   final int? preparationTimeMinutes;
@@ -60,6 +65,8 @@ class MenuItem {
     String? categoryEn,
     String? categoryBn,
     double? price,
+    double? costPrice,
+    bool clearCostPrice = false,
     String? imageUrl,
     bool? isAvailable,
     int? preparationTimeMinutes,
@@ -83,6 +90,7 @@ class MenuItem {
       categoryEn: categoryEn ?? this.categoryEn,
       categoryBn: categoryBn ?? this.categoryBn,
       price: price ?? this.price,
+      costPrice: clearCostPrice ? null : costPrice ?? this.costPrice,
       imageUrl: imageUrl ?? this.imageUrl,
       isAvailable: isAvailable ?? this.isAvailable,
       preparationTimeMinutes:
@@ -109,6 +117,7 @@ class MenuItem {
       'categoryEn': categoryEn,
       'categoryBn': categoryBn,
       'price': price,
+      'costPrice': costPrice,
       'imageUrl': imageUrl,
       'isAvailable': isAvailable ? 1 : 0,
       'preparationTimeMinutes': preparationTimeMinutes,
@@ -134,6 +143,7 @@ class MenuItem {
       'categoryEn': categoryEn,
       'categoryBn': categoryBn,
       'price': price,
+      'costPrice': costPrice,
       'imageUrl': imageUrl,
       'isAvailable': isAvailable,
       'preparationTimeMinutes': preparationTimeMinutes,
@@ -163,6 +173,7 @@ class MenuItem {
       categoryEn: _text(map['categoryEn']) ?? category,
       categoryBn: _text(map['categoryBn']) ?? _splitLegacy(category).$2,
       price: (map['price'] as num).toDouble(),
+      costPrice: (map['costPrice'] as num?)?.toDouble(),
       imageUrl: map['imageUrl'] as String?,
       isAvailable: _decodeBool(map['isAvailable']),
       preparationTimeMinutes: map['preparationTimeMinutes'] as int?,

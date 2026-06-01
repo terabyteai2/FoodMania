@@ -46,3 +46,27 @@ async def test_dashboard_summary_returns_money_first_and_right_now_shapes():
     assert right["tablesTotal"] == 8
     assert right["lateMinThreshold"] == 20
     assert right["needsAttention"] == []
+
+    # Review tab block (Standard/Advanced/Enterprise screens consume this).
+    assert "review" in data
+    review = data["review"]
+    assert set(review.keys()) == {
+        "hero", "kpis", "revenueByHour", "itemsSold", "bySource", "issues", "staff", "fleet",
+    }
+    assert set(review["kpis"].keys()) == {"orders", "covers", "avgTicketBdt", "foodCostPct"}
+    assert review["kpis"]["foodCostPct"] is None  # no cost_price set yet
+    assert review["itemsSold"] == []
+    assert review["staff"] == []
+    # Empty outlet: revenue-by-hour is a flat 15-bucket axis with no peak.
+    rbh = review["revenueByHour"]
+    assert len(rbh["today"]) == 15 and len(rbh["avg7"]) == 15
+    assert rbh["peakLabel"] == ""
+    # bySource always returns the three canonical channels.
+    assert [row["key"] for row in review["bySource"]] == ["cash", "card", "online"]
+
+    # Fleet block renders even for a single-outlet restaurant (one-row list).
+    fleet = review["fleet"]
+    assert set(fleet.keys()) == {"outlets", "kpis", "revenueByHour", "capacity", "topMovers"}
+    assert fleet["kpis"]["outletCount"] == 1
+    assert len(fleet["outlets"]) == 1
+    assert fleet["outlets"][0]["rank"] == 1

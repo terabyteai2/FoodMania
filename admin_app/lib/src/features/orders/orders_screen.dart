@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app_scope.dart';
+import '../../core/enums/business_tier.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/menu_image_view.dart';
@@ -24,6 +25,9 @@ import 'order_list_filters.dart';
 Future<void> openNewOrderForm(
   BuildContext context, {
   VoidCallback? onCreated,
+  String? initialMenuItemId,
+  Map<String, int>? initialMenuItemQuantities,
+  bool startAtReview = false,
 }) async {
   final app = AppScope.of(context);
   final menuItems = app.menuItems.where((i) => i.isAvailable).toList();
@@ -35,6 +39,9 @@ Future<void> openNewOrderForm(
         if ((order.tableNo ?? '').trim().isNotEmpty) order.tableNo!.trim(),
   };
 
+  final tier = TierScope.of(context);
+  final counterMode = tier == BusinessTier.simple;
+
   final created = await Navigator.of(context).push<bool>(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -42,6 +49,10 @@ Future<void> openNewOrderForm(
         menuItems: menuItems,
         tableCount: tableCount,
         occupiedTables: occupiedTables,
+        counterMode: counterMode,
+        initialMenuItemId: initialMenuItemId,
+        initialMenuItemQuantities: initialMenuItemQuantities,
+        startAtReview: startAtReview,
         onCreateOrder: (result) async {
           final order = await app.createManualOrder(
             requestedItems: result.items,
@@ -65,6 +76,112 @@ Future<void> openNewOrderForm(
     ),
   );
   if (created == true) onCreated?.call();
+}
+
+Future<void> openOrderCreatedPage(
+  BuildContext context, {
+  required OrderModel order,
+  String serviceLabel = 'Parcel',
+}) {
+  return Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) =>
+          OrderCreatedPage(order: order, serviceLabel: serviceLabel),
+    ),
+  );
+}
+
+class OrderCreatedPage extends StatefulWidget {
+  const OrderCreatedPage({
+    required this.order,
+    this.serviceLabel = 'Parcel',
+    super.key,
+  });
+
+  final OrderModel order;
+  final String serviceLabel;
+
+  @override
+  State<OrderCreatedPage> createState() => _OrderCreatedPageState();
+}
+
+class _OrderCreatedPageState extends State<OrderCreatedPage> {
+  bool _printingKot = false;
+  bool _printingReceipt = false;
+
+  Future<void> _printKot() async {
+    if (_printingKot) return;
+    setState(() => _printingKot = true);
+    final app = AppScope.of(context);
+    final ok = await app.printOrderTicket(widget.order);
+    if (!mounted) return;
+    setState(() => _printingKot = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+        content: TfText(
+          ok
+              ? app.strings.ticketPrinted(widget.order.displaySequence)
+              : (app.printerState.lastError ?? app.strings.printFailed),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _printReceipt() async {
+    if (_printingReceipt) return;
+    setState(() => _printingReceipt = true);
+    final app = AppScope.of(context);
+    final ok = await app.printCustomerInvoice(widget.order);
+    if (!mounted) return;
+    setState(() => _printingReceipt = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+        content: TfText(
+          ok
+              ? app.strings.billPrinted(widget.order.displaySequence)
+              : (app.printerState.lastError ?? app.strings.printFailed),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: PosColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _WizardHeader(
+              step: 3,
+              totalSteps: 4,
+              tableLabel: widget.serviceLabel,
+              onClose: () => Navigator.pop(context),
+              onBack: null,
+              counterMode: true,
+            ),
+            const _StepIndicator(step: 3, total: 4),
+            Expanded(
+              child: _OrderCreatedStep(
+                order: widget.order,
+                serviceLabel: widget.serviceLabel,
+                total: widget.order.total,
+                printingKot: _printingKot,
+                printingReceipt: _printingReceipt,
+                onPrintKot: () => unawaited(_printKot()),
+                onPrintReceipt: () => unawaited(_printReceipt()),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -544,7 +661,7 @@ class _TopBar extends StatelessWidget {
         title: text.ordersTitle,
         subtitle: subtitle,
         trailing: [
-          if (!quietEmpty) HeaderLanguageButton(),
+          if (!quietEmpty) HeaderModeButton(),
           HeaderNotificationBell(
             onNavigateToOrders: () {},
             onNavigateToTarget: onNavigateToTarget,
@@ -2242,12 +2359,21 @@ class _NewOrderPage extends StatefulWidget {
     required this.tableCount,
     required this.occupiedTables,
     required this.onCreateOrder,
+    this.counterMode = false,
+    this.initialMenuItemId,
+    this.initialMenuItemQuantities,
+    this.startAtReview = false,
   });
 
   final List<MenuItem> menuItems;
   final int tableCount;
   final Set<String> occupiedTables;
   final Future<OrderModel> Function(_OrderResult result) onCreateOrder;
+  // When true, skip table/source step and auto-select counter (takeaway) mode.
+  final bool counterMode;
+  final String? initialMenuItemId;
+  final Map<String, int>? initialMenuItemQuantities;
+  final bool startAtReview;
 
   @override
   State<_NewOrderPage> createState() => _NewOrderPageState();
@@ -2269,7 +2395,32 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   _MenuLayoutMode _menuLayoutMode = _MenuLayoutMode.compactGrid;
   OrderModel? _createdOrder;
   bool _creating = false;
+  bool _printingKot = false;
   bool _printingReceipt = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final validIds = widget.menuItems.map((item) => item.id).toSet();
+    final initialQuantities = widget.initialMenuItemQuantities ?? const {};
+    for (final entry in initialQuantities.entries) {
+      if (validIds.contains(entry.key) && entry.value > 0) {
+        _cart[entry.key] = entry.value;
+      }
+    }
+    if (widget.menuItems.any((item) => item.id == widget.initialMenuItemId)) {
+      _cart[widget.initialMenuItemId!] = 1;
+    }
+    if (widget.counterMode) {
+      // Simple tier: skip source/table selection, start at items step.
+      _step = widget.startAtReview && _cart.isNotEmpty ? 2 : 1;
+      _source = OrderServiceType.takeaway;
+      _selectedTable = '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _pageCtrl.jumpToPage(_step);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -2426,9 +2577,32 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     setState(() => _printingReceipt = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
         content: TfText(
           ok
               ? app.strings.billPrinted(order.displaySequence)
+              : (app.printerState.lastError ?? app.strings.printFailed),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _printCreatedKot() async {
+    final order = _createdOrder;
+    if (order == null || _printingKot) return;
+    setState(() => _printingKot = true);
+    final app = AppScope.of(context);
+    final ok = await app.printOrderTicket(order);
+    if (!mounted) return;
+    setState(() => _printingKot = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+        content: TfText(
+          ok
+              ? app.strings.ticketPrinted(order.displaySequence)
               : (app.printerState.lastError ?? app.strings.printFailed),
         ),
       ),
@@ -2456,9 +2630,10 @@ class _NewOrderPageState extends State<_NewOrderPage> {
               totalSteps: _totalSteps,
               tableLabel: _tableLabel,
               onClose: () => Navigator.pop(context),
-              onBack: _step > 0 && !isSuccess
+              onBack: _step > (widget.counterMode ? 1 : 0) && !isSuccess
                   ? () => _goToStep(_step - 1)
                   : null,
+              counterMode: widget.counterMode,
             ),
             _StepIndicator(step: _step, total: _totalSteps),
             Expanded(
@@ -2514,7 +2689,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     order: _createdOrder,
                     serviceLabel: _tableLabel,
                     total: _total,
+                    printingKot: _printingKot,
                     printingReceipt: _printingReceipt,
+                    onPrintKot: _createdOrder == null
+                        ? null
+                        : () => unawaited(_printCreatedKot()),
                     onPrintReceipt: _createdOrder == null
                         ? null
                         : () => unawaited(_printCreatedReceipt()),
@@ -2536,6 +2715,7 @@ class _WizardHeader extends StatelessWidget {
     required this.tableLabel,
     required this.onClose,
     required this.onBack,
+    this.counterMode = false,
   });
 
   final int step;
@@ -2543,6 +2723,7 @@ class _WizardHeader extends StatelessWidget {
   final String tableLabel;
   final VoidCallback onClose;
   final VoidCallback? onBack;
+  final bool counterMode;
 
   @override
   Widget build(BuildContext context) {
@@ -2606,7 +2787,28 @@ class _WizardHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (tableLabel.isNotEmpty) ...[
+          if (counterMode) ...[
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: PosColors.primarySoft,
+                  borderRadius: BorderRadius.circular(PosRadii.xs),
+                  border: Border.all(color: PosColors.primary.withValues(alpha: 0.3), width: 0.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 6, height: 6, decoration: const BoxDecoration(color: PosColors.primary, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    const Text('COUNTER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: 0.5)),
+                  ],
+                ),
+              ),
+            ),
+          ] else if (tableLabel.isNotEmpty) ...[
             const SizedBox(width: 8),
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -2614,7 +2816,7 @@ class _WizardHeader extends StatelessWidget {
                 tableLabel,
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   color: PosColors.muted,
                 ),
                 maxLines: 1,
@@ -3155,14 +3357,18 @@ class _OrderCreatedStep extends StatelessWidget {
     required this.order,
     required this.serviceLabel,
     required this.total,
+    required this.printingKot,
     required this.printingReceipt,
+    required this.onPrintKot,
     required this.onPrintReceipt,
   });
 
   final OrderModel? order;
   final String serviceLabel;
   final double total;
+  final bool printingKot;
   final bool printingReceipt;
+  final VoidCallback? onPrintKot;
   final VoidCallback? onPrintReceipt;
 
   @override
@@ -3262,12 +3468,31 @@ class _OrderCreatedStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          TfButton(
-            label: printingReceipt ? '...' : text.printReceiptAction,
-            icon: printingReceipt ? null : Icons.print_outlined,
-            variant: TfButtonVariant.dark,
-            size: TfButtonSize.lg,
-            onPressed: printingReceipt ? null : onPrintReceipt,
+          Row(
+            children: [
+              Expanded(
+                child: TfButton(
+                  key: const ValueKey('created-order-kot'),
+                  label: printingKot ? '...' : 'KOT',
+                  icon: printingKot ? null : Icons.soup_kitchen_outlined,
+                  variant: TfButtonVariant.paper,
+                  size: TfButtonSize.lg,
+                  onPressed: printingKot ? null : onPrintKot,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TfButton(
+                  key: const ValueKey('created-order-receipt'),
+                  label: printingReceipt ? '...' : 'Receipt',
+                  labelBn: printingReceipt ? '...' : 'রিসিট',
+                  icon: printingReceipt ? null : Icons.receipt_long_outlined,
+                  variant: TfButtonVariant.dark,
+                  size: TfButtonSize.lg,
+                  onPressed: printingReceipt ? null : onPrintReceipt,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -3887,7 +4112,15 @@ class _MenuTile extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // ── Background image ──────────────────────────────────────────
-            if (hasImage) _ItemImage(url: item.imageUrl!),
+            if (hasImage)
+              _ItemImage(
+                url: item.imageUrl!,
+                iconKey: resolveMenuIconKey(
+                  iconKey: extras.iconKey,
+                  name: item.name,
+                  category: item.category,
+                ),
+              ),
 
             // ── Gradient overlay for readability ──────────────────────────
             if (hasImage)
@@ -4171,8 +4404,9 @@ class _PlainMenuTileContent extends StatelessWidget {
 // Cache dimensions are sized to the actual render box × device pixel ratio so
 // the in-memory image buffer never exceeds the displayed resolution.
 class _ItemImage extends StatelessWidget {
-  const _ItemImage({required this.url});
+  const _ItemImage({required this.url, required this.iconKey});
   final String url;
+  final String iconKey;
 
   @override
   Widget build(BuildContext context) {
@@ -4211,12 +4445,7 @@ class _ItemImage extends StatelessWidget {
     );
   }
 
-  Widget _placeholder() => Container(
-    color: const Color(0xFF2A2622),
-    child: const Center(
-      child: Icon(Icons.restaurant_rounded, color: Color(0xFF4A4642), size: 22),
-    ),
-  );
+  Widget _placeholder() => MenuImageView(imageUrl: null, iconKey: iconKey);
 }
 
 class _CartFooter extends StatelessWidget {

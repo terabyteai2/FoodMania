@@ -68,6 +68,7 @@ def _item_to_dict(item: MenuItem) -> dict:
         "descriptionEn": item.description_en or item.description or "",
         "descriptionBn": item.description_bn or "",
         "price": float(item.price),
+        "costPrice": float(item.cost_price) if item.cost_price is not None else None,
         "category": item.category,
         "categoryEn": item.category_en or item.category or "General",
         "categoryBn": item.category_bn or "",
@@ -104,6 +105,7 @@ def _apply_menu_payload(
     item.description_en = description_en
     item.description_bn = description_bn
     item.price = body.price
+    item.cost_price = body.costPrice
     item.category = category_en
     item.category_en = category_en
     item.category_bn = category_bn

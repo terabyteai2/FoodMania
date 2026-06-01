@@ -8,6 +8,7 @@ import '../../app_controller.dart';
 import '../../models/pos_notification.dart';
 import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
+import 'complexity_dial.dart';
 import 'tf_design_system.dart';
 
 /// Opens the global notifications panel. Rendered as a slide-down shade
@@ -1213,43 +1214,10 @@ class NotificationOverlayButton extends StatelessWidget {
   }
 }
 
-/// Compact language-toggle button for page header action rows.
-class HeaderLanguageButton extends StatelessWidget {
-  const HeaderLanguageButton({super.key});
+/// Compact mode dropdown for page header action rows.
+class HeaderModeButton extends StatelessWidget {
+  const HeaderModeButton({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final isBn = app.language == AppLanguage.bn;
-    final label = isBn ? 'বাং' : 'EN';
-    return SizedBox(
-      height: 38,
-      width: 38,
-      child: Material(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () =>
-              app.updateLanguage(isBn ? AppLanguage.en : AppLanguage.bn),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: PosColors.line, width: 0.5),
-            ),
-            alignment: Alignment.center,
-            child: TfText(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: PosColors.slate,
-                height: 1,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const HeaderComplexityDial();
 }
