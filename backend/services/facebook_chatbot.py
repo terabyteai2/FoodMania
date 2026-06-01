@@ -34,6 +34,8 @@ MAX_CONTEXT_MENU_ITEMS = 80
 MAX_REPLY_CHARS = 1900
 MAX_HISTORY_TURNS = 6          # last N user+assistant pairs kept in Groq context
 MAX_HISTORY_STORE = 20         # total turns kept in DB (ring buffer)
+CHATBOT_SESSION_RESET_HOURS = 24
+CHATBOT_STATE_VERSION = 2
 
 REPLY_STYLE_BANGLISH = "banglish"
 REPLY_STYLE_BN = "bn"
@@ -661,8 +663,26 @@ async def _handle_event(
         return
 
     conversation = await _get_conversation(db, integration, psid)
+    _reset_inactive_session(conversation)
     await _ensure_customer_profile(conversation, integration)
     conversation.last_user_message = text
+    state = _normalize_state(conversation.state_json)
+    if not state["greetingSent"]:
+        reply = _greeting_reply(integration.outlet)
+        state["greetingSent"] = True
+        conversation.state_json = state
+        conversation.last_bot_message = reply
+        conversation.updated_at = datetime.now(timezone.utc)
+        integration.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        try:
+            await _send_message(integration, psid, reply)
+        except Exception as error:
+            logger.warning(
+                "facebook chatbot greeting send failed page=%s psid=%s error=%s",
+                integration.page_id, psid, error,
+            )
+        return
     try:
         reply = await _chatbot_reply(db, integration, conversation, text)
         integration.last_error = None
@@ -744,12 +764,16 @@ async def _ensure_customer_profile(
     integration: ChatbotIntegration,
 ) -> None:
     state = _normalize_state(conversation.state_json)
-    if state["profileFetched"]:
+    if state["profileFetched"] or state["profileLookupAttempted"]:
         return
     profile = await _fetch_facebook_customer_profile(integration, conversation.psid)
-    state["profileName"] = str(profile.get("name") or "").strip()
-    state["profileHonorific"] = _profile_honorific(profile.get("gender"))
-    state["profileFetched"] = True
+    name = str(profile.get("name") or "").strip()
+    state["profileLookupAttempted"] = True
+    if name:
+        state["profileName"] = name
+        state["profileHonorific"] = _profile_honorific(profile.get("gender"))
+        state["profileFetched"] = True
+        state["customerName"] = name
     conversation.state_json = state
 
 
@@ -759,27 +783,58 @@ async def _fetch_facebook_customer_profile(
 ) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=GRAPH_TIMEOUT_SECONDS) as client:
-            for fields in ("name,first_name,last_name,gender", "name,first_name,last_name"):
-                response = await client.get(
-                    _graph_url(f"/{psid}"),
-                    params={
-                        "fields": fields,
-                        "access_token": integration.page_access_token,
-                    },
-                )
-                if response.status_code >= 400 and "gender" in fields:
-                    continue
-                response.raise_for_status()
-                payload = response.json()
-                return payload if isinstance(payload, dict) else {}
-    except (httpx.HTTPError, ValueError) as error:
+            response = await client.get(
+                _graph_url(f"/{integration.page_id}/conversations"),
+                params={
+                    "platform": "messenger",
+                    "user_id": psid,
+                    "fields": "participants{id,name,gender}",
+                    "access_token": integration.page_access_token,
+                },
+            )
+    except httpx.HTTPError as error:
         logger.warning(
-            "facebook customer profile lookup failed page=%s psid=%s error=%s",
+            "facebook customer profile transport failed page=%s psid=%s error_type=%s",
             integration.page_id,
             psid,
-            error,
+            type(error).__name__,
         )
         return {}
+    try:
+        payload = response.json() if response.content else {}
+    except ValueError:
+        logger.warning(
+            "facebook customer profile returned invalid JSON page=%s psid=%s status=%s",
+            integration.page_id,
+            psid,
+            response.status_code,
+        )
+        return {}
+    if response.status_code >= 400:
+        logger.warning(
+            "facebook customer profile rejected page=%s psid=%s status=%s detail=%s",
+            integration.page_id,
+            psid,
+            response.status_code,
+            _facebook_error_detail(payload, "Profile lookup failed."),
+        )
+        return {}
+    return _profile_from_conversations(payload, psid)
+
+
+def _profile_from_conversations(payload: Any, psid: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    for conversation in payload.get("data") or []:
+        if not isinstance(conversation, dict):
+            continue
+        participants = conversation.get("participants")
+        if not isinstance(participants, dict):
+            continue
+        for participant in participants.get("data") or []:
+            if isinstance(participant, dict) and str(participant.get("id") or "") == psid:
+                return participant
+    return {}
 
 
 def _profile_honorific(gender: Any) -> str:
@@ -787,8 +842,22 @@ def _profile_honorific(gender: Any) -> str:
     if clean == "male":
         return "Sir"
     if clean == "female":
-        return "Madam"
-    return ""
+        return "Mam"
+    return "Ji"
+
+
+def _reset_inactive_session(conversation: ChatbotConversation) -> None:
+    state = conversation.state_json if isinstance(conversation.state_json, dict) else {}
+    updated_at = conversation.updated_at
+    inactive = (
+        updated_at is not None
+        and updated_at
+        <= datetime.now(timezone.utc) - timedelta(hours=CHATBOT_SESSION_RESET_HOURS)
+    )
+    if _safe_int(state.get("stateVersion"), fallback=0) != CHATBOT_STATE_VERSION or inactive:
+        conversation.state_json = _empty_state()
+        conversation.last_user_message = None
+        conversation.last_bot_message = None
 
 
 def _append_history(conversation: ChatbotConversation, role: str, content: str) -> None:
@@ -831,6 +900,52 @@ async def _chatbot_reply(
         outlet.restaurant.name if outlet.restaurant else outlet.name
     )
     reply_style = _detect_reply_style(user_text)
+    if state["selectedMenuItemId"]:
+        item = _menu_item_by_id(menu_items, state["selectedMenuItemId"])
+        if item is None:
+            state["selectedMenuItemId"] = ""
+            conversation.state_json = state
+            return _personalize_reply(_localized_reply("unavailable", reply_style), state)
+        quantity = _parse_quantity(user_text)
+        if quantity is None:
+            conversation.state_json = state
+            return _personalize_reply(
+                _selected_item_reply(item.name_en or item.name, reply_style),
+                state,
+            )
+        state = _add_cart_item(state, item.id, quantity)
+        state["selectedMenuItemId"] = ""
+        state["awaitingMoreItems"] = True
+        conversation.state_json = state
+        return _personalize_reply(
+            _cart_item_added_reply(item.name_en or item.name, quantity, reply_style),
+            state,
+        )
+    if state["awaitingMoreItems"]:
+        if _is_negative_response(user_text):
+            state["awaitingMoreItems"] = False
+            if state["profileName"]:
+                state["customerName"] = state["profileName"]
+            state, state_reply = await _apply_order_action(
+                db=db,
+                outlet=outlet,
+                state=state,
+                action={"intent": INTENT_NONE},
+                reply_style=reply_style,
+                menu_items=menu_items,
+            )
+            conversation.state_json = state
+            return _personalize_reply(
+                state_reply or _missing_details_reply(
+                    ["mobile number", "delivery address"],
+                    reply_style,
+                ),
+                state,
+            )
+        if _is_affirmative_confirmation(user_text):
+            state["awaitingMoreItems"] = False
+            conversation.state_json = state
+            return _personalize_reply(_add_more_reply(reply_style), state)
     if state["awaitingConfirmation"] and _is_affirmative_confirmation(user_text):
         state, state_reply = await _apply_order_action(
             db=db,
@@ -843,13 +958,14 @@ async def _chatbot_reply(
         conversation.state_json = state
         if state_reply:
             return _personalize_reply(state_reply, state, force_address=True)
-    resolved_selection = _resolve_numbered_selection(
-        user_text,
-        conversation.last_bot_message,
-        menu_items,
-    )
+    resolved_selection = _resolve_numbered_selection(user_text, state, menu_items)
     if resolved_selection is not None:
         state["selectedMenuItemId"] = resolved_selection["menuItemId"]
+        conversation.state_json = state
+        return _personalize_reply(
+            _selected_item_reply(resolved_selection["name"], reply_style),
+            state,
+        )
 
     model_payload = await _chat_with_groq(
         outlet=outlet,
@@ -869,6 +985,7 @@ async def _chatbot_reply(
         conversation.state_json = state
         if not reply:
             raise ChatbotError("Groq returned an empty chatbot reply.")
+        _capture_numbered_menu_snapshot(state, reply, menu_items)
         return _personalize_reply(reply, state)
 
     state, state_reply = await _apply_order_action(
@@ -884,6 +1001,7 @@ async def _chatbot_reply(
         reply = state_reply
     if not reply:
         raise ChatbotError("Groq returned an empty chatbot reply.")
+    _capture_numbered_menu_snapshot(state, reply, menu_items)
     return _personalize_reply(reply, state)
 
 
@@ -1039,33 +1157,33 @@ def _state_for_llm(state: dict) -> dict:
 
 def _resolve_numbered_selection(
     user_text: str,
-    last_bot_message: str | None,
+    state: dict,
     menu_items: list[MenuItem],
 ) -> dict[str, Any] | None:
-    match = re.search(r"\b(\d{1,2})\s*(?:number|num(?:ber)?|no\.?)?\b", user_text, re.IGNORECASE)
-    if match is None or not last_bot_message:
+    match = re.fullmatch(
+        r"\s*(\d{1,2})(?:\s*(?:number|num(?:ber)?|no\.?|ta|টা|nite|nibo|chai))*\s*",
+        user_text,
+        re.IGNORECASE,
+    )
+    if match is None:
         return None
     selected_number = int(match.group(1))
-    shown_items: dict[int, str] = {}
-    for raw_line in last_bot_message.splitlines():
-        line = raw_line.strip()
-        shown = re.match(r"^(\d{1,2})\s*[\.\)]\s*(.+?)(?:\s*[-–—]\s*৳?\s*\d+(?:\.\d+)?)?$", line)
-        if shown:
-            shown_items[int(shown.group(1))] = shown.group(2).strip()
-    shown_name = shown_items.get(selected_number)
-    if not shown_name:
+    snapshot = state.get("menuSelectionSnapshot")
+    if not isinstance(snapshot, list):
         return None
-    normalized_name = _normalized_menu_name(shown_name)
-    item = next(
+    selected = next(
         (
-            menu_item
-            for menu_item in menu_items
-            if normalized_name in {
-                _normalized_menu_name(menu_item.name),
-                _normalized_menu_name(menu_item.name_en or ""),
-                _normalized_menu_name(menu_item.name_bn or ""),
-            }
+            option
+            for option in snapshot
+            if isinstance(option, dict) and option.get("number") == selected_number
         ),
+        None,
+    )
+    if selected is None:
+        return None
+    menu_id = str(selected.get("menuItemId") or "").strip()
+    item = next(
+        (menu_item for menu_item in menu_items if menu_item.id == menu_id),
         None,
     )
     if item is None:
@@ -1082,29 +1200,93 @@ def _normalized_menu_name(value: str) -> str:
     return re.sub(r"[^a-z0-9\u0980-\u09ff]+", "", value.lower())
 
 
+def _capture_numbered_menu_snapshot(state: dict, reply: str, menu_items: list[MenuItem]) -> None:
+    snapshot = []
+    for raw_line in reply.splitlines():
+        shown = re.match(r"^\s*(\d{1,2})\s*[\.\)]\s*(.+?)\s*$", raw_line)
+        if shown is None:
+            continue
+        shown_name = re.sub(
+            r"\s*[-–—]\s*৳?\s*\d+(?:\.\d+)?\s*$",
+            "",
+            shown.group(2),
+        ).strip()
+        normalized_name = _normalized_menu_name(shown_name)
+        item = next(
+            (
+                menu_item
+                for menu_item in menu_items
+                if normalized_name
+                in {
+                    _normalized_menu_name(menu_item.name),
+                    _normalized_menu_name(menu_item.name_en or ""),
+                    _normalized_menu_name(menu_item.name_bn or ""),
+                }
+            ),
+            None,
+        )
+        if item is not None:
+            snapshot.append(
+                {
+                    "number": int(shown.group(1)),
+                    "menuItemId": item.id,
+                    "name": item.name_en or item.name,
+                    "price": float(item.price),
+                }
+            )
+    if snapshot:
+        state["menuSelectionSnapshot"] = snapshot
+
+
+def _menu_item_by_id(menu_items: list[MenuItem], menu_id: str) -> MenuItem | None:
+    return next((item for item in menu_items if item.id == menu_id), None)
+
+
+def _parse_quantity(text: str) -> int | None:
+    match = re.fullmatch(r"\s*(\d{1,2})(?:\s*(?:ta|টা|piece|pieces|pis))?\s*", text, re.IGNORECASE)
+    if match is None:
+        return None
+    return max(1, min(int(match.group(1)), 99))
+
+
+def _add_cart_item(state: dict, menu_id: str, quantity: int) -> dict:
+    next_state = _normalize_state(state)
+    items = [
+        dict(item)
+        for item in next_state["items"]
+        if isinstance(item, dict) and str(item.get("menuItemId") or "").strip() != menu_id
+    ]
+    items.append({"menuItemId": menu_id, "qty": quantity})
+    next_state["items"] = items
+    return next_state
+
+
+def _greeting_reply(outlet: Outlet) -> str:
+    restaurant = outlet.restaurant.name if outlet.restaurant else outlet.name
+    return f"Assalamu Alaikum, {restaurant} theke bolchi"
+
+
 def _personalize_reply(reply: str, state: dict, *, force_address: bool = False) -> str:
     count = _safe_int(state.get("botReplyCount"), fallback=0)
     state["botReplyCount"] = count + 1
-    if not state.get("greetingSent"):
-        state["greetingSent"] = True
-        restaurant = str(state.get("restaurantDisplayName") or "Restaurant").strip()
-        customer = _customer_address(state)
-        suffix = f" {customer}" if customer else ""
-        return (
-            f"Assalamualaikum, {restaurant} theke bolchi. "
-            f"Kivabe sahajjo korte pari{suffix}?\n\n{reply}"
-        )
-    if force_address or (count + 1) % 3 == 0:
-        customer = _customer_address(state)
+    name_usage_count = _safe_int(state.get("nameUsageCount"), fallback=0)
+    use_address = count == 0 or force_address or (count + 1) % 3 == 0
+    if use_address:
+        include_name = name_usage_count < 2
+        customer = _customer_address(state, include_name=include_name)
         if customer:
-            return f"{reply}\n\n{customer}"
+            if include_name:
+                state["nameUsageCount"] = name_usage_count + 1
+            return f"{customer}, {reply}"
     return reply
 
 
-def _customer_address(state: dict) -> str:
+def _customer_address(state: dict, *, include_name: bool = True) -> str:
     name = str(state.get("profileName") or "").strip()
     honorific = str(state.get("profileHonorific") or "").strip()
-    return " ".join(part for part in (name, honorific) if part)
+    if not name:
+        return ""
+    return " ".join(part for part in (name if include_name else "", honorific) if part)
 
 
 def _is_affirmative_confirmation(text: str) -> bool:
@@ -1120,6 +1302,11 @@ def _is_affirmative_confirmation(text: str) -> bool:
             "হ্যাঁ", "হ্যা", "জি", "ঠিক", "আচ্ছা",
         }
     )
+
+
+def _is_negative_response(text: str) -> bool:
+    words = set(re.findall(r"[a-z\u0980-\u09ff]+", text.lower()))
+    return bool(words & {"na", "nah", "no", "না", "নাহ"})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1277,7 +1464,7 @@ async def _apply_order_action(
 
     # ── cancel ──────────────────────────────────────────────────────────────
     if intent == INTENT_CANCEL:
-        return _empty_state(), _localized_reply("cancel", reply_style)
+        return _clear_order_state(state), _localized_reply("cancel", reply_style)
 
     # ── remove_item ──────────────────────────────────────────────────────────
     if intent == INTENT_REMOVE_ITEM:
@@ -1320,7 +1507,7 @@ async def _apply_order_action(
             source=FACEBOOK_ORDER_SOURCE,
             created_by_role="customer",
         )
-        new_state = _empty_state()
+        new_state = _clear_order_state(state)
         return new_state, _localized_reply(
             "success",
             reply_style,
@@ -1375,8 +1562,29 @@ def _merge_state(state: dict, action: dict) -> dict:
     for key in ("customerName", "mobileNumber", "deliveryAddress"):
         value = action.get(key)
         if isinstance(value, str) and value.strip():
+            if key == "customerName" and next_state.get("profileName"):
+                continue
             next_state[key] = value.strip()
+    if next_state.get("profileName"):
+        next_state["customerName"] = next_state["profileName"]
     return _normalize_state(next_state)
+
+
+def _clear_order_state(state: dict) -> dict:
+    next_state = _normalize_state(state)
+    next_state.update(
+        {
+            "items": [],
+            "mobileNumber": "",
+            "deliveryAddress": "",
+            "awaitingConfirmation": False,
+            "awaitingMoreItems": False,
+            "selectedMenuItemId": "",
+            "menuSelectionSnapshot": [],
+        }
+    )
+    next_state["customerName"] = next_state["profileName"]
+    return next_state
 
 
 async def _validated_lines(
@@ -1468,11 +1676,47 @@ def _confirmation_reply(
 def _missing_details_reply(missing: list[str], reply_style: str) -> str:
     bn_labels = {"name": "নাম", "naam": "নাম", "mobile number": "মোবাইল নম্বর", "delivery address": "ডেলিভারি ঠিকানা"}
     if reply_style == REPLY_STYLE_BN:
-        return "ডেলিভারির জন্য আপনার " + ", ".join(bn_labels[i] for i in missing) + " দিন।"
+        return "ডেলিভারির জন্য আপনার " + _joined_labels([bn_labels[i] for i in missing], "এবং") + " দিন।"
     if reply_style == REPLY_STYLE_EN:
         en_labels = {"name": "name", "naam": "name", "mobile number": "mobile number", "delivery address": "delivery address"}
-        return "Please share your " + ", ".join(en_labels[i] for i in missing) + " for delivery."
-    return "Delivery-r jonno apnar " + ", ".join(missing) + " deben?"
+        return "Please share your " + _joined_labels([en_labels[i] for i in missing], "and") + " for delivery."
+    banglish_labels = {
+        "name": "naam",
+        "naam": "naam",
+        "mobile number": "mobile number",
+        "delivery address": "delivery address-ta",
+    }
+    return "Delivery-r jonno apnar " + _joined_labels([banglish_labels[i] for i in missing], "ar") + " deben?"
+
+
+def _joined_labels(labels: list[str], conjunction: str) -> str:
+    if len(labels) <= 1:
+        return "".join(labels)
+    return f"{', '.join(labels[:-1])} {conjunction} {labels[-1]}"
+
+
+def _selected_item_reply(item_name: str, reply_style: str) -> str:
+    if reply_style == REPLY_STYLE_BN:
+        return f"{item_name} নির্বাচন করেছি। কয়টি নেবেন?"
+    if reply_style == REPLY_STYLE_EN:
+        return f"{item_name} selected. How many would you like?"
+    return f"{item_name} select korechi. Koyta neben?"
+
+
+def _cart_item_added_reply(item_name: str, quantity: int, reply_style: str) -> str:
+    if reply_style == REPLY_STYLE_BN:
+        return f"{quantity}x {item_name} যোগ করেছি। আর কিছু অর্ডার করতে চান?"
+    if reply_style == REPLY_STYLE_EN:
+        return f"{quantity}x {item_name} added. Would you like anything else?"
+    return f"{quantity}x {item_name} add korechi. Ar kichu order korte chan?"
+
+
+def _add_more_reply(reply_style: str) -> str:
+    if reply_style == REPLY_STYLE_BN:
+        return "আর কী অর্ডার করতে চান?"
+    if reply_style == REPLY_STYLE_EN:
+        return "What else would you like to order?"
+    return "Ar ki order korte chan?"
 
 
 def _localized_reply(kind: str, reply_style: str, **values: Any) -> str:
@@ -1582,36 +1826,50 @@ def _parse_json_object(content: str) -> dict:
 def _normalize_state(value: Any) -> dict:
     state = value if isinstance(value, dict) else {}
     return {
+        "stateVersion": CHATBOT_STATE_VERSION,
         "items": state.get("items") if isinstance(state.get("items"), list) else [],
         "customerName": str(state.get("customerName") or "").strip(),
         "mobileNumber": str(state.get("mobileNumber") or "").strip(),
         "deliveryAddress": str(state.get("deliveryAddress") or "").strip(),
         "awaitingConfirmation": bool(state.get("awaitingConfirmation")),
+        "awaitingMoreItems": bool(state.get("awaitingMoreItems")),
         "selectedMenuItemId": str(state.get("selectedMenuItemId") or "").strip(),
+        "menuSelectionSnapshot": (
+            state.get("menuSelectionSnapshot")
+            if isinstance(state.get("menuSelectionSnapshot"), list)
+            else []
+        ),
         "profileName": str(state.get("profileName") or "").strip(),
         "profileHonorific": str(state.get("profileHonorific") or "").strip(),
         "profileFetched": bool(state.get("profileFetched")),
+        "profileLookupAttempted": bool(state.get("profileLookupAttempted")),
         "restaurantDisplayName": str(state.get("restaurantDisplayName") or "").strip(),
         "greetingSent": bool(state.get("greetingSent")),
         "botReplyCount": _safe_int(state.get("botReplyCount"), fallback=0),
+        "nameUsageCount": _safe_int(state.get("nameUsageCount"), fallback=0),
         "history": state.get("history") if isinstance(state.get("history"), list) else [],
     }
 
 
 def _empty_state() -> dict:
     return {
+        "stateVersion": CHATBOT_STATE_VERSION,
         "items": [],
         "customerName": "",
         "mobileNumber": "",
         "deliveryAddress": "",
         "awaitingConfirmation": False,
+        "awaitingMoreItems": False,
         "selectedMenuItemId": "",
+        "menuSelectionSnapshot": [],
         "profileName": "",
         "profileHonorific": "",
         "profileFetched": False,
+        "profileLookupAttempted": False,
         "restaurantDisplayName": "",
         "greetingSent": False,
         "botReplyCount": 0,
+        "nameUsageCount": 0,
         "history": [],
     }
 

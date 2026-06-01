@@ -2,6 +2,8 @@ import hashlib
 import hmac
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -57,19 +59,22 @@ def test_facebook_chatbot_resolves_numbered_choice_from_current_menu():
         MenuItem(id="chicken-id", outlet_id="outlet-1", name="Chicken Burger", price=175),
         MenuItem(id="egger-id", outlet_id="outlet-1", name="Egger Burger", price=120),
     ]
-    last_reply = "Amader burgers:\n1. Chicken Burger - ৳175\n4. Egger Burger - ৳120\nKonTa neben?"
+    state = facebook_chatbot._empty_state()
+    last_reply = "Amader burgers:\n1. Chicken Burger - ৳175\n20. Egger Burger - ৳120\nKonTa neben?"
+    facebook_chatbot._capture_numbered_menu_snapshot(state, last_reply, menu_items)
 
     assert facebook_chatbot._resolve_numbered_selection(
-        "4 number ta nite chai", last_reply, menu_items
+        "20", state, menu_items
     ) == {
-        "number": 4,
+        "number": 20,
         "menuItemId": "egger-id",
         "name": "Egger Burger",
         "price": 120.0,
     }
     assert facebook_chatbot._resolve_numbered_selection(
-        "4 number ta nite chai", last_reply, menu_items[:1]
+        "20", state, menu_items[:1]
     ) is None
+    assert facebook_chatbot._parse_quantity("2 ta") == 2
 
 
 def test_facebook_chatbot_backend_replies_follow_reply_style():
@@ -107,43 +112,195 @@ def test_facebook_chatbot_backend_replies_follow_reply_style():
     )
 
 
-def test_facebook_chatbot_personalizes_greeting_and_periodic_replies():
+def test_facebook_chatbot_personalizes_first_and_periodic_useful_replies():
     state = facebook_chatbot._empty_state()
     state.update(
         {
             "restaurantDisplayName": "Helium",
             "profileName": "Nadia",
-            "profileHonorific": "Madam",
+            "profileHonorific": "Mam",
         }
     )
 
     assert facebook_chatbot._personalize_reply("Burger ache.", state) == (
-        "Assalamualaikum, Helium theke bolchi. "
-        "Kivabe sahajjo korte pari Nadia Madam?\n\nBurger ache."
+        "Nadia Mam, Burger ache."
     )
     assert facebook_chatbot._personalize_reply("Kon burger-ta neben?", state) == (
         "Kon burger-ta neben?"
     )
     assert facebook_chatbot._personalize_reply("Koyta neben?", state) == (
-        "Koyta neben?\n\nNadia Madam"
+        "Nadia Mam, Koyta neben?"
     )
+    assert facebook_chatbot._personalize_reply("Ar kichu?", state) == "Ar kichu?"
+    assert facebook_chatbot._personalize_reply("Mobile deben?", state) == "Mobile deben?"
+    assert facebook_chatbot._personalize_reply("Address deben?", state) == "Mam, Address deben?"
+    assert state["nameUsageCount"] == 2
 
 
 def test_facebook_chatbot_uses_neutral_name_when_gender_is_unavailable():
     state = facebook_chatbot._empty_state()
-    state.update({"restaurantDisplayName": "Helium", "profileName": "Moon"})
+    state.update(
+        {
+            "restaurantDisplayName": "Helium",
+            "profileName": "Moon",
+            "profileHonorific": facebook_chatbot._profile_honorific(None),
+        }
+    )
 
     reply = facebook_chatbot._personalize_reply("Ki order korben?", state)
 
-    assert "Moon?" in reply
+    assert reply == "Moon Ji, Ki order korben?"
     assert "Sir" not in reply
-    assert "Madam" not in reply
+    assert "Mam" not in reply
 
 
 def test_facebook_chatbot_maps_facebook_gender_to_honorific():
     assert facebook_chatbot._profile_honorific("male") == "Sir"
-    assert facebook_chatbot._profile_honorific("female") == "Madam"
-    assert facebook_chatbot._profile_honorific(None) == ""
+    assert facebook_chatbot._profile_honorific("female") == "Mam"
+    assert facebook_chatbot._profile_honorific(None) == "Ji"
+
+
+def test_facebook_chatbot_parses_name_from_conversation_participants():
+    payload = {
+        "data": [
+            {
+                "participants": {
+                    "data": [
+                        {"id": "customer-1", "name": "Moon Ahmed"},
+                        {"id": "page-1", "name": "Cool Leaf"},
+                    ]
+                }
+            }
+        ]
+    }
+
+    assert facebook_chatbot._profile_from_conversations(payload, "customer-1") == {
+        "id": "customer-1",
+        "name": "Moon Ahmed",
+    }
+
+
+@pytest.mark.asyncio
+async def test_facebook_chatbot_profile_lookup_uses_conversations_without_logging_token(
+    monkeypatch,
+    caplog,
+):
+    calls = []
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, params):
+            calls.append((url, params))
+            request = httpx.Request("GET", url, params=params)
+            return httpx.Response(
+                400,
+                request=request,
+                json={"error": {"message": "Permission denied"}},
+            )
+
+    monkeypatch.setattr(facebook_chatbot.httpx, "AsyncClient", FakeClient)
+    integration = SimpleNamespace(
+        page_id="page-1",
+        page_access_token="secret-page-token",
+    )
+
+    with caplog.at_level("WARNING"):
+        profile = await facebook_chatbot._fetch_facebook_customer_profile(
+            integration,
+            "customer-1",
+        )
+
+    assert profile == {}
+    assert calls[0][0].endswith("/page-1/conversations")
+    assert calls[0][1]["user_id"] == "customer-1"
+    assert "secret-page-token" not in caplog.text
+
+
+def test_facebook_chatbot_resets_stale_and_pre_rollout_sessions():
+    stale = SimpleNamespace(
+        state_json={"stateVersion": facebook_chatbot.CHATBOT_STATE_VERSION, "items": [{"menuItemId": "1"}]},
+        updated_at=datetime.now(timezone.utc) - timedelta(hours=25),
+        last_user_message="old",
+        last_bot_message="old",
+    )
+    facebook_chatbot._reset_inactive_session(stale)
+    assert stale.state_json == facebook_chatbot._empty_state()
+    assert stale.last_user_message is None
+    assert stale.last_bot_message is None
+
+    pre_rollout = SimpleNamespace(
+        state_json={"items": [{"menuItemId": "1"}]},
+        updated_at=datetime.now(timezone.utc),
+        last_user_message="old",
+        last_bot_message="old",
+    )
+    facebook_chatbot._reset_inactive_session(pre_rollout)
+    assert pre_rollout.state_json == facebook_chatbot._empty_state()
+
+
+@pytest.mark.asyncio
+async def test_facebook_chatbot_bare_menu_number_then_quantity_then_delivery_details(monkeypatch):
+    menu_item = MenuItem(
+        id="egger-id",
+        outlet_id="outlet-1",
+        name="Egger Burger",
+        price=120,
+    )
+    state = facebook_chatbot._empty_state()
+    state.update(
+        {
+            "greetingSent": True,
+            "profileName": "Moon Ahmed",
+            "profileHonorific": "Ji",
+            "profileFetched": True,
+            "customerName": "Moon Ahmed",
+        }
+    )
+    facebook_chatbot._capture_numbered_menu_snapshot(
+        state,
+        "20. Egger Burger - ৳120",
+        [menu_item],
+    )
+    conversation = SimpleNamespace(state_json=state)
+    integration = SimpleNamespace(
+        outlet=SimpleNamespace(id="outlet-1", name="Outlet", restaurant=None),
+        ordering_enabled=True,
+    )
+
+    async def fake_menu_items(_db, _outlet_id):
+        return [menu_item]
+
+    async def fake_validated_lines(db, outlet_id, state):
+        assert db is None
+        assert outlet_id == "outlet-1"
+        assert state["items"] == [{"menuItemId": "egger-id", "qty": 2}]
+        return [
+            facebook_chatbot.DeliveryOrderLine(
+                menu_item_id="egger-id",
+                name="Egger Burger",
+                qty=2,
+                price=120,
+            )
+        ], None
+
+    monkeypatch.setattr(facebook_chatbot, "_available_menu_items", fake_menu_items)
+    monkeypatch.setattr(facebook_chatbot, "_validated_lines", fake_validated_lines)
+
+    selected = await facebook_chatbot._chatbot_reply(None, integration, conversation, "20")
+    added = await facebook_chatbot._chatbot_reply(None, integration, conversation, "2 ta")
+    details = await facebook_chatbot._chatbot_reply(None, integration, conversation, "na")
+
+    assert selected == "Moon Ahmed Ji, Egger Burger select korechi. Koyta neben?"
+    assert added == "2x Egger Burger add korechi. Ar kichu order korte chan?"
+    assert details == "Moon Ahmed Ji, Delivery-r jonno apnar mobile number ar delivery address-ta deben?"
 
 
 @pytest.mark.asyncio
@@ -212,7 +369,7 @@ def test_facebook_chatbot_openrouter_key_pool_is_deduplicated(monkeypatch):
 
 @pytest.mark.parametrize(
     "message",
-    ["hae", "Humm", "yes korbo", "thik ache", "confirm koren", "done", "ok", "kore den", "হ্যাঁ"],
+    ["hae", "Humm", "yes korbo", "thik ache", "confirm koren", "done", "ok", "kore den", "হ্যাঁ", "জি"],
 )
 def test_facebook_chatbot_understands_flexible_order_confirmation(message):
     assert facebook_chatbot._is_affirmative_confirmation(message)
@@ -469,7 +626,7 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
                     "order": {
                         "intent": "draft",
                         "items": [{"menuItemId": menu_id, "qty": 2}],
-                    "customerName": "Nadia",
+                    "customerName": "Wrong LLM Name",
                     "mobileNumber": "01700000000",
                     "deliveryAddress": "Road 1",
                     "confirmed": False,
@@ -508,6 +665,25 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
         )
         assert created.status_code == 200
 
+        greeting_payload = {
+            "object": "page",
+            "entry": [
+                {
+                    "id": page_id,
+                    "messaging": [
+                        {"sender": {"id": "psid-1"}, "message": {"text": "hello"}}
+                    ],
+                }
+            ],
+        }
+        greeting_content, greeting_headers = _signed_json(
+            greeting_payload, facebook_chatbot.settings.FACEBOOK_APP_SECRET
+        )
+        greeting = await client.post(
+            "/webhooks/facebook",
+            content=greeting_content,
+            headers=greeting_headers,
+        )
         draft_payload = {
             "object": "page",
             "entry": [
@@ -533,7 +709,7 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
                 {
                     "id": page_id,
                     "messaging": [
-                        {"sender": {"id": "psid-1"}, "message": {"text": "yes"}}
+                        {"sender": {"id": "psid-1"}, "message": {"text": "Humm"}}
                     ],
                 }
             ],
@@ -548,9 +724,12 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
         )
         orders = await client.get(f"/outlets/{outlet_id}/orders", headers=headers)
 
+    assert greeting.status_code == 200
     assert draft.status_code == 200
     assert confirm.status_code == 200
-    assert "Apni ki order-ta confirm korben?" in sent_messages[0][1]
+    assert sent_messages[0][1] == "Assalamu Alaikum, bot-order theke bolchi"
+    assert "Apni ki order-ta confirm korben?" in sent_messages[1][1]
+    assert "Order confirmed!" in sent_messages[2][1]
     body = orders.json()["data"]
     messenger_order = next(order for order in body if order["source"] == "facebook_messenger")
     assert messenger_order["customerName"] == "Nadia"
