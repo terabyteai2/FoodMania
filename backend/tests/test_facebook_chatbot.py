@@ -170,6 +170,19 @@ def test_facebook_chatbot_openrouter_key_pool_is_deduplicated(monkeypatch):
     assert facebook_chatbot._openrouter_api_keys() == ["key-1", "key-2", "key-3"]
 
 
+@pytest.mark.parametrize(
+    "message",
+    ["hae", "Humm", "yes korbo", "thik ache", "confirm koren", "done", "ok", "kore den", "হ্যাঁ"],
+)
+def test_facebook_chatbot_understands_flexible_order_confirmation(message):
+    assert facebook_chatbot._is_affirmative_confirmation(message)
+
+
+@pytest.mark.parametrize("message", ["na", "no", "cancel koro", "bad dao", "বাদ দেন"])
+def test_facebook_chatbot_does_not_confirm_negative_reply(message):
+    assert not facebook_chatbot._is_affirmative_confirmation(message)
+
+
 def _signed_json(payload: dict, secret: str) -> tuple[bytes, dict]:
     raw = json.dumps(payload).encode("utf-8")
     digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()

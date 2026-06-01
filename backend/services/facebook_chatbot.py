@@ -771,6 +771,18 @@ async def _chatbot_reply(
     menu_items = await _available_menu_items(db, outlet.id)
     state = _normalize_state(conversation.state_json)
     reply_style = _detect_reply_style(user_text)
+    if state["awaitingConfirmation"] and _is_affirmative_confirmation(user_text):
+        state, state_reply = await _apply_order_action(
+            db=db,
+            outlet=outlet,
+            state=state,
+            action={"intent": INTENT_CONFIRM, "confirmed": True},
+            reply_style=reply_style,
+            menu_items=menu_items,
+        )
+        conversation.state_json = state
+        if state_reply:
+            return state_reply
     resolved_selection = _resolve_numbered_selection(
         user_text,
         conversation.last_bot_message,
@@ -1008,6 +1020,21 @@ def _resolve_numbered_selection(
 
 def _normalized_menu_name(value: str) -> str:
     return re.sub(r"[^a-z0-9\u0980-\u09ff]+", "", value.lower())
+
+
+def _is_affirmative_confirmation(text: str) -> bool:
+    words = set(re.findall(r"[a-z\u0980-\u09ff]+", text.lower()))
+    if words & {"cancel", "না", "নাহ", "bad", "বাদ", "no", "nah"}:
+        return False
+    return bool(
+        words
+        & {
+            "hae", "hmm", "hmmm", "hum", "humm", "yes", "ok", "okay",
+            "confirm", "done", "koro", "koren", "korbo", "den", "thik",
+            "acha", "accha", "দেন",
+            "হ্যাঁ", "হ্যা", "জি", "ঠিক", "আচ্ছা",
+        }
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
