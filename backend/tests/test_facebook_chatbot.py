@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from database import AsyncSessionLocal, create_tables
 from main import app
-from models import AdminAccount
+from models import AdminAccount, MenuItem
 from services import facebook_chatbot
 
 
@@ -24,13 +24,12 @@ def test_facebook_chatbot_detects_latest_message_reply_style():
 def test_facebook_chatbot_prompt_requires_human_style_and_exact_menu_item():
     prompt = facebook_chatbot._system_prompt()
 
-    assert "Sound human, casual, warm, and organized" in prompt
-    assert "Banglish is the default" in prompt
-    assert "Do not list options unless asked" in prompt
-    assert "Do not add a menuItemId" in prompt
-    assert "Do not start replies with Hey, Hi, Hello, or Sure" in prompt
-    assert "mention only matching available items" in prompt
-    assert "items that are absent from restaurant.menu" in prompt
+    assert "friendly, human-sounding restaurant staff member" in prompt
+    assert "Default language: banglish" in prompt
+    assert "list ALL matching items with their prices" in prompt
+    assert "Never start a reply with Hey, Hi, Hello, Sure" in prompt
+    assert "Only use menuItemId values from restaurant.menu" in prompt
+    assert "resolvedNumberedSelection is present" in prompt
 
 
 def test_facebook_chatbot_rewrites_bad_banglish_replies():
@@ -49,6 +48,26 @@ def test_facebook_chatbot_rewrites_bad_banglish_replies():
     assert not facebook_chatbot._reply_needs_rewrite(
         "Sure! Which burger would you like?", "en"
     )
+
+
+def test_facebook_chatbot_resolves_numbered_choice_from_current_menu():
+    menu_items = [
+        MenuItem(id="chicken-id", outlet_id="outlet-1", name="Chicken Burger", price=175),
+        MenuItem(id="egger-id", outlet_id="outlet-1", name="Egger Burger", price=120),
+    ]
+    last_reply = "Amader burgers:\n1. Chicken Burger - ৳175\n4. Egger Burger - ৳120\nKonTa neben?"
+
+    assert facebook_chatbot._resolve_numbered_selection(
+        "4 number ta nite chai", last_reply, menu_items
+    ) == {
+        "number": 4,
+        "menuItemId": "egger-id",
+        "name": "Egger Burger",
+        "price": 120.0,
+    }
+    assert facebook_chatbot._resolve_numbered_selection(
+        "4 number ta nite chai", last_reply, menu_items[:1]
+    ) is None
 
 
 def test_facebook_chatbot_backend_replies_follow_reply_style():
@@ -75,10 +94,10 @@ def test_facebook_chatbot_backend_replies_follow_reply_style():
     assert "cancel kore dilam" in facebook_chatbot._localized_reply("cancel", "banglish")
     assert "বাতিল" in facebook_chatbot._localized_reply("cancel", "bn")
     assert "cancelled" in facebook_chatbot._localized_reply("cancel", "en")
-    assert "Order korte hae likhun" in facebook_chatbot._confirmation_reply(
+    assert "Confirm korte 'hae' likhun" in facebook_chatbot._confirmation_reply(
         lines, {"total": 252}, state, "banglish"
     )
-    assert "অর্ডার দিতে হ্যাঁ লিখুন" in facebook_chatbot._confirmation_reply(
+    assert "কনফার্ম করতে হ্যাঁ লিখুন" in facebook_chatbot._confirmation_reply(
         lines, {"total": 252}, state, "bn"
     )
     assert "Reply yes" in facebook_chatbot._confirmation_reply(
