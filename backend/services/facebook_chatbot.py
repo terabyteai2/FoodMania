@@ -44,6 +44,11 @@ ENGLISH_WORDS = {
     "have", "hello", "hi", "is", "menu", "order", "please", "thanks",
     "the", "want", "what", "yes", "you",
 }
+BANGLISH_DISALLOWED_OPENERS = ("hey", "sure", "hello", "hi")
+BANGLISH_ENGLISH_MARKERS = {
+    "are", "can", "choose", "do", "have", "help", "like", "menu", "order",
+    "please", "sure", "the", "type", "want", "we", "which", "would", "you",
+}
 
 
 class ChatbotError(RuntimeError):
@@ -715,7 +720,9 @@ async def _chatbot_reply(
 
     if not integration.ordering_enabled:
         conversation.state_json = state
-        return reply or _menu_link_reply(outlet, reply_style)
+        if not reply:
+            raise ChatbotError("Groq returned an empty chatbot reply.")
+        return reply
 
     state, state_reply = await _apply_order_action(
         db=db,
@@ -725,7 +732,11 @@ async def _chatbot_reply(
         reply_style=reply_style,
     )
     conversation.state_json = state
-    return state_reply or reply or _localized_reply("general", reply_style)
+    if state_reply:
+        return state_reply
+    if not reply:
+        raise ChatbotError("Groq returned an empty chatbot reply.")
+    return reply
 
 
 async def _chat_with_groq(
@@ -740,15 +751,7 @@ async def _chat_with_groq(
     api_key = settings.GROQ_API_KEY.strip()
     model = settings.CHATBOT_GROQ_MODEL.strip()
     if not api_key or not model:
-        return {
-            "reply": _localized_reply(
-                "not_configured",
-                reply_style,
-                outlet_name=outlet.name,
-                menu_link=_menu_link(outlet),
-            ),
-            "order": {"intent": "none"},
-        }
+        raise ChatbotError("Groq chatbot is not configured.")
 
     context = _restaurant_context(outlet, menu_items, ordering_enabled)
     messages = [
@@ -762,33 +765,51 @@ async def _chat_with_groq(
     ]
     try:
         async with httpx.AsyncClient(timeout=GROQ_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_completion_tokens": 700,
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
+            for attempt in range(2):
+                if attempt:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Rewrite your previous JSON reply. Keep the same factual meaning and "
+                                "order object, but strictly follow replyStyle. For banglish, write only "
+                                "natural Roman Bangla like the customer, without English sentences, "
+                                "greetings such as Hey/Sure, or emoji. Return JSON only."
+                            ),
+                        }
+                    )
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "temperature": 0.2,
+                        "max_completion_tokens": 700,
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                content = (
+                    ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
+                    if isinstance(payload, dict)
+                    else None
+                )
+                if not isinstance(content, str) or not content.strip():
+                    raise ChatbotError("Groq returned an empty chatbot response.")
+                parsed = _parse_json_object(content)
+                reply = str(parsed.get("reply") or "").strip()
+                if not _reply_needs_rewrite(reply, reply_style):
+                    return parsed
+                messages.append({"role": "assistant", "content": content})
     except httpx.HTTPError as error:
         raise ChatbotError("Groq chatbot request failed.") from error
 
-    content = (
-        ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
-        if isinstance(payload, dict)
-        else None
-    )
-    if not isinstance(content, str) or not content.strip():
-        raise ChatbotError("Groq returned an empty chatbot response.")
-    return _parse_json_object(content)
+    raise ChatbotError("Groq chatbot reply did not follow the requested language style.")
 
 
 def _system_prompt() -> str:
@@ -797,11 +818,16 @@ def _system_prompt() -> str:
         "Sound human, casual, warm, and organized, not formal or robotic. Keep each reply short "
         "and usually ask only one clear question at a time. Follow the provided replyStyle: use "
         "natural Roman Bangla for banglish, Bengali script for bn, and English for en. Banglish "
-        "is the default. Safely mirror the customer's tone, but do not copy typos, confusing "
+        "is the default. In banglish mode, write Roman Bangla throughout the reply. Do not switch "
+        "to English sentences. Do not start replies with Hey, Hi, Hello, or Sure. Do not use emoji "
+        "or act excessively cheerful. Safely mirror the customer's tone, but do not copy typos, confusing "
         "shorthand, or offensive language. Use only the provided restaurant/menu context and "
         "never invent an item, price, availability, or order detail. The only order type is delivery. "
         "If a customer asks vaguely about a category such as burgers and the exact item is unclear, "
         "reply conversationally and ask what kind they want. Do not list options unless asked. "
+        "If the customer asks to see the menu or related items, mention only matching available items "
+        "from restaurant.menu, with their real names and prices. Never mention generic categories or "
+        "items that are absent from restaurant.menu. "
         "Do not add a menuItemId to an order until the customer's exact menu item is clear. "
         "Collect menu item ids, quantities, customerName, mobileNumber, and deliveryAddress. "
         "Never create an order immediately after collecting details; first summarize the cart "
@@ -1025,6 +1051,23 @@ def _detect_reply_style(text: str) -> str:
     if words & ENGLISH_WORDS:
         return REPLY_STYLE_EN
     return REPLY_STYLE_BANGLISH
+
+
+def _reply_needs_rewrite(reply: str, reply_style: str) -> bool:
+    clean = reply.strip()
+    if not clean:
+        return True
+    if reply_style != REPLY_STYLE_BANGLISH:
+        return False
+    lower = clean.lower()
+    if lower.startswith(BANGLISH_DISALLOWED_OPENERS):
+        return True
+    if re.search(r"[\U0001F300-\U0001FAFF]", clean):
+        return True
+    words = re.findall(r"[a-z]+", lower)
+    english_markers = sum(word in BANGLISH_ENGLISH_MARKERS for word in words)
+    banglish_markers = sum(word in BANGLISH_WORDS for word in words)
+    return english_markers >= 3 and english_markers > banglish_markers
 
 
 def _missing_details_reply(missing: list[str], reply_style: str) -> str:

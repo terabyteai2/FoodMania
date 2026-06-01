@@ -28,6 +28,27 @@ def test_facebook_chatbot_prompt_requires_human_style_and_exact_menu_item():
     assert "Banglish is the default" in prompt
     assert "Do not list options unless asked" in prompt
     assert "Do not add a menuItemId" in prompt
+    assert "Do not start replies with Hey, Hi, Hello, or Sure" in prompt
+    assert "mention only matching available items" in prompt
+    assert "items that are absent from restaurant.menu" in prompt
+
+
+def test_facebook_chatbot_rewrites_bad_banglish_replies():
+    assert facebook_chatbot._reply_needs_rewrite(
+        "Sure! Which burger would you like?", "banglish"
+    )
+    assert facebook_chatbot._reply_needs_rewrite(
+        "Hey! Apni kon type-er burger chacchen? 😊", "banglish"
+    )
+    assert facebook_chatbot._reply_needs_rewrite(
+        "Sure! We have burgers, chicken and sandwiches. Which type would you like?", "banglish"
+    )
+    assert not facebook_chatbot._reply_needs_rewrite(
+        "Hae, burger ache. Apni kon type-er burger khete chan?", "banglish"
+    )
+    assert not facebook_chatbot._reply_needs_rewrite(
+        "Sure! Which burger would you like?", "en"
+    )
 
 
 def test_facebook_chatbot_backend_replies_follow_reply_style():
