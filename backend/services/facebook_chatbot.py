@@ -898,17 +898,17 @@ async def _chat_completion_with_fallback(
             groq_model,
         ),
     ]
-    openrouter_key = settings.OPENROUTER_API_KEY.strip()
     openrouter_model = settings.CHATBOT_OPENROUTER_MODEL.strip()
-    if openrouter_key and openrouter_model:
-        providers.append(
-            (
-                "openrouter",
-                "https://openrouter.ai/api/v1/chat/completions",
-                openrouter_key,
-                openrouter_model,
+    if openrouter_model:
+        for index, openrouter_key in enumerate(_openrouter_api_keys(), start=1):
+            providers.append(
+                (
+                    f"openrouter[{index}]",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    openrouter_key,
+                    openrouter_model,
+                )
             )
-        )
 
     errors = []
     for provider, url, api_key, model in providers:
@@ -945,6 +945,19 @@ async def _chat_completion_with_fallback(
             )
             errors.append(f"{provider}: {error}")
     raise ChatbotProvidersFailed("Chatbot providers failed: " + "; ".join(errors))
+
+
+def _openrouter_api_keys() -> list[str]:
+    raw_keys = [
+        settings.OPENROUTER_API_KEY,
+        *settings.OPENROUTER_API_KEYS.split(","),
+    ]
+    keys = []
+    for raw_key in raw_keys:
+        key = raw_key.strip()
+        if key and key not in keys:
+            keys.append(key)
+    return keys
 
 
 def _state_for_llm(state: dict) -> dict:

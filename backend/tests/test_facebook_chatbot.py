@@ -109,6 +109,7 @@ def test_facebook_chatbot_backend_replies_follow_reply_style():
 @pytest.mark.asyncio
 async def test_facebook_chatbot_uses_openrouter_when_groq_is_rate_limited(monkeypatch):
     monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEY", "openrouter-key")
+    monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEYS", "")
     monkeypatch.setattr(facebook_chatbot.settings, "CHATBOT_OPENROUTER_MODEL", "openai/gpt-5-mini")
     calls = []
 
@@ -141,6 +142,7 @@ async def test_facebook_chatbot_uses_openrouter_when_groq_is_rate_limited(monkey
 @pytest.mark.asyncio
 async def test_facebook_chatbot_marks_provider_exhaustion_separately(monkeypatch):
     monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEY", "openrouter-key")
+    monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEYS", "")
     monkeypatch.setattr(facebook_chatbot.settings, "CHATBOT_OPENROUTER_MODEL", "openai/gpt-5-mini")
 
     class FakeClient:
@@ -155,6 +157,17 @@ async def test_facebook_chatbot_marks_provider_exhaustion_separately(monkeypatch
             groq_model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": "hello"}],
         )
+
+
+def test_facebook_chatbot_openrouter_key_pool_is_deduplicated(monkeypatch):
+    monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEY", "key-1")
+    monkeypatch.setattr(
+        facebook_chatbot.settings,
+        "OPENROUTER_API_KEYS",
+        " key-2, key-1, key-3 ",
+    )
+
+    assert facebook_chatbot._openrouter_api_keys() == ["key-1", "key-2", "key-3"]
 
 
 def _signed_json(payload: dict, secret: str) -> tuple[bytes, dict]:

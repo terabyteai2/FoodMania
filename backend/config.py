@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     MENU_SCAN_GROQ_MODEL: str = "openai/gpt-oss-20b"
     CHATBOT_GROQ_MODEL: str = "openai/gpt-oss-20b"
     OPENROUTER_API_KEY: str = ""
+    OPENROUTER_API_KEYS: str = ""
     CHATBOT_OPENROUTER_MODEL: str = "openai/gpt-5-mini"
     XAI_API_KEY: str = ""
     DEEPSEEK_API_KEY: str = ""
