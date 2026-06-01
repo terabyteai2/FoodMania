@@ -138,6 +138,25 @@ async def test_facebook_chatbot_uses_openrouter_when_groq_is_rate_limited(monkey
     ]
 
 
+@pytest.mark.asyncio
+async def test_facebook_chatbot_marks_provider_exhaustion_separately(monkeypatch):
+    monkeypatch.setattr(facebook_chatbot.settings, "OPENROUTER_API_KEY", "openrouter-key")
+    monkeypatch.setattr(facebook_chatbot.settings, "CHATBOT_OPENROUTER_MODEL", "openai/gpt-5-mini")
+
+    class FakeClient:
+        async def post(self, url, **kwargs):
+            request = httpx.Request("POST", url)
+            return httpx.Response(429, request=request, json={"error": {"message": "rate limit"}})
+
+    with pytest.raises(facebook_chatbot.ChatbotProvidersFailed):
+        await facebook_chatbot._chat_completion_with_fallback(
+            client=FakeClient(),
+            groq_api_key="groq-key",
+            groq_model="openai/gpt-oss-20b",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+
+
 def _signed_json(payload: dict, secret: str) -> tuple[bytes, dict]:
     raw = json.dumps(payload).encode("utf-8")
     digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()

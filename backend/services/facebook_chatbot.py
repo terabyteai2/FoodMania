@@ -70,6 +70,10 @@ class ChatbotError(RuntimeError):
     pass
 
 
+class ChatbotProvidersFailed(ChatbotError):
+    pass
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Token / config helpers
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -657,9 +661,13 @@ async def _handle_event(
     try:
         reply = await _chatbot_reply(db, integration, conversation, text)
         integration.last_error = None
-    except Exception as error:
+    except ChatbotProvidersFailed as error:
         logger.exception("facebook chatbot failed page=%s psid=%s", integration.page_id, psid)
         reply = "Ami ekjon AI ChatBot.  Arektu bujhiye bolun, kindly"
+        integration.last_error = str(error)[:800]
+    except Exception as error:
+        logger.exception("facebook chatbot failed page=%s psid=%s", integration.page_id, psid)
+        reply = "Ektu technical somossa hocche. Arektu pore abar try korben."
         integration.last_error = str(error)[:800]
 
     # persist bot reply into history before saving
@@ -936,7 +944,7 @@ async def _chat_completion_with_fallback(
                 body,
             )
             errors.append(f"{provider}: {error}")
-    raise ChatbotError("Chatbot providers failed: " + "; ".join(errors))
+    raise ChatbotProvidersFailed("Chatbot providers failed: " + "; ".join(errors))
 
 
 def _state_for_llm(state: dict) -> dict:
