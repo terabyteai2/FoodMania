@@ -293,6 +293,18 @@ class ChatbotIntegration(Base):
     )
 
 
+class ChatbotOAuthSession(Base):
+    __tablename__ = "chatbot_oauth_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    account_id: Mapped[str] = mapped_column(ForeignKey("admin_accounts.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String, default="facebook", nullable=False)
+    pages_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ChatbotConversation(Base):
     __tablename__ = "chatbot_conversations"
     __table_args__ = (

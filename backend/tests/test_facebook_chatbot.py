@@ -1,12 +1,26 @@
+import hashlib
+import hmac
+import json
 import uuid
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
-from database import create_tables
+from database import AsyncSessionLocal, create_tables
 from main import app
+from models import AdminAccount
 from services import facebook_chatbot
+
+
+def _signed_json(payload: dict, secret: str) -> tuple[bytes, dict]:
+    raw = json.dumps(payload).encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    return raw, {
+        "Content-Type": "application/json",
+        "X-Hub-Signature-256": f"sha256={digest}",
+    }
 
 
 async def _manager_headers(client: AsyncClient, label: str) -> tuple[str, dict]:
@@ -42,6 +56,15 @@ async def _manager_headers(client: AsyncClient, label: str) -> tuple[str, dict]:
     return outlet_id, {"Authorization": f"Bearer {token}"}
 
 
+async def _set_account_role(outlet_id: str, role: str) -> None:
+    async with AsyncSessionLocal() as db:
+        account = (
+            await db.execute(select(AdminAccount).where(AdminAccount.outlet_id == outlet_id))
+        ).scalar_one()
+        account.role = role
+        await db.commit()
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_facebook_webhook_verify_token(monkeypatch):
     monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_WEBHOOK_VERIFY_TOKEN", "verify-me")
@@ -57,6 +80,29 @@ async def test_facebook_webhook_verify_token(monkeypatch):
         )
     assert response.status_code == 200
     assert response.text == "abc123"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_owner_can_read_facebook_chatbot_config():
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        outlet_id, headers = await _manager_headers(client, "bot-owner")
+        await _set_account_role(outlet_id, "owner")
+        response = await client.get("/admin/chatbot/facebook", headers=headers)
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_waiter_cannot_read_facebook_chatbot_config():
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        outlet_id, headers = await _manager_headers(client, "bot-waiter")
+        await _set_account_role(outlet_id, "waiter")
+        response = await client.get("/admin/chatbot/facebook", headers=headers)
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Manager or owner access required."
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -166,10 +212,24 @@ async def test_facebook_oauth_callback_saves_page_token(monkeypatch):
             "/admin/chatbot/facebook/oauth/callback",
             params={"code": "auth-code", "state": state},
         )
+        session_id = parse_qs(urlparse(callback.headers["location"]).query)["sessionId"][0]
+        pages = await client.get(
+            "/admin/chatbot/facebook/oauth/pages",
+            headers=headers,
+            params={"sessionId": session_id},
+        )
+        completed = await client.post(
+            "/admin/chatbot/facebook/oauth/complete",
+            headers=headers,
+            json={"sessionId": session_id, "pageId": page_id},
+        )
         fetched = await client.get("/admin/chatbot/facebook", headers=headers)
 
     assert callback.status_code == 303
     assert "status=success" in callback.headers["location"]
+    assert pages.json()["data"]["pages"] == [{"pageId": page_id, "pageName": "OAuth Cafe"}]
+    assert "oauth-page-token" not in pages.text
+    assert completed.status_code == 200
     assert subscribed == [(page_id, "oauth-page-token")]
     config = fetched.json()["data"]
     assert config["isConfigured"] is True
@@ -235,33 +295,43 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
         )
         assert created.status_code == 200
 
+        draft_payload = {
+            "object": "page",
+            "entry": [
+                {
+                    "id": page_id,
+                    "messaging": [
+                        {"sender": {"id": "psid-1"}, "message": {"text": "2 burger"}}
+                    ],
+                }
+            ],
+        }
+        draft_content, draft_headers = _signed_json(
+            draft_payload, facebook_chatbot.settings.FACEBOOK_APP_SECRET
+        )
         draft = await client.post(
             "/webhooks/facebook",
-            json={
-                "object": "page",
-                "entry": [
-                    {
-                        "id": page_id,
-                        "messaging": [
-                            {"sender": {"id": "psid-1"}, "message": {"text": "2 burger"}}
-                        ],
-                    }
-                ],
-            },
+            content=draft_content,
+            headers=draft_headers,
+        )
+        confirm_payload = {
+            "object": "page",
+            "entry": [
+                {
+                    "id": page_id,
+                    "messaging": [
+                        {"sender": {"id": "psid-1"}, "message": {"text": "yes"}}
+                    ],
+                }
+            ],
+        }
+        confirm_content, confirm_headers = _signed_json(
+            confirm_payload, facebook_chatbot.settings.FACEBOOK_APP_SECRET
         )
         confirm = await client.post(
             "/webhooks/facebook",
-            json={
-                "object": "page",
-                "entry": [
-                    {
-                        "id": page_id,
-                        "messaging": [
-                            {"sender": {"id": "psid-1"}, "message": {"text": "yes"}}
-                        ],
-                    }
-                ],
-            },
+            content=confirm_content,
+            headers=confirm_headers,
         )
         orders = await client.get(f"/outlets/{outlet_id}/orders", headers=headers)
 
@@ -272,3 +342,12 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
     messenger_order = next(order for order in body if order["source"] == "facebook_messenger")
     assert messenger_order["customerName"] == "Nadia"
     assert messenger_order["totalAmount"] == 252.0
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_facebook_webhook_rejects_unsigned_payload_when_secret_is_configured(monkeypatch):
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_SECRET", "app-secret")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/webhooks/facebook", json={"object": "page"})
+    assert response.status_code == 403

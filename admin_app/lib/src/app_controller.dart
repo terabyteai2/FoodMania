@@ -118,8 +118,7 @@ class PosAppController extends ChangeNotifier {
        cloudRealtimeService = cloudRealtimeService ?? CloudRealtimeService(),
        appUpdateInstaller = appUpdateInstaller ?? AppUpdateInstallerService(),
        connectivityService = connectivityService ?? ConnectivityService(),
-       systemNotifications =
-           systemNotifications ?? SystemNotificationService(),
+       systemNotifications = systemNotifications ?? SystemNotificationService(),
        pushNotificationService =
            pushNotificationService ?? PushNotificationService() {
     this.syncService =
@@ -1088,7 +1087,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> loadFacebookChatbotConfig() async {
-    if (!isManager || !cloudConfig.canSync) return;
+    if (!cloudConfig.canSync) return;
     facebookChatbotLoading = true;
     facebookChatbotError = null;
     notifyListeners();
@@ -1108,11 +1107,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<FacebookChatbotOAuthStart?> startFacebookChatbotOAuth() async {
-    if (!isManager) {
-      lastError = 'Manager access is required.';
-      notifyListeners();
-      return null;
-    }
     if (!cloudConfig.canSync) {
       lastError = 'Cloud sync must be connected before configuring Messenger.';
       notifyListeners();
@@ -1138,16 +1132,49 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  Future<FacebookChatbotOAuthPages?> loadFacebookChatbotOAuthPages(
+    String sessionId,
+  ) async {
+    try {
+      facebookChatbotLoading = true;
+      facebookChatbotError = null;
+      notifyListeners();
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      return await cloudApiService.fetchFacebookChatbotOAuthPages(
+        sessionId: sessionId,
+      );
+    } catch (error) {
+      facebookChatbotError = _userVisibleError(error);
+      return null;
+    } finally {
+      facebookChatbotLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> completeFacebookChatbotOAuth({
+    required String sessionId,
+    required String pageId,
+  }) async {
+    return _runBusy(() async {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      facebookChatbotConfig = await cloudApiService
+          .completeFacebookChatbotOAuth(sessionId: sessionId, pageId: pageId);
+      facebookChatbotError = null;
+    });
+  }
+
   Future<bool> saveFacebookChatbotConfig({
     required String pageAccessToken,
     required bool isEnabled,
     required bool orderingEnabled,
   }) async {
-    if (!isManager) {
-      lastError = 'Manager access is required.';
-      notifyListeners();
-      return false;
-    }
     if (!cloudConfig.canSync) {
       lastError = 'Cloud sync must be connected before configuring Messenger.';
       notifyListeners();
@@ -2629,10 +2656,7 @@ class PosAppController extends ChangeNotifier {
     unawaited(syncService.syncNow());
   }
 
-  Future<void> updateOrderItems(
-    String id,
-    List<OrderRequestItem> items,
-  ) async {
+  Future<void> updateOrderItems(String id, List<OrderRequestItem> items) async {
     await database.updateOrderItems(id, items);
     unawaited(syncService.syncNow());
   }
@@ -2744,7 +2768,8 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> _retryPushRegistrationIfReady() async {
-    final token = (_lastFcmToken ?? pushNotificationService.token)?.trim() ?? '';
+    final token =
+        (_lastFcmToken ?? pushNotificationService.token)?.trim() ?? '';
     if (token.isEmpty) return;
     final outletId = serverConfig.outletId.trim();
     if (!cloudConfig.canSync || outletId.isEmpty) {
@@ -2869,6 +2894,14 @@ class PosAppController extends ChangeNotifier {
     );
   }
 
+  Future<String> readPrinterDiagnostics() {
+    return printerService.readPrinterDiagnostics();
+  }
+
+  Future<void> clearPrinterDiagnostics() {
+    return printerService.clearPrinterDiagnostics();
+  }
+
   Future<bool> printOrderTicket(OrderModel order) {
     if (printerService.hasPrintedOrder(order.id)) {
       return Future<bool>.value(true);
@@ -2986,7 +3019,8 @@ class PosAppController extends ChangeNotifier {
       }
     }
     final bulkCutoff = DateTime.now().subtract(const Duration(minutes: 2));
-    final bulkCount = notifications
+    final bulkCount =
+        notifications
             .where(
               (n) =>
                   n.type == type &&
@@ -3255,10 +3289,12 @@ class PosAppController extends ChangeNotifier {
       'Printer is not connected.',
       'Select a Bluetooth printer first.',
       'Connect a USB printer or select a Bluetooth printer first.',
+      'Use a built-in printer, connect a USB printer, or select a Bluetooth printer first.',
       'Bluetooth permission is required.',
       'Printer permission is required.',
       'Bluetooth is not ready.',
       'USB printer is not ready.',
+      'Built-in printer is not ready.',
     };
     return known.contains(message.trim());
   }

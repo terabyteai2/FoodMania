@@ -14,7 +14,7 @@ from sqlalchemy.orm import joinedload
 
 from auth import ALGORITHM
 from config import settings
-from models import ChatbotConversation, ChatbotIntegration, MenuItem, Outlet
+from models import ChatbotConversation, ChatbotIntegration, ChatbotOAuthSession, MenuItem, Outlet
 from services.customer_orders import (
     DeliveryOrderLine,
     create_delivery_order,
@@ -256,20 +256,20 @@ async def _fetch_facebook_pages(user_access_token: str) -> list[dict[str, Any]]:
     return [page for page in pages if isinstance(page, dict)]
 
 
-def _select_facebook_page(pages: list[dict[str, Any]]) -> dict[str, Any]:
+def _selectable_facebook_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selectable = []
     for page in pages:
         page_id = str(page.get("id") or "").strip()
         token = str(page.get("access_token") or "").strip()
         if page_id and token:
-            return {
-                "pageId": page_id,
-                "pageName": str(page.get("name") or "").strip() or None,
-                "pageAccessToken": token,
-            }
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Facebook did not return an authorized Page access token.",
-    )
+            selectable.append(
+                {
+                    "pageId": page_id,
+                    "pageName": str(page.get("name") or "").strip() or None,
+                    "pageAccessToken": token,
+                }
+            )
+    return selectable
 
 
 async def _subscribe_facebook_page(page_id: str, page_access_token: str) -> None:
@@ -291,20 +291,114 @@ async def complete_facebook_oauth(
 ) -> dict:
     state_payload = _decode_facebook_oauth_state(state_token)
     outlet_id = str(state_payload["sub"]).strip()
+    account_id = str(state_payload.get("account_id") or "").strip()
+    if not account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook Login state is missing the manager account.",
+        )
     short_token = await _exchange_code_for_user_token(code.strip())
     user_token = await _exchange_long_lived_user_token(short_token)
-    page = _select_facebook_page(await _fetch_facebook_pages(user_token))
+    pages = _selectable_facebook_pages(await _fetch_facebook_pages(user_token))
+    if not pages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook did not return an authorized Page access token.",
+        )
+    session = ChatbotOAuthSession(
+        outlet_id=outlet_id,
+        account_id=account_id,
+        provider=FACEBOOK_PROVIDER,
+        pages_json=pages,
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(minutes=max(1, settings.FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES)),
+    )
+    db.add(session)
+    await db.commit()
+    return {"sessionId": session.id}
+
+
+async def get_facebook_oauth_pages(
+    db: AsyncSession,
+    *,
+    session_id: str,
+    outlet_id: str,
+    account_id: str,
+) -> dict:
+    session = await _get_facebook_oauth_session(
+        db, session_id=session_id, outlet_id=outlet_id, account_id=account_id
+    )
+    return {
+        "sessionId": session.id,
+        "pages": [
+            {"pageId": page["pageId"], "pageName": page.get("pageName")}
+            for page in session.pages_json
+        ],
+    }
+
+
+async def complete_facebook_oauth_page_selection(
+    db: AsyncSession,
+    *,
+    session_id: str,
+    page_id: str,
+    outlet_id: str,
+    account_id: str,
+) -> dict:
+    session = await _get_facebook_oauth_session(
+        db, session_id=session_id, outlet_id=outlet_id, account_id=account_id
+    )
+    page = next(
+        (candidate for candidate in session.pages_json if candidate["pageId"] == page_id),
+        None,
+    )
+    if page is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select a Facebook Page returned by this login.",
+        )
     await _ensure_facebook_page_available(db, outlet_id, page["pageId"])
     await _subscribe_facebook_page(page["pageId"], page["pageAccessToken"])
-    return await save_facebook_page_credentials(
+    config = await save_facebook_page_credentials(
         db=db,
         outlet_id=outlet_id,
         page_id=page["pageId"],
-        page_name=page["pageName"],
+        page_name=page.get("pageName"),
         page_access_token=page["pageAccessToken"],
         is_enabled=True,
         ordering_enabled=True,
     )
+    await db.delete(session)
+    await db.commit()
+    return config
+
+
+async def _get_facebook_oauth_session(
+    db: AsyncSession,
+    *,
+    session_id: str,
+    outlet_id: str,
+    account_id: str,
+) -> ChatbotOAuthSession:
+    session = (
+        await db.execute(
+            select(ChatbotOAuthSession).where(
+                ChatbotOAuthSession.id == session_id.strip(),
+                ChatbotOAuthSession.provider == FACEBOOK_PROVIDER,
+                ChatbotOAuthSession.outlet_id == outlet_id,
+                ChatbotOAuthSession.account_id == account_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if session is None or session.expires_at <= datetime.now(timezone.utc):
+        if session is not None:
+            await db.delete(session)
+            await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook Page selection has expired. Connect with Facebook again.",
+        )
+    return session
 
 
 async def resolve_facebook_page(token: str) -> dict:

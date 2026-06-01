@@ -56,3 +56,45 @@ class FacebookChatbotOAuthStart {
     );
   }
 }
+
+class FacebookChatbotPage {
+  const FacebookChatbotPage({required this.pageId, required this.pageName});
+
+  final String pageId;
+  final String pageName;
+
+  static FacebookChatbotPage fromJson(Map<String, Object?> json) {
+    return FacebookChatbotPage(
+      pageId: json['pageId']?.toString().trim() ?? '',
+      pageName: json['pageName']?.toString().trim() ?? '',
+    );
+  }
+}
+
+class FacebookChatbotOAuthPages {
+  const FacebookChatbotOAuthPages({
+    required this.sessionId,
+    required this.pages,
+  });
+
+  final String sessionId;
+  final List<FacebookChatbotPage> pages;
+
+  static FacebookChatbotOAuthPages fromJson(Map<String, Object?> json) {
+    final data = json['data'] is Map
+        ? Map<String, Object?>.from(json['data'] as Map)
+        : json;
+    final rawPages = data['pages'] is List ? data['pages'] as List : const [];
+    return FacebookChatbotOAuthPages(
+      sessionId: data['sessionId']?.toString().trim() ?? '',
+      pages: rawPages
+          .whereType<Map>()
+          .map(
+            (page) =>
+                FacebookChatbotPage.fromJson(Map<String, Object?>.from(page)),
+          )
+          .where((page) => page.pageId.isNotEmpty)
+          .toList(growable: false),
+    );
+  }
+}

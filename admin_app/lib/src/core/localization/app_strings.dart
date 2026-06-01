@@ -133,6 +133,13 @@ class AppStrings {
   String get facebookLoginFailed => isBn
       ? 'Facebook Login সম্পন্ন হয়নি'
       : 'Facebook Login was not completed';
+  String get selectFacebookPage =>
+      isBn ? 'Facebook Page বেছে নিন' : 'Choose a Facebook Page';
+  String get selectFacebookPageSubtitle => isBn
+      ? 'এই আউটলেটের Messenger bot-এর সাথে যে Page যুক্ত হবে সেটি নিশ্চিত করুন।'
+      : 'Confirm which Page should be connected to this outlet Messenger bot.';
+  String get confirmFacebookPage =>
+      isBn ? 'Page কানেক্ট করুন' : 'Connect selected Page';
   String get facebookBotEnabled => isBn ? 'Bot চালু' : 'Bot enabled';
   String get facebookOrderingEnabled =>
       isBn ? 'ডেলিভারি অর্ডার চালু' : 'Delivery ordering enabled';
@@ -218,16 +225,16 @@ class AppStrings {
 
   String get receiptPrinter => isBn ? 'রিসিট প্রিন্টার' : 'Receipt Printer';
   String get receiptPrinterSubtitle => isBn
-      ? 'Type-C cable থাকলে USB printing, না থাকলে Bluetooth printing।'
-      : 'Uses type-C USB printing when connected, otherwise Bluetooth.';
+      ? 'Built-in printer, Type-C USB অথবা Bluetooth printing ব্যবহার করে।'
+      : 'Uses built-in, type-C USB, or Bluetooth printing.';
   String get noPrinterSelected =>
       isBn ? 'কোনো প্রিন্টার সিলেক্ট করা নেই' : 'No printer selected';
   String get printerConnectedAuto => isBn
       ? 'কানেক্টেড। নতুন অর্ডার অটোমেটিক প্রিন্ট হবে।'
       : 'Connected. New orders will print automatically.';
   String get pairPrinterInstruction => isBn
-      ? 'Type-C cable লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে connect করুন।'
-      : 'Plug in a type-C printer or scan nearby Bluetooth devices to connect.';
+      ? 'Built-in printer ব্যবহার করুন, Type-C cable লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে connect করুন।'
+      : 'Use the built-in printer, plug in type-C, or scan nearby Bluetooth devices.';
   String get autoPrintNewOrders => isBn
       ? 'অটো-অ্যাকসেপ্ট ও অটো-প্রিন্ট নতুন অর্ডার'
       : 'Auto-accept & auto-print new orders';
@@ -237,10 +244,16 @@ class AppStrings {
   String get refreshPairedPrinters =>
       isBn ? 'কাছের ডিভাইস স্ক্যান' : 'Scan for devices';
   String get testPrint => isBn ? 'টেস্ট প্রিন্ট' : 'Test print';
+  String get printerDiagnostics =>
+      isBn ? 'প্রিন্টার ডায়াগনস্টিকস' : 'Printer diagnostics';
+  String get clearPrinterDiagnostics =>
+      isBn ? 'প্রিন্টার ডায়াগনস্টিকস মুছুন' : 'Clear printer diagnostics';
+  String get copyDiagnostics => isBn ? 'কপি করুন' : 'Copy';
+  String get close => isBn ? 'বন্ধ করুন' : 'Close';
   String get printFailed => isBn ? 'প্রিন্ট ব্যর্থ হয়েছে' : 'Print failed';
   String get printerNotConnectedHint => isBn
-      ? 'প্রিন্টার কানেক্ট নেই — Type-C cable লাগান বা Settings থেকে পেয়ার করুন।'
-      : 'Printer not connected — plug in type-C or pair one in Settings.';
+      ? 'প্রিন্টার কানেক্ট নেই — built-in printer ব্যবহার করুন, Type-C cable লাগান বা Settings থেকে পেয়ার করুন।'
+      : 'Printer not connected — use built-in, plug in type-C, or pair one in Settings.';
   String ticketPrinted(String seq) => isBn
       ? '${_digits(seq)}-এর টিকেট প্রিন্ট হয়েছে'
       : 'Ticket printed for $seq';

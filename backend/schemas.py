@@ -130,6 +130,11 @@ class FacebookChatbotOAuthStartResponse(BaseModel):
     expiresInSeconds: int
 
 
+class FacebookChatbotOAuthCompleteRequest(BaseModel):
+    sessionId: str
+    pageId: str
+
+
 class StaffDevBypassLoginRequest(BaseModel):
     """Local/dev staff login without Google; server must set STAFF_DEV_BYPASS_SECRET."""
 

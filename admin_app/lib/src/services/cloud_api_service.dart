@@ -934,6 +934,35 @@ class CloudApiService {
     return FacebookChatbotOAuthStart.fromJson(response);
   }
 
+  Future<FacebookChatbotOAuthPages> fetchFacebookChatbotOAuthPages({
+    required String sessionId,
+  }) async {
+    final uri = _uri(
+      '/admin/chatbot/facebook/oauth/pages',
+    )?.replace(queryParameters: {'sessionId': sessionId.trim()});
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson('GET', uri);
+    return FacebookChatbotOAuthPages.fromJson(response);
+  }
+
+  Future<FacebookChatbotConfig> completeFacebookChatbotOAuth({
+    required String sessionId,
+    required String pageId,
+  }) async {
+    final uri = _uri('/admin/chatbot/facebook/oauth/complete');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'POST',
+      uri,
+      body: {'sessionId': sessionId.trim(), 'pageId': pageId.trim()},
+    );
+    return FacebookChatbotConfig.fromJson(response);
+  }
+
   Future<FacebookChatbotConfig> updateFacebookChatbotConfig({
     String? pageAccessToken,
     required bool isEnabled,
@@ -1513,9 +1542,7 @@ class CloudApiService {
 
   Future<Map<String, Object?>> pushOrderItems(OrderModel order) async {
     final config = _requireServerConfig();
-    final uri = _uri(
-      '/outlets/${config.outletId}/orders/${order.id}/items',
-    );
+    final uri = _uri('/outlets/${config.outletId}/orders/${order.id}/items');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
@@ -1523,7 +1550,9 @@ class CloudApiService {
       'PATCH',
       uri,
       body: {
-        'items': order.items.map((item) => item.toJson()).toList(growable: false),
+        'items': order.items
+            .map((item) => item.toJson())
+            .toList(growable: false),
         'subtotal': order.subtotal,
         'totalAmount': order.total,
         'vatRatePercent': order.vatRatePercent,

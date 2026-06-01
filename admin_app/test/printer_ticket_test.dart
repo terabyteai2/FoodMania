@@ -112,4 +112,33 @@ void main() {
   test('bitmap renderer targets 58mm printable width', () {
     expect(TicketBitmapRenderer.debugPrintableWidth, 384);
   });
+
+  test('built-in printer label wins over external printer availability', () {
+    final state = PrinterRuntimeState(
+      autoPrintEnabled: true,
+      connected: true,
+      busy: false,
+      activeTransport: PrinterTransport.builtIn,
+      builtInPrinterAvailable: true,
+      usbPrinterAvailable: true,
+      selectedPrinterName: 'Bluetooth fallback',
+      selectedPrinterAddress: '00:11:22:33:44:55',
+    );
+
+    expect(state.hasSelectedPrinter, isTrue);
+    expect(state.selectedPrinterLabel, 'Built-in printer (SUNMI)');
+  });
+
+  test('USB printer remains a selected local fallback', () {
+    final state = PrinterRuntimeState(
+      autoPrintEnabled: true,
+      connected: true,
+      busy: false,
+      activeTransport: PrinterTransport.usb,
+      usbPrinterAvailable: true,
+    );
+
+    expect(state.hasSelectedPrinter, isTrue);
+    expect(state.selectedPrinterLabel, 'USB printer (type-C)');
+  });
 }

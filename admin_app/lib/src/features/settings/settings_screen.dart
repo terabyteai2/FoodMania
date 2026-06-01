@@ -15,6 +15,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../models/facebook_chatbot_config.dart';
 import '../../models/pos_notification.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -24,7 +25,7 @@ import '../reports/reports_screen.dart';
 import 'customer_menu_themes.dart';
 import 'qr_pdf_screen.dart';
 
-const bool _showFacebookChatbotSettings = false;
+const bool _showFacebookChatbotSettings = true;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -662,6 +663,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onConnect: _connectPrinter,
             onDisconnect: _disconnectPrinter,
             onTestPrint: _testPrinter,
+            onShowDiagnostics: _showPrinterDiagnostics,
+            onClearDiagnostics: _clearPrinterDiagnostics,
           ),
         ),
       ),
@@ -1018,6 +1021,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _showPrinterDiagnostics() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final diagnostics = await app.readPrinterDiagnostics();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(text.printerDiagnostics),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(child: SelectableText(diagnostics)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: diagnostics));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${text.printerDiagnostics}: copied')),
+              );
+            },
+            child: Text(text.copyDiagnostics),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(text.close),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearPrinterDiagnostics() async {
+    final app = AppScope.of(context);
+    await app.clearPrinterDiagnostics();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${app.strings.printerDiagnostics}: cleared')),
+    );
+  }
+
   String? _required(String? value) {
     if (value == null || value.trim().isEmpty) {
       return AppScope.of(context).strings.requiredField;
@@ -1357,21 +1401,32 @@ class _FacebookChatbotSettingsPageState
       );
       return;
     }
-    final connected = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+    final sessionId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
         builder: (_) => _FacebookOAuthWebViewPage(initialUrl: url),
         fullscreenDialog: true,
       ),
     );
     if (!mounted) return;
-    if (connected == true) {
+    var connected = false;
+    if (sessionId != null && sessionId.trim().isNotEmpty) {
+      connected =
+          await Navigator.of(context).push<bool>(
+            MaterialPageRoute<bool>(
+              builder: (_) => _FacebookPageSelectionPage(sessionId: sessionId),
+              fullscreenDialog: true,
+            ),
+          ) ==
+          true;
+    }
+    if (connected) {
       await app.loadFacebookChatbotConfig();
     }
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
         content: TfText(
-          connected == true
+          connected
               ? app.strings.facebookLoginComplete
               : app.strings.facebookLoginFailed,
         ),
@@ -1467,7 +1522,8 @@ class _FacebookOAuthWebViewPageState extends State<_FacebookOAuthWebViewPage> {
     }
     final success = uri.queryParameters['status'] == 'success';
     if (success) {
-      if (mounted) Navigator.pop(context, true);
+      final sessionId = uri.queryParameters['sessionId']?.trim() ?? '';
+      if (sessionId.isNotEmpty && mounted) Navigator.pop(context, sessionId);
       return true;
     }
     if (mounted) {
@@ -1527,6 +1583,119 @@ class _FacebookOAuthWebViewPageState extends State<_FacebookOAuthWebViewPage> {
                     : WebViewWidget(controller: _controller!),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FacebookPageSelectionPage extends StatefulWidget {
+  const _FacebookPageSelectionPage({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  State<_FacebookPageSelectionPage> createState() =>
+      _FacebookPageSelectionPageState();
+}
+
+class _FacebookPageSelectionPageState
+    extends State<_FacebookPageSelectionPage> {
+  List<FacebookChatbotPage> _pages = const [];
+  String _selectedPageId = '';
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final app = AppScope.of(context);
+    final result = await app.loadFacebookChatbotOAuthPages(widget.sessionId);
+    if (!mounted) return;
+    final pages = result?.pages ?? const <FacebookChatbotPage>[];
+    setState(() {
+      _pages = pages;
+      _selectedPageId = pages.length == 1 ? pages.first.pageId : '';
+      _error = pages.isEmpty
+          ? app.facebookChatbotError ?? app.strings.facebookLoginFailed
+          : null;
+      _loading = false;
+    });
+  }
+
+  Future<void> _complete() async {
+    final app = AppScope.of(context);
+    final ok = await app.completeFacebookChatbotOAuth(
+      sessionId: widget.sessionId,
+      pageId: _selectedPageId,
+    );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _error =
+          app.facebookChatbotError ?? app.lastError ?? app.strings.saveFailed;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    return AppScaffold(
+      title: text.selectFacebookPage,
+      showDatePill: false,
+      showBackButton: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TfText(text.selectFacebookPageSubtitle),
+          SizedBox(height: 12),
+          if (_loading)
+            TfLoading(message: text.facebookLoginTitle)
+          else
+            RadioGroup<String>(
+              groupValue: _selectedPageId,
+              onChanged: (value) =>
+                  setState(() => _selectedPageId = value ?? ''),
+              child: Column(
+                children: [
+                  for (final page in _pages)
+                    RadioListTile<String>(
+                      value: page.pageId,
+                      title: TfText(
+                        page.pageName.isEmpty ? page.pageId : page.pageName,
+                      ),
+                      subtitle: page.pageName.isEmpty
+                          ? null
+                          : TfText(page.pageId),
+                    ),
+                ],
+              ),
+            ),
+          if ((_error ?? '').isNotEmpty) ...[
+            SizedBox(height: 8),
+            TfText(
+              _error!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
+            ),
+          ],
+          SizedBox(height: 12),
+          TfButton(
+            label: text.confirmFacebookPage,
+            icon: Icons.check_rounded,
+            busy: app.busy,
+            fullWidth: true,
+            onPressed: app.busy || _selectedPageId.isEmpty ? null : _complete,
           ),
         ],
       ),
@@ -2273,6 +2442,8 @@ class _PrinterSettingsCard extends StatelessWidget {
     required this.onConnect,
     required this.onDisconnect,
     required this.onTestPrint,
+    required this.onShowDiagnostics,
+    required this.onClearDiagnostics,
   });
 
   final AppStrings text;
@@ -2283,6 +2454,8 @@ class _PrinterSettingsCard extends StatelessWidget {
   final Future<void> Function(BluetoothPrinterDevice printer) onConnect;
   final Future<void> Function() onDisconnect;
   final Future<void> Function() onTestPrint;
+  final Future<void> Function() onShowDiagnostics;
+  final Future<void> Function() onClearDiagnostics;
 
   @override
   Widget build(BuildContext context) {
@@ -2367,6 +2540,22 @@ class _PrinterSettingsCard extends StatelessWidget {
               size: TfButtonSize.sm,
               fullWidth: false,
               onPressed: state.busy ? null : onTestPrint,
+            ),
+            TfButton(
+              label: text.printerDiagnostics,
+              icon: Icons.description_outlined,
+              variant: TfButtonVariant.paper,
+              size: TfButtonSize.sm,
+              fullWidth: false,
+              onPressed: state.busy ? null : onShowDiagnostics,
+            ),
+            TfButton(
+              label: text.clearPrinterDiagnostics,
+              icon: Icons.delete_outline_rounded,
+              variant: TfButtonVariant.paper,
+              size: TfButtonSize.sm,
+              fullWidth: false,
+              onPressed: state.busy ? null : onClearDiagnostics,
             ),
             if (state.connected)
               TfButton(
@@ -3492,7 +3681,7 @@ class _AboutUsPage extends StatelessWidget {
                   color: PosColors.accent,
                   title: 'Kitchen copy and receipt printing',
                   subtitle:
-                      'Send kitchen tickets and customer receipts to supported Bluetooth or USB thermal printers without slowing the counter down.',
+                      'Send kitchen tickets and customer receipts to supported built-in, Bluetooth, or USB thermal printers without slowing the counter down.',
                 ),
                 _divider(),
                 _featureTile(

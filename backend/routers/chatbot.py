@@ -12,16 +12,29 @@ from auth import get_current_device_payload
 from config import settings
 from database import get_db
 from routers.admin import _current_account
-from schemas import FacebookChatbotConfigRequest, ok
+from schemas import FacebookChatbotConfigRequest, FacebookChatbotOAuthCompleteRequest, ok
 from services.facebook_chatbot import (
+    complete_facebook_oauth_page_selection,
     complete_facebook_oauth,
     create_facebook_oauth_url,
     get_facebook_config,
+    get_facebook_oauth_pages,
     handle_facebook_webhook,
     save_facebook_config,
 )
 
 router = APIRouter()
+CHATBOT_ADMIN_ROLES = {"manager", "owner"}
+
+
+async def _current_chatbot_admin(payload: dict, db: AsyncSession):
+    account = await _current_account(payload, db)
+    if (account.role or "").strip().lower() not in CHATBOT_ADMIN_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager or owner access required.",
+        )
+    return account
 
 
 @router.get("/webhooks/facebook", include_in_schema=False)
@@ -61,7 +74,7 @@ async def get_facebook_chatbot_config(
     payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
-    account = await _current_account(payload, db, require_manager=True)
+    account = await _current_chatbot_admin(payload, db)
     return ok(await get_facebook_config(db, account.outlet_id))
 
 
@@ -71,7 +84,7 @@ async def update_facebook_chatbot_config(
     payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
-    account = await _current_account(payload, db, require_manager=True)
+    account = await _current_chatbot_admin(payload, db)
     data = await save_facebook_config(
         db=db,
         outlet_id=account.outlet_id,
@@ -87,7 +100,7 @@ async def start_facebook_chatbot_oauth(
     payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
-    account = await _current_account(payload, db, require_manager=True)
+    account = await _current_chatbot_admin(payload, db)
     return ok(create_facebook_oauth_url(outlet_id=account.outlet_id, account_id=account.id))
 
 
@@ -107,8 +120,43 @@ async def facebook_chatbot_oauth_callback(
         data = await complete_facebook_oauth(db=db, state_token=state, code=code)
     except HTTPException as exc:
         return _facebook_oauth_done_redirect(str(exc.detail), success=False)
-    message = data.get("pageName") or data.get("pageId") or "Facebook Page connected."
-    return _facebook_oauth_done_redirect(str(message), success=True)
+    return _facebook_oauth_done_redirect(
+        "Choose the Facebook Page to connect.",
+        success=True,
+        session_id=str(data["sessionId"]),
+    )
+
+
+@router.get("/admin/chatbot/facebook/oauth/pages")
+async def get_facebook_chatbot_oauth_pages(
+    session_id: str = Query(..., alias="sessionId"),
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    return ok(
+        await get_facebook_oauth_pages(
+            db, session_id=session_id, outlet_id=account.outlet_id, account_id=account.id
+        )
+    )
+
+
+@router.post("/admin/chatbot/facebook/oauth/complete")
+async def complete_facebook_chatbot_oauth(
+    body: FacebookChatbotOAuthCompleteRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    return ok(
+        await complete_facebook_oauth_page_selection(
+            db,
+            session_id=body.sessionId,
+            page_id=body.pageId,
+            outlet_id=account.outlet_id,
+            account_id=account.id,
+        )
+    )
 
 
 @router.get("/admin/chatbot/facebook/oauth/done", include_in_schema=False)
@@ -177,10 +225,14 @@ async def facebook_chatbot_oauth_done(
     )
 
 
-def _facebook_oauth_done_redirect(message: str, *, success: bool) -> RedirectResponse:
-    params = urlencode({"status": "success" if success else "error", "message": message})
+def _facebook_oauth_done_redirect(
+    message: str, *, success: bool, session_id: str | None = None
+) -> RedirectResponse:
+    params = {"status": "success" if success else "error", "message": message}
+    if session_id:
+        params["sessionId"] = session_id
     return RedirectResponse(
-        url=f"/admin/chatbot/facebook/oauth/done?{params}",
+        url=f"/admin/chatbot/facebook/oauth/done?{urlencode(params)}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

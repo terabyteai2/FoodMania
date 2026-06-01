@@ -64,15 +64,18 @@ rsync -az --delete \
   "${REPO_ROOT}/backend/uploads/menu_placeholders/" \
   "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/backend/uploads/menu_placeholders/"
 
-say "Updating nginx API routes (phone/demo OTP) + restarting backend"
+say "Updating nginx routes + restarting backend"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" bash -s <<REMOTE
 set -euo pipefail
 if [[ -f ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf ]]; then
   install -m 644 ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf /etc/nginx/conf.d/rastarant.conf
-  nginx -t
-  systemctl reload nginx
-  echo "  ✓ nginx reloaded"
 fi
+if [[ -f ${REMOTE_DIR}/deploy/nginx/quickbytes.conf ]]; then
+  install -m 644 ${REMOTE_DIR}/deploy/nginx/quickbytes.conf /etc/nginx/conf.d/quickbytes.conf
+fi
+nginx -t
+systemctl reload nginx
+echo "  ✓ nginx reloaded"
 cd ${REMOTE_DIR}/backend
 ./.venv/bin/pip install -r requirements.txt --quiet
 systemctl restart ${SERVICE_NAME}
@@ -84,6 +87,10 @@ API_BASE="${API_BASE:-https://quickbytes.buzz}"
 say "Smoke test (${API_BASE})"
 curl -fsS --max-time 15 "${API_BASE}/health" >/dev/null \
   || die "Health check failed at ${API_BASE}/health"
+curl -fsS --max-time 15 "https://quickbytes.buzz/" | grep -q '<title>QuickBytes' \
+  || die "Landing page smoke check failed at https://quickbytes.buzz/"
+curl -fsS --max-time 15 "https://demo.quickbytes.buzz/" | grep -q '<title>Menu</title>' \
+  || die "Customer menu smoke check failed at https://demo.quickbytes.buzz/"
 curl -fsS --max-time 15 "${API_BASE}/uploads/menu_placeholders/biryani-1.png" >/dev/null \
   || die "Placeholder image smoke check failed at ${API_BASE}/uploads/menu_placeholders/biryani-1.png"
 curl -fsS --max-time 20 -X POST "${API_BASE}/admin/phone/send-otp" \

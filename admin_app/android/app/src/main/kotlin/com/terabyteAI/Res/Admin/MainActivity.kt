@@ -18,15 +18,23 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.sunmi.peripheral.printer.InnerPrinterCallback
+import com.sunmi.peripheral.printer.InnerPrinterManager
+import com.sunmi.peripheral.printer.SunmiPrinterService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Hosts a [MethodChannel] used by [SystemNotificationService] on the Dart
@@ -38,6 +46,7 @@ class MainActivity : FlutterActivity() {
     private val channelName = "com.terabyteai.foodmania/notification_sound"
     private val appUpdateChannelName = "com.terabyteai.foodmania/app_update"
     private val usbPrinterChannelName = "com.terabyteai.foodmania/usb_printer"
+    private val builtInPrinterChannelName = "com.terabyteai.foodmania/built_in_printer"
 
     companion object {
         private const val PENDING_CHANNEL_ID = "pos_pending_orders_v2"
@@ -46,6 +55,9 @@ class MainActivity : FlutterActivity() {
         private const val ACTION_USB_PERMISSION =
             "com.terabyteai.foodmania.posadmin.USB_PRINTER_PERMISSION"
         private const val PRINTER_TAG = "QB-PRINTER"
+        private const val PRINTER_DIAGNOSTICS_FILE = "printer_diagnostics.txt"
+        private const val MAX_PRINTER_DIAGNOSTICS_BYTES = 64 * 1024
+        private const val SUNMI_REBIND_DELAY_MS = 1500L
     }
 
     private data class UsbPrinterTarget(
@@ -61,6 +73,29 @@ class MainActivity : FlutterActivity() {
 
     private var pendingUsbPrint: PendingUsbPrint? = null
     private var usbReceiverRegistered = false
+    private var sunmiBinding = false
+    private var sunmiBound = false
+    private var sunmiRebindScheduled = false
+    private var destroyed = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var sunmiPrinterService: SunmiPrinterService? = null
+
+    private val sunmiPrinterCallback = object : InnerPrinterCallback() {
+        override fun onConnected(service: SunmiPrinterService) {
+            sunmiPrinterService = service
+            sunmiBinding = false
+            sunmiBound = true
+            printerLog("SUNMI service connected hasPrinter=${hasSunmiPrinter()}")
+        }
+
+        override fun onDisconnected() {
+            sunmiPrinterService = null
+            sunmiBinding = false
+            sunmiBound = false
+            printerLog("SUNMI service disconnected")
+            scheduleSunmiRebind()
+        }
+    }
 
     private val usbPermissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -68,7 +103,7 @@ class MainActivity : FlutterActivity() {
             val pending = pendingUsbPrint ?: return
             pendingUsbPrint = null
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-            Log.i(PRINTER_TAG, "USB permission result granted=$granted bytes=${pending.bytes.size}")
+            printerLog("USB permission result granted=$granted bytes=${pending.bytes.size}")
             if (!granted) {
                 pending.result.success(false)
                 return
@@ -83,6 +118,11 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        printerLog(
+            "Device manufacturer=${Build.MANUFACTURER} model=${Build.MODEL} " +
+                "android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}"
+        )
+        ensureSunmiPrinterBound()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -184,10 +224,10 @@ class MainActivity : FlutterActivity() {
                     "hasPrinter" -> {
                         try {
                             val target = findUsbPrinterTarget()
-                            Log.i(PRINTER_TAG, "hasPrinter=${target != null} target=${target?.let { describeTarget(it) } ?: "none"}")
+                            printerLog("hasPrinter=${target != null} target=${target?.let { describeTarget(it) } ?: "none"}")
                             result.success(target != null)
                         } catch (error: Exception) {
-                            Log.w(PRINTER_TAG, "hasPrinter failed", error)
+                            printerLog("hasPrinter failed", error)
                             result.success(false)
                         }
                     }
@@ -199,12 +239,49 @@ class MainActivity : FlutterActivity() {
                         }
                         printUsbPrinterBytes(bytes, result)
                     }
+                    "getDiagnostics" -> result.success(readPrinterDiagnostics())
+                    "clearDiagnostics" -> {
+                        clearPrinterDiagnostics()
+                        printerLog("Diagnostics cleared")
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, builtInPrinterChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "hasPrinter" -> result.success(hasSunmiPrinter())
+                    "printBytes" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("INVALID_ARGUMENT", "bytes are required", null)
+                            return@setMethodCallHandler
+                        }
+                        result.success(printSunmiPrinterBytes(bytes))
+                    }
+                    "getDiagnostics" -> result.success(readPrinterDiagnostics())
+                    "clearDiagnostics" -> {
+                        clearPrinterDiagnostics()
+                        printerLog("Diagnostics cleared")
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }
     }
 
     override fun onDestroy() {
+        destroyed = true
+        mainHandler.removeCallbacksAndMessages(null)
+        if (sunmiBound || sunmiBinding) {
+            try {
+                InnerPrinterManager.getInstance()
+                    .unBindService(applicationContext, sunmiPrinterCallback)
+            } catch (error: Exception) {
+                printerLog("SUNMI unbind failed", error)
+            }
+        }
         if (usbReceiverRegistered) {
             try {
                 unregisterReceiver(usbPermissionReceiver)
@@ -214,16 +291,80 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    private fun ensureSunmiPrinterBound(): Boolean {
+        if (destroyed || sunmiPrinterService != null || sunmiBinding) {
+            return sunmiPrinterService != null
+        }
+        return try {
+            sunmiBinding = true
+            val requested = InnerPrinterManager.getInstance()
+                .bindService(applicationContext, sunmiPrinterCallback)
+            sunmiBound = requested
+            sunmiBinding = requested
+            printerLog("SUNMI bind requested=$requested")
+            requested
+        } catch (error: Exception) {
+            sunmiBinding = false
+            sunmiBound = false
+            printerLog("SUNMI bind unavailable", error)
+            false
+        }
+    }
+
+    private fun scheduleSunmiRebind() {
+        if (destroyed || sunmiRebindScheduled) return
+        sunmiRebindScheduled = true
+        mainHandler.postDelayed({
+            sunmiRebindScheduled = false
+            ensureSunmiPrinterBound()
+        }, SUNMI_REBIND_DELAY_MS)
+    }
+
+    private fun hasSunmiPrinter(): Boolean {
+        ensureSunmiPrinterBound()
+        val service = sunmiPrinterService ?: run {
+            printerLog("SUNMI hasPrinter=false service=disconnected")
+            return false
+        }
+        return try {
+            val available = InnerPrinterManager.getInstance().hasPrinter(service)
+            printerLog("SUNMI hasPrinter=$available service=connected")
+            available
+        } catch (error: Exception) {
+            printerLog("SUNMI hasPrinter failed", error)
+            false
+        }
+    }
+
+    private fun printSunmiPrinterBytes(bytes: ByteArray): Boolean {
+        val service = sunmiPrinterService ?: run {
+            ensureSunmiPrinterBound()
+            printerLog("SUNMI printBytes failed service=disconnected bytes=${bytes.size}")
+            return false
+        }
+        if (!hasSunmiPrinter()) {
+            printerLog("SUNMI printBytes failed printer=unavailable bytes=${bytes.size}")
+            return false
+        }
+        return try {
+            service.sendRAWData(bytes, null)
+            printerLog("SUNMI printBytes submitted bytes=${bytes.size}")
+            true
+        } catch (error: Exception) {
+            printerLog("SUNMI printBytes failed bytes=${bytes.size}", error)
+            false
+        }
+    }
+
     private fun printUsbPrinterBytes(bytes: ByteArray, result: MethodChannel.Result) {
         val manager = getSystemService(USB_SERVICE) as UsbManager
-        Log.i(PRINTER_TAG, "printBytes request bytes=${bytes.size} devices=${manager.deviceList.size}")
+        printerLog("printBytes request bytes=${bytes.size} devices=${manager.deviceList.size}")
         val target = findUsbPrinterTarget() ?: run {
-            Log.w(PRINTER_TAG, "printBytes no USB printer target")
+            printerLog("printBytes no USB printer target")
             result.success(false)
             return
         }
-        Log.i(
-            PRINTER_TAG,
+        printerLog(
             "printBytes target=${describeTarget(target)} hasPermission=${manager.hasPermission(target.device)}"
         )
         if (manager.hasPermission(target.device)) {
@@ -250,7 +391,7 @@ class MainActivity : FlutterActivity() {
             }
         val intent = Intent(ACTION_USB_PERMISSION).setPackage(packageName)
         val permissionIntent = PendingIntent.getBroadcast(this, 0, intent, flags)
-        Log.i(PRINTER_TAG, "requesting USB permission for ${describeDevice(target.device)}")
+        printerLog("requesting USB permission for ${describeDevice(target.device)}")
         manager.requestPermission(target.device, permissionIntent)
     }
 
@@ -269,20 +410,20 @@ class MainActivity : FlutterActivity() {
     private fun writeUsbPrinterBytes(bytes: ByteArray): Boolean {
         val manager = getSystemService(USB_SERVICE) as UsbManager
         val target = findUsbPrinterTarget() ?: run {
-            Log.w(PRINTER_TAG, "write failed: no target")
+            printerLog("write failed: no target")
             return false
         }
         if (!manager.hasPermission(target.device)) {
-            Log.w(PRINTER_TAG, "write failed: no permission for ${describeDevice(target.device)}")
+            printerLog("write failed: no permission for ${describeDevice(target.device)}")
             return false
         }
         val connection = manager.openDevice(target.device) ?: run {
-            Log.w(PRINTER_TAG, "write failed: openDevice returned null for ${describeDevice(target.device)}")
+            printerLog("write failed: openDevice returned null for ${describeDevice(target.device)}")
             return false
         }
         return try {
             val claimed = connection.claimInterface(target.usbInterface, true)
-            Log.i(PRINTER_TAG, "claimInterface=$claimed ${describeTarget(target)}")
+            printerLog("claimInterface=$claimed ${describeTarget(target)}")
             claimed && writeBulkBytes(connection, target.endpoint, bytes)
         } finally {
             try {
@@ -299,26 +440,26 @@ class MainActivity : FlutterActivity() {
     ): Boolean {
         var offset = 0
         val chunkSize = minOf(4096, maxOf(64, endpoint.maxPacketSize * 16))
-        Log.i(PRINTER_TAG, "bulk write start bytes=${bytes.size} chunkSize=$chunkSize maxPacket=${endpoint.maxPacketSize}")
+        printerLog("bulk write start bytes=${bytes.size} chunkSize=$chunkSize maxPacket=${endpoint.maxPacketSize}")
         while (offset < bytes.size) {
             val length = minOf(chunkSize, bytes.size - offset)
             val written = connection.bulkTransfer(endpoint, bytes, offset, length, 3000)
             if (written <= 0) {
-                Log.w(PRINTER_TAG, "bulk write failed offset=$offset requested=$length written=$written")
+                printerLog("bulk write failed offset=$offset requested=$length written=$written")
                 return false
             }
             offset += written
         }
-        Log.i(PRINTER_TAG, "bulk write complete bytes=$offset")
+        printerLog("bulk write complete bytes=$offset")
         return true
     }
 
     private fun findUsbPrinterTarget(): UsbPrinterTarget? {
         val manager = getSystemService(USB_SERVICE) as UsbManager
         manager.deviceList.values.forEach { device ->
-            Log.i(PRINTER_TAG, "USB device ${describeDevice(device)} interfaces=${device.interfaceCount}")
+            printerLog("USB device ${describeDevice(device)} interfaces=${device.interfaceCount}")
             for (i in 0 until device.interfaceCount) {
-                Log.i(PRINTER_TAG, "  iface[$i]=${describeInterface(device.getInterface(i))}")
+                printerLog("  iface[$i]=${describeInterface(device.getInterface(i))}")
             }
         }
         val targets = manager.deviceList.values.mapNotNull { device ->
@@ -326,7 +467,7 @@ class MainActivity : FlutterActivity() {
         }
         if (targets.isNotEmpty()) {
             val target = targets.sortedByDescending { targetScore(it.device, it.usbInterface) }.first()
-            Log.i(PRINTER_TAG, "selected printer-class target ${describeTarget(target)}")
+            printerLog("selected printer-class target ${describeTarget(target)}")
             return target
         }
         val bulkOutTargets = manager.deviceList.values.mapNotNull { device ->
@@ -336,7 +477,7 @@ class MainActivity : FlutterActivity() {
             targetScore(it.device, it.usbInterface)
         }.firstOrNull()
         if (fallback != null) {
-            Log.i(PRINTER_TAG, "selected bulk-out fallback ${describeTarget(fallback)} candidates=${bulkOutTargets.size}")
+            printerLog("selected bulk-out fallback ${describeTarget(fallback)} candidates=${bulkOutTargets.size}")
         }
         return fallback
     }
@@ -426,6 +567,37 @@ class MainActivity : FlutterActivity() {
 
     private fun describeInterface(usbInterface: UsbInterface): String {
         return "class=${usbInterface.interfaceClass} subclass=${usbInterface.interfaceSubclass} protocol=${usbInterface.interfaceProtocol} endpoints=${usbInterface.endpointCount}"
+    }
+
+    @Synchronized
+    private fun printerLog(message: String, error: Throwable? = null) {
+        if (error == null) {
+            Log.i(PRINTER_TAG, message)
+        } else {
+            Log.w(PRINTER_TAG, message, error)
+        }
+        try {
+            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+            val errorText = error?.let { " | ${it.javaClass.simpleName}: ${it.message}" } ?: ""
+            val file = File(filesDir, PRINTER_DIAGNOSTICS_FILE)
+            file.appendText("$timestamp $message$errorText\n")
+            if (file.length() > MAX_PRINTER_DIAGNOSTICS_BYTES) {
+                file.writeText(file.readText().takeLast(MAX_PRINTER_DIAGNOSTICS_BYTES / 2))
+            }
+        } catch (_: Exception) {
+            // Diagnostics must never interfere with printing.
+        }
+    }
+
+    @Synchronized
+    private fun readPrinterDiagnostics(): String {
+        val file = File(filesDir, PRINTER_DIAGNOSTICS_FILE)
+        return if (file.exists()) file.readText() else "No printer diagnostics recorded yet."
+    }
+
+    @Synchronized
+    private fun clearPrinterDiagnostics() {
+        File(filesDir, PRINTER_DIAGNOSTICS_FILE).delete()
     }
 
     private fun runtimeInfo(): Map<String, Any> {

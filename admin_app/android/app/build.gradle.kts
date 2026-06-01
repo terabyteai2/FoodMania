@@ -72,5 +72,6 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("com.sunmi:printerlibrary:1.0.15")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
