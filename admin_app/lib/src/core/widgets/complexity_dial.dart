@@ -37,32 +37,39 @@ class HeaderComplexityDial extends StatelessWidget {
             ),
         ];
       },
-      child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp2),
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          borderRadius: BorderRadius.circular(PosRadii.sm),
-          border: Border.all(color: PosColors.line, width: 0.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TfText(
-              selectedTier.displayNameFor(isBn: isBn),
-              style: const TextStyle(
-                color: PosColors.primaryDark,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 142),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp2),
+          decoration: BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.sm),
+            border: Border.all(color: PosColors.line, width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: TfText(
+                  selectedTier.displayNameFor(isBn: isBn),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: PosColors.primaryDark,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: PosSpacing.sp1),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: PosColors.muted,
-              size: 16,
-            ),
-          ],
+              const SizedBox(width: PosSpacing.sp1),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: PosColors.muted,
+                size: 16,
+              ),
+            ],
+          ),
         ),
       ),
     );

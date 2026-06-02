@@ -208,32 +208,19 @@ class _DashHeader extends StatelessWidget {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
+              final actionBar = _HeaderActionBar(actions: actions);
               if (constraints.maxWidth < 480) {
                 return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    identity,
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: actions,
-                      ),
-                    ),
-                  ],
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [actionBar, const SizedBox(height: 10), identity],
                 );
               }
               return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: identity),
                   const SizedBox(width: 8),
-                  for (int i = 0; i < actions.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 6),
-                    actions[i],
-                  ],
+                  Flexible(child: actionBar),
                 ],
               );
             },
@@ -249,6 +236,22 @@ class _DashHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HeaderActionBar extends StatelessWidget {
+  const _HeaderActionBar({required this.actions});
+
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    alignment: WrapAlignment.end,
+    runAlignment: WrapAlignment.end,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    spacing: 6,
+    runSpacing: 6,
+    children: actions,
+  );
 }
 
 // Top-level dashboard view — the Manager/Owner dropdown under the header.
@@ -280,32 +283,39 @@ class _ReviewTabs extends StatelessWidget {
         _viewItem('Manager', _DashMode.manage),
         _viewItem('Owner', _DashMode.review),
       ],
-      child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          borderRadius: BorderRadius.circular(PosRadii.sm),
-          border: Border.all(color: PosColors.line, width: 0.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: PosColors.primaryDark,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 112),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.sm),
+            border: Border.all(color: PosColors.line, width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.primaryDark,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 16,
-              color: PosColors.muted,
-            ),
-          ],
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: PosColors.muted,
+              ),
+            ],
+          ),
         ),
       ),
     );
