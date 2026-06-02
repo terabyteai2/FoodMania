@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # ── Config (edit these two if your VPS changes) ────────────────────────────────
-VPS_HOST="${VPS_HOST:-103.191.240.34}"
+VPS_HOST="${VPS_HOST:-160.187.130.80}"
 VPS_USER="${VPS_USER:-root}"
 VPS_PORT="${VPS_PORT:-22}"
 REMOTE_DIR="/var/www/rastarant"

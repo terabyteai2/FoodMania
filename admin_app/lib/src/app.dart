@@ -239,6 +239,7 @@ class _MainShellState extends State<MainShell> {
   List<_AppTab> _currentTabOrder = _managerTabOrder;
   String? _lastShownNotificationKey;
   int? _lastShownAppUpdateVersionCode;
+  bool _appUpdateDialogShowing = false;
   int _receiptPrinterOpenRequest = 0;
 
   @override
@@ -473,17 +474,34 @@ class _MainShellState extends State<MainShell> {
   void _maybeShowAppUpdatePrompt(PosAppController app) {
     final update = app.pendingAppUpdate;
     if (update == null || app.appUpdateBusy) return;
-    if (_lastShownAppUpdateVersionCode == update.versionCode) return;
-    _lastShownAppUpdateVersionCode = update.versionCode;
+    if (_appUpdateDialogShowing) return;
+    if (!update.required &&
+        _lastShownAppUpdateVersionCode == update.versionCode) {
+      return;
+    }
+    if (!update.required) {
+      _lastShownAppUpdateVersionCode = update.versionCode;
+    }
+    _appUpdateDialogShowing = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || app.pendingAppUpdate?.versionCode != update.versionCode) {
+        _appUpdateDialogShowing = false;
         return;
       }
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: !update.required,
-        builder: (dialogContext) => _AppUpdateDialog(update: update),
-      );
+      try {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: !update.required,
+          builder: (dialogContext) => PopScope(
+            canPop: !update.required,
+            child: _AppUpdateDialog(update: update),
+          ),
+        );
+      } finally {
+        if (mounted) {
+          _appUpdateDialogShowing = false;
+        }
+      }
     });
   }
 }

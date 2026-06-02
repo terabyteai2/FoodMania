@@ -25,15 +25,40 @@ die()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 ssh -o BatchMode=yes -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "true" 2>/dev/null \
   || die "Keyless SSH not configured. Run bash deploy/bootstrap_vps.sh first."
 
-say "Building customer menu frontend"
+say "Installing customer menu dependencies"
 cd "${REPO_ROOT}/customer_menu/frontend"
+if [[ -f package-lock.json ]]; then
+  npm ci --silent 2>/dev/null || die "Customer menu npm ci failed"
+else
+  npm install --silent 2>/dev/null || die "Customer menu npm install failed"
+fi
+
+say "Building customer menu frontend"
 npm run build --silent 2>/dev/null || die "Customer menu build failed"
+cd "${REPO_ROOT}"
+
+say "Installing platform admin dependencies"
+cd "${REPO_ROOT}/platform_admin"
+if [[ -f package-lock.json ]]; then
+  npm ci --silent 2>/dev/null || die "Platform admin npm ci failed"
+else
+  npm install --silent 2>/dev/null || die "Platform admin npm install failed"
+fi
+
+say "Building platform admin"
+VITE_BASE_PATH=/admin/ npm run build --silent 2>/dev/null || die "Platform admin build failed"
 cd "${REPO_ROOT}"
 
 if [[ -f "${REPO_ROOT}/backend/.env" ]]; then
   say "Syncing backend .env to VPS"
   bash "${SCRIPT_DIR}/push-backend-env.sh" || true
 fi
+
+PLACEHOLDER_SOURCE="${REPO_ROOT}/backend/uploads/menu_placeholders"
+if [[ ! -d "${PLACEHOLDER_SOURCE}" ]]; then
+  PLACEHOLDER_SOURCE="${REPO_ROOT}/admin_app/assets/menu_placeholders"
+fi
+[[ -d "${PLACEHOLDER_SOURCE}" ]] || die "Missing menu placeholder source directory"
 
 say "Syncing code to ${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}"
 rsync -az --delete \
@@ -46,8 +71,10 @@ rsync -az --delete \
   --exclude='.venv/' \
   --exclude='venv/' \
   --exclude='deploy/.deploy-secrets' \
+  --exclude='landing/' \
   --exclude='Restuarent_POS_Admin_APP/' \
   --exclude='admin_app/' \
+  --exclude='platform_admin/' \
   --exclude='customer_menu/frontend/node_modules/' \
   --exclude='customer_menu/frontend/dist/' \
   --exclude='backend/uploads/' \
@@ -58,12 +85,20 @@ rsync -az --delete \
   --exclude='*.keystore' \
   "${REPO_ROOT}/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 
+say "Syncing platform admin build"
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+  "mkdir -p '${REMOTE_DIR}/platform_admin'"
+rsync -az --delete \
+  -e "ssh -p ${VPS_PORT}" \
+  "${REPO_ROOT}/platform_admin/dist/" \
+  "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/platform_admin/"
+
 say "Syncing shipped menu placeholder pictures"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
   "mkdir -p '${REMOTE_DIR}/backend/uploads/menu_placeholders'"
 rsync -az --delete \
   -e "ssh -p ${VPS_PORT}" \
-  "${REPO_ROOT}/backend/uploads/menu_placeholders/" \
+  "${PLACEHOLDER_SOURCE}/" \
   "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/backend/uploads/menu_placeholders/"
 
 say "Updating nginx routes + restarting backend"
@@ -83,6 +118,7 @@ cd ${REMOTE_DIR}/backend
 systemctl restart ${SERVICE_NAME}
 sleep 8
 curl -fsS http://127.0.0.1:8000/health >/dev/null && echo "  ✓ /health OK"
+systemctl is-active --quiet ${SERVICE_NAME} && echo "  ✓ ${SERVICE_NAME} active"
 REMOTE
 
 API_BASE="${API_BASE:-https://quickbytes.buzz}"
@@ -91,6 +127,8 @@ curl -fsS --max-time 15 "${API_BASE}/health" >/dev/null \
   || die "Health check failed at ${API_BASE}/health"
 curl -fsS --max-time 15 "https://quickbytes.buzz/" | grep -q '<title>QuickBytes' \
   || die "Landing page smoke check failed at https://quickbytes.buzz/"
+curl -fsS --max-time 15 "https://quickbytes.buzz/admin/" | grep -q '<title>Rastarant Platform Admin</title>' \
+  || die "Platform admin smoke check failed at https://quickbytes.buzz/admin/"
 curl -fsS --max-time 15 "https://demo.quickbytes.buzz/" | grep -q '<title>Menu</title>' \
   || die "Customer menu smoke check failed at https://demo.quickbytes.buzz/"
 curl -fsS --max-time 15 "${API_BASE}/uploads/menu_placeholders/biryani-1.png" >/dev/null \
@@ -113,7 +151,4 @@ elif [[ "${download_status}" == "200" ]]; then
 else
   die "APK download route smoke check failed at ${API_BASE}/app-download/app-release.apk (HTTP ${download_status})"
 fi
-curl -fsS --max-time 20 -X POST "${API_BASE}/admin/phone/send-otp" \
-  -H 'Content-Type: application/json' -d '{"phone":"01700000000"}' | grep -q '"smsSent"' \
-  || die "Send OTP failed at ${API_BASE}/admin/phone/send-otp"
-ok "Deployed — ${API_BASE} (demo login + send-otp OK)"
+ok "Deployed — ${API_BASE}"

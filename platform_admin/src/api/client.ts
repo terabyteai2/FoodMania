@@ -1,5 +1,19 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "";
+const DEFAULT_API_BASE = "https://quickbytes.buzz";
+const LEGACY_API_BASES = new Set([
+  "https://160-187-130-80.sslip.io",
+  "http://160.187.130.80",
+  "https://160.187.130.80",
+]);
+
+function normalizeApiBase(value: string | undefined): string {
+  const trimmed = (value ?? "").trim().replace(/\/$/, "");
+  if (!trimmed || LEGACY_API_BASES.has(trimmed)) {
+    return DEFAULT_API_BASE;
+  }
+  return trimmed;
+}
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL);
 
 const TOKEN_KEY = "platform_token";
 
