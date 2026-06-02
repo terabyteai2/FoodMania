@@ -443,8 +443,8 @@ class AppStrings {
   String get appUpdateAvailableTitle =>
       isBn ? 'অ্যাপ আপডেট প্রস্তুত' : 'App update ready';
   String appUpdateAvailableMessage(String version) => isBn
-      ? 'Terafoods ${_digits(version)} ইনস্টল করার জন্য প্রস্তুত।'
-      : 'Terafoods $version is ready to install.';
+      ? 'QuickBytes ${_digits(version)} ইনস্টল করার জন্য প্রস্তুত।'
+      : 'QuickBytes $version is ready to install.';
   String get appUpdateRequired =>
       isBn ? 'প্রয়োজনীয় আপডেট' : 'Required update';
   String get appUpdateReleaseNotes => isBn ? 'এই আপডেটে' : 'What changed';
