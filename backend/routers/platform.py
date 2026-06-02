@@ -3,7 +3,7 @@
 import re
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import desc, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -38,6 +38,7 @@ from schemas import (
     PlatformAccountPatchRequest,
     PlatformAdminCreateRequest,
     PlatformAdminPatchRequest,
+    PlatformBlockingNoticeRequest,
     PlatformLoginRequest,
     PlatformOutletPatchRequest,
     PlatformPaymentStatusPatchRequest,
@@ -56,7 +57,19 @@ from subscription_service import (
     subscription_period_days,
     subscription_to_dict,
 )
-from services.app_update import clear_app_update, get_app_update, set_app_update
+from services.app_update import (
+    clear_app_update,
+    extract_apk_version,
+    get_app_update,
+    promote_apk,
+    save_apk_upload,
+    set_app_update,
+)
+from services.blocking_notice import (
+    clear_blocking_notice,
+    get_blocking_notice,
+    set_blocking_notice,
+)
 from uddoktapay_client import uddokta_configured
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -1443,6 +1456,81 @@ async def publish_app_update(
     return ok({**payload, "notifiedOutlets": len(outlet_ids)})
 
 
+@router.post("/app-update/upload")
+async def upload_app_update(
+    file: UploadFile = File(...),
+    versionName: str | None = Form(None),
+    versionCode: int | None = Form(None),
+    releaseNotes: str | None = Form(None),
+    required: bool = Form(True),
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload the release APK from the platform dashboard and publish it in one
+    step. The file is stored at backend/In_App_Update_Apk_File/app-release.apk and
+    served by /app-download/app-release.apk. The version is read from the APK
+    (manual form fields are a fallback). Publish is rejected unless the new
+    versionCode is higher than the currently-published one."""
+    _ = admin
+    tmp = await save_apk_upload(file)
+    try:
+        detected_name, detected_code = extract_apk_version(tmp)
+        final_name = detected_name or (versionName or "").strip()
+        final_code = detected_code if detected_code is not None else versionCode
+        if not final_name or not final_code or final_code < 1:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Could not read the APK version automatically. "
+                    "Enter the version name and version code, then upload again."
+                ),
+            )
+        current = await get_app_update(db)
+        current_code = int(current.get("versionCode") or 0) if current.get("enabled") else 0
+        if final_code <= current_code:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Uploaded APK version code {final_code} must be higher than the "
+                    f"currently published version ({current_code})."
+                ),
+            )
+        promote_apk(tmp)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+    base = settings.BASE_URL.rstrip("/")
+    apk_url = f"{base}/app-download/app-release.apk?v={final_code}"
+    payload = await set_app_update(
+        db,
+        PlatformAppUpdateRequest(
+            versionName=final_name,
+            versionCode=final_code,
+            apkUrl=apk_url,
+            releaseNotes=releaseNotes,
+            required=required,
+            enabled=True,
+        ),
+    )
+    await db.commit()
+
+    outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
+    for outlet_id in outlet_ids:
+        await manager.broadcast(
+            outlet_id,
+            {"type": "app_update_available", "data": payload},
+        )
+
+    return ok(
+        {
+            **payload,
+            "notifiedOutlets": len(outlet_ids),
+            "autoDetectedVersion": detected_code is not None,
+        }
+    )
+
+
 @router.delete("/app-update")
 async def disable_app_update(
     admin: PlatformAdmin = Depends(_require_platform_admin),
@@ -1460,3 +1548,47 @@ async def disable_app_update(
         )
 
     return ok({**payload, "notifiedOutlets": len(outlet_ids)})
+
+
+@router.get("/blocking-notice")
+async def current_blocking_notice(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    return ok(await get_blocking_notice(db))
+
+
+@router.post("/blocking-notice")
+async def publish_blocking_notice(
+    body: PlatformBlockingNoticeRequest,
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    payload = await set_blocking_notice(db, body)
+    await db.commit()
+    notified_outlets = await _broadcast_blocking_notice(db, payload)
+    return ok({**payload, "notifiedOutlets": notified_outlets})
+
+
+@router.delete("/blocking-notice")
+async def disable_blocking_notice(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = admin
+    payload = await clear_blocking_notice(db)
+    await db.commit()
+    notified_outlets = await _broadcast_blocking_notice(db, payload)
+    return ok({**payload, "notifiedOutlets": notified_outlets})
+
+
+async def _broadcast_blocking_notice(db: AsyncSession, payload: dict) -> int:
+    outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
+    for outlet_id in outlet_ids:
+        await manager.broadcast(
+            outlet_id,
+            {"type": "admin_blocking_notice_changed", "data": payload},
+        )
+    return len(outlet_ids)

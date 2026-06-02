@@ -41,6 +41,11 @@ class Outlet(Base):
     video_url: Mapped[str | None] = mapped_column(Text)
     gallery_images: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
     menu_theme: Mapped[str] = mapped_column(String, default="sultans_hearth")
+    delivery_charge: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    pos_floor_layout: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
+    pos_vat_rate_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    pos_service_charge_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    pos_discount_presets: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="outlets")
@@ -49,6 +54,7 @@ class Outlet(Base):
     menu_items: Mapped[list["MenuItem"]] = relationship(back_populates="outlet")
     orders: Mapped[list["Order"]] = relationship(back_populates="outlet")
     inventory_items: Mapped[list["InventoryItem"]] = relationship(back_populates="outlet")
+    inventory_suppliers: Mapped[list["InventorySupplier"]] = relationship(back_populates="outlet")
     subscription: Mapped["OutletSubscription | None"] = relationship(
         back_populates="outlet", uselist=False
     )
@@ -133,6 +139,7 @@ class Order(Base):
         Numeric(5, 2), nullable=True
     )
     vat_amount: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    delivery_charge: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     service_type: Mapped[str | None] = mapped_column(String, nullable=True)
     covers: Mapped[int | None] = mapped_column(Integer, nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -144,10 +151,75 @@ class Order(Base):
     mobile_number: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    shift_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    discount_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    discount_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    service_charge_rate_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
+    service_charge_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    billing_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
+    kot_batches: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     outlet: Mapped[Outlet] = relationship(back_populates="orders")
+
+
+class PosShift(Base):
+    __tablename__ = "pos_shifts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, default="open")
+    opening_cash: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    expected_cash: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    counted_cash: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    variance_cash: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    opening_denominations: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
+    closing_denominations: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
+    opened_by_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    closed_by_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PosSettlement(Base):
+    __tablename__ = "pos_settlements"
+    __table_args__ = (
+        UniqueConstraint("event_id", name="uq_pos_settlements_event_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    event_id: Mapped[str] = mapped_column(String, nullable=False)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), nullable=False)
+    shift_id: Mapped[str | None] = mapped_column(ForeignKey("pos_shifts.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String, default="payment")
+    payment_method: Mapped[str] = mapped_column(String, default="cash")
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    payer_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_by_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PosAuditEvent(Base):
+    __tablename__ = "pos_audit_events"
+    __table_args__ = (
+        UniqueConstraint("event_id", name="uq_pos_audit_events_event_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    event_id: Mapped[str] = mapped_column(String, nullable=False)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    order_id: Mapped[str | None] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    shift_id: Mapped[str | None] = mapped_column(ForeignKey("pos_shifts.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
+    created_by_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_by_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class PlatformAdmin(Base):
@@ -220,6 +292,10 @@ class InventoryItem(Base):
     min_threshold: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
     cost_per_unit: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
     notes: Mapped[str] = mapped_column(Text, default="")
+    default_supplier_id: Mapped[str | None] = mapped_column(
+        ForeignKey("inventory_suppliers.id"), nullable=True
+    )
+    default_reorder_qty: Mapped[float] = mapped_column(Numeric(12, 4), default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -227,6 +303,21 @@ class InventoryItem(Base):
     outlet: Mapped[Outlet] = relationship(back_populates="inventory_items")
     adjustments: Mapped[list["StockAdjustment"]] = relationship(back_populates="item")
     daily_counts: Mapped[list["DailyStockCount"]] = relationship(back_populates="item")
+
+
+class InventorySupplier(Base):
+    __tablename__ = "inventory_suppliers"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    phone: Mapped[str] = mapped_column(String, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    outlet: Mapped[Outlet] = relationship(back_populates="inventory_suppliers")
 
 
 class StockAdjustment(Base):
@@ -241,6 +332,15 @@ class StockAdjustment(Base):
     type: Mapped[str] = mapped_column(String, nullable=False)
     note: Mapped[str] = mapped_column(Text, default="")
     total_cost_bdt: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    supplier_id: Mapped[str | None] = mapped_column(
+        ForeignKey("inventory_suppliers.id"), nullable=True
+    )
+    supplier_name: Mapped[str] = mapped_column(Text, default="")
+    reason: Mapped[str] = mapped_column(String, default="")
+    bill_ref: Mapped[str] = mapped_column(String, default="")
+    invoice_ref: Mapped[str] = mapped_column(String, default="")
+    created_by_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_by_role: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     item: Mapped[InventoryItem] = relationship(back_populates="adjustments")

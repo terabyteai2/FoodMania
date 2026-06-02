@@ -47,9 +47,11 @@ rsync -az --delete \
   --exclude='venv/' \
   --exclude='deploy/.deploy-secrets' \
   --exclude='Restuarent_POS_Admin_APP/' \
+  --exclude='admin_app/' \
   --exclude='customer_menu/frontend/node_modules/' \
   --exclude='customer_menu/frontend/dist/' \
   --exclude='backend/uploads/' \
+  --exclude='backend/In_App_Update_Apk_File/' \
   --exclude='backend/.env' \
   --exclude='*.apk' \
   --exclude='*.aab' \
@@ -93,6 +95,24 @@ curl -fsS --max-time 15 "https://demo.quickbytes.buzz/" | grep -q '<title>Menu</
   || die "Customer menu smoke check failed at https://demo.quickbytes.buzz/"
 curl -fsS --max-time 15 "${API_BASE}/uploads/menu_placeholders/biryani-1.png" >/dev/null \
   || die "Placeholder image smoke check failed at ${API_BASE}/uploads/menu_placeholders/biryani-1.png"
+upload_status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+  -X POST "${API_BASE}/platform/app-update/upload")"
+[[ "${upload_status}" == "401" || "${upload_status}" == "403" ]] \
+  || die "APK upload route smoke check failed at ${API_BASE}/platform/app-update/upload (HTTP ${upload_status})"
+download_headers="$(mktemp)"
+download_body="$(mktemp)"
+trap 'rm -f "${download_headers}" "${download_body}"' EXIT
+download_status="$(curl -sS --max-time 15 -D "${download_headers}" -o "${download_body}" \
+  -w '%{http_code}' "${API_BASE}/app-download/app-release.apk")"
+if [[ "${download_status}" == "404" ]]; then
+  grep -qi '^content-type: application/json' "${download_headers}" \
+    || die "APK download route returned HTTP 404 with an unexpected content type"
+elif [[ "${download_status}" == "200" ]]; then
+  grep -qi '^content-type: application/vnd.android.package-archive' "${download_headers}" \
+    || die "APK download route returned HTTP 200 without the APK content type"
+else
+  die "APK download route smoke check failed at ${API_BASE}/app-download/app-release.apk (HTTP ${download_status})"
+fi
 curl -fsS --max-time 20 -X POST "${API_BASE}/admin/phone/send-otp" \
   -H 'Content-Type: application/json' -d '{"phone":"01700000000"}' | grep -q '"smsSent"' \
   || die "Send OTP failed at ${API_BASE}/admin/phone/send-otp"

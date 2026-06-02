@@ -13,6 +13,8 @@ class InventoryItem {
     required this.createdAt,
     required this.updatedAt,
     this.notes = '',
+    this.defaultSupplierId,
+    this.defaultReorderQty = 0,
   });
 
   final String id;
@@ -23,6 +25,8 @@ class InventoryItem {
   final double minThreshold;
   final double costPerUnit;
   final String notes;
+  final String? defaultSupplierId;
+  final double defaultReorderQty;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -51,6 +55,9 @@ class InventoryItem {
     double? minThreshold,
     double? costPerUnit,
     String? notes,
+    String? defaultSupplierId,
+    bool clearDefaultSupplier = false,
+    double? defaultReorderQty,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -63,6 +70,10 @@ class InventoryItem {
       minThreshold: minThreshold ?? this.minThreshold,
       costPerUnit: costPerUnit ?? this.costPerUnit,
       notes: notes ?? this.notes,
+      defaultSupplierId: clearDefaultSupplier
+          ? null
+          : defaultSupplierId ?? this.defaultSupplierId,
+      defaultReorderQty: defaultReorderQty ?? this.defaultReorderQty,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -78,6 +89,8 @@ class InventoryItem {
       'minThreshold': minThreshold,
       'costPerUnit': costPerUnit,
       'notes': notes,
+      'defaultSupplierId': defaultSupplierId,
+      'defaultReorderQty': defaultReorderQty,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -95,6 +108,8 @@ class InventoryItem {
       minThreshold: (map['minThreshold'] as num?)?.toDouble() ?? 0,
       costPerUnit: (map['costPerUnit'] as num?)?.toDouble() ?? 0,
       notes: map['notes'] as String? ?? '',
+      defaultSupplierId: map['defaultSupplierId'] as String?,
+      defaultReorderQty: (map['defaultReorderQty'] as num?)?.toDouble() ?? 0,
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );

@@ -38,6 +38,7 @@ from models import (
     DailyStockCount,
     Device,
     InventoryItem,
+    InventorySupplier,
     MenuItem,
     Order,
     Outlet,
@@ -230,7 +231,7 @@ async def _auth_payload(
         "outletName": outlet.name,
         "publicSlug": outlet.public_slug,
         "customerMenuUrl": _public_menu_url(outlet.public_slug),
-        "tableCount": outlet.table_count or 10,
+        "tableCount": outlet.table_count if outlet.table_count is not None else 10,
         "deviceToken": token,
         "account": _account_dict(account),
         "role": account.role or MANAGER,
@@ -613,7 +614,7 @@ async def phone_complete_manager_signup(
         restaurant_id=restaurant.id,
         name=outlet_name,
         server_id=server_id,
-        table_count=body.tableCount or 10,
+        table_count=body.tableCount if body.tableCount is not None else 10,
     )
     db.add(outlet)
     await db.flush()
@@ -915,7 +916,7 @@ async def google_start_or_login(
         restaurant_id=restaurant.id,
         name=outlet_name,
         server_id=server_id,
-        table_count=body.tableCount or 10,
+        table_count=body.tableCount if body.tableCount is not None else 10,
     )
     db.add(outlet)
     await db.flush()
@@ -1090,6 +1091,10 @@ async def wipe_outlet_data(
         "inventoryItems": await delete_rows(
             InventoryItem,
             InventoryItem.outlet_id == outlet_id,
+        ),
+        "inventorySuppliers": await delete_rows(
+            InventorySupplier,
+            InventorySupplier.outlet_id == outlet_id,
         ),
         "orders": await delete_rows(Order, Order.outlet_id == outlet_id),
         "menuItems": await delete_rows(MenuItem, MenuItem.outlet_id == outlet_id),

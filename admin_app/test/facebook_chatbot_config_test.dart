@@ -32,11 +32,19 @@ void main() {
       'data': {
         'authorizationUrl': 'https://facebook.example/oauth',
         'expiresInSeconds': 900,
+        'nativeAndroid': {
+          'appId': 'app-123',
+          'clientToken': 'client-123',
+          'scopes': ['pages_show_list', 'pages_messaging'],
+        },
       },
     });
 
     expect(start.authorizationUrl, 'https://facebook.example/oauth');
     expect(start.expiresInSeconds, 900);
+    expect(start.nativeAndroid?.appId, 'app-123');
+    expect(start.nativeAndroid?.clientToken, 'client-123');
+    expect(start.nativeAndroid?.scopes, ['pages_show_list', 'pages_messaging']);
   });
 
   test('FacebookChatbotOAuthPages parses selectable Pages', () {
@@ -199,4 +207,49 @@ void main() {
       'pageId': 'page-1',
     });
   });
+
+  test(
+    'CloudApiService completes native Facebook OAuth token handoff',
+    () async {
+      late http.Request captured;
+      final service = CloudApiService(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(
+            jsonEncode({
+              'data': {'sessionId': 'session-1'},
+              'error': null,
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      service.configure(
+        cloudConfig: CloudConfig(
+          baseUrl: 'https://api.example.com',
+          enabled: true,
+          deviceToken: 'device-token',
+          autoSyncIntervalSeconds: 30,
+        ),
+        serverConfig: ServerConfig(
+          serverId: 'server-1',
+          restaurantId: 'restaurant-1',
+          outletId: 'outlet-1',
+          restaurantName: 'Cafe',
+          outletName: 'Cafe',
+        ),
+      );
+
+      final sessionId = await service.completeFacebookChatbotNativeOAuth(
+        userAccessToken: 'native-token',
+      );
+
+      expect(sessionId, 'session-1');
+      expect(captured.method, 'POST');
+      expect(captured.url.path, '/admin/chatbot/facebook/oauth/native');
+      expect(captured.headers['Authorization'], 'Bearer device-token');
+      expect(jsonDecode(captured.body), {'userAccessToken': 'native-token'});
+    },
+  );
 }

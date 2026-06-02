@@ -8,6 +8,7 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/inventory_item.dart';
+import '../../models/inventory_supplier.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/receipt_scan.dart';
 import '../../services/cloud_api_service.dart';
@@ -32,6 +33,8 @@ class _StockInScreenState extends State<StockInScreen> {
   String? _scanProvider;
   final MenuImageService _imageService = MenuImageService();
   final Uuid _uuid = const Uuid();
+  InventorySupplier? _supplier;
+  final TextEditingController _billRefCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -56,6 +59,7 @@ class _StockInScreenState extends State<StockInScreen> {
   @override
   void dispose() {
     _inventorySearchCtrl.dispose();
+    _billRefCtrl.dispose();
     for (final line in _lines) {
       line.dispose();
     }
@@ -193,6 +197,9 @@ class _StockInScreenState extends State<StockInScreen> {
             inventoryItemId: matchedId,
             quantity: qty,
             totalCostBdt: total,
+            supplierId: _supplier?.id,
+            supplierName: _supplier?.name ?? '',
+            billRef: _billRefCtrl.text.trim(),
           );
         } else {
           final newItem = InventoryItem(
@@ -212,6 +219,9 @@ class _StockInScreenState extends State<StockInScreen> {
             inventoryItemId: newItem.id,
             quantity: qty,
             totalCostBdt: total,
+            supplierId: _supplier?.id,
+            supplierName: _supplier?.name ?? '',
+            billRef: _billRefCtrl.text.trim(),
           );
         }
       }
@@ -222,6 +232,70 @@ class _StockInScreenState extends State<StockInScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _addSupplier() async {
+    final name = TextEditingController();
+    final phone = TextEditingController();
+    final app = AppScope.of(context);
+    final saved = await showModalBottomSheet<InventorySupplier>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(PosRadii.md),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const TfText(
+                'Add supplier',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              TfField(label: 'Supplier name', controller: name),
+              TfField(
+                label: 'Phone',
+                controller: phone,
+                keyboardType: TextInputType.phone,
+              ),
+              TfButton(
+                label: 'Save supplier',
+                onPressed: () {
+                  if (name.text.trim().isEmpty) return;
+                  final now = DateTime.now();
+                  Navigator.pop(
+                    context,
+                    InventorySupplier(
+                      id: _uuid.v4(),
+                      name: name.text.trim(),
+                      phone: phone.text.trim(),
+                      createdAt: now,
+                      updatedAt: now,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    name.dispose();
+    phone.dispose();
+    if (saved == null) return;
+    await app.saveInventorySupplier(saved);
+    if (mounted) setState(() => _supplier = saved);
   }
 
   String? _matchExistingItem(List<InventoryItem> items, _StockInLine line) {
@@ -368,6 +442,49 @@ class _StockInScreenState extends State<StockInScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
+            const SizedBox(height: 12),
+            TfCard(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_shipping_outlined, size: 19),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<InventorySupplier?>(
+                        value: _supplier,
+                        hint: const TfText('Select supplier (optional)'),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: TfText('No supplier'),
+                          ),
+                          ...app.inventorySuppliers.map(
+                            (supplier) => DropdownMenuItem(
+                              value: supplier,
+                              child: TfText(supplier.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => setState(() => _supplier = value),
+                      ),
+                    ),
+                  ),
+                  if (app.isManager)
+                    IconButton(
+                      tooltip: 'Add supplier',
+                      onPressed: _addSupplier,
+                      icon: const Icon(Icons.add_circle_outline, size: 20),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            TfField(
+              label: 'Bill reference (optional)',
+              controller: _billRefCtrl,
+            ),
           ],
         ),
       ),

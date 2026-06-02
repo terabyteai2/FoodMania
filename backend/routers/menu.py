@@ -394,6 +394,7 @@ async def scan_menu_pages(
 class OutletMediaPatch(pydantic.BaseModel):
     videoUrl: str | None = None
     menuTheme: str | None = None
+    deliveryCharge: float | None = pydantic.Field(default=None, ge=0, le=100000)
 
 
 def _hero_images_prefix(outlet_id: str) -> str:
@@ -520,6 +521,9 @@ async def update_outlet_media(
     if "menuTheme" in fields_set:
         outlet.menu_theme = _normalize_menu_theme(body.menuTheme)
 
+    if "deliveryCharge" in fields_set:
+        outlet.delivery_charge = body.deliveryCharge or 0
+
     await db.commit()
 
     if video_changed and previous_url and previous_url != body.videoUrl:
@@ -528,4 +532,5 @@ async def update_outlet_media(
     return ok({
         "videoUrl": outlet.video_url,
         "menuTheme": outlet.menu_theme if outlet.menu_theme in ALLOWED_MENU_THEMES else DEFAULT_MENU_THEME,
+        "deliveryCharge": float(outlet.delivery_charge or 0),
     })

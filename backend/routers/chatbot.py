@@ -12,8 +12,14 @@ from auth import get_current_device_payload
 from config import settings
 from database import get_db
 from routers.admin import _current_account
-from schemas import FacebookChatbotConfigRequest, FacebookChatbotOAuthCompleteRequest, ok
+from schemas import (
+    FacebookChatbotConfigRequest,
+    FacebookChatbotNativeOAuthRequest,
+    FacebookChatbotOAuthCompleteRequest,
+    ok,
+)
 from services.facebook_chatbot import (
+    complete_facebook_native_oauth,
     complete_facebook_oauth_page_selection,
     complete_facebook_oauth,
     create_facebook_oauth_url,
@@ -137,6 +143,23 @@ async def get_facebook_chatbot_oauth_pages(
     return ok(
         await get_facebook_oauth_pages(
             db, session_id=session_id, outlet_id=account.outlet_id, account_id=account.id
+        )
+    )
+
+
+@router.post("/admin/chatbot/facebook/oauth/native")
+async def complete_facebook_chatbot_native_oauth(
+    body: FacebookChatbotNativeOAuthRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    return ok(
+        await complete_facebook_native_oauth(
+            db=db,
+            outlet_id=account.outlet_id,
+            account_id=account.id,
+            user_access_token=body.userAccessToken,
         )
     )
 

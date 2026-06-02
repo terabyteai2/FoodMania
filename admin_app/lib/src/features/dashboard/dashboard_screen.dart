@@ -1,6 +1,3 @@
-import 'dart:async' show Timer;
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -50,7 +47,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final tier = TierScope.of(context);
+    final tier = app.businessTier;
 
     if (!_firstLoadKicked) {
       _firstLoadKicked = true;
@@ -59,28 +56,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    if (_mode == _DashMode.review) {
+    final mode = app.isManager ? _mode : _DashMode.manage;
+    if (mode == _DashMode.review) {
       // Review has three variants; Simple falls back to the Standard screen.
       return switch (tier) {
         BusinessTier.simple || BusinessTier.standard => _ReviewStandard(
           app: app,
           onNavigate: widget.onNavigate,
           onNavigateToTarget: widget.onNavigateToTarget,
-          mode: _mode,
+          mode: mode,
           onModeChanged: _setMode,
         ),
         BusinessTier.advanced => _ReviewAdvanced(
           app: app,
           onNavigate: widget.onNavigate,
           onNavigateToTarget: widget.onNavigateToTarget,
-          mode: _mode,
+          mode: mode,
           onModeChanged: _setMode,
         ),
         BusinessTier.enterprise => _ReviewEnterprise(
           app: app,
           onNavigate: widget.onNavigate,
           onNavigateToTarget: widget.onNavigateToTarget,
-          mode: _mode,
+          mode: mode,
           onModeChanged: _setMode,
         ),
       };
@@ -91,28 +89,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         app: app,
         onNavigate: widget.onNavigate,
         onNavigateToTarget: widget.onNavigateToTarget,
-        mode: _mode,
+        mode: mode,
         onModeChanged: _setMode,
       ),
       BusinessTier.standard => _DashT2Standard(
         app: app,
         onNavigate: widget.onNavigate,
         onNavigateToTarget: widget.onNavigateToTarget,
-        mode: _mode,
+        mode: mode,
         onModeChanged: _setMode,
       ),
       BusinessTier.advanced => _DashT3Full(
         app: app,
         onNavigate: widget.onNavigate,
         onNavigateToTarget: widget.onNavigateToTarget,
-        mode: _mode,
+        mode: mode,
         onModeChanged: _setMode,
       ),
       BusinessTier.enterprise => _DashT4Fleet(
         app: app,
         onNavigate: widget.onNavigate,
         onNavigateToTarget: widget.onNavigateToTarget,
-        mode: _mode,
+        mode: mode,
         onModeChanged: _setMode,
       ),
     };
@@ -164,55 +162,81 @@ class _DashHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final hour = now.hour;
-    final greet = hour < 12 ? 'Morning' : (hour < 17 ? 'Afternoon' : 'Evening');
+    final text = AppScope.of(context).strings;
+    final greet = hour < 12
+        ? text.goodMorning
+        : (hour < 17 ? text.goodAfternoon : text.goodEvening);
     final dateFmt = DateFormat('EEE · h:mm a');
+    final identity = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _MicroLabel(dateFmt.format(now)),
+        const SizedBox(height: 4),
+        Text(
+          bizName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: PosColors.primaryDark,
+            letterSpacing: -0.3,
+            height: 1.15,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          greet,
+          style: const TextStyle(fontSize: 12, color: PosColors.muted),
+        ),
+      ],
+    );
+    final actions = <Widget>[
+      const HeaderModeButton(),
+      if (AppScope.of(context).isManager)
+        _ReviewTabs(mode: mode, onChanged: onModeChanged),
+      HeaderNotificationBell(
+        onNavigateToOrders: onNavigateToOrders,
+        onNavigateToTarget: onNavigateToTarget,
+      ),
+    ];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 480) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _MicroLabel(dateFmt.format(now)),
-                    const SizedBox(height: 4),
-                    Text(
-                      bizName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: PosColors.primaryDark,
-                        letterSpacing: -0.3,
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '$greet',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: PosColors.muted,
+                    identity,
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: actions,
                       ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const HeaderModeButton(),
-              const SizedBox(width: 6),
-              _ReviewTabs(mode: mode, onChanged: onModeChanged),
-              const SizedBox(width: 8),
-              HeaderNotificationBell(
-                onNavigateToOrders: onNavigateToOrders,
-                onNavigateToTarget: onNavigateToTarget,
-              ),
-            ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: identity),
+                  const SizedBox(width: 8),
+                  for (int i = 0; i < actions.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    actions[i],
+                  ],
+                ],
+              );
+            },
           ),
           if (period != null) ...[
             const SizedBox(height: 12),
@@ -241,38 +265,49 @@ class _ReviewTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = mode == _DashMode.manage ? 'Manager' : 'Owner';
     return PopupMenuButton<_DashMode>(
-          key: const ValueKey('dashboard-view-dropdown'),
-          initialValue: mode,
-          tooltip: 'Dashboard view',
-          onSelected: onChanged,
-          position: PopupMenuPosition.under,
+      key: const ValueKey('dashboard-view-dropdown'),
+      initialValue: mode,
+      tooltip: 'Dashboard view',
+      onSelected: onChanged,
+      position: PopupMenuPosition.under,
+      color: PosColors.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PosRadii.sm),
+        side: const BorderSide(color: PosColors.line, width: 0.5),
+      ),
+      itemBuilder: (_) => [
+        _viewItem('Manager', _DashMode.manage),
+        _viewItem('Owner', _DashMode.review),
+      ],
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
           color: PosColors.surface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(PosRadii.sm),
-            side: const BorderSide(color: PosColors.line, width: 0.5),
-          ),
-          itemBuilder: (_) => [
-            _viewItem('Manager', _DashMode.manage),
-            _viewItem('Owner', _DashMode.review),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          border: Border.all(color: PosColors.line, width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: PosColors.primaryDark,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 16,
+              color: PosColors.muted,
+            ),
           ],
-          child: Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: PosColors.surface,
-              borderRadius: BorderRadius.circular(PosRadii.sm),
-              border: Border.all(color: PosColors.line, width: 0.5),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: PosColors.primaryDark)),
-                const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: PosColors.muted),
-              ],
-            ),
-          ),
+        ),
+      ),
     );
   }
 
@@ -282,8 +317,22 @@ class _ReviewTabs extends StatelessWidget {
       value: value,
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark))),
-          if (selected) const Icon(Icons.check_rounded, size: 18, color: PosColors.primaryDark),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: PosColors.primaryDark,
+              ),
+            ),
+          ),
+          if (selected)
+            const Icon(
+              Icons.check_rounded,
+              size: 18,
+              color: PosColors.primaryDark,
+            ),
         ],
       ),
     );
@@ -308,11 +357,22 @@ class _PeriodChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 6, height: 6,
-          decoration: const BoxDecoration(color: PosColors.primary, shape: BoxShape.circle),
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: PosColors.primary,
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 6),
-        Text(period, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: PosColors.primaryDark)),
+        Text(
+          period,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: PosColors.primaryDark,
+          ),
+        ),
         const Icon(Icons.keyboard_arrow_down, size: 14, color: PosColors.muted),
       ],
     ),
@@ -330,7 +390,9 @@ class _DividerBand extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       children: [
-        const Expanded(child: Divider(color: PosColors.lineStrong, thickness: 1, height: 1)),
+        const Expanded(
+          child: Divider(color: PosColors.lineStrong, thickness: 1, height: 1),
+        ),
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 0),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -342,18 +404,30 @@ class _DividerBand extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 5, height: 5, decoration: const BoxDecoration(color: PosColors.mutedSoft, shape: BoxShape.circle)),
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: PosColors.mutedSoft,
+                  shape: BoxShape.circle,
+                ),
+              ),
               const SizedBox(width: 6),
               Text(
-                en.toUpperCase(),
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: PosColors.muted, letterSpacing: 0.8),
+                tfPick(context, en: en, bn: bn).toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.muted,
+                  letterSpacing: 0.8,
+                ),
               ),
-              const SizedBox(width: 4),
-              Text(bn, style: const TextStyle(fontSize: 10, color: PosColors.mutedSoft, fontFamily: 'Hind Siliguri')),
             ],
           ),
         ),
-        const Expanded(child: Divider(color: PosColors.lineStrong, thickness: 1, height: 1)),
+        const Expanded(
+          child: Divider(color: PosColors.lineStrong, thickness: 1, height: 1),
+        ),
       ],
     ),
   );
@@ -361,11 +435,19 @@ class _DividerBand extends StatelessWidget {
 
 // Section label + optional count badge + optional action.
 class _SecHead extends StatelessWidget {
-  const _SecHead({required this.en, this.bn, this.count, this.action, this.onAction});
+  const _SecHead({
+    required this.en,
+    this.bn,
+    this.count,
+    this.action,
+    this.actionBn,
+    this.onAction,
+  });
   final String en;
   final String? bn;
   final int? count;
   final String? action;
+  final String? actionBn;
   final VoidCallback? onAction;
 
   @override
@@ -373,17 +455,31 @@ class _SecHead extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 10, left: 2, right: 2),
     child: Row(
       children: [
-        Text(en, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, letterSpacing: -0.1)),
-        if (bn != null) ...[
-          const SizedBox(width: 4),
-          Text(bn!, style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft, fontFamily: 'Hind Siliguri')),
-        ],
+        Text(
+          tfPick(context, en: en, bn: bn),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: PosColors.primaryDark,
+            letterSpacing: -0.1,
+          ),
+        ),
         const Spacer(),
         if (count != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(color: PosColors.urgent, borderRadius: BorderRadius.circular(999)),
-            child: Text('$count', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
+            decoration: BoxDecoration(
+              color: PosColors.urgent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$count',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ),
         if (action != null)
           GestureDetector(
@@ -391,8 +487,19 @@ class _SecHead extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(action!, style: const TextStyle(fontSize: 12, color: PosColors.muted, fontWeight: FontWeight.w600)),
-                const Icon(Icons.chevron_right, size: 14, color: PosColors.muted),
+                Text(
+                  tfPick(context, en: action!, bn: actionBn),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: PosColors.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: PosColors.muted,
+                ),
               ],
             ),
           ),
@@ -437,18 +544,15 @@ class _EarnedCard extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _MicroLabel(label),
-                  if (bn != null) ...[
-                    const SizedBox(height: 4),
-                    Text(bn!, style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft, fontFamily: 'Hind Siliguri')),
-                  ],
-                ],
+                children: [_MicroLabel(tfPick(context, en: label, bn: bn))],
               ),
             ),
             if (deltaText != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: deltaUp ? PosColors.successSoft : PosColors.dangerSoft,
                   borderRadius: BorderRadius.circular(6),
@@ -456,9 +560,23 @@ class _EarnedCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(deltaUp ? '↑' : '↓', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: deltaUp ? PosColors.success : PosColors.danger)),
+                    Text(
+                      deltaUp ? '↑' : '↓',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: deltaUp ? PosColors.success : PosColors.danger,
+                      ),
+                    ),
                     const SizedBox(width: 4),
-                    Text(deltaText!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: deltaUp ? PosColors.success : PosColors.danger)),
+                    Text(
+                      deltaText!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: deltaUp ? PosColors.success : PosColors.danger,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -473,12 +591,19 @@ class _EarnedCard extends StatelessWidget {
             color: PosColors.primaryDark,
             letterSpacing: -1.5,
             height: 1.0,
-            fontFeatures: [const FontFeature.tabularFigures()],
+            fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
         if (note != null) ...[
           const SizedBox(height: 10),
-          Text(note!, style: const TextStyle(fontSize: 13, color: PosColors.muted, height: 1.5)),
+          Text(
+            note!,
+            style: const TextStyle(
+              fontSize: 13,
+              color: PosColors.muted,
+              height: 1.5,
+            ),
+          ),
         ],
       ],
     ),
@@ -501,8 +626,7 @@ class _KpiStrip extends StatelessWidget {
       child: Row(
         children: [
           for (int i = 0; i < stats.length; i++) ...[
-            if (i > 0)
-              Container(width: 0.5, color: PosColors.line),
+            if (i > 0) Container(width: 0.5, color: PosColors.line),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
@@ -594,15 +718,40 @@ class _TowerTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: fg, letterSpacing: -0.6, height: 1.0, fontFeatures: [const FontFeature.tabularFigures()])),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                        color: fg,
+                        letterSpacing: -0.6,
+                        height: 1.0,
+                        fontFeatures: [const FontFeature.tabularFigures()],
+                      ),
+                    ),
                     if (valueSuffix != null)
-                      Text(valueSuffix!, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg.withValues(alpha: 0.6), height: 1.0)),
+                      Text(
+                        valueSuffix!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: fg.withValues(alpha: 0.6),
+                          height: 1.0,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(sub.toUpperCase(), style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: fg.withValues(alpha: 0.8), letterSpacing: 0.5, height: 1.2)),
-                if (bn != null)
-                  Text(bn!, style: TextStyle(fontSize: 10, color: fg.withValues(alpha: 0.7), fontFamily: 'Hind Siliguri', height: 1.2)),
+                Text(
+                  tfPick(context, en: sub, bn: bn).toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: fg.withValues(alpha: 0.8),
+                    letterSpacing: 0.5,
+                    height: 1.2,
+                  ),
+                ),
               ],
             ),
           ),
@@ -661,18 +810,44 @@ class _AlertRow extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(PosRadii.xs)),
-              child: Text(tag, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg, letterSpacing: 0.7)),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(PosRadii.xs),
+              ),
+              child: Text(
+                tag,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                  letterSpacing: 0.7,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, height: 1.3)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.primaryDark,
+                      height: 1.3,
+                    ),
+                  ),
                   if (sub != null) ...[
                     const SizedBox(height: 3),
-                    Text(sub!, style: const TextStyle(fontSize: 11.5, color: PosColors.muted, height: 1.45)),
+                    Text(
+                      sub!,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: PosColors.muted,
+                        height: 1.45,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -682,12 +857,22 @@ class _AlertRow extends StatelessWidget {
               GestureDetector(
                 onTap: onCta,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: PosColors.primaryDark,
                     borderRadius: BorderRadius.circular(7),
                   ),
-                  child: Text(cta!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                  child: Text(
+                    cta!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -729,7 +914,13 @@ class _MoverRow extends StatelessWidget {
       children: [
         Text(
           rank.toString().padLeft(2, '0'),
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: PosColors.mutedSoft, letterSpacing: 0.4, fontFeatures: [const FontFeature.tabularFigures()]),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: PosColors.mutedSoft,
+            letterSpacing: 0.4,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -739,8 +930,27 @@ class _MoverRow extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark))),
-                  Text(rev, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [const FontFeature.tabularFigures()])),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.primaryDark,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    rev,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.primaryDark,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -758,7 +968,15 @@ class _MoverRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Text('×$qty', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: PosColors.mutedSoft, fontFeatures: [const FontFeature.tabularFigures()])),
+                  Text(
+                    '×$qty',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.mutedSoft,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -793,14 +1011,38 @@ class _CloseCard extends StatelessWidget {
             children: [
               if (kicker != null) _MicroLabel(kicker!),
               const SizedBox(height: 6),
-              Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: PosColors.primaryDark, letterSpacing: -0.2, fontFeatures: [const FontFeature.tabularFigures()])),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                  letterSpacing: -0.2,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               if (warn != null) ...[
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Container(width: 5, height: 5, decoration: const BoxDecoration(color: PosColors.mutedSoft, shape: BoxShape.circle)),
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        color: PosColors.mutedSoft,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 5),
-                    Expanded(child: Text(warn!, style: const TextStyle(fontSize: 12, color: PosColors.muted))),
+                    Expanded(
+                      child: Text(
+                        warn!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -809,13 +1051,18 @@ class _CloseCard extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: PosColors.surfaceSunk,
             borderRadius: BorderRadius.circular(PosRadii.sm),
             border: Border.all(color: PosColors.line, width: 0.5),
           ),
-          child: const Icon(Icons.arrow_forward, size: 18, color: PosColors.primaryDark),
+          child: const Icon(
+            Icons.arrow_forward,
+            size: 18,
+            color: PosColors.primaryDark,
+          ),
         ),
       ],
     ),
@@ -838,7 +1085,9 @@ class _QuickActions extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: actions[i].accent ? PosColors.primary : PosColors.surface,
+                color: actions[i].accent
+                    ? PosColors.primary
+                    : PosColors.surface,
                 borderRadius: BorderRadius.circular(PosRadii.sm),
                 border: Border.all(
                   color: actions[i].accent ? PosColors.primary : PosColors.line,
@@ -850,12 +1099,21 @@ class _QuickActions extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 32, height: 32,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      color: actions[i].accent ? Colors.white.withValues(alpha: 0.16) : PosColors.surfaceSunk,
+                      color: actions[i].accent
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : PosColors.surfaceSunk,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(actions[i].icon, size: 18, color: actions[i].accent ? Colors.white : PosColors.primaryDark),
+                    child: Icon(
+                      actions[i].icon,
+                      size: 18,
+                      color: actions[i].accent
+                          ? Colors.white
+                          : PosColors.primaryDark,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -866,7 +1124,9 @@ class _QuickActions extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: actions[i].accent ? Colors.white : PosColors.primaryDark,
+                      color: actions[i].accent
+                          ? Colors.white
+                          : PosColors.primaryDark,
                       height: 1.2,
                     ),
                   ),
@@ -881,7 +1141,12 @@ class _QuickActions extends StatelessWidget {
 }
 
 class _QAction {
-  const _QAction({required this.icon, required this.label, this.accent = false, this.onTap});
+  const _QAction({
+    required this.icon,
+    required this.label,
+    this.accent = false,
+    this.onTap,
+  });
   final IconData icon;
   final String label;
   final bool accent;
@@ -967,14 +1232,19 @@ class _DashT1CounterState extends State<_DashT1Counter> {
       if (shouldPrint) await widget.app.printOrderTicket(order);
       if (!mounted) return;
       setState(_cart.clear);
-      await openOrderCreatedPage(
-        context,
-        order: order,
-      );
+      await openOrderCreatedPage(context, order: order);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not create order: $error')),
+        SnackBar(
+          content: Text(
+            tfPick(
+              context,
+              en: 'Could not create order: $error',
+              bn: 'অর্ডার তৈরি করা যায়নি: $error',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _creatingOrder = false);
@@ -1061,19 +1331,25 @@ class _DashT1CounterState extends State<_DashT1Counter> {
                                 color: PosColors.primaryDark,
                                 letterSpacing: -0.8,
                                 height: 1.0,
-                                fontFeatures: [const FontFeature.tabularFigures()],
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               '$ordersCount orders',
-                              style: const TextStyle(fontSize: 11, color: PosColors.muted),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: PosColors.muted,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: PosColors.surfaceSunk,
                           borderRadius: BorderRadius.circular(999),
@@ -1082,9 +1358,25 @@ class _DashT1CounterState extends State<_DashT1Counter> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(width: 6, height: 6, decoration: const BoxDecoration(color: PosColors.mutedSoft, shape: BoxShape.circle)),
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: PosColors.mutedSoft,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                             const SizedBox(width: 6),
-                            const Text('ALL CASH', style: TextStyle(fontSize: 11, fontFamily: 'Inter', fontWeight: FontWeight.w700, color: PosColors.muted, letterSpacing: 0.5)),
+                            const Text(
+                              'ALL CASH',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w700,
+                                color: PosColors.muted,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1099,14 +1391,33 @@ class _DashT1CounterState extends State<_DashT1Counter> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Ring it up', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: PosColors.primaryDark, letterSpacing: -0.2)),
+                    const Text(
+                      'Ring it up',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.primaryDark,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
                     GestureDetector(
                       onTap: () => onNavigate(1),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('Edit items', style: TextStyle(fontSize: 12, color: PosColors.muted, fontWeight: FontWeight.w600)),
-                          Icon(Icons.chevron_right, size: 14, color: PosColors.muted),
+                          Text(
+                            'Edit items',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: PosColors.muted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            size: 14,
+                            color: PosColors.muted,
+                          ),
                         ],
                       ),
                     ),
@@ -1117,48 +1428,60 @@ class _DashT1CounterState extends State<_DashT1Counter> {
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
                 child: Text(
                   'Tap items to build an order, then create it.',
-                  style: TextStyle(fontSize: 11.5, color: PosColors.muted, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: PosColors.muted,
+                    height: 1.4,
+                  ),
                 ),
               ),
 
               // Menu grid
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Builder(builder: (context) {
-                  if (menuItems.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: PosColors.surface,
-                        borderRadius: BorderRadius.circular(PosRadii.md),
-                        border: Border.all(color: PosColors.line, width: 0.5),
-                      ),
-                      child: const Center(child: Text('No items yet', style: TextStyle(color: PosColors.muted))),
-                    );
-                  }
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: 1.1,
-                    ),
-                    itemCount: menuItems.length,
-                    itemBuilder: (ctx, i) {
-                      final item = menuItems[i];
-                      final price = '৳${moneyFmt.format(item.price)}';
-                      return _SellTile(
-                        item: item,
-                        price: price,
-                        qty: _cart[item.id] ?? 0,
-                        onTap: () => _increment(item.id),
-                        onDecrement: () => _decrement(item.id),
+                child: Builder(
+                  builder: (context) {
+                    if (menuItems.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: PosColors.surface,
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          border: Border.all(color: PosColors.line, width: 0.5),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'No items yet',
+                            style: TextStyle(color: PosColors.muted),
+                          ),
+                        ),
                       );
-                    },
-                  );
-                }),
+                    }
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.1,
+                          ),
+                      itemCount: menuItems.length,
+                      itemBuilder: (ctx, i) {
+                        final item = menuItems[i];
+                        final price = '৳${moneyFmt.format(item.price)}';
+                        return _SellTile(
+                          item: item,
+                          price: price,
+                          qty: _cart[item.id] ?? 0,
+                          onTap: () => _increment(item.id),
+                          onDecrement: () => _decrement(item.id),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
 
               // Divider
@@ -1174,14 +1497,23 @@ class _DashT1CounterState extends State<_DashT1Counter> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _SecHead(en: 'Top items', bn: 'টপ আইটেম', action: 'See all', onAction: () => onNavigate(_settingsTab)),
+                      _SecHead(
+                        en: 'Top items',
+                        bn: 'টপ আইটেম',
+                        action: 'See all',
+                        onAction: () => onNavigate(_settingsTab),
+                      ),
                       for (int i = 0; i < topMovers.take(3).length; i++)
                         _MoverRow(
                           rank: i + 1,
                           name: topMovers[i].nameEn,
                           qty: topMovers[i].qty,
                           rev: '৳${moneyFmt.format(topMovers[i].salesBdt)}',
-                          pct: topMovers.isNotEmpty ? (topMovers[i].salesBdt / (topMovers.first.salesBdt.abs() + 1)).clamp(0, 1) : 0,
+                          pct: topMovers.isNotEmpty
+                              ? (topMovers[i].salesBdt /
+                                        (topMovers.first.salesBdt.abs() + 1))
+                                    .clamp(0, 1)
+                              : 0,
                         ),
                     ],
                   ),
@@ -1191,10 +1523,18 @@ class _DashT1CounterState extends State<_DashT1Counter> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                 child: _CloseCard(
-                  title: 'Close counter · $earnedStr',
-                  kicker: 'End of day',
+                  title: tfPick(
+                    context,
+                    en: 'Close counter · $earnedStr',
+                    bn: 'কাউন্টার বন্ধ করুন · $earnedStr',
+                  ),
+                  kicker: tfPick(context, en: 'End of day', bn: 'দিন শেষ'),
                   warn: (summary?.moneyFirst.kpis.openOrders ?? 0) > 0
-                      ? '${summary!.moneyFirst.kpis.openOrders} items in current order — clear before closing'
+                      ? tfPick(
+                          context,
+                          en: '${summary!.moneyFirst.kpis.openOrders} items in current order - clear before closing',
+                          bn: 'বর্তমান অর্ডারে ${summary.moneyFirst.kpis.openOrders} টি আইটেম আছে - বন্ধ করার আগে পরিষ্কার করুন',
+                        )
                       : null,
                 ),
               ),
@@ -1231,89 +1571,116 @@ class _SellTile extends StatelessWidget {
       category: item.category,
     );
     return Material(
-    color: selected ? PosColors.primarySoft : PosColors.surface,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(PosRadii.md),
-      side: BorderSide(
-        color: selected ? PosColors.primarySoft : PosColors.line,
-        width: 0.5,
+      color: selected ? PosColors.primarySoft : PosColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        side: BorderSide(
+          color: selected ? PosColors.primarySoft : PosColors.line,
+          width: 0.5,
+        ),
       ),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      key: ValueKey('ring-it-up-${item.name}'),
-      onTap: onTap,
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SizedBox(
-                      width: 58,
-                      height: 58,
-                      child: MenuImageView(
-                        imageUrl: item.imageUrl,
-                        iconKey: iconKey,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: ValueKey('ring-it-up-${item.name}'),
+        onTap: onTap,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        width: 58,
+                        height: 58,
+                        child: MenuImageView(
+                          imageUrl: item.imageUrl,
+                          iconKey: iconKey,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: PosColors.primaryDark, height: 1.2)),
-                    const SizedBox(height: 3),
-                    Text(price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [const FontFeature.tabularFigures()])),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: selected
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        key: ValueKey('ring-it-up-decrement-${item.name}'),
-                        onTap: onDecrement,
-                        child: const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Icon(Icons.remove_circle_outline_rounded, size: 21, color: PosColors.primaryDark),
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.primaryDark,
+                          height: 1.2,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Container(
-                        constraints: const BoxConstraints(minWidth: 22),
-                        height: 22,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        decoration: BoxDecoration(
+                      const SizedBox(height: 3),
+                      Text(
+                        price,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                           color: PosColors.primaryDark,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '$qty',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
+                          fontFeatures: [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
-                  )
-                : const Icon(Icons.add, size: 22, color: PosColors.muted),
-          ),
-        ],
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: selected
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          key: ValueKey('ring-it-up-decrement-${item.name}'),
+                          onTap: onDecrement,
+                          child: const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Icon(
+                              Icons.remove_circle_outline_rounded,
+                              size: 21,
+                              color: PosColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 22),
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          decoration: BoxDecoration(
+                            color: PosColors.primaryDark,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$qty',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : const Icon(Icons.add, size: 22, color: PosColors.muted),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 }
 
@@ -1364,14 +1731,27 @@ class _SimpleCartTray extends StatelessWidget {
                   children: [
                     _MicroLabel('$totalQty items · current order'),
                     const SizedBox(height: 3),
-                    Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: PosColors.primaryDark)),
+                    Text(
+                      summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.primaryDark,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               TfButton(
                 key: const ValueKey('ring-it-up-cart'),
-                label: 'Create order',
+                label: tfPick(
+                  context,
+                  en: 'Create order',
+                  bn: 'অর্ডার তৈরি করুন',
+                ),
                 icon: Icons.check_rounded,
                 fullWidth: false,
                 busy: busy,
@@ -1380,7 +1760,12 @@ class _SimpleCartTray extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '৳${NumberFormat('#,##0', 'en').format(total)}',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: PosColors.primaryDark, fontFeatures: [FontFeature.tabularFigures()]),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),
@@ -1423,10 +1808,12 @@ class _DashT2Standard extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: PosColors.background,
-      floatingActionButton: app.isManager && (app.menuItems as List).any((i) => i.isAvailable)
+      floatingActionButton:
+          app.isManager && (app.menuItems as List).any((i) => i.isAvailable)
           ? TfFab(
               tooltip: text.newOrder,
-              onPressed: () => openNewOrderForm(context, onCreated: () => onNavigate(0)),
+              onPressed: () =>
+                  openNewOrderForm(context, onCreated: () => onNavigate(0)),
             )
           : null,
       body: SafeArea(
@@ -1459,11 +1846,20 @@ class _DashT2Standard extends StatelessWidget {
                     label: 'Earned today',
                     bn: 'আজকের আয়',
                     deltaText: money?.deltaPct != null
-                        ? '${money!.deltaPct!.abs().round()}% vs yest'
+                        ? tfPick(
+                            context,
+                            en: '${money!.deltaPct.abs().round()}% vs yest',
+                            bn: '${money.deltaPct.abs().round()}% বনাম গতকাল',
+                          )
                         : null,
                     deltaUp: (money?.deltaPct ?? 0) >= 0,
-                    note: money?.earnedToday != null && (money?.deltaPct ?? 0) > 0
-                        ? '৳${moneyFmt.format((money!.earnedToday * (money.deltaPct / 100)).abs().round())} over yesterday'
+                    note:
+                        money?.earnedToday != null && (money?.deltaPct ?? 0) > 0
+                        ? tfPick(
+                            context,
+                            en: '৳${moneyFmt.format((money!.earnedToday * (money.deltaPct / 100)).abs().round())} over yesterday',
+                            bn: 'গতকালের চেয়ে ৳${moneyFmt.format((money.earnedToday * (money.deltaPct / 100)).abs().round())} বেশি',
+                          )
                         : null,
                   ),
                 ),
@@ -1472,11 +1868,28 @@ class _DashT2Standard extends StatelessWidget {
                 if (money != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: _KpiStrip(stats: [
-                      _KpiStat('Orders', '${money!.kpis.orders}'),
-                      _KpiStat('Covers', '${right?.tablesSeated ?? 0}'),
-                    ]),
+                    child: _KpiStrip(
+                      stats: [
+                        _KpiStat(
+                          tfPick(context, en: 'Orders', bn: 'অর্ডার'),
+                          '${money.kpis.orders}',
+                        ),
+                        _KpiStat(
+                          tfPick(context, en: 'Covers', bn: 'অতিথি'),
+                          '${right?.tablesSeated ?? 0}',
+                        ),
+                      ],
+                    ),
                   ),
+
+                _FohCounter(
+                  items: (app.menuItems as List<MenuItem>)
+                      .where((item) => item.isAvailable)
+                      .take(3)
+                      .toList(),
+                  onTap: () =>
+                      openNewOrderForm(context, onCreated: () => onNavigate(0)),
+                ),
 
                 // 3 · Floor (if table data available)
                 if ((right?.tablesTotal ?? 0) > 0)
@@ -1485,8 +1898,27 @@ class _DashT2Standard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SecHead(en: 'Floor', bn: 'টেবিল', action: '${right!.tablesSeated} of ${right.tablesTotal} busy'),
-                        _FloorGrid(seated: right.tablesSeated, total: right.tablesTotal, late: right.lateOrders, inKitchen: right.ordersInKitchen),
+                        _SecHead(
+                          en: 'Floor',
+                          bn: 'টেবিল',
+                          action:
+                              '${right!.tablesSeated} of ${right.tablesTotal} busy',
+                        ),
+                        _FloorGrid(
+                          tables: right.floorTables.isNotEmpty
+                              ? right.floorTables
+                              : List.generate(
+                                  right.tablesTotal,
+                                  (index) => FloorTable(
+                                    tableNo: '${index + 1}',
+                                    state: index < right.tablesSeated
+                                        ? 'seated'
+                                        : 'idle',
+                                    covers: 0,
+                                    orderId: null,
+                                  ),
+                                ),
+                        ),
                       ],
                     ),
                   ),
@@ -1498,15 +1930,25 @@ class _DashT2Standard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SecHead(en: 'Needs you', bn: 'নজর দিন', count: alerts.length),
+                        _SecHead(
+                          en: 'Needs you',
+                          bn: 'নজর দিন',
+                          count: alerts.length,
+                        ),
                         for (final a in alerts)
                           _AlertRow(
                             tag: a.kind.toUpperCase(),
-                            tone: a.kind == 'late' ? _AlertTone.late : (a.kind == 'low' ? _AlertTone.low : _AlertTone.info),
+                            tone: a.kind == 'late'
+                                ? _AlertTone.late
+                                : (a.kind == 'low'
+                                      ? _AlertTone.low
+                                      : _AlertTone.info),
                             title: a.title,
                             sub: a.body,
                             cta: 'Check',
-                            onCta: () => onNavigate(a.kind == 'late' ? _ordersTab : _stockTab),
+                            onCta: () => onNavigate(
+                              a.kind == 'late' ? _ordersTab : _stockTab,
+                            ),
                           ),
                       ],
                     ),
@@ -1515,14 +1957,39 @@ class _DashT2Standard extends StatelessWidget {
                 // 5 · Quick actions
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                  child: _QuickActions(actions: [
-                    _QAction(icon: Icons.add, label: 'New order', accent: true, onTap: () => openNewOrderForm(context, onCreated: () => onNavigate(0))),
-                    _QAction(icon: Icons.print_outlined, label: 'Print bill', onTap: () => onNavigate(_ordersTab)),
-                  ]),
+                  child: _QuickActions(
+                    actions: [
+                      _QAction(
+                        icon: Icons.add,
+                        label: tfPick(
+                          context,
+                          en: 'New order',
+                          bn: 'নতুন অর্ডার',
+                        ),
+                        accent: true,
+                        onTap: () => openNewOrderForm(
+                          context,
+                          onCreated: () => onNavigate(0),
+                        ),
+                      ),
+                      _QAction(
+                        icon: Icons.print_outlined,
+                        label: tfPick(
+                          context,
+                          en: 'Print bill',
+                          bn: 'বিল প্রিন্ট',
+                        ),
+                        onTap: () => onNavigate(_ordersTab),
+                      ),
+                    ],
+                  ),
                 ),
 
                 // Divider
-                const Padding(padding: EdgeInsets.fromLTRB(16, 22, 16, 0), child: _DividerBand(en: 'Review', bn: 'পর্যালোচনা')),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 22, 16, 0),
+                  child: _DividerBand(en: 'Review', bn: 'পর্যালোচনা'),
+                ),
 
                 // 6 · Top items
                 if (topMovers.isNotEmpty)
@@ -1531,14 +1998,21 @@ class _DashT2Standard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SecHead(en: 'Top items', bn: 'টপ আইটেম', action: 'See all'),
+                        _SecHead(
+                          en: 'Top items',
+                          bn: 'টপ আইটেম',
+                          action: 'See all',
+                        ),
                         for (int i = 0; i < topMovers.take(3).length; i++)
                           _MoverRow(
                             rank: i + 1,
                             name: topMovers[i].nameEn,
                             qty: topMovers[i].qty,
                             rev: '৳${moneyFmt.format(topMovers[i].salesBdt)}',
-                            pct: (topMovers[i].salesBdt / (topMovers.first.salesBdt.abs() + 1)).clamp(0, 1),
+                            pct:
+                                (topMovers[i].salesBdt /
+                                        (topMovers.first.salesBdt.abs() + 1))
+                                    .clamp(0, 1),
                           ),
                       ],
                     ),
@@ -1548,10 +2022,18 @@ class _DashT2Standard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                   child: _CloseCard(
-                    title: 'Close day · $earnedStr',
-                    kicker: 'End of day · দিন শেষ',
-                    warn: (summary?.moneyFirst.kpis.openOrders ?? 0) > 0
-                        ? '${summary!.moneyFirst.kpis.openOrders} orders still open — settle before closing'
+                    title: tfPick(
+                      context,
+                      en: 'Close day · $earnedStr',
+                      bn: 'দিন শেষ করুন · $earnedStr',
+                    ),
+                    kicker: tfPick(context, en: 'End of day', bn: 'দিন শেষ'),
+                    warn: summary.moneyFirst.kpis.openOrders > 0
+                        ? tfPick(
+                            context,
+                            en: '${summary.moneyFirst.kpis.openOrders} orders still open - settle before closing',
+                            bn: '${summary.moneyFirst.kpis.openOrders} টি অর্ডার খোলা আছে - বন্ধ করার আগে নিষ্পত্তি করুন',
+                          )
                         : null,
                   ),
                 ),
@@ -1564,38 +2046,37 @@ class _DashT2Standard extends StatelessWidget {
   }
 }
 
-// Simple floor grid built from aggregate counts.
 class _FloorGrid extends StatelessWidget {
-  const _FloorGrid({required this.seated, required this.total, required this.late, required this.inKitchen});
-  final int seated;
-  final int total;
-  final int late;
-  final int inKitchen;
+  const _FloorGrid({required this.tables});
+  final List<FloorTable> tables;
 
   @override
   Widget build(BuildContext context) {
-    final tables = List.generate(total, (i) {
-      final idx = i + 1;
-      if (idx <= late) return _TableState.late;
-      if (idx <= seated) return _TableState.seated;
-      return _TableState.idle;
-    });
-
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 1.1),
-      itemCount: total,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 1.1,
+      ),
+      itemCount: tables.length,
       itemBuilder: (_, i) {
-        final state = i < tables.length ? tables[i] : _TableState.idle;
+        final table = tables[i];
+        final state = switch (table.state) {
+          'bill' => _TableState.bill,
+          'seated' => _TableState.seated,
+          _ => _TableState.idle,
+        };
         final bg = switch (state) {
           _TableState.seated => PosColors.primarySoft,
-          _TableState.late => PosColors.urgentSoft,
+          _TableState.bill => PosColors.warningSoft,
           _TableState.idle => PosColors.surface,
         };
         final fg = switch (state) {
           _TableState.seated => PosColors.primaryDark,
-          _TableState.late => PosColors.urgent,
+          _TableState.bill => PosColors.warning,
           _TableState.idle => PosColors.muted,
         };
         return Container(
@@ -1613,16 +2094,40 @@ class _FloorGrid extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('T${i + 1}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: fg, fontFeatures: [const FontFeature.tabularFigures()])),
-                    Container(width: 6, height: 6, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)),
+                    Text(
+                      'T${table.tableNo}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: fg,
+                        fontFeatures: [const FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: fg,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                 child: Text(
-                  state == _TableState.idle ? '—' : (state == _TableState.late ? 'LATE' : 'SEATED'),
-                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: fg.withValues(alpha: 0.8), letterSpacing: 0.3),
+                  state == _TableState.idle
+                      ? 'IDLE'
+                      : (state == _TableState.bill
+                            ? 'BILL'
+                            : '${table.covers} COVERS'),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: fg.withValues(alpha: 0.8),
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ],
@@ -1633,7 +2138,75 @@ class _FloorGrid extends StatelessWidget {
   }
 }
 
-enum _TableState { idle, seated, late }
+enum _TableState { idle, seated, bill }
+
+class _FohCounter extends StatelessWidget {
+  const _FohCounter({required this.items, required this.onTap});
+  final List<MenuItem> items;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SecHead(en: 'FOH counter', action: 'New order'),
+          Row(
+            children: [
+              for (int index = 0; index < items.length; index++) ...[
+                if (index > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: Material(
+                    color: PosColors.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      side: const BorderSide(color: PosColors.line, width: 0.5),
+                    ),
+                    child: InkWell(
+                      key: ValueKey('foh-counter-${items[index].name}'),
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              items[index].name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: PosColors.primaryDark,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              _bdt(items[index].price),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: PosColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIER 3 — Full-service restaurant
@@ -1669,7 +2242,11 @@ class _DashT3Full extends StatelessWidget {
     return Scaffold(
       backgroundColor: PosColors.background,
       floatingActionButton: app.isManager
-          ? TfFab(tooltip: text.newOrder, onPressed: () => openNewOrderForm(context, onCreated: () => onNavigate(0)))
+          ? TfFab(
+              tooltip: text.newOrder,
+              onPressed: () =>
+                  openNewOrderForm(context, onCreated: () => onNavigate(0)),
+            )
           : null,
       body: SafeArea(
         child: RefreshIndicator(
@@ -1700,10 +2277,21 @@ class _DashT3Full extends StatelessWidget {
                     amount: earnedStr,
                     label: 'Earned today',
                     bn: 'আজকের আয়',
-                    deltaText: money?.deltaPct != null ? '${money!.deltaPct!.abs().round()}% vs yest' : null,
+                    deltaText: money?.deltaPct != null
+                        ? tfPick(
+                            context,
+                            en: '${money!.deltaPct.abs().round()}% vs yest',
+                            bn: '${money.deltaPct.abs().round()}% বনাম গতকাল',
+                          )
+                        : null,
                     deltaUp: (money?.deltaPct ?? 0) >= 0,
-                    note: money?.earnedToday != null && (money?.deltaPct ?? 0) > 0
-                        ? '৳${moneyFmt.format((money!.earnedToday * (money.deltaPct / 100)).abs().round())} over yesterday'
+                    note:
+                        money?.earnedToday != null && (money?.deltaPct ?? 0) > 0
+                        ? tfPick(
+                            context,
+                            en: '৳${moneyFmt.format((money!.earnedToday * (money.deltaPct / 100)).abs().round())} over yesterday',
+                            bn: 'গতকালের চেয়ে ৳${moneyFmt.format((money.earnedToday * (money.deltaPct / 100)).abs().round())} বেশি',
+                          )
                         : null,
                   ),
                 ),
@@ -1741,13 +2329,24 @@ class _DashT3Full extends StatelessWidget {
                               value: '${right?.lateOrders ?? 0}',
                               sub: 'Late >20m',
                               bn: 'দেরি',
-                              tone: (right?.lateOrders ?? 0) > 0 ? _TileTone.urgent : _TileTone.paper,
+                              tone: (right?.lateOrders ?? 0) > 0
+                                  ? _TileTone.urgent
+                                  : _TileTone.paper,
                             ),
                           ),
                         ],
                       ),
                     ],
                   ),
+                ),
+
+                _FohCounter(
+                  items: (app.menuItems as List<MenuItem>)
+                      .where((item) => item.isAvailable)
+                      .take(3)
+                      .toList(),
+                  onTap: () =>
+                      openNewOrderForm(context, onCreated: () => onNavigate(0)),
                 ),
 
                 // 3 · Alerts
@@ -1757,15 +2356,25 @@ class _DashT3Full extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SecHead(en: 'Needs you', bn: 'আপনার নজর চাই', count: alerts.length),
+                        _SecHead(
+                          en: 'Needs you',
+                          bn: 'আপনার নজর চাই',
+                          count: alerts.length,
+                        ),
                         for (final a in alerts)
                           _AlertRow(
                             tag: a.kind.toUpperCase(),
-                            tone: a.kind == 'late' ? _AlertTone.late : (a.kind == 'low' ? _AlertTone.low : _AlertTone.info),
+                            tone: a.kind == 'late'
+                                ? _AlertTone.late
+                                : (a.kind == 'low'
+                                      ? _AlertTone.low
+                                      : _AlertTone.info),
                             title: a.title,
                             sub: a.body,
                             cta: 'Check',
-                            onCta: () => onNavigate(a.kind == 'late' ? _ordersTab : _stockTab),
+                            onCta: () => onNavigate(
+                              a.kind == 'late' ? _ordersTab : _stockTab,
+                            ),
                           ),
                       ],
                     ),
@@ -1774,27 +2383,92 @@ class _DashT3Full extends StatelessWidget {
                 // 4 · Quick actions (4 tiles)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                  child: _QuickActions(actions: [
-                    _QAction(icon: Icons.add, label: 'New order', accent: true, onTap: () => openNewOrderForm(context, onCreated: () => onNavigate(0))),
-                    _QAction(icon: Icons.print_outlined, label: 'Print bill', onTap: () => onNavigate(_ordersTab)),
-                    _QAction(icon: Icons.notifications_outlined, label: 'Call waiter'),
-                    _QAction(icon: Icons.bar_chart_outlined, label: 'Reports', onTap: () => onNavigate(_settingsTab)),
-                  ]),
+                  child: _QuickActions(
+                    actions: [
+                      _QAction(
+                        icon: Icons.add,
+                        label: tfPick(
+                          context,
+                          en: 'New order',
+                          bn: 'নতুন অর্ডার',
+                        ),
+                        accent: true,
+                        onTap: () => openNewOrderForm(
+                          context,
+                          onCreated: () => onNavigate(0),
+                        ),
+                      ),
+                      _QAction(
+                        icon: Icons.print_outlined,
+                        label: tfPick(
+                          context,
+                          en: 'Print bill',
+                          bn: 'বিল প্রিন্ট',
+                        ),
+                        onTap: () => onNavigate(_ordersTab),
+                      ),
+                      _QAction(
+                        icon: Icons.notifications_outlined,
+                        label: tfPick(
+                          context,
+                          en: 'Call waiter',
+                          bn: 'ওয়েটার ডাকুন',
+                        ),
+                      ),
+                      _QAction(
+                        icon: Icons.bar_chart_outlined,
+                        label: tfPick(context, en: 'Reports', bn: 'রিপোর্ট'),
+                        onTap: () => onNavigate(_settingsTab),
+                      ),
+                    ],
+                  ),
                 ),
 
                 // Divider
-                const Padding(padding: EdgeInsets.fromLTRB(16, 22, 16, 0), child: _DividerBand(en: 'Review', bn: 'পর্যালোচনা')),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 22, 16, 0),
+                  child: _DividerBand(en: 'Review', bn: 'পর্যালোচনা'),
+                ),
+
+                if (money != null && money.serviceMix.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SecHead(
+                          en: 'Order channels',
+                          bn: 'অর্ডার চ্যানেল',
+                        ),
+                        _SourceChips(rows: money.serviceMix),
+                      ],
+                    ),
+                  ),
 
                 // 5 · KPI strip: Orders · Covers · Avg Ticket · FC%
                 if (money != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: _KpiStrip(stats: [
-                      _KpiStat('Orders', '${money!.kpis.orders}'),
-                      _KpiStat('Covers', '${right?.tablesSeated ?? 0}'),
-                      _KpiStat('Avg ticket', '৳${money.kpis.avgTicket.round()}'),
-                      _KpiStat('Food cost', '${money.kpis.profitPct.toStringAsFixed(1)}%'),
-                    ]),
+                    child: _KpiStrip(
+                      stats: [
+                        _KpiStat(
+                          tfPick(context, en: 'Orders', bn: 'অর্ডার'),
+                          '${money.kpis.orders}',
+                        ),
+                        _KpiStat(
+                          tfPick(context, en: 'Covers', bn: 'অতিথি'),
+                          '${right?.tablesSeated ?? 0}',
+                        ),
+                        _KpiStat(
+                          tfPick(context, en: 'Avg ticket', bn: 'গড় বিল'),
+                          '৳${money.kpis.avgTicket.round()}',
+                        ),
+                        _KpiStat(
+                          tfPick(context, en: 'Food cost', bn: 'খাবারের খরচ'),
+                          '${money.kpis.profitPct.toStringAsFixed(1)}%',
+                        ),
+                      ],
+                    ),
                   ),
 
                 // 6 · Top movers
@@ -1804,14 +2478,22 @@ class _DashT3Full extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SecHead(en: 'Top movers', bn: 'টপ আইটেম', action: 'See all'),
+                        _SecHead(
+                          en: 'Top movers',
+                          bn: 'টপ আইটেম',
+                          action: 'See all',
+                          actionBn: 'সব দেখুন',
+                        ),
                         for (int i = 0; i < topMovers.take(3).length; i++)
                           _MoverRow(
                             rank: i + 1,
                             name: topMovers[i].nameEn,
                             qty: topMovers[i].qty,
                             rev: '৳${moneyFmt.format(topMovers[i].salesBdt)}',
-                            pct: (topMovers[i].salesBdt / (topMovers.first.salesBdt.abs() + 1)).clamp(0, 1),
+                            pct:
+                                (topMovers[i].salesBdt /
+                                        (topMovers.first.salesBdt.abs() + 1))
+                                    .clamp(0, 1),
                           ),
                       ],
                     ),
@@ -1821,9 +2503,23 @@ class _DashT3Full extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                   child: _CloseCard(
-                    title: 'Close shift · hand over',
-                    kicker: 'Shift handover · $earnedStr',
-                    warn: (summary?.moneyFirst.kpis.openOrders ?? 0) > 0 ? '${summary!.moneyFirst.kpis.openOrders} open orders carry to next shift' : null,
+                    title: tfPick(
+                      context,
+                      en: 'Close shift · hand over',
+                      bn: 'শিফট বন্ধ করে হস্তান্তর করুন',
+                    ),
+                    kicker: tfPick(
+                      context,
+                      en: 'Shift handover · $earnedStr',
+                      bn: 'শিফট হস্তান্তর · $earnedStr',
+                    ),
+                    warn: summary.moneyFirst.kpis.openOrders > 0
+                        ? tfPick(
+                            context,
+                            en: '${summary.moneyFirst.kpis.openOrders} open orders carry to next shift',
+                            bn: '${summary.moneyFirst.kpis.openOrders} টি খোলা অর্ডার পরের শিফটে যাবে',
+                          )
+                        : null,
                   ),
                 ),
               ],
@@ -1859,12 +2555,11 @@ class _DashT4Fleet extends StatelessWidget {
     final text = app.strings as AppStrings;
     final summary = app.dashboardSummary as DashboardSummary?;
     final money = summary?.moneyFirst;
-    final right = summary?.rightNow;
     final moneyFmt = NumberFormat('#,##0', 'en');
     final earned = money?.earnedToday ?? 0.0;
     final earnedStr = '৳${moneyFmt.format(earned)}';
-    final topMovers = money?.topMovers ?? [];
-    final alerts = right?.needsAttention ?? [];
+    final fleet = summary?.review?.fleet;
+    final fleetKpis = fleet?.kpis;
 
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -1896,39 +2591,72 @@ class _DashT4Fleet extends StatelessWidget {
                   child: _GoalCard(
                     amount: earnedStr,
                     label: 'Fleet revenue · today',
-                    bn: 'লক্ষ্য',
-                    sub: 'Across all outlets',
-                    pct: 89,
-                    goal: '—',
+                    bn: 'আজকের সব আউটলেটের আয়',
+                    sub: tfPick(
+                      context,
+                      en: 'Across all outlets',
+                      bn: 'সব আউটলেট মিলিয়ে',
+                    ),
+                    pct: fleet?.goal.progressPct ?? 0,
+                    goal: '৳${moneyFmt.format(fleet?.goal.targetBdt ?? 0)}',
                   ),
                 ),
 
                 // 2 · Fleet KPI strip
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                  child: _KpiStrip(stats: [
-                    const _KpiStat('Outlets', '1'),
-                    _KpiStat('Covers', '${right?.tablesSeated ?? 0}'),
-                    if (money != null) _KpiStat('Avg ticket', '৳${money!.kpis.avgTicket.round()}'),
-                    _KpiStat('Fleet late', '${right?.lateOrders ?? 0}%', color: (right?.lateOrders ?? 0) > 0 ? PosColors.urgent : null),
-                  ]),
+                  child: _KpiStrip(
+                    stats: [
+                      _KpiStat(
+                        tfPick(context, en: 'Outlets', bn: 'আউটলেট'),
+                        '${fleetKpis?.outletCount ?? 0}',
+                      ),
+                      _KpiStat(
+                        tfPick(context, en: 'Covers', bn: 'অতিথি'),
+                        '${fleetKpis?.covers ?? 0}',
+                      ),
+                      _KpiStat(
+                        tfPick(context, en: 'Avg ticket', bn: 'গড় বিল'),
+                        '৳${moneyFmt.format(fleetKpis?.avgTicketBdt ?? 0)}',
+                      ),
+                      _KpiStat(
+                        tfPick(
+                          context,
+                          en: 'Fleet late',
+                          bn: 'সব আউটলেটে দেরি',
+                        ),
+                        '${fleetKpis?.fleetLatePct ?? 0}%',
+                        color: (fleetKpis?.fleetLatePct ?? 0) > 0
+                            ? PosColors.urgent
+                            : null,
+                      ),
+                    ],
+                  ),
                 ),
 
                 // 3 · Fleet alerts
-                if (alerts.isNotEmpty)
+                if (fleet?.alerts.isNotEmpty == true)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SecHead(en: 'Needs you', bn: 'ফ্লিট অ্যালার্ট', count: alerts.length),
-                        for (final a in alerts)
+                        _SecHead(
+                          en: 'Fleet alerts',
+                          bn: 'সব আউটলেটের সতর্কতা',
+                          count: fleet!.alerts.length,
+                        ),
+                        for (final a in fleet.alerts)
                           _AlertRow(
                             tag: a.kind.toUpperCase(),
-                            tone: a.kind == 'late' ? _AlertTone.late : (a.kind == 'low' ? _AlertTone.low : _AlertTone.info),
+                            tone: a.kind == 'stuck'
+                                ? _AlertTone.late
+                                : (a.kind == 'low'
+                                      ? _AlertTone.low
+                                      : _AlertTone.info),
                             title: a.title,
                             sub: a.body,
-                            cta: 'View',
+                            cta: tfPick(context, en: 'View', bn: 'দেখুন'),
                             onCta: () => onNavigate(_ordersTab),
                           ),
                       ],
@@ -1941,44 +2669,83 @@ class _DashT4Fleet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _SecHead(en: 'Outlets today', bn: 'আউটলেট', action: 'Ranked'),
-                      // Placeholder outlet card using current outlet data
-                      _OutletCard(
-                        name: app.serverConfig?.restaurantName ?? 'Main Outlet',
-                        area: app.serverConfig?.outletName ?? 'Main location',
-                        rev: earnedStr,
-                        deltaUp: (money?.deltaPct ?? 0) >= 0,
-                        delta: money?.deltaPct != null
-                            ? '${money!.deltaPct!.abs().round()}%'
-                            : '—',
-                        occ: right != null && right.tablesTotal > 0
-                            ? '${((right.tablesSeated / right.tablesTotal) * 100).round()}%'
-                            : '—',
-                        late: '${right?.lateOrders ?? 0}%',
-                        isTop: true,
+                      const _SecHead(
+                        en: 'Outlets today',
+                        bn: 'আউটলেট',
+                        action: 'Ranked',
+                        actionBn: 'ক্রম অনুযায়ী',
                       ),
+                      for (final outlet
+                          in fleet?.outlets ?? const <FleetOutlet>[])
+                        _OutletCard(
+                          name: outlet.name,
+                          area: outlet.area,
+                          rev: '৳${moneyFmt.format(outlet.revBdt)}',
+                          deltaUp: outlet.deltaUp,
+                          delta: '${outlet.deltaPct.round()}%',
+                          occ: '${outlet.occupancyPct}%',
+                          late: '${outlet.latePct}%',
+                          isTop: outlet.rank == 1,
+                        ),
                     ],
                   ),
                 ),
 
                 // Divider
-                const Padding(padding: EdgeInsets.fromLTRB(16, 22, 16, 0), child: _DividerBand(en: 'Review', bn: 'পর্যালোচনা')),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 22, 16, 0),
+                  child: _DividerBand(en: 'Review', bn: 'পর্যালোচনা'),
+                ),
 
-                // 5 · Benchmarks
-                if (topMovers.isNotEmpty)
+                if (fleet != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SecHead(en: 'Top movers', bn: 'টপ আইটেম', action: 'See all'),
-                        for (int i = 0; i < topMovers.take(2).length; i++)
-                          _MoverRow(
-                            rank: i + 1,
-                            name: topMovers[i].nameEn,
-                            qty: topMovers[i].qty,
-                            rev: '৳${moneyFmt.format(topMovers[i].salesBdt)}',
-                            pct: (topMovers[i].salesBdt / (topMovers.first.salesBdt.abs() + 1)).clamp(0, 1),
+                        const _SecHead(en: 'Benchmarks', bn: 'তুলনামূলক মান'),
+                        _FleetNote(
+                          title: fleet.benchmarks.bestAvgTicketOutlet.isEmpty
+                              ? tfPick(
+                                  context,
+                                  en: 'No benchmark yet',
+                                  bn: 'এখনো তুলনামূলক মান নেই',
+                                )
+                              : tfPick(
+                                  context,
+                                  en: '${fleet.benchmarks.bestAvgTicketOutlet} leads average ticket',
+                                  bn: '${fleet.benchmarks.bestAvgTicketOutlet} গড় বিলে এগিয়ে',
+                                ),
+                          body: fleet.benchmarks.worstLateOutlet.isEmpty
+                              ? tfPick(
+                                  context,
+                                  en: 'No late-order pressure right now',
+                                  bn: 'এখন দেরি হওয়া অর্ডারের চাপ নেই',
+                                )
+                              : tfPick(
+                                  context,
+                                  en: '${fleet.benchmarks.worstLateOutlet} has the highest late-order rate',
+                                  bn: '${fleet.benchmarks.worstLateOutlet}-এ দেরি হওয়া অর্ডারের হার সবচেয়ে বেশি',
+                                ),
+                        ),
+                        if (fleet.staffingSuggestion.outletName.isNotEmpty)
+                          _FleetNote(
+                            title: tfPick(
+                              context,
+                              en: 'Staffing suggestion · ${fleet.staffingSuggestion.outletName}',
+                              bn: 'স্টাফ পরামর্শ · ${fleet.staffingSuggestion.outletName}',
+                            ),
+                            body: fleet.staffingSuggestion.peakLabel.isEmpty
+                                ? tfPick(
+                                    context,
+                                    en: 'Watch the next service peak',
+                                    bn: 'পরবর্তী ব্যস্ত সময় নজরে রাখুন',
+                                  )
+                                : tfPick(
+                                    context,
+                                    en: 'Plan cover around ${fleet.staffingSuggestion.peakLabel}',
+                                    bn: '${fleet.staffingSuggestion.peakLabel} সময়ের অতিথির জন্য পরিকল্পনা করুন',
+                                  ),
                           ),
                       ],
                     ),
@@ -1988,9 +2755,23 @@ class _DashT4Fleet extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                   child: _CloseCard(
-                    title: 'Fleet day-end · all outlets',
-                    kicker: 'Roll up the group',
-                    warn: (summary?.moneyFirst.kpis.openOrders ?? 0) > 0 ? '${summary!.moneyFirst.kpis.openOrders} outlets still have open orders' : null,
+                    title: tfPick(
+                      context,
+                      en: 'Fleet day-end · all outlets',
+                      bn: 'সব আউটলেটের দিন শেষ',
+                    ),
+                    kicker: tfPick(
+                      context,
+                      en: 'Roll up the group',
+                      bn: 'সমগ্র হিসাব প্রস্তুত করুন',
+                    ),
+                    warn: fleet?.openOutlets.isNotEmpty == true
+                        ? tfPick(
+                            context,
+                            en: '${fleet!.openOutlets.length} outlets still have open orders',
+                            bn: '${fleet.openOutlets.length} টি আউটলেটে এখনো খোলা অর্ডার আছে',
+                          )
+                        : null,
                   ),
                 ),
               ],
@@ -2035,16 +2816,34 @@ class _GoalCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _MicroLabel(label),
+            _MicroLabel(tfPick(context, en: label, bn: bn)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: PosColors.primarySoft, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: PosColors.primarySoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(width: 5, height: 5, decoration: const BoxDecoration(color: PosColors.primary, shape: BoxShape.circle)),
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: const BoxDecoration(
+                      color: PosColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                   const SizedBox(width: 5),
-                  Text('$pct% of goal', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [const FontFeature.tabularFigures()])),
+                  Text(
+                    tfPick(context, en: '$pct% of goal', bn: 'লক্ষ্যের $pct%'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.primaryDark,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2053,13 +2852,20 @@ class _GoalCard extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           amount,
-          style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: -1.5, height: 1.0, fontFeatures: [const FontFeature.tabularFigures()]),
+          style: const TextStyle(
+            fontSize: 48,
+            fontWeight: FontWeight.w700,
+            color: PosColors.primaryDark,
+            letterSpacing: -1.5,
+            height: 1.0,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
         ),
         const SizedBox(height: 16),
         ClipRRect(
           borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(
-            value: pct / 100.0,
+            value: (pct / 100.0).clamp(0, 1),
             backgroundColor: PosColors.surfaceSunk,
             color: PosColors.primary,
             minHeight: 6,
@@ -2069,8 +2875,22 @@ class _GoalCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(sub, style: const TextStyle(fontSize: 12, color: PosColors.muted, fontFeatures: [const FontFeature.tabularFigures()])),
-            Text('Goal $goal', style: const TextStyle(fontSize: 12, color: PosColors.mutedSoft, fontFeatures: [const FontFeature.tabularFigures()])),
+            Text(
+              sub,
+              style: const TextStyle(
+                fontSize: 12,
+                color: PosColors.muted,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            Text(
+              tfPick(context, en: 'Goal $goal', bn: 'লক্ষ্য $goal'),
+              style: const TextStyle(
+                fontSize: 12,
+                color: PosColors.mutedSoft,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
           ],
         ),
       ],
@@ -2121,30 +2941,77 @@ class _OutletCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: PosColors.primaryDark, letterSpacing: -0.1)),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.primaryDark,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
                       if (isTop) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: PosColors.primarySoft, borderRadius: BorderRadius.circular(4)),
-                          child: const Text('TOP', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: 0.6)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: PosColors.primarySoft,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            tfPick(context, en: 'TOP', bn: 'শীর্ষ'),
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: PosColors.primaryDark,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
                         ),
                       ],
                     ],
                   ),
                   const SizedBox(height: 3),
-                  Text(area, style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft)),
+                  Text(
+                    area,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: PosColors.mutedSoft,
+                    ),
+                  ),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(rev, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: PosColors.primaryDark, letterSpacing: -0.4, height: 1.0, fontFeatures: [const FontFeature.tabularFigures()])),
+                Text(
+                  rev,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.primaryDark,
+                    letterSpacing: -0.4,
+                    height: 1.0,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  '${deltaUp ? "▲" : "▼"} $delta vs avg',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: deltaUp ? PosColors.primary : PosColors.urgent, fontFeatures: [const FontFeature.tabularFigures()]),
+                  tfPick(
+                    context,
+                    en: '${deltaUp ? "▲" : "▼"} $delta vs avg',
+                    bn: '${deltaUp ? "▲" : "▼"} গড়ের তুলনায় $delta',
+                  ),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: deltaUp ? PosColors.primary : PosColors.urgent,
+                    fontFeatures: [const FontFeature.tabularFigures()],
+                  ),
                 ),
               ],
             ),
@@ -2155,9 +3022,21 @@ class _OutletCard extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            _OutletMetric(label: 'Occupancy', value: occ),
-            Container(width: 0.5, height: 24, color: PosColors.line, margin: const EdgeInsets.symmetric(horizontal: 18)),
-            _OutletMetric(label: 'Late', value: late, warn: late != '0%' && late != '—'),
+            _OutletMetric(
+              label: tfPick(context, en: 'Occupancy', bn: 'ব্যবহার'),
+              value: occ,
+            ),
+            Container(
+              width: 0.5,
+              height: 24,
+              color: PosColors.line,
+              margin: const EdgeInsets.symmetric(horizontal: 18),
+            ),
+            _OutletMetric(
+              label: tfPick(context, en: 'Late', bn: 'দেরি'),
+              value: late,
+              warn: late != '0%' && late != '—',
+            ),
           ],
         ),
       ],
@@ -2166,7 +3045,11 @@ class _OutletCard extends StatelessWidget {
 }
 
 class _OutletMetric extends StatelessWidget {
-  const _OutletMetric({required this.label, required this.value, this.warn = false});
+  const _OutletMetric({
+    required this.label,
+    required this.value,
+    this.warn = false,
+  });
   final String label;
   final String value;
   final bool warn;
@@ -2175,10 +3058,67 @@ class _OutletMetric extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: warn ? PosColors.urgent : PosColors.primaryDark, height: 1.0, fontFeatures: [const FontFeature.tabularFigures()])),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: warn ? PosColors.urgent : PosColors.primaryDark,
+          height: 1.0,
+          fontFeatures: [const FontFeature.tabularFigures()],
+        ),
+      ),
       const SizedBox(height: 4),
-      Text(label.toUpperCase(), style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: PosColors.mutedSoft, letterSpacing: 0.5)),
+      Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+          color: PosColors.mutedSoft,
+          letterSpacing: 0.5,
+        ),
+      ),
     ],
+  );
+}
+
+class _FleetNote extends StatelessWidget {
+  const _FleetNote({required this.title, required this.body});
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    decoration: BoxDecoration(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      border: Border.all(color: PosColors.line, width: 0.5),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: PosColors.primaryDark,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          body,
+          style: const TextStyle(
+            fontSize: 11.5,
+            color: PosColors.muted,
+            height: 1.35,
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -2222,149 +3162,12 @@ Widget _reviewScaffold({
               onModeChanged: onModeChanged,
               period: period,
             ),
-            _ReviewSyncControl(app: app),
             ...sections,
           ],
         ),
       ),
     ),
   );
-}
-
-class _ReviewSyncControl extends StatefulWidget {
-  const _ReviewSyncControl({required this.app});
-
-  final dynamic app;
-
-  @override
-  State<_ReviewSyncControl> createState() => _ReviewSyncControlState();
-}
-
-class _ReviewSyncControlState extends State<_ReviewSyncControl> {
-  bool _autoSync = true;
-  bool _busy = false;
-  bool? _lastSyncOk;
-  Timer? _autoSyncTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startAutoSyncTimer();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
-  }
-
-  @override
-  void dispose() {
-    _autoSyncTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startAutoSyncTimer() {
-    _autoSyncTimer?.cancel();
-    _autoSyncTimer = Timer.periodic(
-      const Duration(minutes: 1),
-      (_) => _sync(),
-    );
-  }
-
-  Future<void> _sync() async {
-    if (!mounted || _busy) return;
-    setState(() => _busy = true);
-    var ok = false;
-    try {
-      ok = await widget.app.syncNow() as bool;
-      await widget.app.refreshDashboardSummary();
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _lastSyncOk = ok;
-        });
-      }
-    }
-  }
-
-  void _toggleAutoSync(bool value) {
-    setState(() => _autoSync = value);
-    if (value) {
-      _startAutoSyncTimer();
-      _sync();
-    } else {
-      _autoSyncTimer?.cancel();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final status = _busy
-        ? 'Syncing latest data'
-        : _lastSyncOk == false
-            ? 'Sync needs attention'
-            : 'Auto sync is on';
-    final statusColor = _lastSyncOk == false ? PosColors.urgent : PosColors.muted;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          borderRadius: BorderRadius.circular(PosRadii.md),
-          border: Border.all(color: PosColors.line, width: 0.5),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: PosColors.primarySoft,
-                borderRadius: BorderRadius.circular(PosRadii.sm),
-              ),
-              child: _busy
-                  ? const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: PosColors.primaryDark,
-                      ),
-                    )
-                  : const Icon(Icons.sync, size: 18, color: PosColors.primaryDark),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Owner sync',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: PosColors.primaryDark,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(status, style: TextStyle(fontSize: 10.5, color: statusColor)),
-                ],
-              ),
-            ),
-            TextButton(
-              key: const ValueKey('review-sync-now'),
-              onPressed: _busy ? null : _sync,
-              child: const Text('Sync now'),
-            ),
-            Switch(
-              key: const ValueKey('review-auto-sync'),
-              value: _autoSync,
-              onChanged: _busy ? null : _toggleAutoSync,
-              activeThumbColor: PosColors.primaryDark,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // Section wrapper — horizontal screen padding + configurable top gap.
@@ -2380,8 +3183,9 @@ class _RSection extends StatelessWidget {
 
 // Short neutral placeholder for an empty Review section.
 class _ReviewEmptyNote extends StatelessWidget {
-  const _ReviewEmptyNote(this.text);
+  const _ReviewEmptyNote(this.text, {this.bn});
   final String text;
+  final String? bn;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -2392,7 +3196,10 @@ class _ReviewEmptyNote extends StatelessWidget {
       borderRadius: BorderRadius.circular(PosRadii.md),
       border: Border.all(color: PosColors.line, width: 0.5),
     ),
-    child: Text(text, style: const TextStyle(fontSize: 12.5, color: PosColors.muted)),
+    child: Text(
+      tfPick(context, en: text, bn: bn),
+      style: const TextStyle(fontSize: 12.5, color: PosColors.muted),
+    ),
   );
 }
 
@@ -2412,7 +3219,8 @@ class _RowsCard extends StatelessWidget {
     child: Column(
       children: [
         for (int i = 0; i < children.length; i++) ...[
-          if (i > 0) const Divider(height: 0.5, thickness: 0.5, color: PosColors.line),
+          if (i > 0)
+            const Divider(height: 0.5, thickness: 0.5, color: PosColors.line),
           children[i],
         ],
       ],
@@ -2427,7 +3235,12 @@ class _Eyebrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text.toUpperCase(),
-    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: PosColors.muted, letterSpacing: 0.5),
+    style: const TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      color: PosColors.muted,
+      letterSpacing: 0.5,
+    ),
   );
 }
 
@@ -2469,13 +3282,7 @@ class _ReviewHero extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _MicroLabel(label),
-                  if (bn != null) ...[
-                    const SizedBox(height: 4),
-                    Text(bn!, style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft, fontFamily: 'Hind Siliguri')),
-                  ],
-                ],
+                children: [_MicroLabel(tfPick(context, en: label, bn: bn))],
               ),
             ),
             Column(
@@ -2483,23 +3290,54 @@ class _ReviewHero extends StatelessWidget {
               children: [
                 if (deltaText != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: deltaUp ? PosColors.successSoft : PosColors.dangerSoft,
+                      color: deltaUp
+                          ? PosColors.successSoft
+                          : PosColors.dangerSoft,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(deltaUp ? '▲' : '▼', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: deltaUp ? PosColors.success : PosColors.danger)),
+                        Text(
+                          deltaUp ? '▲' : '▼',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: deltaUp
+                                ? PosColors.success
+                                : PosColors.danger,
+                          ),
+                        ),
                         const SizedBox(width: 4),
-                        Text(deltaText!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: deltaUp ? PosColors.success : PosColors.danger, fontFeatures: const [FontFeature.tabularFigures()])),
+                        Text(
+                          deltaText!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: deltaUp
+                                ? PosColors.success
+                                : PosColors.danger,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 if (baseLabel != null) ...[
                   const SizedBox(height: 4),
-                  Text(baseLabel!, style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft, fontFeatures: [FontFeature.tabularFigures()])),
+                  Text(
+                    baseLabel!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: PosColors.mutedSoft,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -2508,11 +3346,25 @@ class _ReviewHero extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           amount,
-          style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: -1.5, height: 1.0, fontFeatures: [FontFeature.tabularFigures()]),
+          style: const TextStyle(
+            fontSize: 48,
+            fontWeight: FontWeight.w700,
+            color: PosColors.primaryDark,
+            letterSpacing: -1.5,
+            height: 1.0,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
         ),
         if (note != null && note!.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Text(note!, style: const TextStyle(fontSize: 13, color: PosColors.muted, height: 1.5)),
+          Text(
+            note!,
+            style: const TextStyle(
+              fontSize: 13,
+              color: PosColors.muted,
+              height: 1.5,
+            ),
+          ),
         ],
       ],
     ),
@@ -2521,9 +3373,14 @@ class _ReviewHero extends StatelessWidget {
 
 // Revenue-by-hour card — chart + peak label + legend.
 class _HourlyCard extends StatelessWidget {
-  const _HourlyCard({required this.data, this.title = 'Today vs 7-day average'});
+  const _HourlyCard({
+    required this.data,
+    this.title = 'Today vs 7-day average',
+    this.titleBn = 'আজ বনাম ৭ দিনের গড়',
+  });
   final RevenueByHour data;
   final String title;
+  final String titleBn;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -2540,20 +3397,43 @@ class _HourlyCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Row(
             children: [
-              Expanded(child: _Eyebrow(title)),
+              Expanded(
+                child: _Eyebrow(tfPick(context, en: title, bn: titleBn)),
+              ),
               if (data.peakLabel.isNotEmpty)
-                Text('PEAK · ${data.peakLabel}', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: PosColors.primary, letterSpacing: 0.3, fontFeatures: [FontFeature.tabularFigures()])),
+                Text(
+                  '${tfPick(context, en: 'PEAK', bn: 'সর্বোচ্চ')} · ${data.peakLabel}',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.primary,
+                    letterSpacing: 0.3,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
             ],
           ),
         ),
         const SizedBox(height: 10),
-        HourlyBarsChart(today: data.today, avg7: data.avg7, startHour: data.startHour, peakIndex: data.peakIndex),
+        HourlyBarsChart(
+          today: data.today,
+          avg7: data.avg7,
+          startHour: data.startHour,
+          peakIndex: data.peakIndex,
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
-            _legendDot(PosColors.primaryDark, 'Today'),
+            _legendDot(
+              PosColors.primaryDark,
+              tfPick(context, en: 'Today', bn: 'আজ'),
+            ),
             const SizedBox(width: 14),
-            _legendDot(PosColors.surfaceSunk, '7-day avg', bordered: true),
+            _legendDot(
+              PosColors.surfaceSunk,
+              tfPick(context, en: '7-day avg', bn: '৭ দিনের গড়'),
+              bordered: true,
+            ),
           ],
         ),
       ],
@@ -2564,11 +3444,14 @@ class _HourlyCard extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        width: 8, height: 8,
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(1),
-          border: bordered ? Border.all(color: PosColors.lineStrong, width: 0.5) : null,
+          border: bordered
+              ? Border.all(color: PosColors.lineStrong, width: 0.5)
+              : null,
         ),
       ),
       const SizedBox(width: 5),
@@ -2591,35 +3474,84 @@ class _ReviewItemRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 22, height: 22,
+            width: 22,
+            height: 22,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: top ? PosColors.primaryDark : PosColors.surfaceSunk,
               borderRadius: BorderRadius.circular(PosRadii.xs),
             ),
-            child: Text('$rank', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: top ? Colors.white : PosColors.mutedSoft, fontFeatures: const [FontFeature.tabularFigures()])),
+            child: Text(
+              '$rank',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: top ? Colors.white : PosColors.mutedSoft,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.nameEn, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, height: 1.15)),
+                Text(
+                  item.nameEn,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.primaryDark,
+                    height: 1.15,
+                  ),
+                ),
                 const SizedBox(height: 3),
                 Wrap(
                   spacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (item.nameBn.isNotEmpty)
-                      Text(item.nameBn, style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft, fontFamily: 'Hind Siliguri')),
-                    Text('×${item.qty}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: PosColors.mutedSoft, fontFeatures: [FontFeature.tabularFigures()])),
+                    Text(
+                      '×${item.qty}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.mutedSoft,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
                     if (item.foodCostPct != null)
-                      Text('FC ${item.foodCostPct!.round()}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: item.lowMargin ? PosColors.urgent : PosColors.mutedSoft, fontFeatures: const [FontFeature.tabularFigures()])),
+                      Text(
+                        'FC ${item.foodCostPct!.round()}%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: item.lowMargin
+                              ? PosColors.urgent
+                              : PosColors.mutedSoft,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
                     if (item.lowMargin)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: PosColors.warningSoft, borderRadius: BorderRadius.circular(PosRadii.xs)),
-                        child: const Text('MARGIN LOW', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: PosColors.warning, letterSpacing: 0.3)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PosColors.warningSoft,
+                          borderRadius: BorderRadius.circular(PosRadii.xs),
+                        ),
+                        child: const Text(
+                          'MARGIN LOW',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: PosColors.warning,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -2630,10 +3562,26 @@ class _ReviewItemRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(_bdt(item.salesBdt), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [FontFeature.tabularFigures()])),
+              Text(
+                _bdt(item.salesBdt),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               if (item.marginBdt != null) ...[
                 const SizedBox(height: 3),
-                Text('+${_bdt(item.marginBdt!)} margin', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: PosColors.success, fontFeatures: [FontFeature.tabularFigures()])),
+                Text(
+                  '+${_bdt(item.marginBdt!)} margin',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.success,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
               ],
             ],
           ),
@@ -2655,14 +3603,35 @@ class _MarginCallout extends StatelessWidget {
     decoration: BoxDecoration(
       color: PosColors.warningSoft,
       borderRadius: BorderRadius.circular(PosRadii.sm),
-      border: Border.all(color: PosColors.warning.withValues(alpha: 0.16), width: 1),
+      border: Border.all(
+        color: PosColors.warning.withValues(alpha: 0.16),
+        width: 1,
+      ),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(width: 6, height: 6, margin: const EdgeInsets.only(top: 5), decoration: const BoxDecoration(color: PosColors.warning, shape: BoxShape.circle)),
+        Container(
+          width: 6,
+          height: 6,
+          margin: const EdgeInsets.only(top: 5),
+          decoration: const BoxDecoration(
+            color: PosColors.warning,
+            shape: BoxShape.circle,
+          ),
+        ),
         const SizedBox(width: 10),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 12.5, color: PosColors.primaryDark, height: 1.5, fontWeight: FontWeight.w600))),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: PosColors.primaryDark,
+              height: 1.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ],
     ),
   );
@@ -2683,18 +3652,44 @@ class _IssueRow extends StatelessWidget {
         Container(
           margin: const EdgeInsets.only(top: 1),
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-          decoration: BoxDecoration(color: PosColors.surface, borderRadius: BorderRadius.circular(PosRadii.xs)),
-          child: Text(issue.tag, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: PosColors.urgent, letterSpacing: 0.7)),
+          decoration: BoxDecoration(
+            color: PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.xs),
+          ),
+          child: Text(
+            issue.tag,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: PosColors.urgent,
+              letterSpacing: 0.7,
+            ),
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(issue.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, height: 1.3)),
+              Text(
+                issue.title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                  height: 1.3,
+                ),
+              ),
               if (issue.body.isNotEmpty) ...[
                 const SizedBox(height: 3),
-                Text(issue.body, style: const TextStyle(fontSize: 11.5, color: PosColors.inkSoft, height: 1.45)),
+                Text(
+                  issue.body,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: PosColors.inkSoft,
+                    height: 1.45,
+                  ),
+                ),
               ],
             ],
           ),
@@ -2705,6 +3700,36 @@ class _IssueRow extends StatelessWidget {
 }
 
 // Payment-source breakdown — 3 cells (Cash / Card / Online).
+class _CollapsedSourceCard extends StatelessWidget {
+  const _CollapsedSourceCard({required this.rows});
+  final List<SourceSlice> rows;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      border: Border.all(color: PosColors.line, width: 0.5),
+    ),
+    child: ExpansionTile(
+      key: const ValueKey('review-source-breakdown'),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: const Text(
+        'Payment breakdown',
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: PosColors.primaryDark,
+        ),
+      ),
+      children: [_SourceChips(rows: rows)],
+    ),
+  );
+}
+
 class _SourceChips extends StatelessWidget {
   const _SourceChips({required this.rows});
   final List<SourceSlice> rows;
@@ -2717,7 +3742,7 @@ class _SourceChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       for (int i = 0; i < rows.length; i++) ...[
         if (i > 0) const SizedBox(width: 8),
@@ -2734,15 +3759,49 @@ class _SourceChips extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Container(width: 6, height: 6, decoration: BoxDecoration(color: _dotColor(rows[i].key), shape: BoxShape.circle)),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: _dotColor(rows[i].key),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 5),
-                    Text(rows[i].label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: PosColors.muted)),
+                    Expanded(
+                      child: Text(
+                        rows[i].label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(_bdt(rows[i].valueBdt), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [FontFeature.tabularFigures()])),
+                Text(
+                  _bdt(rows[i].valueBdt),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.primaryDark,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text('${rows[i].pct}%', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: PosColors.mutedSoft, fontFeatures: [FontFeature.tabularFigures()])),
+                Text(
+                  '${rows[i].pct}%',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.mutedSoft,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
               ],
             ),
           ),
@@ -2767,14 +3826,25 @@ class _StaffScoreRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 30, height: 30,
+            width: 30,
+            height: 30,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: top ? PosColors.primaryDark : PosColors.surfaceSunk,
               shape: BoxShape.circle,
-              border: Border.all(color: top ? PosColors.primaryDark : PosColors.line, width: 0.5),
+              border: Border.all(
+                color: top ? PosColors.primaryDark : PosColors.line,
+                width: 0.5,
+              ),
             ),
-            child: Text(initial, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: top ? Colors.white : PosColors.primaryDark)),
+            child: Text(
+              initial,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: top ? Colors.white : PosColors.primaryDark,
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2783,19 +3853,48 @@ class _StaffScoreRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(staff.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark)),
+                    Text(
+                      staff.name,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.primaryDark,
+                      ),
+                    ),
                     if (top) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(color: PosColors.primarySoft, borderRadius: BorderRadius.circular(3)),
-                        child: const Text('TOP', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: 0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PosColors.primarySoft,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          'TOP',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: PosColors.primaryDark,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                     ],
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('${staff.role} · ${staff.covers} covers', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: PosColors.mutedSoft, fontFeatures: [FontFeature.tabularFigures()])),
+                Text(
+                  '${staff.role} · ${staff.covers} covers',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.mutedSoft,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
               ],
             ),
           ),
@@ -2803,9 +3902,25 @@ class _StaffScoreRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(_bdt(staff.avgTicketBdt), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [FontFeature.tabularFigures()])),
+              Text(
+                _bdt(staff.avgTicketBdt),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               const SizedBox(height: 3),
-              Text('${staff.ordersToday} orders', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: PosColors.mutedSoft, fontFeatures: [FontFeature.tabularFigures()])),
+              Text(
+                '${staff.ordersToday} orders',
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.mutedSoft,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
             ],
           ),
         ],
@@ -2833,11 +3948,23 @@ class _OutletRankRowInline extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 28, height: 28,
+            width: 28,
+            height: 28,
             alignment: Alignment.center,
             margin: const EdgeInsets.only(top: 2),
-            decoration: BoxDecoration(color: rankBg, borderRadius: BorderRadius.circular(PosRadii.sm)),
-            child: Text('$rank', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: rankFg, fontFeatures: const [FontFeature.tabularFigures()])),
+            decoration: BoxDecoration(
+              color: rankBg,
+              borderRadius: BorderRadius.circular(PosRadii.sm),
+            ),
+            child: Text(
+              '$rank',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: rankFg,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2846,13 +3973,38 @@ class _OutletRankRowInline extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Flexible(child: Text(outlet.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: PosColors.primaryDark))),
+                    Flexible(
+                      child: Text(
+                        outlet.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.primaryDark,
+                        ),
+                      ),
+                    ),
                     if (rank == 1) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(color: PosColors.primarySoft, borderRadius: BorderRadius.circular(3)),
-                        child: const Text('TOP', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: 0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PosColors.primarySoft,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          'TOP',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: PosColors.primaryDark,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -2860,12 +4012,21 @@ class _OutletRankRowInline extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${outlet.area.isEmpty ? '' : '${outlet.area} · '}${outlet.covers} covers · FC ${_fcLabel(outlet.foodCostPct)}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: PosColors.mutedSoft, fontFeatures: [FontFeature.tabularFigures()]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: PosColors.mutedSoft,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
                 if (outlet.health.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Wrap(spacing: 6, runSpacing: 6, children: [for (final c in outlet.health) _HealthChip(c)]),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [for (final c in outlet.health) _HealthChip(c)],
+                  ),
                 ],
               ],
             ),
@@ -2874,9 +4035,25 @@ class _OutletRankRowInline extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(_bdt(outlet.revBdt), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [FontFeature.tabularFigures()])),
+              Text(
+                _bdt(outlet.revBdt),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               const SizedBox(height: 3),
-              Text('${outlet.deltaUp ? '▲' : '▼'} ${outlet.deltaPct.round()}%', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: outlet.deltaUp ? PosColors.success : PosColors.urgent, fontFeatures: const [FontFeature.tabularFigures()])),
+              Text(
+                '${outlet.deltaUp ? '▲' : '▼'} ${outlet.deltaPct.round()}%',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: outlet.deltaUp ? PosColors.success : PosColors.urgent,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
             ],
           ),
         ],
@@ -2898,13 +4075,32 @@ class _HealthChip extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(5)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(5),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(chip.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg, letterSpacing: 0.6)),
+          Text(
+            chip.label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: fg,
+              letterSpacing: 0.6,
+            ),
+          ),
           const SizedBox(width: 5),
-          Text(chip.value, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(
+            chip.value,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: fg,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
       ),
     );
@@ -2917,23 +4113,55 @@ class _CapacityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = row.pct >= 85 ? PosColors.urgent : (row.pct >= 60 ? PosColors.primary : PosColors.success);
+    final tone = row.pct >= 85
+        ? PosColors.urgent
+        : (row.pct >= 60 ? PosColors.primary : PosColors.success);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
       child: Column(
         children: [
           Row(
             children: [
-              Expanded(child: Text(row.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark))),
-              Text('${row.pct}%', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PosColors.primaryDark, fontFeatures: [FontFeature.tabularFigures()])),
+              Expanded(
+                child: Text(
+                  row.name,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.primaryDark,
+                  ),
+                ),
+              ),
+              Text(
+                '${row.pct}%',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               const SizedBox(width: 6),
-              Text(row.status.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: PosColors.muted, letterSpacing: 0.4)),
+              Text(
+                row.status.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.muted,
+                  letterSpacing: 0.4,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(value: (row.pct / 100).clamp(0, 1).toDouble(), backgroundColor: PosColors.surfaceSunk, color: tone, minHeight: 4),
+            child: LinearProgressIndicator(
+              value: (row.pct / 100).clamp(0, 1).toDouble(),
+              backgroundColor: PosColors.surfaceSunk,
+              color: tone,
+              minHeight: 4,
+            ),
           ),
         ],
       ),
@@ -2963,7 +4191,15 @@ class _ReviewStandard extends StatelessWidget {
     final sections = <Widget>[];
 
     if (review == null) {
-      sections.add(const _RSection(top: 12, child: _ReviewEmptyNote('Review data will appear once today\'s sales sync.')));
+      sections.add(
+        const _RSection(
+          top: 12,
+          child: _ReviewEmptyNote(
+            'Review data will appear once today\'s sales sync.',
+            bn: 'আজকের বিক্রি সিঙ্ক হলে পর্যালোচনার তথ্য দেখা যাবে।',
+          ),
+        ),
+      );
     } else {
       final hero = review.hero;
       final diff = hero.earnedTodayBdt - hero.earnedYesterdayBdt;
@@ -2976,15 +4212,27 @@ class _ReviewStandard extends StatelessWidget {
             bn: 'আজকের আয়',
             deltaText: '${diff >= 0 ? '+' : '-'}${_bdt(diff.abs())}',
             deltaUp: hero.deltaUp,
-            baseLabel: 'vs yest ${_bdt(hero.earnedYesterdayBdt)}',
+            baseLabel: tfPick(
+              context,
+              en: 'vs yest ${_bdt(hero.earnedYesterdayBdt)}',
+              bn: 'গতকাল ${_bdt(hero.earnedYesterdayBdt)}',
+            ),
             note: hero.periodNote,
           ),
         ),
         _RSection(
-          child: _KpiStrip(stats: [
-            _KpiStat('Orders', '${review.kpis.orders}'),
-            _KpiStat('Covers', '${review.kpis.covers}'),
-          ]),
+          child: _KpiStrip(
+            stats: [
+              _KpiStat(
+                tfPick(context, en: 'Orders', bn: 'অর্ডার'),
+                '${review.kpis.orders}',
+              ),
+              _KpiStat(
+                tfPick(context, en: 'Covers', bn: 'অতিথি'),
+                '${review.kpis.covers}',
+              ),
+            ],
+          ),
         ),
         _RSection(
           top: 18,
@@ -2993,11 +4241,19 @@ class _ReviewStandard extends StatelessWidget {
             children: [
               const _SecHead(en: 'Top items today', bn: 'টপ আইটেম'),
               review.itemsSold.isEmpty
-                  ? const _ReviewEmptyNote('No sales recorded yet today.')
-                  : _RowsCard(children: [
-                      for (int i = 0; i < review.itemsSold.length; i++)
-                        _ReviewItemRow(rank: i + 1, item: review.itemsSold[i]),
-                    ]),
+                  ? const _ReviewEmptyNote(
+                      'No sales recorded yet today.',
+                      bn: 'আজ এখনো কোনো বিক্রি রেকর্ড হয়নি।',
+                    )
+                  : _RowsCard(
+                      children: [
+                        for (int i = 0; i < review.itemsSold.length; i++)
+                          _ReviewItemRow(
+                            rank: i + 1,
+                            item: review.itemsSold[i],
+                          ),
+                      ],
+                    ),
             ],
           ),
         ),
@@ -3006,8 +4262,16 @@ class _ReviewStandard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SecHead(en: "Today's issues", bn: 'সমস্যা', count: review.issues.length),
-                _RowsCard(children: [for (final issue in review.issues) _IssueRow(issue)]),
+                _SecHead(
+                  en: "Today's issues",
+                  bn: 'সমস্যা',
+                  count: review.issues.length,
+                ),
+                _RowsCard(
+                  children: [
+                    for (final issue in review.issues) _IssueRow(issue),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3015,8 +4279,8 @@ class _ReviewStandard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SecHead(en: 'By source', bn: 'সোর্স'),
-              _SourceChips(rows: review.bySource),
+              const _SecHead(en: 'By source', bn: 'সোর্স অনুযায়ী'),
+              _CollapsedSourceCard(rows: review.bySource),
             ],
           ),
         ),
@@ -3025,7 +4289,7 @@ class _ReviewStandard extends StatelessWidget {
 
     return _reviewScaffold(
       app: app,
-      period: 'Today',
+      period: tfPick(context, en: 'Today', bn: 'আজ'),
       mode: mode,
       onModeChanged: onModeChanged,
       onNavigate: onNavigate,
@@ -3057,10 +4321,22 @@ class _ReviewAdvanced extends StatelessWidget {
     final sections = <Widget>[];
 
     if (review == null) {
-      sections.add(const _RSection(top: 12, child: _ReviewEmptyNote('Review data will appear once today\'s sales sync.')));
+      sections.add(
+        const _RSection(
+          top: 12,
+          child: _ReviewEmptyNote(
+            'Review data will appear once today\'s sales sync.',
+            bn: 'আজকের বিক্রি সিঙ্ক হলে পর্যালোচনার তথ্য দেখা যাবে।',
+          ),
+        ),
+      );
     } else {
       final hero = review.hero;
-      final lowItem = review.itemsSold.where((it) => it.lowMargin).cast<ReviewItem?>().firstWhere((_) => true, orElse: () => null);
+      final lowItem = review.itemsSold
+          .where((it) => it.lowMargin)
+          .cast<ReviewItem?>()
+          .firstWhere((_) => true, orElse: () => null);
+      final lowFoodCostPct = lowItem?.foodCostPct;
       sections.addAll([
         _RSection(
           top: 12,
@@ -3070,7 +4346,11 @@ class _ReviewAdvanced extends StatelessWidget {
             bn: 'আজকের আয়',
             deltaText: '${hero.deltaPct.round()}%',
             deltaUp: hero.deltaUp,
-            baseLabel: 'vs 7-day avg ${_bdt(hero.avg7Bdt)}',
+            baseLabel: tfPick(
+              context,
+              en: 'vs 7-day avg ${_bdt(hero.avg7Bdt)}',
+              bn: '৭ দিনের গড় ${_bdt(hero.avg7Bdt)}',
+            ),
             note: hero.periodNote,
           ),
         ),
@@ -3078,32 +4358,64 @@ class _ReviewAdvanced extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SecHead(en: 'Staff today', bn: 'স্টাফ', action: '${review.staff.length} on shift'),
+              _SecHead(
+                en: 'Staff today',
+                bn: 'স্টাফ',
+                action: '${review.staff.length} on shift',
+                actionBn: 'শিফটে ${review.staff.length} জন',
+              ),
               review.staff.isEmpty
-                  ? const _ReviewEmptyNote('No staff-attributed orders yet today.')
-                  : _RowsCard(children: [
-                      for (int i = 0; i < review.staff.length; i++)
-                        _StaffScoreRow(rank: i + 1, staff: review.staff[i]),
-                    ]),
+                  ? const _ReviewEmptyNote(
+                      'No staff-attributed orders yet today.',
+                      bn: 'আজ এখনো স্টাফের নামে কোনো অর্ডার নেই।',
+                    )
+                  : _RowsCard(
+                      children: [
+                        for (int i = 0; i < review.staff.length; i++)
+                          _StaffScoreRow(rank: i + 1, staff: review.staff[i]),
+                      ],
+                    ),
             ],
           ),
         ),
         _RSection(
-          child: _KpiStrip(stats: [
-            _KpiStat('Orders', '${review.kpis.orders}'),
-            _KpiStat('Covers', '${review.kpis.covers}'),
-            _KpiStat('Avg ticket', _bdt(review.kpis.avgTicketBdt)),
-            _KpiStat('Food cost', _fcLabel(review.kpis.foodCostPct)),
-          ]),
+          child: _KpiStrip(
+            stats: [
+              _KpiStat(
+                tfPick(context, en: 'Orders', bn: 'অর্ডার'),
+                '${review.kpis.orders}',
+              ),
+              _KpiStat(
+                tfPick(context, en: 'Covers', bn: 'অতিথি'),
+                '${review.kpis.covers}',
+              ),
+              _KpiStat(
+                tfPick(context, en: 'Avg ticket', bn: 'গড় বিল'),
+                _bdt(review.kpis.avgTicketBdt),
+              ),
+              _KpiStat(
+                tfPick(context, en: 'Food cost', bn: 'খাবারের খরচ'),
+                _fcLabel(review.kpis.foodCostPct),
+              ),
+            ],
+          ),
         ),
         _RSection(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SecHead(en: 'Revenue by hour', bn: 'আয়', action: '7-day'),
+              const _SecHead(
+                en: 'Revenue by hour',
+                bn: 'ঘণ্টাভিত্তিক আয়',
+                action: '7-day',
+                actionBn: '৭ দিন',
+              ),
               review.revenueByHour.hasData
                   ? _HourlyCard(data: review.revenueByHour)
-                  : const _ReviewEmptyNote('Not enough sales yet to chart today.'),
+                  : const _ReviewEmptyNote(
+                      'Not enough sales yet to chart today.',
+                      bn: 'আজ চার্ট দেখানোর মতো যথেষ্ট বিক্রি নেই।',
+                    ),
             ],
           ),
         ),
@@ -3111,15 +4423,29 @@ class _ReviewAdvanced extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SecHead(en: 'What sold', bn: 'বিক্রি'),
+              const _SecHead(en: 'Hot selling', bn: 'বেশি বিক্রি'),
               review.itemsSold.isEmpty
-                  ? const _ReviewEmptyNote('No sales recorded yet today.')
-                  : _RowsCard(children: [
-                      for (int i = 0; i < review.itemsSold.length; i++)
-                        _ReviewItemRow(rank: i + 1, item: review.itemsSold[i]),
-                    ]),
-              if (lowItem != null)
-                _MarginCallout('${lowItem.nameEn} — selling well but margin is low (FC ${lowItem.foodCostPct!.round()}%). Worth a check.'),
+                  ? const _ReviewEmptyNote(
+                      'No sales recorded yet today.',
+                      bn: 'আজ এখনো কোনো বিক্রি রেকর্ড হয়নি।',
+                    )
+                  : _RowsCard(
+                      children: [
+                        for (int i = 0; i < review.itemsSold.length; i++)
+                          _ReviewItemRow(
+                            rank: i + 1,
+                            item: review.itemsSold[i],
+                          ),
+                      ],
+                    ),
+              if (lowItem != null && lowFoodCostPct != null)
+                _MarginCallout(
+                  tfPick(
+                    context,
+                    en: '${lowItem.nameEn} - selling well but margin is low (FC ${lowFoodCostPct.round()}%). Worth a check.',
+                    bn: '${lowItem.nameEn} ভালো বিক্রি হচ্ছে, কিন্তু মার্জিন কম (FC ${lowFoodCostPct.round()}%)। দেখে নিন।',
+                  ),
+                ),
             ],
           ),
         ),
@@ -3137,7 +4463,7 @@ class _ReviewAdvanced extends StatelessWidget {
 
     return _reviewScaffold(
       app: app,
-      period: 'Today',
+      period: tfPick(context, en: 'Today', bn: 'আজ'),
       mode: mode,
       onModeChanged: onModeChanged,
       onNavigate: onNavigate,
@@ -3169,7 +4495,15 @@ class _ReviewEnterprise extends StatelessWidget {
     final sections = <Widget>[];
 
     if (review == null) {
-      sections.add(const _RSection(top: 12, child: _ReviewEmptyNote('Fleet review will appear once outlet sales sync.')));
+      sections.add(
+        const _RSection(
+          top: 12,
+          child: _ReviewEmptyNote(
+            'Fleet review will appear once outlet sales sync.',
+            bn: 'আউটলেটের বিক্রি সিঙ্ক হলে ফ্লিট পর্যালোচনা দেখা যাবে।',
+          ),
+        ),
+      );
     } else {
       final fleet = review.fleet;
       final k = fleet.kpis;
@@ -3179,39 +4513,87 @@ class _ReviewEnterprise extends StatelessWidget {
           child: _ReviewHero(
             amount: _bdt(k.revBdt),
             label: 'Fleet revenue · today',
+            bn: 'আজকের সব আউটলেটের আয়',
             deltaText: '${k.deltaPct.round()}%',
             deltaUp: k.deltaUp,
-            baseLabel: 'vs 7-day avg ${_bdt(k.avg7Bdt)}',
-            note: '${k.onGoalCount} of ${k.outletCount} outlets on goal',
+            baseLabel: tfPick(
+              context,
+              en: 'vs 7-day avg ${_bdt(k.avg7Bdt)}',
+              bn: '৭ দিনের গড় ${_bdt(k.avg7Bdt)}',
+            ),
+            note: tfPick(
+              context,
+              en: '${k.onGoalCount} of ${k.outletCount} outlets on goal',
+              bn: '${k.outletCount}টির মধ্যে ${k.onGoalCount} টি আউটলেট লক্ষ্যে আছে',
+            ),
           ),
         ),
         _RSection(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SecHead(en: 'Outlets · today', bn: 'আউটলেট', action: 'Compare'),
+              const _SecHead(
+                en: 'Outlets · today',
+                bn: 'আউটলেট',
+                action: 'Compare',
+                actionBn: 'তুলনা',
+              ),
               fleet.outlets.isEmpty
-                  ? const _ReviewEmptyNote('No outlet sales yet today.')
-                  : _RowsCard(children: [for (final o in fleet.outlets) _OutletRankRowInline(outlet: o)]),
+                  ? const _ReviewEmptyNote(
+                      'No outlet sales yet today.',
+                      bn: 'আজ এখনো কোনো আউটলেটে বিক্রি নেই।',
+                    )
+                  : _RowsCard(
+                      children: [
+                        for (final o in fleet.outlets)
+                          _OutletRankRowInline(outlet: o),
+                      ],
+                    ),
             ],
           ),
         ),
         _RSection(
-          child: _KpiStrip(stats: [
-            _KpiStat('Covers', '${k.covers}'),
-            _KpiStat('Avg ticket', _bdt(k.avgTicketBdt)),
-            _KpiStat('Fleet FC', _fcLabel(k.foodCostPct)),
-            _KpiStat('On goal', '${k.onGoalCount}/${k.outletCount}'),
-          ]),
+          child: _KpiStrip(
+            stats: [
+              _KpiStat(
+                tfPick(context, en: 'Covers', bn: 'অতিথি'),
+                '${k.covers}',
+              ),
+              _KpiStat(
+                tfPick(context, en: 'Avg ticket', bn: 'গড় বিল'),
+                _bdt(k.avgTicketBdt),
+              ),
+              _KpiStat(
+                tfPick(context, en: 'Fleet FC', bn: 'ফ্লিট FC'),
+                _fcLabel(k.foodCostPct),
+              ),
+              _KpiStat(
+                tfPick(context, en: 'On goal', bn: 'লক্ষ্যে'),
+                '${k.onGoalCount}/${k.outletCount}',
+              ),
+            ],
+          ),
         ),
         _RSection(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SecHead(en: 'Revenue by hour · fleet', bn: 'আয়', action: '7-day'),
+              const _SecHead(
+                en: 'Revenue by hour · fleet',
+                bn: 'ফ্লিটের ঘণ্টাভিত্তিক আয়',
+                action: '7-day',
+                actionBn: '৭ দিন',
+              ),
               fleet.revenueByHour.hasData
-                  ? _HourlyCard(data: fleet.revenueByHour, title: 'Today vs 7-day average · all outlets')
-                  : const _ReviewEmptyNote('Not enough sales yet to chart today.'),
+                  ? _HourlyCard(
+                      data: fleet.revenueByHour,
+                      title: 'Today vs 7-day average · all outlets',
+                      titleBn: 'আজ বনাম ৭ দিনের গড় · সব আউটলেট',
+                    )
+                  : const _ReviewEmptyNote(
+                      'Not enough sales yet to chart today.',
+                      bn: 'আজ চার্ট দেখানোর মতো যথেষ্ট বিক্রি নেই।',
+                    ),
             ],
           ),
         ),
@@ -3220,8 +4602,15 @@ class _ReviewEnterprise extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _SecHead(en: 'Capacity right now', bn: 'ক্যাপাসিটি', action: 'Tonight'),
-                _RowsCard(children: [for (final c in fleet.capacity) _CapacityRow(c)]),
+                const _SecHead(
+                  en: 'Capacity right now',
+                  bn: 'ক্যাপাসিটি',
+                  action: 'Tonight',
+                  actionBn: 'আজ রাত',
+                ),
+                _RowsCard(
+                  children: [for (final c in fleet.capacity) _CapacityRow(c)],
+                ),
               ],
             ),
           ),
@@ -3230,11 +4619,18 @@ class _ReviewEnterprise extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _SecHead(en: 'Top movers · fleet', bn: 'টপ আইটেম', action: 'Aggregate'),
-                _RowsCard(children: [
-                  for (int i = 0; i < fleet.topMovers.length; i++)
-                    _ReviewItemRow(rank: i + 1, item: fleet.topMovers[i]),
-                ]),
+                const _SecHead(
+                  en: 'Top movers · fleet',
+                  bn: 'টপ আইটেম',
+                  action: 'Aggregate',
+                  actionBn: 'মোট হিসাব',
+                ),
+                _RowsCard(
+                  children: [
+                    for (int i = 0; i < fleet.topMovers.length; i++)
+                      _ReviewItemRow(rank: i + 1, item: fleet.topMovers[i]),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3243,7 +4639,7 @@ class _ReviewEnterprise extends StatelessWidget {
 
     return _reviewScaffold(
       app: app,
-      period: 'Today · Fleet',
+      period: tfPick(context, en: 'Today · Fleet', bn: 'আজ · ফ্লিট'),
       mode: mode,
       onModeChanged: onModeChanged,
       onNavigate: onNavigate,

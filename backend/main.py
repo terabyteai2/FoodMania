@@ -14,7 +14,7 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
-from routers import admin, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, tenants, ws
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, tenants, ws
 from subscription_service import maybe_expire_subscription
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
@@ -166,10 +166,12 @@ app.include_router(menu.router)
 app.include_router(inventory.router)
 app.include_router(dashboard.router)
 app.include_router(orders.router)
+app.include_router(pos.router)
 app.include_router(payments.router)
 app.include_router(platform.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
+app.include_router(app_download.router)
 
 
 @app.exception_handler(Exception)

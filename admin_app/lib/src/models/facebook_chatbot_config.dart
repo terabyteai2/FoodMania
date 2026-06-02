@@ -39,10 +39,12 @@ class FacebookChatbotOAuthStart {
   const FacebookChatbotOAuthStart({
     required this.authorizationUrl,
     required this.expiresInSeconds,
+    this.nativeAndroid,
   });
 
   final String authorizationUrl;
   final int expiresInSeconds;
+  final FacebookChatbotNativeAndroidConfig? nativeAndroid;
 
   static FacebookChatbotOAuthStart fromJson(Map<String, Object?> json) {
     final data = json['data'] is Map
@@ -53,6 +55,41 @@ class FacebookChatbotOAuthStart {
       expiresInSeconds: data['expiresInSeconds'] is num
           ? (data['expiresInSeconds'] as num).toInt()
           : int.tryParse('${data['expiresInSeconds']}') ?? 0,
+      nativeAndroid: data['nativeAndroid'] is Map
+          ? FacebookChatbotNativeAndroidConfig.fromJson(
+              Map<String, Object?>.from(data['nativeAndroid'] as Map),
+            )
+          : null,
+    );
+  }
+}
+
+class FacebookChatbotNativeAndroidConfig {
+  const FacebookChatbotNativeAndroidConfig({
+    required this.appId,
+    required this.clientToken,
+    required this.scopes,
+  });
+
+  final String appId;
+  final String clientToken;
+  final List<String> scopes;
+
+  bool get isConfigured => appId.isNotEmpty && clientToken.isNotEmpty;
+
+  static FacebookChatbotNativeAndroidConfig fromJson(
+    Map<String, Object?> json,
+  ) {
+    final rawScopes = json['scopes'] is List
+        ? json['scopes'] as List
+        : const [];
+    return FacebookChatbotNativeAndroidConfig(
+      appId: json['appId']?.toString().trim() ?? '',
+      clientToken: json['clientToken']?.toString().trim() ?? '',
+      scopes: rawScopes
+          .map((scope) => scope.toString().trim())
+          .where((scope) => scope.isNotEmpty)
+          .toList(growable: false),
     );
   }
 }

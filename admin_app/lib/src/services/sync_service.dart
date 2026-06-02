@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../core/constants/cloud_defaults.dart';
 import '../models/daily_stock_count.dart';
 import '../models/inventory_item.dart';
+import '../models/inventory_supplier.dart';
 import '../models/inventory_unit.dart';
 import '../models/menu_item.dart';
 import '../models/stock_adjustment.dart';
@@ -329,6 +330,21 @@ class SyncService {
       case 'server_config':
         await _cloudApi.registerDevice();
         return;
+      case 'pos_settings':
+        await _cloudApi.pushDesktopPosSettings(payload);
+        return;
+      case 'pos_shift':
+        await _cloudApi.pushDesktopPosShift(event.entityId, event.action, payload);
+        return;
+      case 'pos_kot':
+        await _cloudApi.pushDesktopKot(event.entityId, payload);
+        return;
+      case 'pos_settlement':
+        await _cloudApi.pushDesktopSettlement(event.entityId, payload);
+        return;
+      case 'pos_audit':
+        await _cloudApi.pushDesktopAudit(event.entityId, payload);
+        return;
       default:
         throw CloudApiException('Unknown sync entity ${event.entityType}.');
     }
@@ -392,6 +408,24 @@ class SyncService {
           if (applied != null) imported++;
         } catch (error) {
           _addLog('Cloud inventory import skipped: $error', isError: true);
+        }
+      }
+    }
+
+    final supplierPayloads = inventoryBundle['suppliers'];
+    if (supplierPayloads is List) {
+      for (final raw in supplierPayloads) {
+        if (raw is! Map) continue;
+        try {
+          final normalized = Map<String, Object?>.from(raw);
+          normalized['createdAt'] ??= DateTime.now().toIso8601String();
+          normalized['updatedAt'] ??= normalized['createdAt'];
+          await _database.applyRemoteInventorySupplier(
+            InventorySupplier.fromMap(normalized),
+          );
+          imported++;
+        } catch (error) {
+          _addLog('Cloud supplier import skipped: $error', isError: true);
         }
       }
     }

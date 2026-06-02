@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -32,57 +31,11 @@ GRAPH_TIMEOUT_SECONDS = 8.0
 GROQ_TIMEOUT_SECONDS = 30.0
 MAX_CONTEXT_MENU_ITEMS = 80
 MAX_REPLY_CHARS = 1900
-MAX_HISTORY_TURNS = 6          # last N user+assistant pairs kept in Groq context
-MAX_HISTORY_STORE = 20         # total turns kept in DB (ring buffer)
-CHATBOT_SESSION_RESET_HOURS = 24
-CHATBOT_STATE_VERSION = 2
-
-REPLY_STYLE_BANGLISH = "banglish"
-REPLY_STYLE_BN = "bn"
-REPLY_STYLE_EN = "en"
-
-BANGLISH_WORDS = {
-    "ami", "apni", "ase", "ache", "bolen", "chai", "chan", "daw", "den",
-    "hae", "hobe", "jabe", "khete", "ki", "lagbe", "nibo", "pawa",
-    "dao", "deben", "korbo", "korben", "neben", "pete", "chai", "kono",
-    "ekta", "duta", "tিনটা", "koto", "boro", "choto", "thik", "ache",
-}
-ENGLISH_WORDS = {
-    "address", "available", "burger", "can", "cancel", "delivery", "do",
-    "have", "hello", "hi", "is", "menu", "order", "please", "thanks",
-    "the", "want", "what", "yes", "you",
-}
-ENGLISH_SENTENCE_WORDS = {
-    "can", "do", "have", "hello", "hi", "is", "please", "thanks", "the",
-    "want", "what", "yes", "you",
-}
-BANGLISH_DISALLOWED_OPENERS = ("hey", "sure", "hello", "hi", "great", "awesome", "wonderful")
-BANGLISH_ENGLISH_MARKERS = {
-    "are", "can", "choose", "do", "have", "help", "like", "menu", "order",
-    "please", "sure", "the", "type", "want", "we", "which", "would", "you",
-}
-
-# ─── intent tags the LLM returns (extended set) ──────────────────────────────
-INTENT_NONE        = "none"
-INTENT_DRAFT       = "draft"
-INTENT_CONFIRM     = "confirm"
-INTENT_CANCEL      = "cancel"
-INTENT_ADD_MORE    = "add_more"     # customer wants to add another item
-INTENT_SHOW_MENU   = "show_menu"    # customer wants to browse
-INTENT_REMOVE_ITEM = "remove_item"  # customer wants to drop an item from cart
 
 
 class ChatbotError(RuntimeError):
     pass
 
-
-class ChatbotProvidersFailed(ChatbotError):
-    pass
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Token / config helpers
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def mask_page_token(token: str | None) -> str | None:
     clean = (token or "").strip()
@@ -93,7 +46,7 @@ def mask_page_token(token: str | None) -> str | None:
     return f"{clean[:4]}…{clean[-4:]}"
 
 
-def integration_to_config(integration: "ChatbotIntegration | None") -> dict:
+def integration_to_config(integration: ChatbotIntegration | None) -> dict:
     if integration is None:
         return {
             "isConfigured": False,
@@ -115,10 +68,6 @@ def integration_to_config(integration: "ChatbotIntegration | None") -> dict:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# DB helpers
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def get_facebook_config(db: AsyncSession, outlet_id: str) -> dict:
     integration = (
         await db.execute(
@@ -130,10 +79,6 @@ async def get_facebook_config(db: AsyncSession, outlet_id: str) -> dict:
     ).scalar_one_or_none()
     return integration_to_config(integration)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Graph API helpers
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _graph_version() -> str:
     return settings.META_GRAPH_API_VERSION.strip() or "v24.0"
@@ -170,8 +115,11 @@ def _require_facebook_app_config() -> tuple[str, str]:
 
 
 def _facebook_login_scopes() -> str:
-    scopes = [s.strip() for s in settings.FACEBOOK_LOGIN_SCOPES.split(",") if s.strip()]
-    return ",".join(scopes) if scopes else "pages_show_list,pages_manage_metadata,pages_messaging"
+    scopes = [scope.strip() for scope in settings.FACEBOOK_LOGIN_SCOPES.split(",")]
+    scopes = [scope for scope in scopes if scope]
+    if not scopes:
+        scopes = ["pages_show_list", "pages_manage_metadata", "pages_messaging"]
+    return ",".join(scopes)
 
 
 def create_facebook_oauth_url(*, outlet_id: str, account_id: str) -> dict:
@@ -198,7 +146,15 @@ def create_facebook_oauth_url(*, outlet_id: str, account_id: str) -> dict:
         "auth_type": "rerequest",
     }
     url = f"https://www.facebook.com/{_graph_version()}/dialog/oauth?{urlencode(params)}"
-    return {"authorizationUrl": url, "expiresInSeconds": expires_in}
+    result = {"authorizationUrl": url, "expiresInSeconds": expires_in}
+    client_token = settings.FACEBOOK_ANDROID_CLIENT_TOKEN.strip()
+    if client_token:
+        result["nativeAndroid"] = {
+            "appId": app_id,
+            "clientToken": client_token,
+            "scopes": _facebook_login_scopes().split(","),
+        }
+    return result
 
 
 def _decode_facebook_oauth_state(raw_state: str) -> dict[str, Any]:
@@ -257,10 +213,6 @@ async def _graph_post(path: str, params: dict[str, str], fallback: str) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# OAuth flow
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def _exchange_code_for_user_token(code: str) -> str:
     app_id, app_secret = _require_facebook_app_config()
     payload = await _graph_get(
@@ -300,11 +252,16 @@ async def _exchange_long_lived_user_token(short_token: str) -> str:
 async def _fetch_facebook_pages(user_access_token: str) -> list[dict[str, Any]]:
     payload = await _graph_get(
         "/me/accounts",
-        {"fields": "id,name,access_token", "access_token": user_access_token},
+        {
+            "fields": "id,name,access_token",
+            "access_token": user_access_token,
+        },
         "Could not read Facebook Pages for this account.",
     )
     pages = payload.get("data")
-    return [p for p in (pages or []) if isinstance(p, dict)]
+    if not isinstance(pages, list):
+        return []
+    return [page for page in pages if isinstance(page, dict)]
 
 
 def _selectable_facebook_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -313,11 +270,13 @@ def _selectable_facebook_pages(pages: list[dict[str, Any]]) -> list[dict[str, An
         page_id = str(page.get("id") or "").strip()
         token = str(page.get("access_token") or "").strip()
         if page_id and token:
-            selectable.append({
-                "pageId": page_id,
-                "pageName": str(page.get("name") or "").strip() or None,
-                "pageAccessToken": token,
-            })
+            selectable.append(
+                {
+                    "pageId": page_id,
+                    "pageName": str(page.get("name") or "").strip() or None,
+                    "pageAccessToken": token,
+                }
+            )
     return selectable
 
 
@@ -332,7 +291,12 @@ async def _subscribe_facebook_page(page_id: str, page_access_token: str) -> None
     )
 
 
-async def complete_facebook_oauth(*, db: AsyncSession, state_token: str, code: str) -> dict:
+async def complete_facebook_oauth(
+    *,
+    db: AsyncSession,
+    state_token: str,
+    code: str,
+) -> dict:
     state_payload = _decode_facebook_oauth_state(state_token)
     outlet_id = str(state_payload["sub"]).strip()
     account_id = str(state_payload.get("account_id") or "").strip()
@@ -342,7 +306,43 @@ async def complete_facebook_oauth(*, db: AsyncSession, state_token: str, code: s
             detail="Facebook Login state is missing the manager account.",
         )
     short_token = await _exchange_code_for_user_token(code.strip())
-    user_token = await _exchange_long_lived_user_token(short_token)
+    return await _create_facebook_oauth_session(
+        db=db,
+        outlet_id=outlet_id,
+        account_id=account_id,
+        user_access_token=short_token,
+    )
+
+
+async def complete_facebook_native_oauth(
+    *,
+    db: AsyncSession,
+    outlet_id: str,
+    account_id: str,
+    user_access_token: str,
+) -> dict:
+    clean_token = user_access_token.strip()
+    if not clean_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Facebook Login did not return a user access token.",
+        )
+    return await _create_facebook_oauth_session(
+        db=db,
+        outlet_id=outlet_id,
+        account_id=account_id,
+        user_access_token=clean_token,
+    )
+
+
+async def _create_facebook_oauth_session(
+    *,
+    db: AsyncSession,
+    outlet_id: str,
+    account_id: str,
+    user_access_token: str,
+) -> dict:
+    user_token = await _exchange_long_lived_user_token(user_access_token)
     pages = _selectable_facebook_pages(await _fetch_facebook_pages(user_token))
     if not pages:
         raise HTTPException(
@@ -375,8 +375,8 @@ async def get_facebook_oauth_pages(
     return {
         "sessionId": session.id,
         "pages": [
-            {"pageId": p["pageId"], "pageName": p.get("pageName")}
-            for p in session.pages_json
+            {"pageId": page["pageId"], "pageName": page.get("pageName")}
+            for page in session.pages_json
         ],
     }
 
@@ -393,7 +393,7 @@ async def complete_facebook_oauth_page_selection(
         db, session_id=session_id, outlet_id=outlet_id, account_id=account_id
     )
     page = next(
-        (c for c in session.pages_json if c["pageId"] == page_id),
+        (candidate for candidate in session.pages_json if candidate["pageId"] == page_id),
         None,
     )
     if page is None:
@@ -445,10 +445,6 @@ async def _get_facebook_oauth_session(
     return session
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Page token / config save
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def resolve_facebook_page(token: str) -> dict:
     clean = token.strip()
     if not clean:
@@ -460,7 +456,10 @@ async def resolve_facebook_page(token: str) -> dict:
     url = f"https://graph.facebook.com/{version}/me"
     try:
         async with httpx.AsyncClient(timeout=GRAPH_TIMEOUT_SECONDS) as client:
-            response = await client.get(url, params={"fields": "id,name", "access_token": clean})
+            response = await client.get(
+                url,
+                params={"fields": "id,name", "access_token": clean},
+            )
     except httpx.HTTPError as error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -487,7 +486,7 @@ async def _ensure_facebook_page_available(
     outlet_id: str,
     page_id: str,
 ) -> None:
-    existing = (
+    existing_page = (
         await db.execute(
             select(ChatbotIntegration).where(
                 ChatbotIntegration.provider == FACEBOOK_PROVIDER,
@@ -496,7 +495,7 @@ async def _ensure_facebook_page_available(
             )
         )
     ).scalar_one_or_none()
-    if existing is not None:
+    if existing_page is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="That Facebook Page is already connected to another outlet.",
@@ -564,6 +563,7 @@ async def save_facebook_page_credentials(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Facebook did not return a valid Page token.",
         )
+
     integration = (
         await db.execute(
             select(ChatbotIntegration).where(
@@ -601,10 +601,6 @@ async def save_facebook_page_credentials(
     return integration_to_config(integration)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Webhook entry point
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def handle_facebook_webhook(db: AsyncSession, payload: dict[str, Any]) -> None:
     if payload.get("object") != "page":
         return
@@ -625,7 +621,7 @@ async def handle_facebook_webhook(db: AsyncSession, payload: dict[str, Any]) -> 
 async def _integration_for_page(
     db: AsyncSession,
     page_id: str,
-) -> "ChatbotIntegration | None":
+) -> ChatbotIntegration | None:
     return (
         await db.execute(
             select(ChatbotIntegration)
@@ -652,64 +648,36 @@ async def _handle_event(
     psid = str(sender.get("id") or "").strip()
     if not psid:
         return
-
     text = _event_text(message, postback)
     if not text:
         await _send_message(
             integration,
             psid,
-            "Menu ba delivery order niye help korte amake ekta text message pathan.",
+            "Please send a text message so I can help with the menu or delivery order.",
         )
         return
 
     conversation = await _get_conversation(db, integration, psid)
-    _reset_inactive_session(conversation)
-    await _ensure_customer_profile(conversation, integration)
     conversation.last_user_message = text
-    state = _normalize_state(conversation.state_json)
-    if not state["greetingSent"]:
-        reply = _greeting_reply(integration.outlet)
-        state["greetingSent"] = True
-        conversation.state_json = state
-        conversation.last_bot_message = reply
-        conversation.updated_at = datetime.now(timezone.utc)
-        integration.updated_at = datetime.now(timezone.utc)
-        await db.commit()
-        try:
-            await _send_message(integration, psid, reply)
-        except Exception as error:
-            logger.warning(
-                "facebook chatbot greeting send failed page=%s psid=%s error=%s",
-                integration.page_id, psid, error,
-            )
-        return
     try:
         reply = await _chatbot_reply(db, integration, conversation, text)
         integration.last_error = None
-    except ChatbotProvidersFailed as error:
-        logger.exception("facebook chatbot failed page=%s psid=%s", integration.page_id, psid)
-        reply = "Ami ekjon AI ChatBot.  Arektu bujhiye bolun, kindly"
-        integration.last_error = str(error)[:800]
     except Exception as error:
         logger.exception("facebook chatbot failed page=%s psid=%s", integration.page_id, psid)
-        reply = "Ektu technical somossa hocche. Arektu pore abar try korben."
+        reply = "Sorry, I could not process that right now. Please try again or use the menu link."
         integration.last_error = str(error)[:800]
-
-    # persist bot reply into history before saving
-    _append_history(conversation, "user", text)
-    _append_history(conversation, "assistant", reply)
-
     conversation.last_bot_message = reply
     conversation.updated_at = datetime.now(timezone.utc)
     integration.updated_at = datetime.now(timezone.utc)
     await db.commit()
-
     try:
         await _send_message(integration, psid, reply)
     except Exception as error:
         logger.warning(
             "facebook chatbot reply send failed page=%s psid=%s error=%s",
-            integration.page_id, psid, error,
+            integration.page_id,
+            psid,
+            error,
         )
         integration.last_error = str(error)[:800]
         integration.updated_at = datetime.now(timezone.utc)
@@ -728,10 +696,6 @@ def _event_text(message: dict | None, postback: dict | None) -> str:
             return payload
     return str(message.get("text") or "").strip()
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Conversation state & history
-# ═══════════════════════════════════════════════════════════════════════════════
 
 async def _get_conversation(
     db: AsyncSession,
@@ -759,134 +723,6 @@ async def _get_conversation(
     return conversation
 
 
-async def _ensure_customer_profile(
-    conversation: ChatbotConversation,
-    integration: ChatbotIntegration,
-) -> None:
-    state = _normalize_state(conversation.state_json)
-    if state["profileFetched"] or state["profileLookupAttempted"]:
-        return
-    profile = await _fetch_facebook_customer_profile(integration, conversation.psid)
-    name = str(profile.get("name") or "").strip()
-    state["profileLookupAttempted"] = True
-    if name:
-        state["profileName"] = name
-        state["profileHonorific"] = _profile_honorific(profile.get("gender"))
-        state["profileFetched"] = True
-        state["customerName"] = name
-    conversation.state_json = state
-
-
-async def _fetch_facebook_customer_profile(
-    integration: ChatbotIntegration,
-    psid: str,
-) -> dict[str, Any]:
-    try:
-        async with httpx.AsyncClient(timeout=GRAPH_TIMEOUT_SECONDS) as client:
-            response = await client.get(
-                _graph_url(f"/{integration.page_id}/conversations"),
-                params={
-                    "platform": "messenger",
-                    "user_id": psid,
-                    "fields": "participants{id,name,gender}",
-                    "access_token": integration.page_access_token,
-                },
-            )
-    except httpx.HTTPError as error:
-        logger.warning(
-            "facebook customer profile transport failed page=%s psid=%s error_type=%s",
-            integration.page_id,
-            psid,
-            type(error).__name__,
-        )
-        return {}
-    try:
-        payload = response.json() if response.content else {}
-    except ValueError:
-        logger.warning(
-            "facebook customer profile returned invalid JSON page=%s psid=%s status=%s",
-            integration.page_id,
-            psid,
-            response.status_code,
-        )
-        return {}
-    if response.status_code >= 400:
-        logger.warning(
-            "facebook customer profile rejected page=%s psid=%s status=%s detail=%s",
-            integration.page_id,
-            psid,
-            response.status_code,
-            _facebook_error_detail(payload, "Profile lookup failed."),
-        )
-        return {}
-    return _profile_from_conversations(payload, psid)
-
-
-def _profile_from_conversations(payload: Any, psid: str) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        return {}
-    for conversation in payload.get("data") or []:
-        if not isinstance(conversation, dict):
-            continue
-        participants = conversation.get("participants")
-        if not isinstance(participants, dict):
-            continue
-        for participant in participants.get("data") or []:
-            if isinstance(participant, dict) and str(participant.get("id") or "") == psid:
-                return participant
-    return {}
-
-
-def _profile_honorific(gender: Any) -> str:
-    clean = str(gender or "").strip().lower()
-    if clean == "male":
-        return "Sir"
-    if clean == "female":
-        return "Mam"
-    return "Ji"
-
-
-def _reset_inactive_session(conversation: ChatbotConversation) -> None:
-    state = conversation.state_json if isinstance(conversation.state_json, dict) else {}
-    updated_at = conversation.updated_at
-    inactive = (
-        updated_at is not None
-        and updated_at
-        <= datetime.now(timezone.utc) - timedelta(hours=CHATBOT_SESSION_RESET_HOURS)
-    )
-    if _safe_int(state.get("stateVersion"), fallback=0) != CHATBOT_STATE_VERSION or inactive:
-        conversation.state_json = _empty_state()
-        conversation.last_user_message = None
-        conversation.last_bot_message = None
-
-
-def _append_history(conversation: ChatbotConversation, role: str, content: str) -> None:
-    """Ring-buffer: keep the last MAX_HISTORY_STORE turns in state_json['history']."""
-    state = _normalize_state(conversation.state_json)
-    history: list[dict] = state.get("history") or []
-    history.append({"role": role, "content": content})
-    if len(history) > MAX_HISTORY_STORE * 2:
-        history = history[-(MAX_HISTORY_STORE * 2):]
-    state["history"] = history
-    conversation.state_json = state
-
-
-def _recent_history(state: dict, n_turns: int = MAX_HISTORY_TURNS) -> list[dict]:
-    """Return last n_turns user+assistant pairs as Groq messages."""
-    raw: list[dict] = state.get("history") or []
-    # each turn = 2 entries; grab last n_turns * 2 messages, skip the very last
-    # user message (we send it as the final user message separately)
-    pairs = raw[-(n_turns * 2):]
-    # drop trailing user entry if present (will be re-sent as current message)
-    if pairs and pairs[-1].get("role") == "user":
-        pairs = pairs[:-1]
-    return [{"role": m["role"], "content": m["content"]} for m in pairs]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Core chatbot reply
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def _chatbot_reply(
     db: AsyncSession,
     integration: ChatbotIntegration,
@@ -896,118 +732,29 @@ async def _chatbot_reply(
     outlet = integration.outlet
     menu_items = await _available_menu_items(db, outlet.id)
     state = _normalize_state(conversation.state_json)
-    state["restaurantDisplayName"] = (
-        outlet.restaurant.name if outlet.restaurant else outlet.name
-    )
-    reply_style = _detect_reply_style(user_text)
-    if state["selectedMenuItemId"]:
-        item = _menu_item_by_id(menu_items, state["selectedMenuItemId"])
-        if item is None:
-            state["selectedMenuItemId"] = ""
-            conversation.state_json = state
-            return _personalize_reply(_localized_reply("unavailable", reply_style), state)
-        quantity = _parse_quantity(user_text)
-        if quantity is None:
-            conversation.state_json = state
-            return _personalize_reply(
-                _selected_item_reply(item.name_en or item.name, reply_style),
-                state,
-            )
-        state = _add_cart_item(state, item.id, quantity)
-        state["selectedMenuItemId"] = ""
-        state["awaitingMoreItems"] = True
-        conversation.state_json = state
-        return _personalize_reply(
-            _cart_item_added_reply(item.name_en or item.name, quantity, reply_style),
-            state,
-        )
-    if state["awaitingMoreItems"]:
-        if _is_negative_response(user_text):
-            state["awaitingMoreItems"] = False
-            if state["profileName"]:
-                state["customerName"] = state["profileName"]
-            state, state_reply = await _apply_order_action(
-                db=db,
-                outlet=outlet,
-                state=state,
-                action={"intent": INTENT_NONE},
-                reply_style=reply_style,
-                menu_items=menu_items,
-            )
-            conversation.state_json = state
-            return _personalize_reply(
-                state_reply or _missing_details_reply(
-                    ["mobile number", "delivery address"],
-                    reply_style,
-                ),
-                state,
-            )
-        if _is_affirmative_confirmation(user_text):
-            state["awaitingMoreItems"] = False
-            conversation.state_json = state
-            return _personalize_reply(_add_more_reply(reply_style), state)
-    if state["awaitingConfirmation"] and _is_affirmative_confirmation(user_text):
-        state, state_reply = await _apply_order_action(
-            db=db,
-            outlet=outlet,
-            state=state,
-            action={"intent": INTENT_CONFIRM, "confirmed": True},
-            reply_style=reply_style,
-            menu_items=menu_items,
-        )
-        conversation.state_json = state
-        if state_reply:
-            return _personalize_reply(state_reply, state, force_address=True)
-    resolved_selection = _resolve_numbered_selection(user_text, state, menu_items)
-    if resolved_selection is not None:
-        state["selectedMenuItemId"] = resolved_selection["menuItemId"]
-        conversation.state_json = state
-        return _personalize_reply(
-            _selected_item_reply(resolved_selection["name"], reply_style),
-            state,
-        )
-
     model_payload = await _chat_with_groq(
         outlet=outlet,
         menu_items=menu_items,
         state=state,
         user_text=user_text,
         ordering_enabled=integration.ordering_enabled,
-        reply_style=reply_style,
-        history=_recent_history(state),
-        resolved_selection=resolved_selection,
     )
-
     reply = str(model_payload.get("reply") or "").strip()
     order_action = model_payload.get("order") if isinstance(model_payload.get("order"), dict) else {}
 
     if not integration.ordering_enabled:
         conversation.state_json = state
-        if not reply:
-            raise ChatbotError("Groq returned an empty chatbot reply.")
-        _capture_numbered_menu_snapshot(state, reply, menu_items)
-        return _personalize_reply(reply, state)
+        return reply or _menu_link_reply(outlet)
 
     state, state_reply = await _apply_order_action(
         db=db,
         outlet=outlet,
         state=state,
         action=order_action,
-        reply_style=reply_style,
-        menu_items=menu_items,
     )
     conversation.state_json = state
-    if state_reply:
-        reply = state_reply
-    if not reply:
-        raise ChatbotError("Groq returned an empty chatbot reply.")
-    _capture_numbered_menu_snapshot(state, reply, menu_items)
-    return _personalize_reply(reply, state)
+    return state_reply or reply or "I can help with menu questions and delivery orders."
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Groq LLM call
-# ═══════════════════════════════════════════════════════════════════════════════
 
 async def _chat_with_groq(
     *,
@@ -1016,95 +763,31 @@ async def _chat_with_groq(
     state: dict,
     user_text: str,
     ordering_enabled: bool,
-    reply_style: str,
-    history: list[dict],
-    resolved_selection: dict[str, Any] | None = None,
 ) -> dict:
     api_key = settings.GROQ_API_KEY.strip()
     model = settings.CHATBOT_GROQ_MODEL.strip()
     if not api_key or not model:
-        raise ChatbotError("Groq chatbot is not configured.")
+        return {
+            "reply": (
+                f"Thanks for messaging {outlet.name}. AI chat is not configured yet. "
+                f"You can order here: {_menu_link(outlet)}"
+            ),
+            "order": {"intent": "none"},
+        }
 
     context = _restaurant_context(outlet, menu_items, ordering_enabled)
-
-    # Build the message list: system → history → current user message
-    messages: list[dict] = [{"role": "system", "content": _system_prompt()}]
-    messages.extend(history)
-    messages.append({
-        "role": "user",
-        "content": json.dumps({
+    messages = [
+        {"role": "system", "content": _system_prompt()},
+        {"role": "user", "content": json.dumps({
             "restaurant": context,
-            "conversationState": _state_for_llm(state),
+            "conversationState": state,
             "customerMessage": user_text,
-            "replyStyle": reply_style,
-            "resolvedNumberedSelection": resolved_selection,
-        }, ensure_ascii=False),
-    })
-
-    async with httpx.AsyncClient(timeout=GROQ_TIMEOUT_SECONDS) as client:
-        for attempt in range(2):
-            if attempt:
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "Rewrite your previous JSON reply. Keep the same factual meaning and "
-                        "order object, but strictly follow replyStyle. For banglish, write only "
-                        "natural Roman Bangla like the customer — short, warm, no English sentences, "
-                        "no greetings like Hey/Sure/Hello, no emoji. Return JSON only."
-                    ),
-                })
-            payload = await _chat_completion_with_fallback(
-                client=client,
-                groq_api_key=api_key,
-                groq_model=model,
-                messages=messages,
-            )
-            content = (
-                ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
-                if isinstance(payload, dict) else None
-            )
-            if not isinstance(content, str) or not content.strip():
-                raise ChatbotError("Groq returned an empty chatbot response.")
-            parsed = _parse_json_object(content)
-            reply = str(parsed.get("reply") or "").strip()
-            if not _reply_needs_rewrite(reply, reply_style):
-                return parsed
-            messages.append({"role": "assistant", "content": content})
-    raise ChatbotError("Groq chatbot reply did not follow the requested language style.")
-
-
-async def _chat_completion_with_fallback(
-    *,
-    client: httpx.AsyncClient,
-    groq_api_key: str,
-    groq_model: str,
-    messages: list[dict],
-) -> dict:
-    providers = [
-        (
-            "groq",
-            "https://api.groq.com/openai/v1/chat/completions",
-            groq_api_key,
-            groq_model,
-        ),
+        }, ensure_ascii=False)},
     ]
-    openrouter_model = settings.CHATBOT_OPENROUTER_MODEL.strip()
-    if openrouter_model:
-        for index, openrouter_key in enumerate(_openrouter_api_keys(), start=1):
-            providers.append(
-                (
-                    f"openrouter[{index}]",
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    openrouter_key,
-                    openrouter_model,
-                )
-            )
-
-    errors = []
-    for provider, url, api_key, model in providers:
-        try:
+    try:
+        async with httpx.AsyncClient(timeout=GROQ_TIMEOUT_SECONDS) as client:
             response = await client.post(
-                url,
+                "https://api.groq.com/openai/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
@@ -1112,313 +795,52 @@ async def _chat_completion_with_fallback(
                 json={
                     "model": model,
                     "messages": messages,
-                    "temperature": 0.25,
-                    "max_completion_tokens": 800,
+                    "temperature": 0.2,
+                    "max_completion_tokens": 700,
                     "response_format": {"type": "json_object"},
                 },
             )
             response.raise_for_status()
             payload = response.json()
-            if isinstance(payload, dict):
-                return payload
-            raise ChatbotError(f"{provider} returned a malformed response.")
-        except (httpx.HTTPError, ValueError, ChatbotError) as error:
-            body = ""
-            if isinstance(error, httpx.HTTPStatusError):
-                body = error.response.text[:1000]
-            logger.warning(
-                "facebook chatbot provider failed provider=%s model=%s error=%s body=%s",
-                provider,
-                model,
-                error,
-                body,
-            )
-            errors.append(f"{provider}: {error}")
-    raise ChatbotProvidersFailed("Chatbot providers failed: " + "; ".join(errors))
+    except httpx.HTTPError as error:
+        raise ChatbotError("Groq chatbot request failed.") from error
 
-
-def _openrouter_api_keys() -> list[str]:
-    raw_keys = [
-        settings.OPENROUTER_API_KEY,
-        *settings.OPENROUTER_API_KEYS.split(","),
-    ]
-    keys = []
-    for raw_key in raw_keys:
-        key = raw_key.strip()
-        if key and key not in keys:
-            keys.append(key)
-    return keys
-
-
-def _state_for_llm(state: dict) -> dict:
-    """Send only the cart fields to the LLM, not the full history buffer."""
-    return {k: v for k, v in state.items() if k != "history"}
-
-
-def _resolve_numbered_selection(
-    user_text: str,
-    state: dict,
-    menu_items: list[MenuItem],
-) -> dict[str, Any] | None:
-    match = re.fullmatch(
-        r"\s*(\d{1,2})(?:\s*(?:number|num(?:ber)?|no\.?|ta|টা|nite|nibo|chai))*\s*",
-        user_text,
-        re.IGNORECASE,
+    content = (
+        ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
+        if isinstance(payload, dict)
+        else None
     )
-    if match is None:
-        return None
-    selected_number = int(match.group(1))
-    snapshot = state.get("menuSelectionSnapshot")
-    if not isinstance(snapshot, list):
-        return None
-    selected = next(
-        (
-            option
-            for option in snapshot
-            if isinstance(option, dict) and option.get("number") == selected_number
-        ),
-        None,
-    )
-    if selected is None:
-        return None
-    menu_id = str(selected.get("menuItemId") or "").strip()
-    item = next(
-        (menu_item for menu_item in menu_items if menu_item.id == menu_id),
-        None,
-    )
-    if item is None:
-        return None
-    return {
-        "number": selected_number,
-        "menuItemId": item.id,
-        "name": item.name_en or item.name,
-        "price": float(item.price),
-    }
+    if not isinstance(content, str) or not content.strip():
+        raise ChatbotError("Groq returned an empty chatbot response.")
+    return _parse_json_object(content)
 
-
-def _normalized_menu_name(value: str) -> str:
-    return re.sub(r"[^a-z0-9\u0980-\u09ff]+", "", value.lower())
-
-
-def _capture_numbered_menu_snapshot(state: dict, reply: str, menu_items: list[MenuItem]) -> None:
-    snapshot = []
-    for raw_line in reply.splitlines():
-        shown = re.match(r"^\s*(\d{1,2})\s*[\.\)]\s*(.+?)\s*$", raw_line)
-        if shown is None:
-            continue
-        shown_name = re.sub(
-            r"\s*[-–—]\s*৳?\s*\d+(?:\.\d+)?\s*$",
-            "",
-            shown.group(2),
-        ).strip()
-        normalized_name = _normalized_menu_name(shown_name)
-        item = next(
-            (
-                menu_item
-                for menu_item in menu_items
-                if normalized_name
-                in {
-                    _normalized_menu_name(menu_item.name),
-                    _normalized_menu_name(menu_item.name_en or ""),
-                    _normalized_menu_name(menu_item.name_bn or ""),
-                }
-            ),
-            None,
-        )
-        if item is not None:
-            snapshot.append(
-                {
-                    "number": int(shown.group(1)),
-                    "menuItemId": item.id,
-                    "name": item.name_en or item.name,
-                    "price": float(item.price),
-                }
-            )
-    if snapshot:
-        state["menuSelectionSnapshot"] = snapshot
-
-
-def _menu_item_by_id(menu_items: list[MenuItem], menu_id: str) -> MenuItem | None:
-    return next((item for item in menu_items if item.id == menu_id), None)
-
-
-def _parse_quantity(text: str) -> int | None:
-    match = re.fullmatch(r"\s*(\d{1,2})(?:\s*(?:ta|টা|piece|pieces|pis))?\s*", text, re.IGNORECASE)
-    if match is None:
-        return None
-    return max(1, min(int(match.group(1)), 99))
-
-
-def _add_cart_item(state: dict, menu_id: str, quantity: int) -> dict:
-    next_state = _normalize_state(state)
-    items = [
-        dict(item)
-        for item in next_state["items"]
-        if isinstance(item, dict) and str(item.get("menuItemId") or "").strip() != menu_id
-    ]
-    items.append({"menuItemId": menu_id, "qty": quantity})
-    next_state["items"] = items
-    return next_state
-
-
-def _greeting_reply(outlet: Outlet) -> str:
-    restaurant = outlet.restaurant.name if outlet.restaurant else outlet.name
-    return f"Assalamu Alaikum, {restaurant} theke bolchi"
-
-
-def _personalize_reply(reply: str, state: dict, *, force_address: bool = False) -> str:
-    count = _safe_int(state.get("botReplyCount"), fallback=0)
-    state["botReplyCount"] = count + 1
-    name_usage_count = _safe_int(state.get("nameUsageCount"), fallback=0)
-    use_address = count == 0 or force_address or (count + 1) % 3 == 0
-    if use_address:
-        include_name = name_usage_count < 2
-        customer = _customer_address(state, include_name=include_name)
-        if customer:
-            if include_name:
-                state["nameUsageCount"] = name_usage_count + 1
-            return f"{customer}, {reply}"
-    return reply
-
-
-def _customer_address(state: dict, *, include_name: bool = True) -> str:
-    name = str(state.get("profileName") or "").strip()
-    honorific = str(state.get("profileHonorific") or "").strip()
-    if not name:
-        return ""
-    return " ".join(part for part in (name if include_name else "", honorific) if part)
-
-
-def _is_affirmative_confirmation(text: str) -> bool:
-    words = set(re.findall(r"[a-z\u0980-\u09ff]+", text.lower()))
-    if words & {"cancel", "না", "নাহ", "bad", "বাদ", "no", "nah"}:
-        return False
-    return bool(
-        words
-        & {
-            "hae", "hmm", "hmmm", "hum", "humm", "yes", "ok", "okay",
-            "confirm", "done", "koro", "koren", "korbo", "den", "thik",
-            "acha", "accha", "দেন",
-            "হ্যাঁ", "হ্যা", "জি", "ঠিক", "আচ্ছা",
-        }
-    )
-
-
-def _is_negative_response(text: str) -> bool:
-    words = set(re.findall(r"[a-z\u0980-\u09ff]+", text.lower()))
-    return bool(words & {"na", "nah", "no", "না", "নাহ"})
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# System prompt  ← the most important improvement
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _system_prompt() -> str:
-    return """You are a friendly, human-sounding restaurant staff member on Facebook Messenger.
-Your job is to take delivery orders naturally — like a real person chatting, not a bot.
+    return (
+        "You are the restaurant's Facebook Messenger assistant. Reply in banglish only with moslty bangla, in roman alphabet."
+        "Reply briefly and warmly. "
+        "Use only the provided restaurant/menu context. The only order type is delivery. "
+        "Collect menu items, quantities, customerName, mobileNumber, and deliveryAddress. "
+        "You can be flexible to change order information."
+        "Never create an order immediately after collecting details; first summarize the cart "
+        "and ask the customer to confirm. When you get the general seense that the customer confirms, set "
+        "order.intent to confirm and order.confirmed to true. Return JSON only: "
+        "{\"reply\":\"...\",\"order\":{\"intent\":\"none|draft|confirm|cancel\","
+        "\"items\":[{\"menuItemId\":\"...\",\"qty\":1}],\"customerName\":\"\","
+        "\"mobileNumber\":\"\",\"deliveryAddress\":\"\",\"confirmed\":false}}."
+    )
 
-LANGUAGE RULES
-- Default language: banglish (Roman Bangla). Use only natural Roman Bangla words, short sentences.
-  Example: "Kon burger ta neben?" not "Which burger would you like to order?"
-- Never start a reply with Hey, Hi, Hello, Sure, Great, Awesome, or any English greeting.
-- Never use emoji unless the customer used one first.
-- If replyStyle is "bn", reply fully in Bengali script.
-- If replyStyle is "en", reply fully in English.
-- Mirror the customer's energy: short reply → short reply, detailed → more detail.
-
-ORDERING FLOW — follow this strictly:
-
-STEP 1 — ITEM DISAMBIGUATION
-If a customer names a category (e.g. "burger", "pizza") and there are multiple matching items in
-restaurant.menu, list ALL matching items with their prices and ask which one they want.
-Format: "Amader burgers:\n1. Chicken Burger - ৳120\n2. Beef Burger - ৳150\n3. Veggie Burger - ৳100\nKonTa neben?"
-Never assume which item they want if multiple matches exist.
-
-STEP 2 — QUANTITY
-Once the exact item is clear, ask how many they want (if not already said).
-Example: "Kototgulo neben?" or "Koy piis lagbe?"
-
-STEP 3 — MORE ITEMS
-After quantity is set, always ask if they want anything else before collecting details.
-Example: "Thik ache! Ar kono kichu add korben?"
-Set order.intent = "add_more" if customer says yes.
-
-STEP 4 — COLLECT DETAILS
-When customer is done adding items, ask for: name, mobile number, delivery address.
-You may ask all three at once or one at a time depending on flow.
-Example: "Delivery-r jonno apnar naam, mobile number, ar address-ta deben?"
-
-STEP 5 — CONFIRM
-When all details are collected, summarize the full order and ask for confirmation.
-Show: items + qty, total price, name, mobile, address.
-Only set order.confirmed = true when the customer clearly says yes/hae/confirm/thik ache/done.
-
-STEP 6 — AFTER ORDER
-After successful order, always ask: "Ar kono kichu lagbe?"
-
-ITEM REMOVAL
-If customer says "eta bad dao" or "remove koren", set order.intent = "remove_item" and include
-the updated items list without that item.
-
-CANCELLATION
-If customer wants to cancel: set order.intent = "cancel".
-
-MENU BROWSING
-If customer asks to see the menu or a category, show relevant available items from restaurant.menu
-with names and prices. Never invent items or prices.
-When showing menu choices, always number each line consistently: "1. Item name - ৳price".
-If resolvedNumberedSelection is present, it is the exact current available menu item chosen from
-your previous numbered list. Use that item directly, acknowledge it naturally, and ask quantity if
-the customer did not provide quantity. Do not say you could not understand the numbered choice.
-
-IMPORTANT RULES
-- Never invent menu items, prices, or availability.
-- Only use menuItemId values from restaurant.menu.
-- Do not place the order until order.confirmed = true AND order.intent = "confirm".
-- Keep replies SHORT. 2-4 lines max.
-- Be warm but efficient — help them order fast.
-- If customer is confused or going in circles, gently steer back: "Ki order korben seta bolun, ami help korbo."
-
-RESPONSE FORMAT — always return valid JSON:
-{
-  "reply": "...",
-  "order": {
-    "intent": "none|draft|confirm|cancel|add_more|remove_item|show_menu",
-    "items": [{"menuItemId": "...", "qty": 1}],
-    "customerName": "",
-    "mobileNumber": "",
-    "deliveryAddress": "",
-    "confirmed": false
-  }
-}"""
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Restaurant context
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _restaurant_context(
     outlet: Outlet,
     menu_items: list[MenuItem],
     ordering_enabled: bool,
 ) -> dict:
-    # Group items by category so the LLM can present them cleanly
-    categories: dict[str, list[dict]] = {}
-    for item in menu_items[:MAX_CONTEXT_MENU_ITEMS]:
-        cat = item.category_en or item.category or "General"
-        categories.setdefault(cat, []).append({
-            "id": item.id,
-            "name": item.name_en or item.name,
-            "nameBn": item.name_bn or "",
-            "price": float(item.price),
-        })
     return {
         "restaurantName": outlet.restaurant.name if outlet.restaurant else outlet.name,
         "outletName": outlet.name,
         "orderingEnabled": ordering_enabled,
         "orderingUrl": _menu_link(outlet),
-        "menuByCategory": categories,
-        # flat list kept for backward-compat / item lookup
         "menu": [
             {
                 "id": item.id,
@@ -1447,42 +869,22 @@ async def _available_menu_items(db: AsyncSession, outlet_id: str) -> list[MenuIt
     ).scalars().all()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Order action handler
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def _apply_order_action(
     *,
     db: AsyncSession,
     outlet: Outlet,
     state: dict,
     action: dict,
-    reply_style: str = REPLY_STYLE_BANGLISH,
-    menu_items: list[MenuItem] | None = None,
 ) -> tuple[dict, str | None]:
-    intent = str(action.get("intent") or INTENT_NONE).strip().lower()
+    intent = str(action.get("intent") or "none").strip().lower()
+    if intent == "cancel":
+        return _empty_state(), "No problem, I cancelled the draft order. What else can I help with?"
 
-    # ── cancel ──────────────────────────────────────────────────────────────
-    if intent == INTENT_CANCEL:
-        return _clear_order_state(state), _localized_reply("cancel", reply_style)
-
-    # ── remove_item ──────────────────────────────────────────────────────────
-    if intent == INTENT_REMOVE_ITEM:
-        state = _merge_state(state, action)
-        conversation_state = _normalize_state(state)
-        return conversation_state, None  # LLM reply handles this
-
-    # ── add_more / show_menu — just persist state, LLM reply is used ─────────
-    if intent in (INTENT_ADD_MORE, INTENT_SHOW_MENU):
-        state = _merge_state(state, action)
-        return _normalize_state(state), None
-
-    # ── draft / confirm / none ───────────────────────────────────────────────
     state = _merge_state(state, action)
     lines, issue = await _validated_lines(db, outlet.id, state)
     if issue:
         state["awaitingConfirmation"] = False
-        return state, _localized_reply("unavailable", reply_style)
+        return state, issue
     if not lines:
         return state, None
 
@@ -1491,10 +893,9 @@ async def _apply_order_action(
         str(state.get(key) or "").strip()
         for key in ("customerName", "mobileNumber", "deliveryAddress")
     )
-    confirmed = bool(action.get("confirmed")) or intent == INTENT_CONFIRM
+    confirmed = bool(action.get("confirmed")) or intent == "confirm"
     awaiting = bool(state.get("awaitingConfirmation"))
 
-    # ── place order ──────────────────────────────────────────────────────────
     if confirmed and awaiting and has_details:
         order = await create_delivery_order(
             db=db,
@@ -1507,43 +908,33 @@ async def _apply_order_action(
             source=FACEBOOK_ORDER_SOURCE,
             created_by_role="customer",
         )
-        new_state = _clear_order_state(state)
-        return new_state, _localized_reply(
-            "success",
-            reply_style,
-            serial=order.serial_number,
-            total=float(order.total_amount),
+        return _empty_state(), (
+            "Order confirmed. "
+            f"Your order number is #{order.serial_number}. Total: ৳{float(order.total_amount):.0f}."
         )
 
-    # ── first confirmation attempt ──────────────────────────────────────────
     if confirmed and not awaiting:
         state["awaitingConfirmation"] = True
-        return state, _confirmation_reply(lines, totals, state, reply_style)
+        return state, _confirmation_reply(lines, totals, state)
 
-    # ── all details ready → show confirmation ───────────────────────────────
-    if has_details and lines:
+    if has_details:
         state["awaitingConfirmation"] = True
-        return state, _confirmation_reply(lines, totals, state, reply_style)
+        return state, _confirmation_reply(lines, totals, state)
 
-    # ── missing details → ask ────────────────────────────────────────────────
     state["awaitingConfirmation"] = False
     missing = [
         label
         for key, label in [
-            ("customerName", "naam"),
+            ("customerName", "name"),
             ("mobileNumber", "mobile number"),
             ("deliveryAddress", "delivery address"),
         ]
         if not str(state.get(key) or "").strip()
     ]
     if missing:
-        return state, _missing_details_reply(missing, reply_style)
+        return state, "Please share your " + ", ".join(missing) + " for delivery."
     return state, None
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# State helpers
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _merge_state(state: dict, action: dict) -> dict:
     next_state = dict(state)
@@ -1562,29 +953,8 @@ def _merge_state(state: dict, action: dict) -> dict:
     for key in ("customerName", "mobileNumber", "deliveryAddress"):
         value = action.get(key)
         if isinstance(value, str) and value.strip():
-            if key == "customerName" and next_state.get("profileName"):
-                continue
             next_state[key] = value.strip()
-    if next_state.get("profileName"):
-        next_state["customerName"] = next_state["profileName"]
     return _normalize_state(next_state)
-
-
-def _clear_order_state(state: dict) -> dict:
-    next_state = _normalize_state(state)
-    next_state.update(
-        {
-            "items": [],
-            "mobileNumber": "",
-            "deliveryAddress": "",
-            "awaitingConfirmation": False,
-            "awaitingMoreItems": False,
-            "selectedMenuItemId": "",
-            "menuSelectionSnapshot": [],
-        }
-    )
-    next_state["customerName"] = next_state["profileName"]
-    return next_state
 
 
 async def _validated_lines(
@@ -1595,12 +965,8 @@ async def _validated_lines(
     items = state.get("items")
     if not isinstance(items, list) or not items:
         return [], None
-    menu_ids = [
-        str(item.get("menuItemId") or "").strip()
-        for item in items
-        if isinstance(item, dict)
-    ]
-    menu_ids = [mid for mid in menu_ids if mid]
+    menu_ids = [str(item.get("menuItemId") or "").strip() for item in items if isinstance(item, dict)]
+    menu_ids = [item for item in menu_ids if item]
     if not menu_ids:
         return [], None
     rows = (
@@ -1614,9 +980,9 @@ async def _validated_lines(
         )
     ).scalars().all()
     by_id = {item.id: item for item in rows}
-    missing = [mid for mid in menu_ids if mid not in by_id]
+    missing = [menu_id for menu_id in menu_ids if menu_id not in by_id]
     if missing:
-        return [], "Some selected items are no longer available."
+        return [], "Some selected items are no longer available. Please choose from the current menu."
     lines: list[DeliveryOrderLine] = []
     for raw in items:
         if not isinstance(raw, dict):
@@ -1626,164 +992,26 @@ async def _validated_lines(
         if item is None:
             continue
         qty = max(1, min(_safe_int(raw.get("qty"), fallback=1), 99))
-        lines.append(DeliveryOrderLine(
-            menu_item_id=item.id,
-            name=item.name_en or item.name,
-            qty=qty,
-            price=float(item.price),
-        ))
+        lines.append(
+            DeliveryOrderLine(
+                menu_item_id=item.id,
+                name=item.name_en or item.name,
+                qty=qty,
+                price=float(item.price),
+            )
+        )
     return lines, None
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Reply builders
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _confirmation_reply(
-    lines: list[DeliveryOrderLine], totals: dict, state: dict, reply_style: str
-) -> str:
-    item_lines = "\n".join(f"  • {line.qty}x {line.name} — ৳{line.qty * line.price:.0f}" for line in lines)
-    total_str = f"৳{totals['total']:.0f}"
-    name = state.get("customerName") or "—"
-    mobile = state.get("mobileNumber") or "—"
-    address = state.get("deliveryAddress") or "—"
-
-    if reply_style == REPLY_STYLE_BN:
-        return (
-            f"আপনার অর্ডার একবার মিলিয়ে নিন:\n{item_lines}\n"
-            f"মোট: {total_str}\n"
-            f"নাম: {name} | মোবাইল: {mobile}\n"
-            f"ঠিকানা: {address}\n\n"
-            "আপনি কি অর্ডারটি নিশ্চিত করবেন?"
-        )
-    if reply_style == REPLY_STYLE_EN:
-        return (
-            f"Please confirm your order:\n{item_lines}\n"
-            f"Total: {total_str}\n"
-            f"Name: {name} | Mobile: {mobile}\n"
-            f"Address: {address}\n\n"
-            "Would you like to confirm the order?"
-        )
+def _confirmation_reply(lines: list[DeliveryOrderLine], totals: dict, state: dict) -> str:
+    item_text = ", ".join(f"{line.qty} x {line.name}" for line in lines)
     return (
-        f"Order-ta ektu check koren:\n{item_lines}\n"
-        f"Total: {total_str}\n"
-        f"Naam: {name} | Mobile: {mobile}\n"
-        f"Address: {address}\n\n"
-        "Apni ki order-ta confirm korben?"
+        f"Please confirm your delivery order: {item_text}. "
+        f"Name: {state.get('customerName')}. Mobile: {state.get('mobileNumber')}. "
+        f"Address: {state.get('deliveryAddress')}. Total: ৳{totals['total']:.0f}. "
+        "Reply yes to place the order."
     )
 
-
-def _missing_details_reply(missing: list[str], reply_style: str) -> str:
-    bn_labels = {"name": "নাম", "naam": "নাম", "mobile number": "মোবাইল নম্বর", "delivery address": "ডেলিভারি ঠিকানা"}
-    if reply_style == REPLY_STYLE_BN:
-        return "ডেলিভারির জন্য আপনার " + _joined_labels([bn_labels[i] for i in missing], "এবং") + " দিন।"
-    if reply_style == REPLY_STYLE_EN:
-        en_labels = {"name": "name", "naam": "name", "mobile number": "mobile number", "delivery address": "delivery address"}
-        return "Please share your " + _joined_labels([en_labels[i] for i in missing], "and") + " for delivery."
-    banglish_labels = {
-        "name": "naam",
-        "naam": "naam",
-        "mobile number": "mobile number",
-        "delivery address": "delivery address-ta",
-    }
-    return "Delivery-r jonno apnar " + _joined_labels([banglish_labels[i] for i in missing], "ar") + " deben?"
-
-
-def _joined_labels(labels: list[str], conjunction: str) -> str:
-    if len(labels) <= 1:
-        return "".join(labels)
-    return f"{', '.join(labels[:-1])} {conjunction} {labels[-1]}"
-
-
-def _selected_item_reply(item_name: str, reply_style: str) -> str:
-    if reply_style == REPLY_STYLE_BN:
-        return f"{item_name} নির্বাচন করেছি। কয়টি নেবেন?"
-    if reply_style == REPLY_STYLE_EN:
-        return f"{item_name} selected. How many would you like?"
-    return f"{item_name} select korechi. Koyta neben?"
-
-
-def _cart_item_added_reply(item_name: str, quantity: int, reply_style: str) -> str:
-    if reply_style == REPLY_STYLE_BN:
-        return f"{quantity}x {item_name} যোগ করেছি। আর কিছু অর্ডার করতে চান?"
-    if reply_style == REPLY_STYLE_EN:
-        return f"{quantity}x {item_name} added. Would you like anything else?"
-    return f"{quantity}x {item_name} add korechi. Ar kichu order korte chan?"
-
-
-def _add_more_reply(reply_style: str) -> str:
-    if reply_style == REPLY_STYLE_BN:
-        return "আর কী অর্ডার করতে চান?"
-    if reply_style == REPLY_STYLE_EN:
-        return "What else would you like to order?"
-    return "Ar ki order korte chan?"
-
-
-def _localized_reply(kind: str, reply_style: str, **values: Any) -> str:
-    replies: dict[str, dict[str, str]] = {
-        "cancel": {
-            REPLY_STYLE_BANGLISH: "Thik ache, order-ta cancel kore dilam. Ar kichu lagbe?",
-            REPLY_STYLE_BN: "ঠিক আছে, অর্ডারটি বাতিল করা হয়েছে। আর কিছু লাগবে?",
-            REPLY_STYLE_EN: "Done, I've cancelled your order. Anything else?",
-        },
-        "unavailable": {
-            REPLY_STYLE_BANGLISH: "Kichhu item ekhon available nei. Current menu theke choose korben?",
-            REPLY_STYLE_BN: "কিছু আইটেম এখন পাওয়া যাচ্ছে না। বর্তমান মেনু থেকে বেছে নিন।",
-            REPLY_STYLE_EN: "Some items are no longer available. Please choose from the current menu.",
-        },
-        "success": {
-            REPLY_STYLE_BANGLISH: "Order confirmed! Apnar order number #{serial}. Total: ৳{total:.0f}. Ar kichu lagbe?",
-            REPLY_STYLE_BN: "অর্ডার নিশ্চিত! অর্ডার নম্বর #{serial}। মোট: ৳{total:.0f}। আর কিছু লাগবে?",
-            REPLY_STYLE_EN: "Order confirmed! Your order #{serial}. Total: ৳{total:.0f}. Anything else?",
-        },
-        "general": {
-            REPLY_STYLE_BANGLISH: "Menu ba delivery order niye ki help korte pari?",
-            REPLY_STYLE_BN: "মেনু বা ডেলিভারি অর্ডার নিয়ে কিভাবে সাহায্য করতে পারি?",
-            REPLY_STYLE_EN: "How can I help you with the menu or a delivery order?",
-        },
-    }
-    return replies[kind][reply_style].format(**values)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Language detection & style checks
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _detect_reply_style(text: str) -> str:
-    if re.search(r"[\u0980-\u09ff]", text):
-        return REPLY_STYLE_BN
-    words = set(re.findall(r"[a-z]+", text.lower()))
-    if words & BANGLISH_WORDS:
-        return REPLY_STYLE_BANGLISH
-    if words & ENGLISH_SENTENCE_WORDS:
-        return REPLY_STYLE_EN
-    return REPLY_STYLE_BANGLISH
-
-
-def _reply_needs_rewrite(reply: str, reply_style: str) -> bool:
-    clean = reply.strip()
-    if not clean:
-        return True
-    if reply_style != REPLY_STYLE_BANGLISH:
-        return False
-    lower = clean.lower()
-    # disallowed openers
-    for opener in BANGLISH_DISALLOWED_OPENERS:
-        if lower.startswith(opener):
-            return True
-    # emoji
-    if re.search(r"[\U0001F300-\U0001FAFF]", clean):
-        return True
-    # too much English
-    words = re.findall(r"[a-z]+", lower)
-    english_markers = sum(w in BANGLISH_ENGLISH_MARKERS for w in words)
-    banglish_markers = sum(w in BANGLISH_WORDS for w in words)
-    return english_markers >= 3 and english_markers > banglish_markers
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Send message
-# ═══════════════════════════════════════════════════════════════════════════════
 
 async def _send_message(integration: ChatbotIntegration, psid: str, text: str) -> None:
     version = settings.META_GRAPH_API_VERSION.strip() or "v24.0"
@@ -1804,10 +1032,6 @@ async def _send_message(integration: ChatbotIntegration, psid: str, text: str) -
         raise ChatbotError("Could not send Facebook Messenger reply.") from error
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Misc utilities
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def _parse_json_object(content: str) -> dict:
     clean = content.strip()
     if clean.startswith("```"):
@@ -1826,51 +1050,21 @@ def _parse_json_object(content: str) -> dict:
 def _normalize_state(value: Any) -> dict:
     state = value if isinstance(value, dict) else {}
     return {
-        "stateVersion": CHATBOT_STATE_VERSION,
         "items": state.get("items") if isinstance(state.get("items"), list) else [],
         "customerName": str(state.get("customerName") or "").strip(),
         "mobileNumber": str(state.get("mobileNumber") or "").strip(),
         "deliveryAddress": str(state.get("deliveryAddress") or "").strip(),
         "awaitingConfirmation": bool(state.get("awaitingConfirmation")),
-        "awaitingMoreItems": bool(state.get("awaitingMoreItems")),
-        "selectedMenuItemId": str(state.get("selectedMenuItemId") or "").strip(),
-        "menuSelectionSnapshot": (
-            state.get("menuSelectionSnapshot")
-            if isinstance(state.get("menuSelectionSnapshot"), list)
-            else []
-        ),
-        "profileName": str(state.get("profileName") or "").strip(),
-        "profileHonorific": str(state.get("profileHonorific") or "").strip(),
-        "profileFetched": bool(state.get("profileFetched")),
-        "profileLookupAttempted": bool(state.get("profileLookupAttempted")),
-        "restaurantDisplayName": str(state.get("restaurantDisplayName") or "").strip(),
-        "greetingSent": bool(state.get("greetingSent")),
-        "botReplyCount": _safe_int(state.get("botReplyCount"), fallback=0),
-        "nameUsageCount": _safe_int(state.get("nameUsageCount"), fallback=0),
-        "history": state.get("history") if isinstance(state.get("history"), list) else [],
     }
 
 
 def _empty_state() -> dict:
     return {
-        "stateVersion": CHATBOT_STATE_VERSION,
         "items": [],
         "customerName": "",
         "mobileNumber": "",
         "deliveryAddress": "",
         "awaitingConfirmation": False,
-        "awaitingMoreItems": False,
-        "selectedMenuItemId": "",
-        "menuSelectionSnapshot": [],
-        "profileName": "",
-        "profileHonorific": "",
-        "profileFetched": False,
-        "profileLookupAttempted": False,
-        "restaurantDisplayName": "",
-        "greetingSent": False,
-        "botReplyCount": 0,
-        "nameUsageCount": 0,
-        "history": [],
     }
 
 
@@ -1890,10 +1084,5 @@ def _menu_link(outlet: Outlet) -> str:
     return f"{settings.BASE_URL.rstrip('/')}/menu/{outlet.id}"
 
 
-def _menu_link_reply(outlet: Outlet, reply_style: str = REPLY_STYLE_BANGLISH) -> str:
-    link = _menu_link(outlet)
-    if reply_style == REPLY_STYLE_BN:
-        return f"এখানে মেনু দেখে অর্ডার করতে পারেন: {link}"
-    if reply_style == REPLY_STYLE_EN:
-        return f"You can view the menu and order here: {link}"
-    return f"Ekhane menu dekhe order korte paren: {link}"
+def _menu_link_reply(outlet: Outlet) -> str:
+    return f"You can view the menu and order here: {_menu_link(outlet)}"

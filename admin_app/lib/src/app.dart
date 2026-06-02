@@ -4,12 +4,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app_controller.dart';
 import 'app_scope.dart';
 import 'core/localization/app_strings.dart';
+import 'core/platform/desktop_platform.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/notification_center.dart';
 import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
 import 'features/dashboard/dashboard_screen.dart';
+import 'features/desktop_pos/desktop_pos_shell.dart';
 import 'features/inventory/inventory_screen.dart';
 import 'features/menu/menu_management_screen.dart';
 import 'features/orders/orders_screen.dart';
@@ -19,6 +21,7 @@ import 'features/setup/tenant_setup_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
 import 'features/splash/splash_screen.dart';
+import 'features/system/admin_blocking_notice_screen.dart';
 
 class LocalPosApp extends StatefulWidget {
   const LocalPosApp({super.key});
@@ -136,6 +139,16 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
         },
       );
     }
+    final blockingNotice = _controller.adminBlockingNotice;
+    if (blockingNotice?.isBlocking == true) {
+      return AdminBlockingNoticeScreen(
+        key: const ValueKey('admin-blocking-notice-screen'),
+        notice: blockingNotice!,
+        refreshing: _controller.adminBlockingNoticeRefreshing,
+        error: _controller.adminBlockingNoticeError,
+        onRetry: _controller.refreshAdminBlockingNotice,
+      );
+    }
     if (_controller.pendingStaffInvite != null) {
       return StaffInviteScreen(
         onFinished: () => setState(() => _initialShellIndex = 0),
@@ -179,14 +192,16 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     if (pending && _initialShellIndex != _dashboardTabIndex) {
       _initialShellIndex = _defaultShellIndex();
     }
-    return MainShell(
-      initialIndex: _initialShellIndex,
-      onMounted: () {
-        if (_controller.pendingOnboardingLanding) {
-          _controller.consumeOnboardingLanding();
-        }
-      },
-    );
+    void mounted() {
+      if (_controller.pendingOnboardingLanding) {
+        _controller.consumeOnboardingLanding();
+      }
+    }
+
+    if (isNativeDesktop) {
+      return DesktopPosShell(onMounted: mounted);
+    }
+    return MainShell(initialIndex: _initialShellIndex, onMounted: mounted);
   }
 
   int _defaultShellIndex() => _controller.isManager ? _dashboardTabIndex : 0;

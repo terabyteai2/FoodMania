@@ -10,7 +10,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/inventory_item.dart';
+import '../models/inventory_supplier.dart';
 import '../models/menu_item.dart';
+import '../models/desktop_pos.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
 import '../models/order_payment_method.dart';
@@ -89,7 +91,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 11,
+      version: 14,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -337,12 +339,19 @@ class LocalDatabaseService {
     String? note,
     String? deliveryAddress,
     String? mobileNumber,
+    double deliveryCharge = 0,
     OrderServiceType? serviceType,
     int? covers,
     OrderPaymentMethod? paymentMethod,
     OrderSource source = OrderSource.cloud,
     String? createdByAccountId,
     String? createdByRole,
+    String? shiftId,
+    String? discountLabel,
+    double discountAmount = 0,
+    double serviceChargeRatePercent = 0,
+    double serviceChargeAmount = 0,
+    double vatRatePercent = 0,
     bool createSyncEvent = true,
     OrderStatus initialStatus = OrderStatus.pending,
   }) async {
@@ -390,27 +399,49 @@ class LocalDatabaseService {
           );
         }
 
-        final lineTotal = menuItem.price * requestItem.qty;
+        final unitPrice = _requestUnitPrice(requestItem, menuItem);
+        final lineTotal = _roundMoney(unitPrice * requestItem.qty);
         subtotal += lineTotal;
         orderItems.add(
           OrderItem(
             id: _uuid.v4(),
             orderId: orderId,
             menuItemId: menuItem.id,
-            name: menuItem.name,
-            nameEn: menuItem.nameEn,
-            nameBn: menuItem.nameBn,
+            name: _requestName(
+              base: menuItem.name,
+              suffix: requestItem.nameSuffix,
+              override: requestItem.nameOverride,
+            ),
+            nameEn: _requestName(
+              base: menuItem.nameEn,
+              suffix: requestItem.nameSuffix,
+              override: requestItem.nameEnOverride,
+              appendSuffixToEmptyBase: false,
+            ),
+            nameBn: _requestName(
+              base: menuItem.nameBn,
+              suffix: requestItem.nameSuffix,
+              override: requestItem.nameBnOverride,
+              appendSuffixToEmptyBase: false,
+            ),
             qty: requestItem.qty,
-            price: menuItem.price,
+            price: unitPrice,
             lineTotal: lineTotal,
+            costPriceSnapshot: menuItem.costPrice ?? 0,
+            note: _cleanNullable(requestItem.note),
           ),
         );
       }
 
       final roundedSubtotal = _roundMoney(subtotal);
-      const vatRatePercent = 0.0;
-      const vatAmount = 0.0;
-      final total = roundedSubtotal;
+      final cleanVatRate = vatRatePercent.clamp(0, 100).toDouble();
+      final vatAmount = _roundMoney(roundedSubtotal * cleanVatRate / 100);
+      final cleanDeliveryCharge = _roundMoney(
+        deliveryCharge.clamp(0, 100000).toDouble(),
+      );
+      final total = _roundMoney(
+        roundedSubtotal + vatAmount + cleanDeliveryCharge + serviceChargeAmount,
+      );
 
       final model = OrderModel(
         id: orderId,
@@ -423,14 +454,20 @@ class LocalDatabaseService {
         mobileNumber: _cleanNullable(mobileNumber),
         createdByAccountId: _cleanNullable(createdByAccountId),
         createdByRole: _cleanNullable(createdByRole),
+        shiftId: _cleanNullable(shiftId),
+        discountLabel: _cleanNullable(discountLabel),
+        discountAmount: _roundMoney(discountAmount),
+        serviceChargeRatePercent: _roundMoney(serviceChargeRatePercent),
+        serviceChargeAmount: _roundMoney(serviceChargeAmount),
         serviceType: serviceType,
         covers: covers?.clamp(1, 999).toInt(),
         paymentMethod: paymentMethod,
         source: source,
         status: initialStatus,
         subtotal: roundedSubtotal,
-        vatRatePercent: vatRatePercent,
+        vatRatePercent: cleanVatRate,
         vatAmount: vatAmount,
+        deliveryCharge: cleanDeliveryCharge,
         total: total,
         items: orderItems,
         syncStatus: createSyncEvent ? SyncStatus.pending : SyncStatus.synced,
@@ -699,9 +736,19 @@ class LocalDatabaseService {
       final currentItems = await _getOrderItemsWithExecutor(txn, id);
       final current = OrderModel.fromMap(rows.first, items: currentItems);
 
-      final currentItemsByMenuId = <String, OrderItem>{
-        for (final item in currentItems) item.menuItemId: item,
+      final currentItemsById = <String, OrderItem>{
+        for (final item in currentItems) item.id: item,
       };
+      final currentItemsByMenuId = <String, List<OrderItem>>{};
+      for (final item in currentItems) {
+        currentItemsByMenuId.putIfAbsent(item.menuItemId, () => []).add(item);
+      }
+
+      OrderItem? takeExistingByMenuId(String menuItemId) {
+        final matches = currentItemsByMenuId[menuItemId];
+        if (matches == null || matches.isEmpty) return null;
+        return matches.removeAt(0);
+      }
 
       final newItems = <OrderItem>[];
       var subtotal = 0.0;
@@ -723,26 +770,57 @@ class LocalDatabaseService {
           );
         }
         final menuItem = MenuItem.fromMap(menuRows.first);
-        final lineTotal = menuItem.price * request.qty;
+        final unitPrice = _requestUnitPrice(request, menuItem);
+        final lineTotal = _roundMoney(unitPrice * request.qty);
         subtotal += lineTotal;
-        final existing = currentItemsByMenuId[menuItem.id];
+        final existingId = _cleanNullable(request.existingOrderItemId);
+        final existingById = existingId == null
+            ? null
+            : currentItemsById.remove(existingId);
+        if (existingById != null) {
+          currentItemsByMenuId[existingById.menuItemId]?.removeWhere(
+            (item) => item.id == existingById.id,
+          );
+        }
+        final existing = existingById ?? takeExistingByMenuId(menuItem.id);
         newItems.add(
           OrderItem(
             id: existing?.id ?? _uuid.v4(),
             orderId: id,
             menuItemId: menuItem.id,
-            name: menuItem.name,
-            nameEn: menuItem.nameEn,
-            nameBn: menuItem.nameBn,
+            name: _requestName(
+              base: menuItem.name,
+              suffix: request.nameSuffix,
+              override: request.nameOverride,
+            ),
+            nameEn: _requestName(
+              base: menuItem.nameEn,
+              suffix: request.nameSuffix,
+              override: request.nameEnOverride,
+              appendSuffixToEmptyBase: false,
+            ),
+            nameBn: _requestName(
+              base: menuItem.nameBn,
+              suffix: request.nameSuffix,
+              override: request.nameBnOverride,
+              appendSuffixToEmptyBase: false,
+            ),
             qty: request.qty,
-            price: menuItem.price,
+            price: unitPrice,
             lineTotal: lineTotal,
+            costPriceSnapshot:
+                existing?.costPriceSnapshot ?? menuItem.costPrice ?? 0,
+            note: _cleanNullable(request.note) ?? existing?.note,
+            kotBatchId: existing?.kotBatchId,
+            kotSentAt: existing?.kotSentAt,
           ),
         );
       }
 
       final roundedSubtotal = _roundMoney(subtotal);
-      final total = roundedSubtotal;
+      final total = _roundMoney(
+        roundedSubtotal + current.vatAmount + current.deliveryCharge,
+      );
 
       final updated = current.copyWith(
         items: newItems,
@@ -911,6 +989,7 @@ class LocalDatabaseService {
       await txn.delete('stock_adjustments');
       await txn.delete('daily_stock_counts');
       await txn.delete('inventory_items');
+      await txn.delete('inventory_suppliers');
     });
     _emitChange();
   }
@@ -1006,12 +1085,21 @@ class LocalDatabaseService {
         mobileNumber TEXT,
         createdByAccountId TEXT,
         createdByRole TEXT,
+        shiftId TEXT,
+        discountLabel TEXT,
+        discountAmount REAL NOT NULL DEFAULT 0,
+        serviceChargeRatePercent REAL NOT NULL DEFAULT 0,
+        serviceChargeAmount REAL NOT NULL DEFAULT 0,
+        billingSnapshot TEXT NOT NULL DEFAULT '{}',
+        kotBatches TEXT NOT NULL DEFAULT '[]',
+        settledAt TEXT,
         serviceType TEXT,
         covers INTEGER,
         paymentMethod TEXT,
         subtotal REAL,
         vatRatePercent REAL,
         vatAmount REAL,
+        deliveryCharge REAL NOT NULL DEFAULT 0,
         status TEXT NOT NULL,
         total REAL NOT NULL,
         syncStatus TEXT NOT NULL DEFAULT 'synced',
@@ -1033,6 +1121,10 @@ class LocalDatabaseService {
         qty INTEGER NOT NULL,
         price REAL NOT NULL,
         lineTotal REAL NOT NULL,
+        costPriceSnapshot REAL NOT NULL DEFAULT 0,
+        note TEXT,
+        kotBatchId TEXT,
+        kotSentAt TEXT,
         FOREIGN KEY(orderId) REFERENCES orders(id) ON DELETE CASCADE
       )
     ''');
@@ -1040,6 +1132,7 @@ class LocalDatabaseService {
     await _createSyncTable(db);
     await _createInventoryTables(db);
     await _createNotificationTable(db);
+    await _createDesktopPosTables(db);
     await _createIndexes(db);
   }
 
@@ -1136,6 +1229,103 @@ class LocalDatabaseService {
     if (oldVersion < 11) {
       await _migrateMenuCostPriceV11(db);
     }
+    if (oldVersion < 12) {
+      await _migrateOrdersDeliveryChargeV12(db);
+    }
+    if (oldVersion < 13) {
+      await _migrateInventoryRedesignV13(db);
+    }
+    if (oldVersion < 14) {
+      await _migrateDesktopPosV14(db);
+    }
+  }
+
+  Future<void> _migrateInventoryRedesignV13(Database db) async {
+    await _createInventorySupplierTable(db);
+    await _addColumnIfMissing(
+      db,
+      'inventory_items',
+      'defaultSupplierId',
+      'defaultSupplierId TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'inventory_items',
+      'defaultReorderQty',
+      'defaultReorderQty REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'stock_adjustments',
+      'supplierId',
+      'supplierId TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'stock_adjustments',
+      'supplierName',
+      "supplierName TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'stock_adjustments',
+      'reason',
+      "reason TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'stock_adjustments',
+      'billRef',
+      "billRef TEXT NOT NULL DEFAULT ''",
+    );
+    await _addColumnIfMissing(
+      db,
+      'stock_adjustments',
+      'createdByAccountId',
+      'createdByAccountId TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'stock_adjustments',
+      'createdByRole',
+      'createdByRole TEXT',
+    );
+  }
+
+  Future<void> _migrateDesktopPosV14(Database db) async {
+    for (final entry in <(String, String)>[
+      ('shiftId', 'shiftId TEXT'),
+      ('discountLabel', 'discountLabel TEXT'),
+      ('discountAmount', 'discountAmount REAL NOT NULL DEFAULT 0'),
+      (
+        'serviceChargeRatePercent',
+        'serviceChargeRatePercent REAL NOT NULL DEFAULT 0',
+      ),
+      ('serviceChargeAmount', 'serviceChargeAmount REAL NOT NULL DEFAULT 0'),
+      ('billingSnapshot', "billingSnapshot TEXT NOT NULL DEFAULT '{}'"),
+      ('kotBatches', "kotBatches TEXT NOT NULL DEFAULT '[]'"),
+      ('settledAt', 'settledAt TEXT'),
+    ]) {
+      await _addColumnIfMissing(db, 'orders', entry.$1, entry.$2);
+    }
+    for (final entry in <(String, String)>[
+      ('costPriceSnapshot', 'costPriceSnapshot REAL NOT NULL DEFAULT 0'),
+      ('note', 'note TEXT'),
+      ('kotBatchId', 'kotBatchId TEXT'),
+      ('kotSentAt', 'kotSentAt TEXT'),
+    ]) {
+      await _addColumnIfMissing(db, 'order_items', entry.$1, entry.$2);
+    }
+    await _createDesktopPosTables(db);
+  }
+
+  Future<void> _migrateOrdersDeliveryChargeV12(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'orders',
+      'deliveryCharge',
+      'deliveryCharge REAL NOT NULL DEFAULT 0',
+    );
   }
 
   Future<void> _migrateMenuCostPriceV11(Database db) async {
@@ -1309,10 +1499,13 @@ class LocalDatabaseService {
     );
     await _backfillOrderSequences(db);
     await _migrateOrdersV8(db);
+    await _migrateOrdersDeliveryChargeV12(db);
     await _migrateOrderItemsBilingualV9(db);
     await _createSyncTable(db);
     await _createInventoryTables(db);
     await _migrateInventoryV6(db);
+    await _migrateInventoryRedesignV13(db);
+    await _migrateDesktopPosV14(db);
     await _createNotificationTable(db);
     await _createIndexes(db);
   }
@@ -1345,6 +1538,8 @@ class LocalDatabaseService {
         minThreshold REAL NOT NULL DEFAULT 0,
         costPerUnit REAL NOT NULL DEFAULT 0,
         notes TEXT NOT NULL DEFAULT '',
+        defaultSupplierId TEXT,
+        defaultReorderQty REAL NOT NULL DEFAULT 0,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )
@@ -1358,10 +1553,17 @@ class LocalDatabaseService {
         type TEXT NOT NULL,
         note TEXT NOT NULL DEFAULT '',
         totalCostBdt REAL NOT NULL DEFAULT 0,
+        supplierId TEXT,
+        supplierName TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL DEFAULT '',
+        billRef TEXT NOT NULL DEFAULT '',
+        createdByAccountId TEXT,
+        createdByRole TEXT,
         createdAt TEXT NOT NULL,
         FOREIGN KEY(inventoryItemId) REFERENCES inventory_items(id) ON DELETE CASCADE
       )
     ''');
+    await _createInventorySupplierTable(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS daily_stock_counts (
         id TEXT PRIMARY KEY,
@@ -1371,6 +1573,20 @@ class LocalDatabaseService {
         createdAt TEXT NOT NULL,
         UNIQUE(inventoryItemId, countDate),
         FOREIGN KEY(inventoryItemId) REFERENCES inventory_items(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createInventorySupplierTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS inventory_suppliers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        isActive INTEGER NOT NULL DEFAULT 1,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
       )
     ''');
   }
@@ -1386,6 +1602,62 @@ class LocalDatabaseService {
         actionTarget TEXT,
         createdAt TEXT NOT NULL,
         readAt TEXT
+      )
+    ''');
+  }
+
+  Future<void> _createDesktopPosTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS desktop_pos_settings (
+        id TEXT PRIMARY KEY,
+        payloadJson TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pos_shifts (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        openingCash REAL NOT NULL DEFAULT 0,
+        expectedCash REAL,
+        countedCash REAL,
+        varianceCash REAL,
+        openingDenominations TEXT NOT NULL DEFAULT '{}',
+        closingDenominations TEXT NOT NULL DEFAULT '{}',
+        openedByAccountId TEXT,
+        closedByAccountId TEXT,
+        openedAt TEXT NOT NULL,
+        closedAt TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pos_settlements (
+        eventId TEXT PRIMARY KEY,
+        orderId TEXT NOT NULL,
+        shiftId TEXT NOT NULL,
+        paymentMethod TEXT NOT NULL,
+        amount REAL NOT NULL,
+        payerLabel TEXT,
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY(orderId) REFERENCES orders(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pos_audit_events (
+        eventId TEXT PRIMARY KEY,
+        orderId TEXT,
+        shiftId TEXT,
+        action TEXT NOT NULL,
+        reason TEXT,
+        payloadJson TEXT NOT NULL DEFAULT '{}',
+        createdAt TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pos_report_cache (
+        id TEXT PRIMARY KEY,
+        payloadJson TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
       )
     ''');
   }
@@ -1417,6 +1689,12 @@ class LocalDatabaseService {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS index_notifications_read ON notifications(readAt)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS index_pos_shifts_status ON pos_shifts(status, openedAt)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS index_pos_settlements_shift ON pos_settlements(shiftId, createdAt)',
     );
   }
 
@@ -1567,6 +1845,607 @@ class LocalDatabaseService {
 
   double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
 
+  double _requestUnitPrice(OrderRequestItem request, MenuItem menuItem) {
+    final price = request.unitPrice;
+    if (price != null && price.isFinite && price >= 0) {
+      return _roundMoney(price);
+    }
+    return menuItem.price;
+  }
+
+  String _requestName({
+    required String base,
+    String? suffix,
+    String? override,
+    bool appendSuffixToEmptyBase = true,
+  }) {
+    final cleanOverride = _cleanNullable(override);
+    if (cleanOverride != null) return cleanOverride;
+    final cleanBase = base.trim();
+    final cleanSuffix = _cleanNullable(suffix);
+    if (cleanSuffix == null) return cleanBase;
+    if (cleanBase.isEmpty) {
+      return appendSuffixToEmptyBase ? cleanSuffix : cleanBase;
+    }
+    return '$cleanBase ($cleanSuffix)';
+  }
+
+  // ── Desktop POS ──────────────────────────────────────────────────────────
+
+  Future<DesktopPosSettings> getDesktopPosSettings({
+    required int fallbackTableCount,
+  }) async {
+    final db = await _db;
+    final rows = await db.query(
+      'desktop_pos_settings',
+      where: 'id = ?',
+      whereArgs: ['outlet'],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return DesktopPosSettings(
+        floorLayout: DesktopPosSettings.fallbackFloor(fallbackTableCount),
+      );
+    }
+    final raw = jsonDecode(rows.first['payloadJson'] as String);
+    return DesktopPosSettings.fromJson(
+      raw is Map ? Map<String, Object?>.from(raw) : const {},
+      fallbackTableCount: fallbackTableCount,
+    );
+  }
+
+  Future<void> saveDesktopPosSettings(DesktopPosSettings settings) async {
+    final db = await _db;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.insert('desktop_pos_settings', {
+        'id': 'outlet',
+        'payloadJson': jsonEncode(settings.toJson()),
+        'updatedAt': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await _insertSyncEvent(
+        txn,
+        entityType: 'pos_settings',
+        entityId: 'outlet',
+        action: 'update',
+        payload: settings.toJson(),
+      );
+    });
+    _emitChange();
+  }
+
+  Future<void> applyRemoteDesktopPosSettings(
+    DesktopPosSettings settings,
+  ) async {
+    final db = await _db;
+    await db.insert('desktop_pos_settings', {
+      'id': 'outlet',
+      'payloadJson': jsonEncode(settings.toJson()),
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    _emitChange();
+  }
+
+  Future<PosShift?> getCurrentPosShift() async {
+    final db = await _db;
+    final rows = await db.query(
+      'pos_shifts',
+      where: 'status = ?',
+      whereArgs: ['open'],
+      orderBy: 'openedAt DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : PosShift.fromMap(rows.first);
+  }
+
+  Future<void> applyRemotePosShift(PosShift shift) async {
+    final db = await _db;
+    if (shift.isOpen) {
+      await db.update(
+        'pos_shifts',
+        {'status': 'closed'},
+        where: 'status = ? AND id != ?',
+        whereArgs: ['open', shift.id],
+      );
+    }
+    await db.insert(
+      'pos_shifts',
+      shift.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    _emitChange();
+  }
+
+  Future<void> clearRemoteClosedPosShift() async {
+    final db = await _db;
+    final pending =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            "SELECT COUNT(*) FROM sync_events WHERE entityType = 'pos_shift' "
+            "AND action = 'open' AND status != ?",
+            [SyncStatus.synced.value],
+          ),
+        ) ??
+        0;
+    if (pending > 0) return;
+    await db.update(
+      'pos_shifts',
+      {'status': 'closed', 'closedAt': DateTime.now().toIso8601String()},
+      where: 'status = ?',
+      whereArgs: ['open'],
+    );
+    _emitChange();
+  }
+
+  Future<PosShift> openPosShift({
+    required double openingCash,
+    required Map<String, int> denominations,
+    String? openedByAccountId,
+  }) async {
+    final current = await getCurrentPosShift();
+    if (current != null) return current;
+    final db = await _db;
+    final now = DateTime.now();
+    final shift = PosShift(
+      id: _uuid.v4(),
+      status: 'open',
+      openingCash: _roundMoney(openingCash),
+      openingDenominations: denominations,
+      openedByAccountId: _cleanNullable(openedByAccountId),
+      openedAt: now,
+    );
+    await db.transaction((txn) async {
+      await txn.insert('pos_shifts', shift.toMap());
+      await _insertSyncEvent(
+        txn,
+        entityType: 'pos_shift',
+        entityId: shift.id,
+        action: 'open',
+        payload: {
+          'id': shift.id,
+          'openingCash': shift.openingCash,
+          'denominations': denominations,
+        },
+      );
+    });
+    _emitChange();
+    return shift;
+  }
+
+  Future<PosShift> closePosShift({
+    required String shiftId,
+    required double countedCash,
+    required Map<String, int> denominations,
+    String? closedByAccountId,
+  }) async {
+    final db = await _db;
+    late PosShift result;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'pos_shifts',
+        where: 'id = ?',
+        whereArgs: [shiftId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw DatabaseValidationException('Shift was not found.');
+      }
+      final current = PosShift.fromMap(rows.first);
+      final cashRows = await txn.rawQuery(
+        'SELECT COALESCE(SUM(amount), 0) total FROM pos_settlements '
+        'WHERE shiftId = ? AND paymentMethod = ?',
+        [shiftId, 'cash'],
+      );
+      final cashSales = (cashRows.first['total'] as num?)?.toDouble() ?? 0;
+      final expected = _roundMoney(current.openingCash + cashSales);
+      final counted = _roundMoney(countedCash);
+      result = PosShift(
+        id: current.id,
+        status: 'closed',
+        openingCash: current.openingCash,
+        expectedCash: expected,
+        countedCash: counted,
+        varianceCash: _roundMoney(counted - expected),
+        openingDenominations: current.openingDenominations,
+        closingDenominations: denominations,
+        openedByAccountId: current.openedByAccountId,
+        closedByAccountId: _cleanNullable(closedByAccountId),
+        openedAt: current.openedAt,
+        closedAt: DateTime.now(),
+      );
+      await txn.update(
+        'pos_shifts',
+        result.toMap(),
+        where: 'id = ?',
+        whereArgs: [shiftId],
+      );
+      await _insertSyncEvent(
+        txn,
+        entityType: 'pos_shift',
+        entityId: shiftId,
+        action: 'close',
+        payload: {'countedCash': counted, 'denominations': denominations},
+      );
+    });
+    _emitChange();
+    return result;
+  }
+
+  Future<OrderModel> markDesktopKotSent({
+    required String orderId,
+    required List<String> itemIds,
+    String? note,
+  }) async {
+    final db = await _db;
+    late OrderModel result;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [orderId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw DatabaseValidationException('Order was not found.');
+      }
+      final now = DateTime.now();
+      final batchId = _uuid.v4();
+      final items = await _getOrderItemsWithExecutor(txn, orderId);
+      final selected = itemIds.toSet();
+      final nextItems = [
+        for (final item in items)
+          OrderItem(
+            id: item.id,
+            orderId: item.orderId,
+            menuItemId: item.menuItemId,
+            name: item.name,
+            nameEn: item.nameEn,
+            nameBn: item.nameBn,
+            qty: item.qty,
+            price: item.price,
+            lineTotal: item.lineTotal,
+            costPriceSnapshot: item.costPriceSnapshot,
+            note: item.note,
+            kotBatchId: selected.contains(item.id) ? batchId : item.kotBatchId,
+            kotSentAt: selected.contains(item.id) ? now : item.kotSentAt,
+          ),
+      ];
+      final current = OrderModel.fromMap(rows.first, items: items);
+      final batches = [
+        ...current.kotBatches,
+        {
+          'id': batchId,
+          'itemIds': itemIds,
+          'note': _cleanNullable(note),
+          'sentAt': now.toIso8601String(),
+        },
+      ];
+      result = current.copyWith(
+        items: nextItems,
+        kotBatches: batches,
+        updatedAt: now,
+      );
+      await txn.update(
+        'orders',
+        result.toMap(),
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      await txn.delete(
+        'order_items',
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      for (final item in nextItems) {
+        await txn.insert('order_items', item.toMap());
+      }
+      await _insertSyncEvent(
+        txn,
+        entityType: 'pos_kot',
+        entityId: orderId,
+        action: 'send',
+        payload: {'batchId': batchId, 'itemIds': itemIds, 'note': note},
+      );
+    });
+    _emitChange();
+    return result;
+  }
+
+  Future<OrderModel> settleDesktopOrder({
+    required String orderId,
+    required PosShift shift,
+    required List<PosSettlementLine> settlements,
+    required double discountAmount,
+    required double serviceChargeRatePercent,
+    required double serviceChargeAmount,
+    String? discountPresetId,
+    String? discountLabel,
+  }) async {
+    final db = await _db;
+    late OrderModel result;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [orderId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        throw DatabaseValidationException('Order was not found.');
+      }
+      final items = await _getOrderItemsWithExecutor(txn, orderId);
+      final current = OrderModel.fromMap(rows.first, items: items);
+      final total = _roundMoney(
+        current.subtotal +
+            current.vatAmount +
+            current.deliveryCharge +
+            serviceChargeAmount -
+            discountAmount,
+      );
+      final paid = _roundMoney(
+        settlements.fold(0, (sum, line) => sum + line.amount),
+      );
+      if ((paid - total).abs() > 0.01) {
+        throw DatabaseValidationException(
+          'Split payments must equal the bill total.',
+        );
+      }
+      final now = DateTime.now();
+      result = current.copyWith(
+        shiftId: shift.id,
+        discountLabel: _cleanNullable(discountLabel),
+        discountAmount: _roundMoney(discountAmount),
+        serviceChargeRatePercent: _roundMoney(serviceChargeRatePercent),
+        serviceChargeAmount: _roundMoney(serviceChargeAmount),
+        billingSnapshot: {
+          'subtotal': current.subtotal,
+          'vatRatePercent': current.vatRatePercent,
+          'vatAmount': current.vatAmount,
+          'deliveryCharge': current.deliveryCharge,
+          'discountLabel': _cleanNullable(discountLabel),
+          'discountAmount': _roundMoney(discountAmount),
+          'serviceChargeRatePercent': _roundMoney(serviceChargeRatePercent),
+          'serviceChargeAmount': _roundMoney(serviceChargeAmount),
+          'totalAmount': total,
+        },
+        paymentMethod: settlements.length == 1
+            ? OrderPaymentMethod.tryParse(settlements.first.paymentMethod)
+            : current.paymentMethod,
+        status: OrderStatus.served,
+        settledAt: now,
+        total: total,
+        updatedAt: now,
+      );
+      await txn.update(
+        'orders',
+        result.toMap(),
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      for (final line in settlements) {
+        await txn.insert('pos_settlements', {
+          'eventId': line.eventId,
+          'orderId': orderId,
+          'shiftId': shift.id,
+          'paymentMethod': line.paymentMethod,
+          'amount': line.amount,
+          'payerLabel': line.payerLabel,
+          'createdAt': now.toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await _insertSyncEvent(
+        txn,
+        entityType: 'pos_settlement',
+        entityId: orderId,
+        action: 'settle',
+        payload: {
+          'shiftId': shift.id,
+          'discountPresetId': discountPresetId,
+          'customDiscountLabel': discountPresetId == null
+              ? discountLabel
+              : null,
+          'discountAmount': _roundMoney(discountAmount),
+          'serviceChargeRatePercent': _roundMoney(serviceChargeRatePercent),
+          'serviceChargeAmount': _roundMoney(serviceChargeAmount),
+          'totalAmount': total,
+          'settlements': settlements.map((line) => line.toJson()).toList(),
+        },
+      );
+    });
+    _emitChange();
+    return result;
+  }
+
+  Future<void> queueDesktopAudit({
+    required String orderId,
+    required String action,
+    required String reason,
+    String? shiftId,
+    double? amount,
+    String? paymentMethod,
+  }) async {
+    final db = await _db;
+    final eventId = _uuid.v4();
+    final now = DateTime.now().toIso8601String();
+    final payload = <String, Object?>{
+      'eventId': eventId,
+      'action': action,
+      'reason': reason,
+      'shiftId': shiftId,
+      'amount': amount,
+      'paymentMethod': paymentMethod,
+      'metadata': const <String, Object?>{},
+    };
+    await db.transaction((txn) async {
+      await txn.insert('pos_audit_events', {
+        'eventId': eventId,
+        'orderId': orderId,
+        'shiftId': shiftId,
+        'action': action,
+        'reason': reason,
+        'payloadJson': jsonEncode(payload),
+        'createdAt': now,
+      });
+      if (action == 'refund' && amount != null && paymentMethod != null) {
+        await txn.insert('pos_settlements', {
+          'eventId': 'refund:$eventId',
+          'orderId': orderId,
+          'shiftId': shiftId ?? '',
+          'paymentMethod': paymentMethod,
+          'amount': -amount.abs(),
+          'payerLabel': 'Refund',
+          'createdAt': now,
+        });
+      }
+      await _insertSyncEvent(
+        txn,
+        entityType: 'pos_audit',
+        entityId: orderId,
+        action: action,
+        payload: payload,
+      );
+    });
+    _emitChange();
+  }
+
+  Future<void> saveCachedDesktopPosReport(PosReportSnapshot report) async {
+    final db = await _db;
+    await db.insert('pos_report_cache', {
+      'id': 'outlet',
+      'payloadJson': jsonEncode(report.toJson()),
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    _emitChange();
+  }
+
+  Future<PosReportSnapshot?> getCachedDesktopPosReport() async {
+    final db = await _db;
+    final rows = await db.query(
+      'pos_report_cache',
+      where: 'id = ?',
+      whereArgs: ['outlet'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final raw = jsonDecode(rows.first['payloadJson'] as String);
+    return raw is Map
+        ? PosReportSnapshot.fromJson(Map<String, Object?>.from(raw))
+        : null;
+  }
+
+  Future<PosReportSnapshot> desktopPosReport({int days = 1}) async {
+    final db = await _db;
+    final now = DateTime.now();
+    final cutoff = now.subtract(Duration(days: days)).toIso8601String();
+    final orders = await db.query(
+      'orders',
+      where: 'createdAt >= ? AND status = ?',
+      whereArgs: [cutoff, OrderStatus.served.value],
+    );
+    final payments = await db.rawQuery(
+      'SELECT paymentMethod, COALESCE(SUM(amount), 0) total '
+      'FROM pos_settlements WHERE createdAt >= ? GROUP BY paymentMethod',
+      [cutoff],
+    );
+    final audits = await db.rawQuery(
+      'SELECT action, COUNT(*) total FROM pos_audit_events '
+      'WHERE createdAt >= ? GROUP BY action',
+      [cutoff],
+    );
+    final history = await db.query(
+      'orders',
+      where: 'createdAt >= ? AND status = ?',
+      whereArgs: [
+        now.subtract(const Duration(days: 35)).toIso8601String(),
+        OrderStatus.served.value,
+      ],
+    );
+    final hourly = <int, double>{};
+    final coversByHour = <int, int>{};
+    final priorSameWeekdayHourly = <int, double>{};
+    final priorSameWeekdays = <String>{};
+    final items = <String, Map<String, Object?>>{};
+    final staff = <String, Map<String, Object?>>{};
+    var sales = 0.0;
+    var covers = 0;
+    for (final row in orders) {
+      final total = (row['total'] as num?)?.toDouble() ?? 0;
+      sales += total;
+      covers += (row['covers'] as num?)?.toInt() ?? 0;
+      final created = DateTime.tryParse(row['createdAt']?.toString() ?? '');
+      if (created != null) {
+        hourly[created.hour] = (hourly[created.hour] ?? 0) + total;
+        coversByHour[created.hour] =
+            (coversByHour[created.hour] ?? 0) +
+            ((row['covers'] as num?)?.toInt() ?? 0);
+      }
+      final actor = row['createdByAccountId']?.toString() ?? 'unknown';
+      final actorRow = staff.putIfAbsent(
+        actor,
+        () => {'accountId': actor, 'orders': 0, 'sales': 0.0},
+      );
+      actorRow['orders'] = (actorRow['orders'] as int) + 1;
+      actorRow['sales'] = _roundMoney((actorRow['sales'] as double) + total);
+    }
+    for (final row in history) {
+      final created = DateTime.tryParse(row['createdAt']?.toString() ?? '');
+      if (created == null ||
+          created.weekday != now.weekday ||
+          _sameCalendarDay(created, now)) {
+        continue;
+      }
+      priorSameWeekdays.add('${created.year}-${created.month}-${created.day}');
+      priorSameWeekdayHourly[created.hour] =
+          (priorSameWeekdayHourly[created.hour] ?? 0) +
+          ((row['total'] as num?)?.toDouble() ?? 0);
+    }
+    if (priorSameWeekdays.isNotEmpty) {
+      for (final hour in priorSameWeekdayHourly.keys.toList()) {
+        priorSameWeekdayHourly[hour] = _roundMoney(
+          priorSameWeekdayHourly[hour]! / priorSameWeekdays.length,
+        );
+      }
+    }
+    final orderItems = await db.rawQuery(
+      'SELECT item.name, item.menuItemId, SUM(item.qty) qty, '
+      'SUM(item.lineTotal) sales, '
+      'SUM(item.lineTotal - (item.costPriceSnapshot * item.qty)) margin '
+      'FROM order_items item JOIN orders ticket ON ticket.id = item.orderId '
+      'WHERE ticket.createdAt >= ? AND ticket.status = ? '
+      'GROUP BY item.menuItemId, item.name ORDER BY qty DESC',
+      [cutoff, OrderStatus.served.value],
+    );
+    for (final row in orderItems) {
+      items[row['menuItemId']?.toString() ?? row['name']!.toString()] =
+          Map<String, Object?>.from(row);
+    }
+    return PosReportSnapshot(
+      sales: _roundMoney(sales),
+      orders: orders.length,
+      covers: covers,
+      paymentSplit: {
+        for (final row in payments)
+          row['paymentMethod']?.toString() ?? 'unknown':
+              (row['total'] as num?)?.toDouble() ?? 0,
+      },
+      hourlySales: hourly,
+      coversByHour: coversByHour,
+      auditCounts: {
+        for (final row in audits)
+          row['action']?.toString() ?? 'unknown':
+              (row['total'] as num?)?.toInt() ?? 0,
+      },
+      priorSameWeekdayHourlyAverage: priorSameWeekdayHourly,
+      items: items.values.toList(growable: false),
+      staff: staff.values.toList(growable: false),
+    );
+  }
+
+  bool _sameCalendarDay(DateTime left, DateTime right) =>
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+
   // ── Inventory ─────────────────────────────────────────────────────────────
 
   Future<List<InventoryItem>> getInventoryItems() async {
@@ -1577,6 +2456,31 @@ class LocalDatabaseService {
     );
     return rows.map(InventoryItem.fromMap).toList(growable: false);
   }
+
+  Future<List<InventorySupplier>> getInventorySuppliers({
+    bool includeArchived = false,
+  }) async {
+    final db = await _db;
+    final rows = await db.query(
+      'inventory_suppliers',
+      where: includeArchived ? null : 'isActive = 1',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    return rows.map(InventorySupplier.fromMap).toList(growable: false);
+  }
+
+  Future<void> upsertInventorySupplier(InventorySupplier supplier) async {
+    final db = await _db;
+    await db.insert(
+      'inventory_suppliers',
+      supplier.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    _emitChange();
+  }
+
+  Future<void> applyRemoteInventorySupplier(InventorySupplier supplier) =>
+      upsertInventorySupplier(supplier);
 
   Future<InventoryItem?> getInventoryItemById(String id) async {
     final db = await _db;
@@ -1681,6 +2585,12 @@ class LocalDatabaseService {
     required String type,
     String note = '',
     double totalCostBdt = 0,
+    String? supplierId,
+    String supplierName = '',
+    String reason = '',
+    String billRef = '',
+    String? createdByAccountId,
+    String? createdByRole,
   }) async {
     final db = await _db;
     late InventoryItem updated;
@@ -1721,6 +2631,12 @@ class LocalDatabaseService {
         type: parsedType,
         note: note,
         totalCostBdt: totalCostBdt,
+        supplierId: supplierId,
+        supplierName: supplierName,
+        reason: reason,
+        billRef: billRef,
+        createdByAccountId: createdByAccountId,
+        createdByRole: createdByRole,
         createdAt: DateTime.now(),
       );
       await txn.insert('stock_adjustments', adjustment.toMap());
@@ -1733,6 +2649,8 @@ class LocalDatabaseService {
     required String inventoryItemId,
     required double quantity,
     DateTime? onDate,
+    String? createdByAccountId,
+    String? createdByRole,
   }) async {
     final db = await _db;
     final day = onDate ?? DateTime.now();
@@ -1786,6 +2704,8 @@ class LocalDatabaseService {
             delta: delta,
             type: AdjustmentType.correction,
             note: 'End of day count',
+            createdByAccountId: createdByAccountId,
+            createdByRole: createdByRole,
             createdAt: DateTime.now(),
           ).toMap(),
         );

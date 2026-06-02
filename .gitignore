@@ -34,6 +34,7 @@ backend/frontend_dist/
 # ---------- Secrets & runtime (never push) ----------
 backend/.env
 backend/uploads/
+backend/In_App_Update_Apk_File/
 
 # ---------- Logs ----------
 *.log

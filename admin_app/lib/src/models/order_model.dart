@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'order_item.dart';
 import 'order_payment_method.dart';
 import 'order_service_type.dart';
@@ -17,6 +19,7 @@ class OrderModel {
     double? subtotal,
     double? vatRatePercent,
     double? vatAmount,
+    double? deliveryCharge,
     this.source = OrderSource.cloud,
     this.syncStatus = SyncStatus.synced,
     this.version = 1,
@@ -31,9 +34,18 @@ class OrderModel {
     this.mobileNumber,
     this.createdByAccountId,
     this.createdByRole,
+    this.shiftId,
+    this.discountLabel,
+    this.discountAmount = 0,
+    this.serviceChargeRatePercent = 0,
+    this.serviceChargeAmount = 0,
+    this.billingSnapshot = const {},
+    this.kotBatches = const [],
+    this.settledAt,
   }) : subtotal = subtotal ?? total,
        vatRatePercent = vatRatePercent ?? 0,
-       vatAmount = vatAmount ?? 0;
+       vatAmount = vatAmount ?? 0,
+       deliveryCharge = deliveryCharge ?? 0;
 
   final String id;
   final String orderNo;
@@ -44,6 +56,14 @@ class OrderModel {
   final String? mobileNumber;
   final String? createdByAccountId;
   final String? createdByRole;
+  final String? shiftId;
+  final String? discountLabel;
+  final double discountAmount;
+  final double serviceChargeRatePercent;
+  final double serviceChargeAmount;
+  final Map<String, Object?> billingSnapshot;
+  final List<Map<String, Object?>> kotBatches;
+  final DateTime? settledAt;
   final OrderServiceType? serviceType;
   final int? covers;
   final OrderPaymentMethod? paymentMethod;
@@ -52,6 +72,7 @@ class OrderModel {
   final double subtotal;
   final double vatRatePercent;
   final double vatAmount;
+  final double deliveryCharge;
   final double total;
   final List<OrderItem> items;
   final SyncStatus syncStatus;
@@ -72,6 +93,14 @@ class OrderModel {
     String? mobileNumber,
     String? createdByAccountId,
     String? createdByRole,
+    String? shiftId,
+    String? discountLabel,
+    double? discountAmount,
+    double? serviceChargeRatePercent,
+    double? serviceChargeAmount,
+    Map<String, Object?>? billingSnapshot,
+    List<Map<String, Object?>>? kotBatches,
+    DateTime? settledAt,
     OrderServiceType? serviceType,
     int? covers,
     OrderPaymentMethod? paymentMethod,
@@ -80,6 +109,7 @@ class OrderModel {
     double? subtotal,
     double? vatRatePercent,
     double? vatAmount,
+    double? deliveryCharge,
     double? total,
     List<OrderItem>? items,
     SyncStatus? syncStatus,
@@ -109,6 +139,15 @@ class OrderModel {
           : (mobileNumber ?? this.mobileNumber),
       createdByAccountId: createdByAccountId ?? this.createdByAccountId,
       createdByRole: createdByRole ?? this.createdByRole,
+      shiftId: shiftId ?? this.shiftId,
+      discountLabel: discountLabel ?? this.discountLabel,
+      discountAmount: discountAmount ?? this.discountAmount,
+      serviceChargeRatePercent:
+          serviceChargeRatePercent ?? this.serviceChargeRatePercent,
+      serviceChargeAmount: serviceChargeAmount ?? this.serviceChargeAmount,
+      billingSnapshot: billingSnapshot ?? this.billingSnapshot,
+      kotBatches: kotBatches ?? this.kotBatches,
+      settledAt: settledAt ?? this.settledAt,
       serviceType: serviceType ?? this.serviceType,
       covers: covers ?? this.covers,
       paymentMethod: paymentMethod ?? this.paymentMethod,
@@ -117,6 +156,7 @@ class OrderModel {
       subtotal: subtotal ?? this.subtotal,
       vatRatePercent: vatRatePercent ?? this.vatRatePercent,
       vatAmount: vatAmount ?? this.vatAmount,
+      deliveryCharge: deliveryCharge ?? this.deliveryCharge,
       total: total ?? this.total,
       items: items ?? this.items,
       syncStatus: syncStatus ?? this.syncStatus,
@@ -138,6 +178,14 @@ class OrderModel {
       'mobileNumber': mobileNumber,
       'createdByAccountId': createdByAccountId,
       'createdByRole': createdByRole,
+      'shiftId': shiftId,
+      'discountLabel': discountLabel,
+      'discountAmount': discountAmount,
+      'serviceChargeRatePercent': serviceChargeRatePercent,
+      'serviceChargeAmount': serviceChargeAmount,
+      'billingSnapshot': jsonEncode(billingSnapshot),
+      'kotBatches': jsonEncode(kotBatches),
+      'settledAt': settledAt?.toIso8601String(),
       'serviceType': serviceType?.value,
       'covers': covers,
       'paymentMethod': paymentMethod?.value,
@@ -146,6 +194,7 @@ class OrderModel {
       'subtotal': subtotal,
       'vatRatePercent': vatRatePercent,
       'vatAmount': vatAmount,
+      'deliveryCharge': deliveryCharge,
       'total': total,
       'syncStatus': syncStatus.value,
       'version': version,
@@ -166,6 +215,14 @@ class OrderModel {
       'mobileNumber': mobileNumber,
       'createdByAccountId': createdByAccountId,
       'createdByRole': createdByRole,
+      'shiftId': shiftId,
+      'discountLabel': discountLabel,
+      'discountAmount': discountAmount,
+      'serviceChargeRatePercent': serviceChargeRatePercent,
+      'serviceChargeAmount': serviceChargeAmount,
+      'billingSnapshot': billingSnapshot,
+      'kotBatches': kotBatches,
+      'settledAt': settledAt?.toIso8601String(),
       'serviceType': serviceType?.value,
       'covers': covers,
       'paymentMethod': paymentMethod?.value,
@@ -176,6 +233,7 @@ class OrderModel {
       'subtotal': subtotal,
       'vatRatePercent': vatRatePercent,
       'vatAmount': vatAmount,
+      'deliveryCharge': deliveryCharge,
       'total': total,
       'items': items.map((item) => item.toJson()).toList(growable: false),
       'syncStatus': syncStatus.value,
@@ -200,6 +258,15 @@ class OrderModel {
       mobileNumber: map['mobileNumber'] as String?,
       createdByAccountId: map['createdByAccountId'] as String?,
       createdByRole: map['createdByRole'] as String?,
+      shiftId: map['shiftId'] as String?,
+      discountLabel: map['discountLabel'] as String?,
+      discountAmount: _doubleOrNull(map['discountAmount']) ?? 0,
+      serviceChargeRatePercent:
+          _doubleOrNull(map['serviceChargeRatePercent']) ?? 0,
+      serviceChargeAmount: _doubleOrNull(map['serviceChargeAmount']) ?? 0,
+      billingSnapshot: _jsonMap(map['billingSnapshot']),
+      kotBatches: _jsonMapList(map['kotBatches']),
+      settledAt: DateTime.tryParse(map['settledAt']?.toString() ?? ''),
       serviceType: OrderServiceType.tryParse(map['serviceType'] as String?),
       covers: _intOrNull(map['covers']),
       paymentMethod: OrderPaymentMethod.tryParse(
@@ -211,6 +278,7 @@ class OrderModel {
       subtotal: _doubleOrNull(map['subtotal']) ?? _double(map['total']),
       vatRatePercent: _doubleOrNull(map['vatRatePercent']) ?? 0,
       vatAmount: _doubleOrNull(map['vatAmount']) ?? 0,
+      deliveryCharge: _doubleOrNull(map['deliveryCharge']) ?? 0,
       total: _double(map['total']),
       items: items,
       syncStatus: SyncStatus.parse(map['syncStatus'] as String?),
@@ -238,5 +306,25 @@ class OrderModel {
     if (value == null) return null;
     if (value is num) return value.toInt();
     return int.tryParse('$value');
+  }
+
+  static Map<String, Object?> _jsonMap(Object? value) {
+    if (value is Map) return Map<String, Object?>.from(value);
+    if (value is String && value.isNotEmpty) {
+      final decoded = jsonDecode(value);
+      if (decoded is Map) return Map<String, Object?>.from(decoded);
+    }
+    return const {};
+  }
+
+  static List<Map<String, Object?>> _jsonMapList(Object? value) {
+    if (value is String && value.isNotEmpty) {
+      return _jsonMapList(jsonDecode(value));
+    }
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, Object?>.from(item))
+        .toList(growable: false);
   }
 }

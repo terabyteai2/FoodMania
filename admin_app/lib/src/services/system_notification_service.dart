@@ -57,10 +57,12 @@ class SystemNotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
+    const linuxInit = LinuxInitializationSettings(defaultActionName: 'Open');
     const settings = InitializationSettings(
       android: androidInit,
       iOS: darwinInit,
       macOS: darwinInit,
+      linux: linuxInit,
     );
     try {
       await _plugin.initialize(settings);
@@ -104,7 +106,9 @@ class SystemNotificationService {
   Future<String?> _fetchSystemDefaultSoundUri() async {
     if (!Platform.isAndroid) return null;
     try {
-      return await _platform.invokeMethod<String>('defaultNotificationSoundUri');
+      return await _platform.invokeMethod<String>(
+        'defaultNotificationSoundUri',
+      );
     } catch (_) {
       return null;
     }
@@ -258,10 +262,12 @@ class SystemNotificationService {
       presentSound: playSound,
       sound: iosSound,
     );
+    final linuxDetails = LinuxNotificationDetails(suppressSound: !playSound);
     final details = NotificationDetails(
       android: androidDetails,
       iOS: darwinDetails,
       macOS: darwinDetails,
+      linux: linuxDetails,
     );
     try {
       await _plugin.show(id, title, body, details, payload: payload);
@@ -329,8 +335,9 @@ class SystemNotificationService {
   Future<bool> playDefaultNotificationSound() async {
     if (!Platform.isAndroid) return false;
     try {
-      final played =
-          await _platform.invokeMethod<bool>('playDefaultNotificationSound');
+      final played = await _platform.invokeMethod<bool>(
+        'playDefaultNotificationSound',
+      );
       return played == true;
     } catch (_) {
       return false;

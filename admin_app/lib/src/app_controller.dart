@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -18,14 +19,17 @@ import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
 import 'core/utils/bounded_string_set.dart';
 import 'models/account_role.dart';
+import 'models/admin_blocking_notice.dart';
 import 'models/app_update_info.dart';
 import 'models/bkash_payment_session.dart';
 import 'models/daily_report.dart';
 import 'models/dashboard_metrics.dart';
 import 'models/dashboard_summary.dart';
+import 'models/desktop_pos.dart';
 import 'models/facebook_chatbot_config.dart';
 import 'models/inventory_item.dart';
 import 'models/inventory_summary.dart';
+import 'models/inventory_supplier.dart';
 import 'models/inventory_unit.dart';
 import 'models/receipt_scan.dart';
 import 'models/menu_item.dart';
@@ -184,9 +188,10 @@ class PosAppController extends ChangeNotifier {
     cap: kAlertSetCap,
   );
   Timer? _databaseChangeDebounce;
+  Timer? _adminBlockingNoticePollTimer;
   bool _handlingDatabaseChange = false;
   bool _databaseChangePending = false;
-  final AudioPlayer _notificationPlayer = AudioPlayer();
+  AudioPlayer? _notificationPlayer;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['openid', 'email', 'profile'],
     serverClientId: GoogleAuthDefaults.webClientId,
@@ -247,6 +252,7 @@ class PosAppController extends ChangeNotifier {
   List<PosNotification> notifications = [];
   List<SyncEvent> syncEvents = [];
   List<InventoryItem> inventoryItems = [];
+  List<InventorySupplier> inventorySuppliers = [];
   List<BluetoothPrinterDevice> pairedPrinters = [];
   PrinterRuntimeState printerState = PrinterRuntimeState(
     autoPrintEnabled: true,
@@ -276,6 +282,10 @@ class PosAppController extends ChangeNotifier {
   int _dismissedAppUpdateVersionCode = 0;
   AppUpdateInfo? _appUpdateWaitingForPermission;
   bool _checkingForAppUpdate = false;
+  bool _checkingAdminBlockingNotice = false;
+  AdminBlockingNotice? adminBlockingNotice;
+  bool adminBlockingNoticeRefreshing = false;
+  String? adminBlockingNoticeError;
 
   ServerConfig serverConfig = ServerConfig(
     serverId: '',
@@ -324,6 +334,7 @@ class PosAppController extends ChangeNotifier {
   bool get isCloudReady =>
       cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl;
   bool get isManager => accountRole.isManager;
+  bool get hasAdminBlockingNotice => adminBlockingNotice?.isBlocking == true;
 
   /// Order-triggered printer side effects (auto-print + preflight + alerts).
   bool get orderPrinterSideEffectsEnabled => true;
@@ -340,6 +351,7 @@ class PosAppController extends ChangeNotifier {
     // Re-check notification permission in case the user just granted it from
     // system settings while the app was backgrounded.
     unawaited(systemNotifications.ensurePermissionGranted());
+    unawaited(refreshAdminBlockingNotice());
     if (!isCloudReady || !cloudConfig.canSync) return;
     final hasInternet = await connectivityService.hasInternetAccess();
     if (hasInternet) {
@@ -412,6 +424,7 @@ class PosAppController extends ChangeNotifier {
         tableCount: preferences.getInt(_tableCountKey) ?? 10,
         customerMenuTheme:
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
+        deliveryCharge: preferences.getDouble(_deliveryChargeKey) ?? 0,
       );
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
@@ -435,6 +448,9 @@ class PosAppController extends ChangeNotifier {
         deviceToken: preferences.getString(_deviceTokenKey) ?? '',
         autoSyncIntervalSeconds: preferences.getInt(_autoSyncIntervalKey) ?? 30,
       );
+      await _loadCachedAdminBlockingNotice(preferences);
+      await refreshAdminBlockingNotice();
+      _startAdminBlockingNoticePolling();
       accountEmail = preferences.getString(_accountEmailKey) ?? '';
       accountUsername = preferences.getString(_accountUsernameKey) ?? '';
       accountId = preferences.getString(_accountIdKey) ?? '';
@@ -690,7 +706,7 @@ class PosAppController extends ChangeNotifier {
     final cleanRestaurantName = restaurantName.trim();
     final cleanManagerName = managerName?.trim() ?? '';
     final cleanOutletName = cleanRestaurantName;
-    final cleanTableCount = tableCount.clamp(1, 200);
+    final cleanTableCount = tableCount.clamp(0, 200);
     if (cleanManagerName.isNotEmpty) {
       accountDisplayName = cleanManagerName;
     }
@@ -849,6 +865,7 @@ class PosAppController extends ChangeNotifier {
     _hasMoreOrders = loadedOrders.length >= kOrdersInitialPage;
     syncEvents = await database.getSyncEvents(statuses: null, limit: 100);
     inventoryItems = await database.getInventoryItems();
+    inventorySuppliers = await database.getInventorySuppliers();
     inventoryTodaySpend = await database.getInventoryPurchaseTotalForDate(
       DateTime.now(),
     );
@@ -913,6 +930,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> refreshInventory() async {
     inventoryItems = await database.getInventoryItems();
+    inventorySuppliers = await database.getInventorySuppliers();
     inventoryTodaySpend = await database.getInventoryPurchaseTotalForDate(
       DateTime.now(),
     );
@@ -1160,6 +1178,29 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  Future<String?> completeFacebookChatbotNativeOAuth(
+    String userAccessToken,
+  ) async {
+    try {
+      facebookChatbotLoading = true;
+      facebookChatbotError = null;
+      notifyListeners();
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final sessionId = await cloudApiService
+          .completeFacebookChatbotNativeOAuth(userAccessToken: userAccessToken);
+      return sessionId.isEmpty ? null : sessionId;
+    } catch (error) {
+      facebookChatbotError = _userVisibleError(error);
+      return null;
+    } finally {
+      facebookChatbotLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> completeFacebookChatbotOAuth({
     required String sessionId,
     required String pageId,
@@ -1372,6 +1413,14 @@ class PosAppController extends ChangeNotifier {
       showDevOtpHint = false;
     }
     notifyListeners();
+  }
+
+  Future<Map<String, Object?>> loadLiveDiagnostics() async {
+    cloudApiService.configure(
+      cloudConfig: cloudConfig,
+      serverConfig: serverConfig,
+    );
+    return cloudApiService.testHealth();
   }
 
   Future<bool> loginAsDemoManager() async {
@@ -1970,6 +2019,14 @@ class PosAppController extends ChangeNotifier {
   void _handleRemoteSyncEvent(Map<String, Object?> event) {
     final type = event['type']?.toString() ?? '';
     final data = event['data'];
+    if (type == 'admin_blocking_notice_changed' && data is Map) {
+      unawaited(
+        _applyAdminBlockingNotice(
+          AdminBlockingNotice.fromJson(Map<String, Object?>.from(data)),
+        ),
+      );
+      return;
+    }
     if (type == 'app_update_disabled') {
       pendingAppUpdate = null;
       appUpdateError = null;
@@ -2008,6 +2065,81 @@ class PosAppController extends ChangeNotifier {
     } finally {
       _checkingForAppUpdate = false;
     }
+  }
+
+  Future<void> refreshAdminBlockingNotice({bool quiet = true}) async {
+    if (_checkingAdminBlockingNotice || !cloudConfig.hasValidBaseUrl) return;
+    _checkingAdminBlockingNotice = true;
+    adminBlockingNoticeRefreshing = true;
+    if (hasAdminBlockingNotice) notifyListeners();
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig.copyWith(enabled: true),
+        serverConfig: serverConfig,
+      );
+      final notice = await cloudApiService.fetchAdminBlockingNotice();
+      await _applyAdminBlockingNotice(notice);
+    } catch (error) {
+      if (hasAdminBlockingNotice) {
+        adminBlockingNoticeError = strings.adminBlockingNoticeRefreshFailed;
+        notifyListeners();
+      }
+      if (!quiet) rethrow;
+      debugPrint('[QB-BLOCKING-NOTICE] refresh failed: $error');
+    } finally {
+      _checkingAdminBlockingNotice = false;
+      adminBlockingNoticeRefreshing = false;
+      notifyListeners();
+    }
+  }
+
+  void _startAdminBlockingNoticePolling() {
+    _adminBlockingNoticePollTimer?.cancel();
+    if (!cloudConfig.hasValidBaseUrl) return;
+    _adminBlockingNoticePollTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(refreshAdminBlockingNotice()),
+    );
+  }
+
+  Future<void> _loadCachedAdminBlockingNotice(
+    SharedPreferences preferences,
+  ) async {
+    final raw = preferences.getString(_adminBlockingNoticeKey);
+    if (raw == null || raw.trim().isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        await preferences.remove(_adminBlockingNoticeKey);
+        return;
+      }
+      final notice = AdminBlockingNotice.fromJson(
+        Map<String, Object?>.from(decoded),
+      );
+      if (notice.isBlocking) {
+        adminBlockingNotice = notice;
+      } else {
+        await preferences.remove(_adminBlockingNoticeKey);
+      }
+    } catch (_) {
+      await preferences.remove(_adminBlockingNoticeKey);
+    }
+  }
+
+  Future<void> _applyAdminBlockingNotice(AdminBlockingNotice notice) async {
+    final preferences = await SharedPreferences.getInstance();
+    if (notice.isBlocking) {
+      adminBlockingNotice = notice;
+      await preferences.setString(
+        _adminBlockingNoticeKey,
+        jsonEncode(notice.toJson()),
+      );
+    } else {
+      adminBlockingNotice = null;
+      await preferences.remove(_adminBlockingNoticeKey);
+    }
+    adminBlockingNoticeError = null;
+    notifyListeners();
   }
 
   Future<void> _considerAppUpdate(AppUpdateInfo update) async {
@@ -2231,7 +2363,10 @@ class PosAppController extends ChangeNotifier {
     _clearOrderAlertTracking();
     // Stop the notification sound if it is mid-playback so the audio buffer
     // is released along with the rest of the per-session state.
-    unawaited(_notificationPlayer.stop());
+    final notificationPlayer = _notificationPlayer;
+    if (notificationPlayer != null) {
+      unawaited(notificationPlayer.stop());
+    }
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(_accountLoggedInKey, false);
     // Clear tenant-scoped prefs so the next login cannot briefly show the
@@ -2514,6 +2649,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> saveInventoryItem(InventoryItem item) async {
+    if (!isManager) throw Exception('Only managers can edit inventory items.');
     final normalized = item.copyWith(
       unit: InventoryUnits.normalize(item.unit),
       updatedAt: DateTime.now(),
@@ -2524,6 +2660,9 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> deleteInventoryItem(String id) async {
+    if (!isManager) {
+      throw Exception('Only managers can delete inventory items.');
+    }
     await database.deleteInventoryItem(id);
     await refreshInventory();
     if (cloudConfig.canSync) {
@@ -2538,6 +2677,9 @@ class PosAppController extends ChangeNotifier {
     required double quantity,
     required double totalCostBdt,
     String note = '',
+    String? supplierId,
+    String supplierName = '',
+    String billRef = '',
   }) async {
     if (quantity <= 0) {
       throw Exception('Enter a quantity greater than zero.');
@@ -2548,6 +2690,11 @@ class PosAppController extends ChangeNotifier {
       type: AdjustmentType.restock.value,
       note: note,
       totalCostBdt: totalCostBdt,
+      supplierId: supplierId,
+      supplierName: supplierName,
+      billRef: billRef,
+      createdByAccountId: accountId.isEmpty ? null : accountId,
+      createdByRole: accountRole.value,
     );
     await refreshInventory();
     await _pushLatestInventoryAdjustment(inventoryItemId);
@@ -2559,6 +2706,7 @@ class PosAppController extends ChangeNotifier {
     required String inventoryItemId,
     required double quantity,
     String note = '',
+    String reason = 'kitchen',
   }) async {
     if (quantity <= 0) {
       throw Exception('Enter a quantity greater than zero.');
@@ -2568,11 +2716,60 @@ class PosAppController extends ChangeNotifier {
       delta: -quantity,
       type: AdjustmentType.usage.value,
       note: note,
+      reason: reason,
+      createdByAccountId: accountId.isEmpty ? null : accountId,
+      createdByRole: accountRole.value,
     );
     await refreshInventory();
     await _pushLatestInventoryAdjustment(inventoryItemId);
     await _pushInventoryItemToCloud(updated);
     return updated;
+  }
+
+  Future<void> recordInventoryUsageBatch(
+    Map<String, double> quantities, {
+    required String reason,
+    String note = '',
+  }) async {
+    final rows = <StockAdjustment>[];
+    final updatedItems = <InventoryItem>[];
+    for (final entry in quantities.entries) {
+      if (entry.value <= 0) continue;
+      updatedItems.add(
+        await database.adjustStock(
+          inventoryItemId: entry.key,
+          delta: -entry.value,
+          type: reason == 'spoiled'
+              ? AdjustmentType.waste.value
+              : AdjustmentType.usage.value,
+          note: note,
+          reason: reason,
+          createdByAccountId: accountId.isEmpty ? null : accountId,
+          createdByRole: accountRole.value,
+        ),
+      );
+      rows.add((await database.getStockAdjustments(entry.key, limit: 1)).first);
+    }
+    await refreshInventory();
+    if (cloudConfig.canSync && rows.isNotEmpty) {
+      try {
+        await cloudApiService.pushInventoryAdjustments(rows);
+        for (final item in updatedItems) {
+          await cloudApiService.pushInventoryItem(item);
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> saveInventorySupplier(InventorySupplier supplier) async {
+    if (!isManager) throw Exception('Only managers can edit suppliers.');
+    var saved = supplier;
+    if (cloudConfig.canSync) {
+      saved = await cloudApiService.saveInventorySupplier(supplier);
+    }
+    await database.upsertInventorySupplier(saved);
+    inventorySuppliers = await database.getInventorySuppliers();
+    notifyListeners();
   }
 
   Future<InventoryItem> setInventoryEndOfDayCount({
@@ -2582,6 +2779,8 @@ class PosAppController extends ChangeNotifier {
     final updated = await database.setDailyStockCount(
       inventoryItemId: inventoryItemId,
       quantity: quantity,
+      createdByAccountId: accountId.isEmpty ? null : accountId,
+      createdByRole: accountRole.value,
     );
     await refreshInventory();
     await _pushLatestInventoryAdjustment(inventoryItemId);
@@ -2620,6 +2819,9 @@ class PosAppController extends ChangeNotifier {
       serviceType: serviceType,
       covers: covers,
       paymentMethod: paymentMethod,
+      deliveryCharge: serviceType == OrderServiceType.delivery
+          ? serverConfig.deliveryCharge
+          : 0,
       source: OrderSource.manual,
       createdByAccountId: accountId.isEmpty ? null : accountId,
       createdByRole: accountRole.value,
@@ -2632,6 +2834,182 @@ class PosAppController extends ChangeNotifier {
       unawaited(_notifyPrinterUnavailableForCreatedOrder(order));
     }
     return order;
+  }
+
+  Future<OrderModel> createDesktopOrder({
+    required List<OrderRequestItem> requestedItems,
+    required PosShift shift,
+    required DesktopPosSettings settings,
+    OrderServiceType? serviceType,
+    String? tableNo,
+    String? customerName,
+    String? note,
+    int? covers,
+  }) async {
+    final current = await database.getCurrentPosShift();
+    if (current == null || current.id != shift.id) {
+      throw Exception('Open the outlet register shift before creating a sale.');
+    }
+    final order = await database.createOrder(
+      requestedItems: requestedItems,
+      customerName: customerName,
+      tableNo: tableNo,
+      note: note,
+      serviceType: serviceType,
+      covers: covers,
+      source: OrderSource.desktopPos,
+      shiftId: shift.id,
+      vatRatePercent: settings.vatRatePercent,
+      createdByAccountId: accountId.isEmpty ? null : accountId,
+      createdByRole: accountRole.value,
+      initialStatus: OrderStatus.accepted,
+    );
+    unawaited(syncService.syncNow());
+    return order;
+  }
+
+  Future<DesktopPosSettings> loadDesktopPosSettings() {
+    return database.getDesktopPosSettings(
+      fallbackTableCount: serverConfig.tableCount,
+    );
+  }
+
+  Future<void> refreshDesktopPosFromCloud() async {
+    if (!cloudConfig.canSync) return;
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final settingsJson = await cloudApiService.pullDesktopPosSettings();
+      if (settingsJson != null) {
+        await database.applyRemoteDesktopPosSettings(
+          DesktopPosSettings.fromJson(
+            settingsJson,
+            fallbackTableCount: serverConfig.tableCount,
+          ),
+        );
+      }
+      final shiftJson = await cloudApiService.pullDesktopCurrentShift();
+      if (shiftJson != null) {
+        await database.applyRemotePosShift(PosShift.fromJson(shiftJson));
+      } else {
+        await database.clearRemoteClosedPosShift();
+      }
+      final reportJson = await cloudApiService.pullDesktopPosReport();
+      if (reportJson != null) {
+        await database.saveCachedDesktopPosReport(
+          PosReportSnapshot.fromJson(reportJson),
+        );
+      }
+    } catch (error) {
+      debugPrint('[QB-DESKTOP] POS bootstrap refresh skipped: $error');
+    }
+  }
+
+  Future<void> saveDesktopPosSettings(DesktopPosSettings settings) async {
+    if (!isManager) throw Exception('Only managers can change POS settings.');
+    await database.saveDesktopPosSettings(settings);
+    await updateTableCount(settings.tableCount);
+    unawaited(syncService.syncNow());
+  }
+
+  Future<PosShift?> currentDesktopShift() => database.getCurrentPosShift();
+
+  Future<PosShift> openDesktopShift({
+    required double openingCash,
+    required Map<String, int> denominations,
+  }) async {
+    final shift = await database.openPosShift(
+      openingCash: openingCash,
+      denominations: denominations,
+      openedByAccountId: accountId,
+    );
+    unawaited(syncService.syncNow());
+    return shift;
+  }
+
+  Future<PosShift> closeDesktopShift({
+    required PosShift shift,
+    required double countedCash,
+    required Map<String, int> denominations,
+  }) async {
+    if (!isManager) throw Exception('Only managers can close a shift.');
+    final result = await database.closePosShift(
+      shiftId: shift.id,
+      countedCash: countedCash,
+      denominations: denominations,
+      closedByAccountId: accountId,
+    );
+    unawaited(syncService.syncNow());
+    return result;
+  }
+
+  Future<OrderModel> sendDesktopKot(OrderModel order, {String? note}) async {
+    final unsent = order.items
+        .where((item) => item.kotSentAt == null)
+        .map((item) => item.id)
+        .toList(growable: false);
+    if (unsent.isEmpty) return order;
+    final updated = await database.markDesktopKotSent(
+      orderId: order.id,
+      itemIds: unsent,
+      note: note,
+    );
+    unawaited(syncService.syncNow());
+    return updated;
+  }
+
+  Future<OrderModel> settleDesktopOrder({
+    required OrderModel order,
+    required PosShift shift,
+    required List<PosSettlementLine> settlements,
+    required double discountAmount,
+    required double serviceChargeRatePercent,
+    required double serviceChargeAmount,
+    String? discountPresetId,
+    String? discountLabel,
+  }) async {
+    final settled = await database.settleDesktopOrder(
+      orderId: order.id,
+      shift: shift,
+      settlements: settlements,
+      discountAmount: discountAmount,
+      serviceChargeRatePercent: serviceChargeRatePercent,
+      serviceChargeAmount: serviceChargeAmount,
+      discountPresetId: discountPresetId,
+      discountLabel: discountLabel,
+    );
+    unawaited(syncService.syncNow());
+    return settled;
+  }
+
+  Future<PosReportSnapshot> desktopPosReport({int days = 1}) async {
+    final local = await database.desktopPosReport(days: days);
+    if (!syncState.cloudConnected) return local;
+    return await database.getCachedDesktopPosReport() ?? local;
+  }
+
+  Future<void> auditDesktopOrder({
+    required OrderModel order,
+    required String action,
+    required String reason,
+    double? amount,
+    String? paymentMethod,
+  }) async {
+    if (!isManager) throw Exception('Only managers can perform this action.');
+    await database.queueDesktopAudit(
+      orderId: order.id,
+      action: action,
+      reason: reason,
+      shiftId: order.shiftId,
+      amount: amount,
+      paymentMethod: paymentMethod,
+    );
+    if (action == 'void' && order.status != OrderStatus.served) {
+      await database.updateOrderStatus(order.id, OrderStatus.cancelled);
+    }
+    unawaited(syncService.syncNow());
   }
 
   Future<void> updateOrderStatus(String id, OrderStatus status) async {
@@ -2742,7 +3120,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> updateTableCount(int count) async {
-    final clamped = count.clamp(1, 200);
+    final clamped = count.clamp(0, 200);
     if (serverConfig.tableCount == clamped) return;
     serverConfig = serverConfig.copyWith(tableCount: clamped);
     notifyListeners();
@@ -2835,6 +3213,26 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  Future<void> updateDeliveryCharge(double value) async {
+    final clean = value.clamp(0, 100000).toDouble();
+    if (serverConfig.deliveryCharge == clean) return;
+    serverConfig = serverConfig.copyWith(deliveryCharge: clean);
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setDouble(_deliveryChargeKey, clean);
+    if (serverConfig.outletId.trim().isNotEmpty && cloudConfig.canSync) {
+      try {
+        cloudApiService.configure(
+          cloudConfig: cloudConfig,
+          serverConfig: serverConfig,
+        );
+        await cloudApiService.updateOutletDeliveryCharge(clean);
+      } catch (error) {
+        debugPrint('[QB-MENU] could not sync delivery charge: $error');
+      }
+    }
+  }
+
   Future<void> updateLanguage(AppLanguage value) async {
     if (language == value) return;
     language = value;
@@ -2875,6 +3273,33 @@ class PosAppController extends ChangeNotifier {
     return pairedPrinters;
   }
 
+  Future<List<String>> listSystemPrinterQueues() {
+    return printerService.listSystemPrinterQueues();
+  }
+
+  bool get supportsDirectBluetoothPrinting {
+    return printerService.supportsDirectBluetoothPrinting;
+  }
+
+  Future<void> selectSystemPrinterQueue(
+    String queueName, {
+    int paperWidthMm = 58,
+  }) async {
+    await printerService.selectSystemPrinterQueue(
+      queueName,
+      paperWidthMm: paperWidthMm,
+    );
+    printerState = printerService.state;
+    notifyListeners();
+  }
+
+  Future<bool> connectLocalUsbPrinterAuto() async {
+    final ok = await printerService.connectLocalUsbPrinterAuto();
+    printerState = printerService.state;
+    notifyListeners();
+    return ok;
+  }
+
   Future<bool> connectPrinter(BluetoothPrinterDevice printer) async {
     final ok = await printerService.connect(printer);
     printerState = printerService.state;
@@ -2900,11 +3325,14 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> testPrinter() {
-    return printerService.testPrint(
+  Future<bool> testPrinter() async {
+    final ok = await printerService.testPrint(
       restaurantName: restaurantName,
       outletName: outletName,
     );
+    printerState = printerService.state;
+    notifyListeners();
+    return ok;
   }
 
   Future<String> readPrinterDiagnostics() {
@@ -3237,9 +3665,10 @@ class PosAppController extends ChangeNotifier {
     if (!notificationSoundEnabled) return;
     final assetPath = _assetSoundForType(type);
     try {
-      await _notificationPlayer.stop();
+      final player = _notificationPlayer ??= AudioPlayer();
+      await player.stop();
       if (assetPath != null) {
-        await _notificationPlayer.play(AssetSource(assetPath));
+        await player.play(AssetSource(assetPath));
         return;
       }
       // Fallback for types without a dedicated asset (print events, etc.)
@@ -3482,13 +3911,17 @@ class PosAppController extends ChangeNotifier {
   @override
   void dispose() {
     _databaseChangeDebounce?.cancel();
+    _adminBlockingNoticePollTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
     unawaited(syncService.dispose());
     unawaited(printerService.dispose());
     unawaited(pushNotificationService.dispose());
-    unawaited(_notificationPlayer.dispose());
+    final notificationPlayer = _notificationPlayer;
+    if (notificationPlayer != null) {
+      unawaited(notificationPlayer.dispose());
+    }
     appUpdateInstaller.close();
     cloudApiService.close();
     unawaited(database.close());
@@ -3557,6 +3990,11 @@ class PosAppController extends ChangeNotifier {
       _customerMenuThemeKey,
       serverConfig.customerMenuTheme,
     );
+    await preferences.setDouble(
+      _deliveryChargeKey,
+      serverConfig.deliveryCharge,
+    );
+    _startAdminBlockingNoticePolling();
     unawaited(_retryPushRegistrationIfReady());
   }
 
@@ -3731,8 +4169,11 @@ class PosAppController extends ChangeNotifier {
       'local_pos_variance_tracking_enabled';
   static final String _dismissedAppUpdateVersionCodeKey =
       'local_pos_dismissed_app_update_version_code';
+  static final String _adminBlockingNoticeKey =
+      'local_pos_admin_blocking_notice';
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
+  static final String _deliveryChargeKey = 'local_pos_delivery_charge';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';

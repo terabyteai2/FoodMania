@@ -575,14 +575,16 @@ class _OrdersScreenState extends State<OrdersScreen>
       deliveryAddress: result.deliveryAddress,
       mobileNumber: result.mobileNumber,
     );
-    if (result.itemsChanged && result.items != null && result.items!.isNotEmpty) {
+    if (result.itemsChanged &&
+        result.items != null &&
+        result.items!.isNotEmpty) {
       try {
         await app.updateOrderItems(order.id, result.items!);
       } catch (error) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: TfText('$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: TfText('$error')));
       }
     }
   }
@@ -960,10 +962,9 @@ class _OrderList extends StatelessWidget {
           child: useGrid
               ? GridView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                  gridDelegate:
-                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 480,
-                    mainAxisExtent: 170,
+                    mainAxisExtent: 280,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
                   ),
@@ -1632,7 +1633,10 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
     });
   }
 
-  ({String name, double price}) _metaFor(BuildContext context, String menuItemId) {
+  ({String name, double price}) _metaFor(
+    BuildContext context,
+    String menuItemId,
+  ) {
     final cached = _itemMeta[menuItemId];
     if (cached != null) return cached;
     final app = AppScope.of(context);
@@ -1779,7 +1783,10 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                               ),
                             ),
                             TfText(
-                              _metaFor(context, entry.key).price.toStringAsFixed(2),
+                              _metaFor(
+                                context,
+                                entry.key,
+                              ).price.toStringAsFixed(2),
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: PosColors.muted,
@@ -1869,16 +1876,18 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                   serviceType: _serviceType,
                                   tableNo:
                                       _serviceType == OrderServiceType.dineIn
-                                          ? _clean(_tableCtrl)
-                                          : null,
+                                      ? _clean(_tableCtrl)
+                                      : null,
                                   note: _clean(_noteCtrl),
-                                  customerName:
-                                      isDelivery ? _clean(_nameCtrl) : null,
+                                  customerName: isDelivery
+                                      ? _clean(_nameCtrl)
+                                      : null,
                                   deliveryAddress: isDelivery
                                       ? _clean(_addressCtrl)
                                       : null,
-                                  mobileNumber:
-                                      isDelivery ? _clean(_phoneCtrl) : null,
+                                  mobileNumber: isDelivery
+                                      ? _clean(_phoneCtrl)
+                                      : null,
                                   items: items,
                                   itemsChanged: _itemsDirty,
                                 ),
@@ -1923,16 +1932,18 @@ class _MenuItemPickerSheetState extends State<_MenuItemPickerSheet> {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final query = _query.trim().toLowerCase();
-    final filtered = widget.menuItems.where((item) {
-      if (query.isEmpty) return true;
-      final searchable = [
-        item.name,
-        item.nameEn,
-        item.nameBn,
-        item.category,
-      ].whereType<String>().join(' ').toLowerCase();
-      return searchable.contains(query);
-    }).toList(growable: false);
+    final filtered = widget.menuItems
+        .where((item) {
+          if (query.isEmpty) return true;
+          final searchable = [
+            item.name,
+            item.nameEn,
+            item.nameBn,
+            item.category,
+          ].whereType<String>().join(' ').toLowerCase();
+          return searchable.contains(query);
+        })
+        .toList(growable: false);
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -2792,18 +2803,39 @@ class _WizardHeader extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: PosColors.primarySoft,
                   borderRadius: BorderRadius.circular(PosRadii.xs),
-                  border: Border.all(color: PosColors.primary.withValues(alpha: 0.3), width: 0.5),
+                  border: Border.all(
+                    color: PosColors.primary.withValues(alpha: 0.3),
+                    width: 0.5,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(width: 6, height: 6, decoration: const BoxDecoration(color: PosColors.primary, shape: BoxShape.circle)),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: PosColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 6),
-                    const Text('COUNTER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: PosColors.primaryDark, letterSpacing: 0.5)),
+                    const Text(
+                      'COUNTER',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.primaryDark,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -3581,6 +3613,13 @@ class _CreatedOrderBillCard extends StatelessWidget {
             _AmountLine(
               label: text.vatLabelWithPercent(order!.vatRatePercent),
               value: tfFormatCurrency(context, order!.vatAmount),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (order != null && order!.deliveryCharge > 0) ...[
+            _AmountLine(
+              label: text.menuDeliveryCharge,
+              value: tfFormatCurrency(context, order!.deliveryCharge),
             ),
             const SizedBox(height: 8),
           ],

@@ -7,6 +7,9 @@ class DailyReport {
     required this.headlineBn,
     required this.breakdown,
     required this.reorderSuggestions,
+    this.stockFlow = const StockFlow(inQty: 0, outQty: 0, spendBdt: 0),
+    this.revenueSplit = const [],
+    this.topSellers = const [],
   });
 
   final String date;
@@ -16,6 +19,9 @@ class DailyReport {
   final String headlineBn;
   final List<VarianceBreakdown> breakdown;
   final List<ReorderSuggestion> reorderSuggestions;
+  final StockFlow stockFlow;
+  final List<RevenueSplit> revenueSplit;
+  final List<TopSeller> topSellers;
 
   factory DailyReport.fromJson(Map<String, Object?> json) {
     return DailyReport(
@@ -32,8 +38,70 @@ class DailyReport {
           .whereType<Map>()
           .map((row) => ReorderSuggestion.fromJson(row.cast<String, Object?>()))
           .toList(growable: false),
+      stockFlow: StockFlow.fromJson(
+        (json['stockFlow'] as Map?)?.cast<String, Object?>() ?? const {},
+      ),
+      revenueSplit: ((json['revenueSplit'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((row) => RevenueSplit.fromJson(row.cast<String, Object?>()))
+          .toList(growable: false),
+      topSellers: ((json['topSellers'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((row) => TopSeller.fromJson(row.cast<String, Object?>()))
+          .toList(growable: false),
     );
   }
+}
+
+class StockFlow {
+  const StockFlow({
+    required this.inQty,
+    required this.outQty,
+    required this.spendBdt,
+  });
+  final double inQty;
+  final double outQty;
+  final double spendBdt;
+  factory StockFlow.fromJson(Map<String, Object?> json) => StockFlow(
+    inQty: _parseDouble(json['inQty']),
+    outQty: _parseDouble(json['outQty']),
+    spendBdt: _parseDouble(json['spendBdt']),
+  );
+}
+
+class RevenueSplit {
+  const RevenueSplit({
+    required this.key,
+    required this.label,
+    required this.valueBdt,
+    required this.pct,
+  });
+  final String key;
+  final String label;
+  final double valueBdt;
+  final int pct;
+  factory RevenueSplit.fromJson(Map<String, Object?> json) => RevenueSplit(
+    key: json['key'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+    valueBdt: _parseDouble(json['valueBdt']),
+    pct: _parseInt(json['pct']),
+  );
+}
+
+class TopSeller {
+  const TopSeller({
+    required this.name,
+    required this.qty,
+    required this.salesBdt,
+  });
+  final String name;
+  final int qty;
+  final double salesBdt;
+  factory TopSeller.fromJson(Map<String, Object?> json) => TopSeller(
+    name: json['name'] as String? ?? '',
+    qty: _parseInt(json['qty']),
+    salesBdt: _parseDouble(json['salesBdt']),
+  );
 }
 
 class VarianceBreakdown {

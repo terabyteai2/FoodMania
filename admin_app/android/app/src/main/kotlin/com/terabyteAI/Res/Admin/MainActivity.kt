@@ -24,6 +24,13 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.facebook.CallbackManager
+import com.facebook.FacebookCallback
+import com.facebook.FacebookException
+import com.facebook.FacebookSdk
+import com.facebook.login.LoginBehavior
+import com.facebook.login.LoginManager
+import com.facebook.login.LoginResult
 import com.sunmi.peripheral.printer.InnerPrinterCallback
 import com.sunmi.peripheral.printer.InnerPrinterManager
 import com.sunmi.peripheral.printer.SunmiPrinterService
@@ -47,6 +54,7 @@ class MainActivity : FlutterActivity() {
     private val appUpdateChannelName = "com.terabyteai.foodmania/app_update"
     private val usbPrinterChannelName = "com.terabyteai.foodmania/usb_printer"
     private val builtInPrinterChannelName = "com.terabyteai.foodmania/built_in_printer"
+    private val facebookLoginChannelName = "com.terabyteai.foodmania/facebook_login"
 
     companion object {
         private const val PENDING_CHANNEL_ID = "pos_pending_orders_v2"
@@ -72,6 +80,9 @@ class MainActivity : FlutterActivity() {
     )
 
     private var pendingUsbPrint: PendingUsbPrint? = null
+    private var pendingFacebookLoginResult: MethodChannel.Result? = null
+    private val facebookCallbackManager = CallbackManager.Factory.create()
+    private var facebookCallbackRegistered = false
     private var usbReceiverRegistered = false
     private var sunmiBinding = false
     private var sunmiBound = false
@@ -123,6 +134,7 @@ class MainActivity : FlutterActivity() {
                 "android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}"
         )
         ensureSunmiPrinterBound()
+        registerFacebookLoginChannel(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -269,6 +281,82 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun registerFacebookLoginChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, facebookLoginChannelName)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "login") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                if (pendingFacebookLoginResult != null) {
+                    result.error("LOGIN_IN_PROGRESS", "Facebook Login is already in progress.", null)
+                    return@setMethodCallHandler
+                }
+                val appId = call.argument<String>("appId")?.trim().orEmpty()
+                val clientToken = call.argument<String>("clientToken")?.trim().orEmpty()
+                val scopes = call.argument<List<String>>("scopes")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    .orEmpty()
+                if (appId.isEmpty() || clientToken.isEmpty() || scopes.isEmpty()) {
+                    result.error("INVALID_ARGUMENT", "Facebook Login configuration is incomplete.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    FacebookSdk.setApplicationId(appId)
+                    FacebookSdk.setClientToken(clientToken)
+                    FacebookSdk.setAutoInitEnabled(false)
+                    FacebookSdk.setAutoLogAppEventsEnabled(false)
+                    FacebookSdk.setAdvertiserIDCollectionEnabled(false)
+                    @Suppress("DEPRECATION")
+                    FacebookSdk.sdkInitialize(applicationContext)
+                    ensureFacebookLoginCallbackRegistered()
+                    pendingFacebookLoginResult = result
+                    LoginManager.getInstance()
+                        .setLoginBehavior(LoginBehavior.NATIVE_ONLY)
+                        .logInWithReadPermissions(this, scopes)
+                } catch (error: Exception) {
+                    pendingFacebookLoginResult = null
+                    result.error("FACEBOOK_LOGIN_FAILED", error.message, null)
+                }
+            }
+    }
+
+    private fun ensureFacebookLoginCallbackRegistered() {
+        if (facebookCallbackRegistered) return
+        LoginManager.getInstance().registerCallback(
+            facebookCallbackManager,
+            object : FacebookCallback<LoginResult> {
+                override fun onSuccess(result: LoginResult) {
+                    val token = result.accessToken.token
+                    finishFacebookLogin(mapOf("status" to "success", "accessToken" to token))
+                }
+
+                override fun onCancel() {
+                    finishFacebookLogin(mapOf("status" to "cancelled"))
+                }
+
+                override fun onError(error: FacebookException) {
+                    finishFacebookLogin(
+                        mapOf("status" to "failed", "message" to (error.message ?: "Facebook Login failed"))
+                    )
+                }
+            },
+        )
+        facebookCallbackRegistered = true
+    }
+
+    private fun finishFacebookLogin(value: Map<String, String>) {
+        val result = pendingFacebookLoginResult ?: return
+        pendingFacebookLoginResult = null
+        result.success(value)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        facebookCallbackManager.onActivityResult(requestCode, resultCode, data)
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {

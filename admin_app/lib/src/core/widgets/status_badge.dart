@@ -37,12 +37,14 @@ class StatusBadge extends StatelessWidget {
       color: switch (source) {
         OrderSource.cloud => PosColors.info,
         OrderSource.facebookMessenger => PosColors.success,
+        OrderSource.desktopPos => PosColors.primaryDark,
         OrderSource.manual => PosColors.warning,
         OrderSource.localLan => PosColors.primary,
       },
       icon: switch (source) {
         OrderSource.cloud => Icons.cloud_outlined,
         OrderSource.facebookMessenger => Icons.chat_bubble_outline_rounded,
+        OrderSource.desktopPos => Icons.desktop_windows_outlined,
         OrderSource.manual => Icons.edit_note,
         OrderSource.localLan => Icons.router_outlined,
       },

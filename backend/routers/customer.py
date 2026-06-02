@@ -378,6 +378,7 @@ async def get_outlet_info(
         "outletName": outlet.name,
         "bannerUrl": _rewrite_upload_url(request, outlet.banner_url),
         "videoUrl": _rewrite_upload_url(request, outlet.video_url),
+        "deliveryCharge": float(outlet.delivery_charge or 0),
         "galleryImages": gallery,
         "menuTheme": _public_menu_theme(outlet.menu_theme),
     })

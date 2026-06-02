@@ -8,6 +8,8 @@ import 'package:local_pos/src/core/theme/app_theme.dart';
 import 'package:local_pos/src/core/widgets/menu_image_view.dart';
 import 'package:local_pos/src/features/dashboard/dashboard_screen.dart';
 import 'package:local_pos/src/models/menu_item.dart';
+import 'package:local_pos/src/models/account_role.dart';
+import 'package:local_pos/src/models/dashboard_summary.dart';
 import 'package:local_pos/src/models/order_item.dart';
 import 'package:local_pos/src/models/order_model.dart';
 import 'package:local_pos/src/models/order_payment_method.dart';
@@ -17,10 +19,14 @@ import 'package:local_pos/src/models/order_status.dart';
 import 'package:local_pos/src/services/printer_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-Widget _scoped(PosAppController controller, Widget child) {
+Widget _scoped(
+  PosAppController controller,
+  Widget child, {
+  Locale locale = const Locale('en'),
+}) {
   return AppScope(
     controller: controller,
-    child: MaterialApp(theme: AppTheme.light(), home: child),
+    child: MaterialApp(locale: locale, theme: AppTheme.light(), home: child),
   );
 }
 
@@ -107,22 +113,6 @@ class _OrderFlowController extends PosAppController {
   Future<bool> printCustomerInvoice(OrderModel order) async {
     printInvoiceCalls++;
     return true;
-  }
-}
-
-class _ReviewSyncController extends PosAppController {
-  int syncNowCalls = 0;
-  int refreshDashboardSummaryCalls = 0;
-
-  @override
-  Future<bool> syncNow() async {
-    syncNowCalls++;
-    return true;
-  }
-
-  @override
-  Future<void> refreshDashboardSummary() async {
-    refreshDashboardSummaryCalls++;
   }
 }
 
@@ -299,10 +289,10 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('review sync defaults on and syncs again when re-enabled', (
+  testWidgets('owner review relies on normal dashboard refresh', (
     tester,
   ) async {
-    final controller = _ReviewSyncController()..language = AppLanguage.en;
+    final controller = PosAppController()..language = AppLanguage.en;
 
     await tester.pumpWidget(
       _scoped(controller, DashboardScreen(onNavigate: (_) {})),
@@ -313,30 +303,278 @@ void main() {
     await tester.tap(find.text('Owner').last);
     await tester.pumpAndSettle();
 
-    expect(controller.syncNowCalls, 1);
-    expect(
-      tester.widget<Switch>(find.byKey(const ValueKey('review-auto-sync'))).value,
-      isTrue,
+    expect(find.byKey(const ValueKey('review-auto-sync')), findsNothing);
+    expect(find.byKey(const ValueKey('review-sync-now')), findsNothing);
+
+    controller.dispose();
+  });
+
+  testWidgets('staff dashboard does not expose owner review switcher', (
+    tester,
+  ) async {
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..accountRole = AccountRole.staff;
+
+    await tester.pumpWidget(
+      _scoped(controller, DashboardScreen(onNavigate: (_) {})),
     );
 
-    await tester.pump(const Duration(minutes: 1));
-    await tester.pumpAndSettle();
-    expect(controller.syncNowCalls, 2);
+    expect(find.byKey(const ValueKey('dashboard-view-dropdown')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('review-auto-sync')));
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(minutes: 1));
-    await tester.pumpAndSettle();
-    expect(controller.syncNowCalls, 2);
+    controller.dispose();
+  });
 
-    await tester.tap(find.byKey(const ValueKey('review-auto-sync')));
+  testWidgets('standard dashboard renders real floor states and FOH counter', (
+    tester,
+  ) async {
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..businessTier = BusinessTier.standard
+      ..menuItems = [_menuItem()]
+      ..dashboardSummary = DashboardSummary.fromJson({
+        'asOf': '2026-06-01T00:00:00Z',
+        'moneyFirst': {},
+        'rightNow': {
+          'tablesSeated': 1,
+          'tablesTotal': 2,
+          'floorTables': [
+            {'tableNo': '1', 'state': 'bill', 'covers': 3},
+            {'tableNo': '2', 'state': 'idle', 'covers': 0},
+          ],
+        },
+      });
+
+    await tester.pumpWidget(
+      _scoped(controller, DashboardScreen(onNavigate: (_) {})),
+    );
+
+    expect(find.text('FOH counter'), findsOneWidget);
+    expect(find.byKey(const ValueKey('foh-counter-Burger')), findsOneWidget);
+    expect(find.text('BILL'), findsOneWidget);
+    expect(find.text('IDLE'), findsOneWidget);
+
+    controller.dispose();
+  });
+
+  testWidgets('restaurant mode selection renders the advanced dashboard', (
+    tester,
+  ) async {
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..businessTier = BusinessTier.standard
+      ..dashboardSummary = DashboardSummary.fromJson({
+        'asOf': '2026-06-01T00:00:00Z',
+        'moneyFirst': {},
+        'rightNow': {},
+      });
+
+    await tester.pumpWidget(
+      _scoped(controller, DashboardScreen(onNavigate: (_) {})),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('complexity-dial-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('complexity-dial-advanced')));
     await tester.pumpAndSettle();
 
-    expect(controller.syncNowCalls, 3);
+    expect(controller.businessTier, BusinessTier.advanced);
+    expect(find.text('Restaurant'), findsOneWidget);
+    expect(find.text('Right now'), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byKey(const ValueKey('review-sync-now')));
-    await tester.pumpAndSettle();
-    expect(controller.syncNowCalls, 4);
+    controller.dispose();
+  });
+
+  testWidgets(
+    'restaurant dashboard renders with Bangla locale and no summary',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = PosAppController()
+        ..language = AppLanguage.bn
+        ..businessTier = BusinessTier.advanced;
+
+      await tester.pumpWidget(
+        _scoped(
+          controller,
+          DashboardScreen(onNavigate: (_) {}),
+          locale: const Locale('bn'),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey('complexity-dial-dropdown')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const ValueKey('complexity-dial-dropdown')));
+      await tester.pumpAndSettle();
+
+      for (final tier in BusinessTier.values) {
+        expect(
+          find.byKey(ValueKey('complexity-dial-${tier.key}')),
+          findsOneWidget,
+        );
+      }
+      expect(tester.takeException(), isNull);
+
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'restaurant dashboard lays out order channels in the scroll view',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = PosAppController()
+        ..language = AppLanguage.en
+        ..businessTier = BusinessTier.advanced
+        ..dashboardSummary = DashboardSummary.fromJson({
+          'asOf': '2026-06-01T00:00:00Z',
+          'moneyFirst': {
+            'serviceMix': [
+              {
+                'key': 'dine_in',
+                'label': 'Dine-in',
+                'valueBdt': 438,
+                'pct': 33,
+              },
+              {
+                'key': 'takeaway',
+                'label': 'Takeaway',
+                'valueBdt': 880,
+                'pct': 67,
+              },
+              {'key': 'delivery', 'label': 'Delivery', 'valueBdt': 0, 'pct': 0},
+            ],
+          },
+          'rightNow': {},
+        });
+
+      await tester.pumpWidget(
+        _scoped(controller, DashboardScreen(onNavigate: (_) {})),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Order channels'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dine-in'), findsOneWidget);
+      expect(find.text('Takeaway'), findsOneWidget);
+      expect(find.text('Delivery'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'restaurant owner review tolerates missing low-margin food cost',
+    (tester) async {
+      final controller = PosAppController()
+        ..language = AppLanguage.en
+        ..businessTier = BusinessTier.advanced
+        ..dashboardSummary = DashboardSummary.fromJson({
+          'asOf': '2026-06-01T00:00:00Z',
+          'moneyFirst': {},
+          'rightNow': {},
+          'review': {
+            'itemsSold': [
+              {
+                'nameEn': 'Burger',
+                'qty': 2,
+                'salesBdt': 440,
+                'lowMargin': true,
+              },
+            ],
+          },
+        });
+
+      await tester.pumpWidget(
+        _scoped(controller, DashboardScreen(onNavigate: (_) {})),
+      );
+      await tester.tap(find.byKey(const ValueKey('dashboard-view-dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Owner').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('MARGIN LOW'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      controller.dispose();
+    },
+  );
+
+  testWidgets('enterprise dashboard renders derived fleet operations', (
+    tester,
+  ) async {
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..businessTier = BusinessTier.enterprise
+      ..dashboardSummary = DashboardSummary.fromJson({
+        'asOf': '2026-06-01T00:00:00Z',
+        'moneyFirst': {'earnedToday': 7500},
+        'rightNow': {},
+        'review': {
+          'fleet': {
+            'kpis': {
+              'outletCount': 2,
+              'covers': 18,
+              'avgTicketBdt': 420,
+              'fleetLatePct': 8,
+            },
+            'goal': {
+              'targetBdt': 10000,
+              'progressPct': 75,
+              'remainingBdt': 2500,
+            },
+            'alerts': [
+              {
+                'kind': 'capacity',
+                'title': 'Main is full',
+                'body': '90% occupancy',
+              },
+            ],
+            'outlets': [
+              {'rank': 1, 'name': 'Main', 'occupancyPct': 90, 'latePct': 8},
+            ],
+            'benchmarks': {
+              'bestAvgTicketOutlet': 'Main',
+              'worstLateOutlet': 'Main',
+            },
+            'staffingSuggestion': {
+              'outletName': 'Main',
+              'peakLabel': '8:00 PM',
+            },
+            'openOutlets': ['Main'],
+          },
+        },
+      });
+
+    await tester.pumpWidget(
+      _scoped(controller, DashboardScreen(onNavigate: (_) {})),
+    );
+
+    expect(find.text('75% of goal'), findsOneWidget);
+    expect(find.text('Fleet alerts'), findsOneWidget);
+    expect(find.text('Main is full'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Benchmarks'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Benchmarks'), findsOneWidget);
+    expect(find.textContaining('Staffing suggestion'), findsOneWidget);
 
     controller.dispose();
   });

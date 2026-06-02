@@ -8,13 +8,16 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import get_current_outlet_id
+from auth import get_current_device_payload, get_current_outlet_id
 from database import get_db
-from models import DailyStockCount, InventoryItem, StockAdjustment
+from models import AdminAccount, DailyStockCount, InventoryItem, InventorySupplier, Order, StockAdjustment
 from routers.menu import _ensure_outlet, _parse_since
 from schemas import (
     DailyStockCountPayload,
     InventoryItemPayload,
+    InventorySupplierPatchPayload,
+    InventorySupplierPayload,
+    StockAdjustmentBatchPayload,
     StockAdjustmentPayload,
     ok,
 )
@@ -198,6 +201,8 @@ def _item_to_dict(item: InventoryItem) -> dict:
         "minThreshold": float(item.min_threshold),
         "costPerUnit": float(item.cost_per_unit),
         "notes": item.notes or "",
+        "defaultSupplierId": item.default_supplier_id,
+        "defaultReorderQty": float(item.default_reorder_qty or 0),
         "createdAt": item.created_at.isoformat(),
         "updatedAt": item.updated_at.isoformat(),
         "deletedAt": item.deleted_at.isoformat() if item.deleted_at else None,
@@ -212,7 +217,25 @@ def _adjustment_to_dict(row: StockAdjustment) -> dict:
         "type": row.type,
         "note": row.note or "",
         "totalCostBdt": float(row.total_cost_bdt),
+        "supplierId": row.supplier_id,
+        "supplierName": row.supplier_name or "",
+        "reason": row.reason or "",
+        "billRef": row.bill_ref or "",
+        "createdByAccountId": row.created_by_account_id,
+        "createdByRole": row.created_by_role,
         "createdAt": row.created_at.isoformat(),
+    }
+
+
+def _supplier_to_dict(row: InventorySupplier) -> dict:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "phone": row.phone or "",
+        "notes": row.notes or "",
+        "isActive": bool(row.is_active),
+        "createdAt": row.created_at.isoformat(),
+        "updatedAt": row.updated_at.isoformat(),
     }
 
 
@@ -249,6 +272,35 @@ async def _get_item(
     return item
 
 
+async def _require_inventory_account(
+    db: AsyncSession,
+    outlet_id: str,
+    payload: dict,
+    *,
+    manager_only: bool = False,
+) -> AdminAccount | None:
+    account_id = str(payload.get("account_id") or "")
+    if not account_id:
+        # Bootstrap and older devices hold an outlet-scoped token until the
+        # first account login. Preserve that setup path; role checks apply as
+        # soon as a token carries an account id.
+        return None
+    account = (
+        await db.execute(
+            select(AdminAccount).where(
+                AdminAccount.id == account_id,
+                AdminAccount.outlet_id == outlet_id,
+                AdminAccount.is_active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Active account required.")
+    if manager_only and account.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
+    return account
+
+
 @router.get("/outlets/{outlet_id}/inventory")
 async def pull_inventory(
     outlet_id: str,
@@ -274,12 +326,20 @@ async def pull_inventory(
     if since_dt:
         count_query = count_query.where(DailyStockCount.created_at > since_dt)
     daily_counts = (await db.execute(count_query.order_by(DailyStockCount.created_at.asc()))).scalars().all()
+    suppliers = (
+        await db.execute(
+            select(InventorySupplier)
+            .where(InventorySupplier.outlet_id == outlet_id)
+            .order_by(InventorySupplier.name.asc())
+        )
+    ).scalars().all()
 
     return ok(
         {
             "items": [_item_to_dict(i) for i in items],
             "adjustments": [_adjustment_to_dict(a) for a in adjustments],
             "dailyCounts": [_daily_count_to_dict(c) for c in daily_counts],
+            "suppliers": [_supplier_to_dict(s) for s in suppliers],
         }
     )
 
@@ -288,10 +348,11 @@ async def pull_inventory(
 async def upsert_inventory_item(
     outlet_id: str,
     body: InventoryItemPayload,
-    current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
-    _ensure_outlet(current_outlet, outlet_id)
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
     now = datetime.now(timezone.utc)
     created_at = now
     if body.createdAt:
@@ -329,6 +390,8 @@ async def upsert_inventory_item(
         existing.min_threshold = body.minThreshold
         existing.cost_per_unit = body.costPerUnit
         existing.notes = body.notes or ""
+        existing.default_supplier_id = body.defaultSupplierId
+        existing.default_reorder_qty = body.defaultReorderQty
         existing.updated_at = updated_at
         existing.deleted_at = None
         await db.commit()
@@ -345,6 +408,8 @@ async def upsert_inventory_item(
         min_threshold=body.minThreshold,
         cost_per_unit=body.costPerUnit,
         notes=body.notes or "",
+        default_supplier_id=body.defaultSupplierId,
+        default_reorder_qty=body.defaultReorderQty,
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -358,10 +423,11 @@ async def upsert_inventory_item(
 async def delete_inventory_item(
     outlet_id: str,
     item_id: str,
-    current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
-    _ensure_outlet(current_outlet, outlet_id)
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
     item = await _get_item(db, outlet_id, item_id)
     now = datetime.now(timezone.utc)
     item.deleted_at = now
@@ -370,30 +436,112 @@ async def delete_inventory_item(
     return ok({"id": item_id, "deletedAt": now.isoformat()})
 
 
-@router.post("/outlets/{outlet_id}/inventory/adjustments")
-async def record_stock_adjustment(
+@router.get("/outlets/{outlet_id}/inventory/suppliers")
+async def list_inventory_suppliers(
     outlet_id: str,
-    body: StockAdjustmentPayload,
+    include_archived: bool = False,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(current_outlet, outlet_id)
+    query = select(InventorySupplier).where(InventorySupplier.outlet_id == outlet_id)
+    if not include_archived:
+        query = query.where(InventorySupplier.is_active.is_(True))
+    rows = (await db.execute(query.order_by(InventorySupplier.name.asc()))).scalars().all()
+    return ok([_supplier_to_dict(row) for row in rows])
+
+
+@router.post("/outlets/{outlet_id}/inventory/suppliers")
+async def create_inventory_supplier(
+    outlet_id: str,
+    body: InventorySupplierPayload,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
+    row = InventorySupplier(
+        id=body.id or str(uuid4()),
+        outlet_id=outlet_id,
+        name=body.name.strip(),
+        phone=(body.phone or "").strip(),
+        notes=(body.notes or "").strip(),
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return ok(_supplier_to_dict(row))
+
+
+@router.patch("/outlets/{outlet_id}/inventory/suppliers/{supplier_id}")
+async def update_inventory_supplier(
+    outlet_id: str,
+    supplier_id: str,
+    body: InventorySupplierPatchPayload,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
+    row = (
+        await db.execute(
+            select(InventorySupplier).where(
+                InventorySupplier.id == supplier_id,
+                InventorySupplier.outlet_id == outlet_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found.")
+    if body.name is not None:
+        row.name = body.name.strip()
+    if body.phone is not None:
+        row.phone = body.phone.strip()
+    if body.notes is not None:
+        row.notes = body.notes.strip()
+    if body.isActive is not None:
+        row.is_active = body.isActive
+    row.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(row)
+    return ok(_supplier_to_dict(row))
+
+
+@router.delete("/outlets/{outlet_id}/inventory/suppliers/{supplier_id}")
+async def archive_inventory_supplier(
+    outlet_id: str,
+    supplier_id: str,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_inventory_supplier(
+        outlet_id,
+        supplier_id,
+        InventorySupplierPatchPayload(isActive=False),
+        payload,
+        db,
+    )
+
+
+async def _apply_stock_adjustment(
+    db: AsyncSession,
+    outlet_id: str,
+    body: StockAdjustmentPayload,
+    account: AdminAccount | None,
+) -> tuple[InventoryItem, StockAdjustment]:
     adj_type = (body.type or "correction").strip().lower()
     if adj_type not in ADJUSTMENT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid adjustment type.")
-
     existing_adj = (
         await db.execute(select(StockAdjustment).where(StockAdjustment.id == body.id))
     ).scalar_one_or_none()
     if existing_adj:
-        return ok(_adjustment_to_dict(existing_adj))
-
+        return await _get_item(db, outlet_id, existing_adj.inventory_item_id), existing_adj
     item = await _get_item(db, outlet_id, body.inventoryItemId)
     new_qty = max(0.0, float(item.quantity) + float(body.delta))
     cost_per_unit = float(item.cost_per_unit)
     if adj_type == "restock" and body.delta > 0 and body.totalCostBdt > 0:
         cost_per_unit = body.totalCostBdt / body.delta
-
     created_at = datetime.now(timezone.utc)
     if body.createdAt:
         try:
@@ -402,7 +550,19 @@ async def record_stock_adjustment(
                 created_at = created_at.replace(tzinfo=timezone.utc)
         except ValueError:
             pass
-
+    supplier_name = (body.supplierName or "").strip()
+    if body.supplierId:
+        supplier = (
+            await db.execute(
+                select(InventorySupplier).where(
+                    InventorySupplier.id == body.supplierId,
+                    InventorySupplier.outlet_id == outlet_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if supplier is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid supplier.")
+        supplier_name = supplier.name
     adjustment = StockAdjustment(
         id=body.id or str(uuid4()),
         outlet_id=outlet_id,
@@ -411,26 +571,69 @@ async def record_stock_adjustment(
         type=adj_type,
         note=body.note or "",
         total_cost_bdt=body.totalCostBdt,
+        supplier_id=body.supplierId,
+        supplier_name=supplier_name,
+        reason=(body.reason or "").strip(),
+        bill_ref=(body.billRef or "").strip(),
+        invoice_ref=(body.billRef or "").strip(),
+        created_by_account_id=account.id if account else None,
+        created_by_role=account.role if account else None,
         created_at=created_at,
     )
     item.quantity = new_qty
     item.cost_per_unit = cost_per_unit
     item.updated_at = datetime.now(timezone.utc)
     db.add(adjustment)
+    return item, adjustment
+
+
+@router.post("/outlets/{outlet_id}/inventory/adjustments")
+async def record_stock_adjustment(
+    outlet_id: str,
+    body: StockAdjustmentPayload,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    account = await _require_inventory_account(db, outlet_id, payload)
+    item, adjustment = await _apply_stock_adjustment(db, outlet_id, body, account)
     await db.commit()
     await db.refresh(item)
     await db.refresh(adjustment)
     return ok({"item": _item_to_dict(item), "adjustment": _adjustment_to_dict(adjustment)})
 
 
+@router.post("/outlets/{outlet_id}/inventory/adjustments/batch")
+async def record_stock_adjustment_batch(
+    outlet_id: str,
+    body: StockAdjustmentBatchPayload,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    account = await _require_inventory_account(db, outlet_id, payload)
+    results = [
+        await _apply_stock_adjustment(db, outlet_id, adjustment, account)
+        for adjustment in body.adjustments
+    ]
+    await db.commit()
+    return ok(
+        {
+            "items": [_item_to_dict(item) for item, _ in results],
+            "adjustments": [_adjustment_to_dict(row) for _, row in results],
+        }
+    )
+
+
 @router.post("/outlets/{outlet_id}/inventory/daily-counts")
 async def upsert_daily_stock_count(
     outlet_id: str,
     body: DailyStockCountPayload,
-    current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
-    _ensure_outlet(current_outlet, outlet_id)
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    await _require_inventory_account(db, outlet_id, payload)
     await _get_item(db, outlet_id, body.inventoryItemId)
 
     existing = (
@@ -763,6 +966,8 @@ async def inventory_daily_report(
                     "qtyToOrder": round(qty_to_order, 2),
                     "unit": unit,
                     "ctaEn": f"{en or item.name} below par · order ~{round(qty_to_order, 1)} {unit} before noon",
+                    "supplierId": item.default_supplier_id,
+                    "defaultReorderQty": round(float(item.default_reorder_qty or 0), 2),
                 }
             )
 
@@ -777,6 +982,60 @@ async def inventory_daily_report(
         else:
             headline_en = f"{worst['nameEn']} is off by {abs(worst['varianceQty'])} {worst['unit']} today."
 
+    today_in = 0.0
+    today_out = 0.0
+    today_spend = 0.0
+    for adjustment in day_adjustments:
+        delta = float(adjustment.delta or 0)
+        if adjustment.type == "restock":
+            today_in += max(delta, 0)
+            today_spend += float(adjustment.total_cost_bdt or 0)
+        elif adjustment.type in {"usage", "waste"}:
+            today_out += abs(delta)
+
+    orders = (
+        await db.execute(
+            select(Order)
+            .where(Order.outlet_id == outlet_id)
+            .where(Order.created_at >= day_start)
+            .where(Order.created_at < day_end)
+            .where(Order.status != "cancelled")
+        )
+    ).scalars().all()
+    revenue_by_source: dict[str, float] = defaultdict(float)
+    seller_qty: dict[str, int] = defaultdict(int)
+    seller_sales: dict[str, float] = defaultdict(float)
+    for order in orders:
+        method = (order.payment_method or "cash").strip().lower()
+        source = "card" if method in {"card", "credit", "debit", "visa", "mastercard"} else (
+            "cash" if method in {"", "cash"} else "online"
+        )
+        revenue_by_source[source] += float(order.total_amount or 0)
+        for line in order.items if isinstance(order.items, list) else []:
+            if not isinstance(line, dict):
+                continue
+            name = str(line.get("nameEn") or line.get("name") or "").strip()
+            if not name:
+                continue
+            qty = int(line.get("qty") or 0)
+            sales = float(line.get("lineTotal") or (qty * float(line.get("price") or 0)))
+            seller_qty[name] += qty
+            seller_sales[name] += sales
+    revenue_total = sum(revenue_by_source.values())
+    revenue_split = [
+        {
+            "key": key,
+            "label": label,
+            "valueBdt": round(revenue_by_source.get(key, 0), 2),
+            "pct": round((revenue_by_source.get(key, 0) / revenue_total) * 100) if revenue_total else 0,
+        }
+        for key, label in (("cash", "Cash"), ("card", "Card"), ("online", "Online"))
+    ]
+    top_sellers = [
+        {"name": name, "qty": seller_qty[name], "salesBdt": round(sales, 2)}
+        for name, sales in sorted(seller_sales.items(), key=lambda pair: pair[1], reverse=True)[:5]
+    ]
+
     return ok(
         {
             "date": target_str,
@@ -786,6 +1045,13 @@ async def inventory_daily_report(
             "headlineBn": "",
             "breakdown": breakdown,
             "reorderSuggestions": reorder_suggestions[:5],
+            "stockFlow": {
+                "inQty": round(today_in, 3),
+                "outQty": round(today_out, 3),
+                "spendBdt": round(today_spend, 2),
+            },
+            "revenueSplit": revenue_split,
+            "topSellers": top_sellers,
         }
     )
 
@@ -794,9 +1060,11 @@ async def inventory_daily_report(
 async def scan_inventory_receipt(
     outlet_id: str,
     files: list[UploadFile] = File(...),
-    current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
 ):
-    _ensure_outlet(current_outlet, outlet_id)
+    _ensure_outlet(str(payload["sub"]), outlet_id)
+    await _require_inventory_account(db, outlet_id, payload)
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

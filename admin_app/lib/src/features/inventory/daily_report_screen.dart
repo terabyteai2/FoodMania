@@ -143,6 +143,8 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
               children: [
                 _AlertCard(report: report, text: text),
                 const SizedBox(height: 18),
+                _ReportSnapshot(report: report),
+                const SizedBox(height: 18),
                 TfSectionHeader(
                   label: text.varianceBreakdown,
                   padding: EdgeInsets.zero,
@@ -173,6 +175,162 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       ),
     );
   }
+}
+
+class _ReportSnapshot extends StatelessWidget {
+  const _ReportSnapshot({required this.report});
+
+  final DailyReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TfSectionHeader(
+          label: 'STOCK FLOW · TODAY',
+          padding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: 8),
+        TfCard(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              _ReportMetric(
+                label: 'STOCK IN',
+                value: '+${report.stockFlow.inQty.toStringAsFixed(1)}',
+                color: PosColors.success,
+              ),
+              _ReportMetric(
+                label: 'USED',
+                value: '−${report.stockFlow.outQty.toStringAsFixed(1)}',
+                color: PosColors.warning,
+              ),
+              _ReportMetric(
+                label: 'SPEND',
+                value: fmt.format(report.stockFlow.spendBdt),
+              ),
+            ],
+          ),
+        ),
+        if (report.revenueSplit.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const TfSectionHeader(
+            label: 'REVENUE SPLIT',
+            padding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
+          TfCard(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: report.revenueSplit
+                  .map(
+                    (row) => _ReportMetric(
+                      label: row.label.toUpperCase(),
+                      value: '${row.pct}%',
+                      detail: fmt.format(row.valueBdt),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ),
+        ],
+        if (report.topSellers.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const TfSectionHeader(label: 'TOP SELLERS', padding: EdgeInsets.zero),
+          const SizedBox(height: 8),
+          TfCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: report.topSellers
+                  .map(
+                    (row) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 11,
+                      ),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: PosColors.line, width: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TfText(
+                              row.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          TfText(
+                            '${row.qty} sold',
+                            style: const TextStyle(
+                              color: PosColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          TfText(
+                            fmt.format(row.salesBdt),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ReportMetric extends StatelessWidget {
+  const _ReportMetric({
+    required this.label,
+    required this.value,
+    this.detail,
+    this.color = PosColors.primaryDark,
+  });
+  final String label;
+  final String value;
+  final String? detail;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TfText(
+          label,
+          style: const TextStyle(
+            color: PosColors.muted,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 5),
+        TfText(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (detail != null)
+          TfText(
+            detail!,
+            style: const TextStyle(color: PosColors.muted, fontSize: 10),
+          ),
+      ],
+    ),
+  );
 }
 
 class _AlertCard extends StatelessWidget {

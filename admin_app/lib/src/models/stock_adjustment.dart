@@ -38,6 +38,12 @@ class StockAdjustment {
     required this.createdAt,
     this.note = '',
     this.totalCostBdt = 0,
+    this.supplierId,
+    this.supplierName = '',
+    this.reason = '',
+    this.billRef = '',
+    this.createdByAccountId,
+    this.createdByRole,
   });
 
   final String id;
@@ -46,8 +52,15 @@ class StockAdjustment {
   final AdjustmentType type;
   final String note;
   final DateTime createdAt;
+
   /// Purchase total (৳) when [type] is [AdjustmentType.restock].
   final double totalCostBdt;
+  final String? supplierId;
+  final String supplierName;
+  final String reason;
+  final String billRef;
+  final String? createdByAccountId;
+  final String? createdByRole;
 
   Map<String, Object?> toMap() {
     return {
@@ -58,6 +71,12 @@ class StockAdjustment {
       'note': note,
       'createdAt': createdAt.toIso8601String(),
       'totalCostBdt': totalCostBdt,
+      'supplierId': supplierId,
+      'supplierName': supplierName,
+      'reason': reason,
+      'billRef': billRef,
+      'createdByAccountId': createdByAccountId,
+      'createdByRole': createdByRole,
     };
   }
 
@@ -70,6 +89,12 @@ class StockAdjustment {
       note: map['note'] as String? ?? '',
       createdAt: DateTime.parse(map['createdAt'] as String),
       totalCostBdt: (map['totalCostBdt'] as num?)?.toDouble() ?? 0,
+      supplierId: map['supplierId'] as String?,
+      supplierName: map['supplierName'] as String? ?? '',
+      reason: map['reason'] as String? ?? '',
+      billRef: map['billRef'] as String? ?? '',
+      createdByAccountId: map['createdByAccountId'] as String?,
+      createdByRole: map['createdByRole'] as String?,
     );
   }
 }

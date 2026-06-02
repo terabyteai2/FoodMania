@@ -199,6 +199,59 @@ def _by_source(today_orders: list[Order]) -> list[dict[str, Any]]:
     return rows
 
 
+def _service_key(service_type: str | None) -> str:
+    raw = (service_type or "").strip().lower()
+    if raw in {"takeaway", "parcel"}:
+        return "takeaway"
+    if raw == "delivery":
+        return "delivery"
+    return "dineIn"
+
+
+def _service_mix(today_orders: list[Order]) -> list[dict[str, Any]]:
+    totals: dict[str, float] = defaultdict(float)
+    for order in today_orders:
+        totals[_service_key(order.service_type)] += float(order.total_amount or 0)
+    grand = sum(totals.values())
+    return [
+        {
+            "key": key,
+            "label": label,
+            "valueBdt": round(totals.get(key, 0.0), 2),
+            "pct": round(_safe_div(totals.get(key, 0.0), grand) * 100.0) if grand > 0 else 0,
+        }
+        for key, label in (
+            ("dineIn", "Dine-in"),
+            ("takeaway", "Takeaway"),
+            ("delivery", "Delivery"),
+        )
+    ]
+
+
+def _floor_tables(open_orders: list[Order], table_count: int) -> list[dict[str, Any]]:
+    by_table: dict[str, list[Order]] = defaultdict(list)
+    for order in open_orders:
+        table = _table_no(order)
+        if table:
+            by_table[table].append(order)
+
+    rows: list[dict[str, Any]] = []
+    for number in range(1, table_count + 1):
+        table = str(number)
+        orders = by_table.get(table, [])
+        bill_order = next((order for order in orders if order.status == "ready"), None)
+        active_order = bill_order or (orders[0] if orders else None)
+        rows.append(
+            {
+                "tableNo": table,
+                "state": "bill" if bill_order else ("seated" if orders else "idle"),
+                "covers": sum(int(order.covers or 0) for order in orders),
+                "orderId": active_order.id if active_order else None,
+            }
+        )
+    return rows
+
+
 def _items_sold(
     mover_qty: dict[str, int],
     mover_sales: dict[str, float],
@@ -325,7 +378,7 @@ async def _build_fleet(
         await db.execute(
             select(Order)
             .where(Order.outlet_id.in_(sib_ids))
-            .where(Order.created_at >= week_start)
+            .where(Order.created_at >= week_start - timedelta(days=1))
             .where(Order.created_at < today_end)
         )
     ).scalars().all()
@@ -334,6 +387,14 @@ async def _build_fleet(
             select(Order)
             .where(Order.outlet_id.in_(sib_ids))
             .where(Order.status.in_(list(OPEN_STATUSES)))
+        )
+    ).scalars().all()
+    chart_week_orders = [order for order in week_orders if order.created_at >= week_start]
+    inventory_items = (
+        await db.execute(
+            select(InventoryItem)
+            .where(InventoryItem.outlet_id.in_(sib_ids))
+            .where(InventoryItem.deleted_at.is_(None))
         )
     ).scalars().all()
 
@@ -354,12 +415,14 @@ async def _build_fleet(
     late_threshold = now - timedelta(minutes=LATE_ORDER_MIN)
     late_by_outlet: dict[str, int] = defaultdict(int)
     seated_by_outlet: dict[str, set[str]] = defaultdict(set)
+    open_by_outlet: dict[str, list[Order]] = defaultdict(list)
     for order in open_orders:
         if order.status == "cancelled":
             continue
         table = _table_no(order)
         if table:
             seated_by_outlet[order.outlet_id].add(table)
+        open_by_outlet[order.outlet_id].append(order)
         if order.status == "pending" and order.created_at < late_threshold:
             late_by_outlet[order.outlet_id] += 1
 
@@ -384,10 +447,15 @@ async def _build_fleet(
         _, food_cost_pct = _items_sold(oq, osales, {}, menu_lookup, limit=0)
         order_count = len(items_for_outlet)
         late = late_by_outlet.get(o.id, 0)
+        late_rate = round(_safe_div(late, order_count) * 100.0) if order_count else 0
+        occupancy_pct = (
+            round(_safe_div(len(seated_by_outlet.get(o.id, set())), int(o.table_count or 0)) * 100.0)
+            if int(o.table_count or 0) > 0
+            else 0
+        )
         delta = _delta_pct(rev_today.get(o.id, 0.0), rev_yesterday.get(o.id, 0.0))
         health: list[dict[str, Any]] = []
         if late > 0:
-            late_rate = round(_safe_div(late, order_count) * 100.0) if order_count else 0
             health.append({"tone": "late", "label": "LATE", "value": f"{late_rate}%"})
         outlets.append(
             {
@@ -401,6 +469,10 @@ async def _build_fleet(
                 "foodCostPct": food_cost_pct,
                 "tablesSeated": len(seated_by_outlet.get(o.id, set())),
                 "tablesTotal": int(o.table_count or 0),
+                "occupancyPct": occupancy_pct,
+                "latePct": late_rate,
+                "openOrders": len(open_by_outlet.get(o.id, [])),
+                "sparkline": _revenue_by_hour(items_for_outlet, chart_week_orders)["today"],
                 "health": health,
             }
         )
@@ -428,10 +500,40 @@ async def _build_fleet(
     on_goal = sum(1 for row in outlets if row["deltaUp"])
     fleet_delta = _delta_pct(fleet_rev, sum(rev_yesterday.values()))
     fleet_avg7 = round(
-        sum(float(o.total_amount or 0) for o in week_orders if o.status != "cancelled") / 7.0,
+        sum(
+            float(order.total_amount or 0)
+            for order in week_orders
+            if order.status != "cancelled" and order.created_at < today_start
+        )
+        / 7.0,
         2,
     )
     top_movers, fleet_food_cost = _items_sold(fleet_qty, fleet_sales, fleet_name, menu_lookup, limit=5)
+    goal_bdt = fleet_avg7
+    goal_pct = round(_safe_div(fleet_rev, goal_bdt) * 100.0) if goal_bdt > 0 else 0
+    fleet_late = sum(late_by_outlet.values())
+    fleet_late_pct = round(_safe_div(fleet_late, fleet_orders) * 100.0) if fleet_orders else 0
+    low_by_outlet: dict[str, int] = defaultdict(int)
+    for item in inventory_items:
+        if float(item.quantity or 0) <= float(item.min_threshold or 0):
+            low_by_outlet[item.outlet_id] += 1
+    alerts: list[dict[str, Any]] = []
+    for row in outlets:
+        if row["occupancyPct"] >= 85:
+            alerts.append({"kind": "capacity", "title": f'{row["name"]} is full', "body": f'{row["occupancyPct"]}% occupancy'})
+        if row["latePct"] > 0:
+            alerts.append({"kind": "stuck", "title": f'{row["name"]} kitchen needs attention', "body": f'{row["latePct"]}% of orders late'})
+        low_count = low_by_outlet.get(row["outletId"], 0)
+        if low_count:
+            alerts.append({"kind": "low", "title": f'{row["name"]} inventory is low', "body": f'{low_count} items at or below threshold'})
+    best_ticket = max(outlets, key=lambda row: _safe_div(row["revBdt"], len(today_by_outlet.get(row["outletId"], []))), default=None)
+    worst_late = max(outlets, key=lambda row: row["latePct"], default=None)
+    fleet_hourly = _revenue_by_hour(all_today, chart_week_orders)
+    pressure = max(
+        (row for row in outlets if row["latePct"] > 0 or row["occupancyPct"] >= 60),
+        key=lambda row: (row["latePct"], row["occupancyPct"]),
+        default=None,
+    )
 
     return {
         "outlets": outlets,
@@ -445,8 +547,24 @@ async def _build_fleet(
             "avgTicketBdt": round(_safe_div(fleet_rev, fleet_orders), 2),
             "foodCostPct": fleet_food_cost,
             "onGoalCount": on_goal,
+            "fleetLatePct": fleet_late_pct,
         },
-        "revenueByHour": _revenue_by_hour(all_today, week_orders),
+        "goal": {
+            "targetBdt": goal_bdt,
+            "progressPct": goal_pct,
+            "remainingBdt": round(max(0.0, goal_bdt - fleet_rev), 2),
+        },
+        "alerts": alerts[:6],
+        "benchmarks": {
+            "bestAvgTicketOutlet": best_ticket["name"] if best_ticket else "",
+            "worstLateOutlet": worst_late["name"] if worst_late and worst_late["latePct"] > 0 else "",
+        },
+        "staffingSuggestion": {
+            "outletName": pressure["name"] if pressure else "",
+            "peakLabel": fleet_hourly["peakLabel"],
+        },
+        "openOutlets": [row["name"] for row in outlets if row["openOrders"] > 0],
+        "revenueByHour": fleet_hourly,
         "capacity": capacity,
         "topMovers": top_movers,
     }
@@ -607,6 +725,7 @@ async def dashboard_summary(
             "profitPct": profit_pct,
         },
         "topMovers": top_movers,
+        "serviceMix": _service_mix(today_orders),
         "closeTodayHintBdt": round(earned_today, 2),
     }
 
@@ -619,7 +738,7 @@ async def dashboard_summary(
     for order in open_orders_query:
         if order.status == "cancelled":
             continue
-        table = _table_no_from_notes(order.notes)
+        table = _table_no(order)
         if table:
             seated_tables.add(table)
         if order.status in KITCHEN_STATUSES:
@@ -683,6 +802,7 @@ async def dashboard_summary(
         "lateOrders": late_count,
         "lateMinThreshold": LATE_ORDER_MIN,
         "needsAttention": needs_attention,
+        "floorTables": _floor_tables(open_orders_query, int(outlet.table_count or 0)),
         "todaySoFarBdt": round(earned_today, 2),
         "todaySoFarDeltaPct": delta_pct,
     }

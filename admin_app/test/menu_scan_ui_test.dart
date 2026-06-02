@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:local_pos/src/app_controller.dart';
 import 'package:local_pos/src/app_scope.dart';
+import 'package:local_pos/src/core/enums/business_tier.dart';
 import 'package:local_pos/src/core/localization/app_strings.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
 import 'package:local_pos/src/core/widgets/menu_image_view.dart';
@@ -261,34 +262,44 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('restaurant setup validates a default table count', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
-    final controller = PosAppController()..language = AppLanguage.en;
-    var provisioned = false;
-    await tester.pumpWidget(
-      _scoped(
-        controller,
-        TenantSetupScreen(onProvisioned: () => provisioned = true),
-      ),
-    );
+  testWidgets(
+    'restaurant setup saves the selected type and default table count',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final controller = PosAppController()..language = AppLanguage.en;
+      var provisioned = false;
+      await tester.pumpWidget(
+        _scoped(
+          controller,
+          TenantSetupScreen(onProvisioned: () => provisioned = true),
+        ),
+      );
 
-    await tester.enterText(find.byType(TextField).first, 'Moon Ahmed');
-    await tester.pump();
-    expect(find.text('Continue'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, 'Moon Ahmed');
+      await tester.pump();
+      expect(find.text('Continue'), findsOneWidget);
 
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'Scan Cafe');
-    await tester.pump();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Scan Cafe');
+      await tester.pump();
 
-    await tester.tap(find.text('Create restaurant'));
-    for (var i = 0; i < 10 && !provisioned; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(provisioned, isTrue);
-    expect(controller.serverConfig.tableCount, 10);
-    controller.dispose();
-  });
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      expect(find.text('What type of restaurant?'), findsOneWidget);
+      expect(find.text('FoodCart'), findsOneWidget);
+      expect(find.text('Cafe'), findsOneWidget);
+      expect(find.text('Restaurant'), findsOneWidget);
+      expect(find.text('Enterprise'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('restaurant-type-advanced')));
+      for (var i = 0; i < 10 && !provisioned; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(provisioned, isTrue);
+      expect(controller.serverConfig.tableCount, 10);
+      expect(controller.businessTier, BusinessTier.advanced);
+      controller.dispose();
+    },
+  );
 }

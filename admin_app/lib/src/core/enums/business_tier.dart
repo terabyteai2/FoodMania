@@ -32,6 +32,16 @@ enum BusinessTier {
     enterprise => 'Enterprise',
   };
 
+  String displayNameFor({required bool isBn}) {
+    if (!isBn) return displayName;
+    return switch (this) {
+      simple => 'ফুডকার্ট',
+      standard => 'ক্যাফে',
+      advanced => 'রেস্টুরেন্ট',
+      enterprise => 'এন্টারপ্রাইজ',
+    };
+  }
+
   String get description => switch (this) {
     simple => 'Counter-only · no floor map · receipt printing',
     standard => 'Dine-in · table floor · kitchen send',

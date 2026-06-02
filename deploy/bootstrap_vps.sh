@@ -93,8 +93,10 @@ rsync -az --delete \
   --exclude='venv/' \
   --exclude='deploy/.deploy-secrets' \
   --exclude='Restuarent_POS_Admin_APP/' \
+  --exclude='admin_app/' \
   --exclude='customer_menu/frontend/node_modules/' \
   --exclude='customer_menu/frontend/dist/' \
+  --exclude='backend/In_App_Update_Apk_File/' \
   --exclude='*.apk' \
   --exclude='*.aab' \
   --exclude='*.keystore' \

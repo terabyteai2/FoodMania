@@ -56,7 +56,7 @@ async def bootstrap_tenant(
             restaurant_id=restaurant.id,
             name=outlet_name,
             server_id=body.serverId,
-            table_count=body.tableCount or 10,
+            table_count=body.tableCount if body.tableCount is not None else 10,
         )
         db.add(outlet)
         await db.flush()
@@ -88,7 +88,7 @@ async def bootstrap_tenant(
         "outletId": outlet.id,
         "restaurantName": restaurant.name,
         "outletName": outlet.name,
-        "tableCount": outlet.table_count or 10,
+        "tableCount": outlet.table_count if outlet.table_count is not None else 10,
         "deviceToken": token,
         "publicApiBaseUrl": client_visible_api_base(request),
     })

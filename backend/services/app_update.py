@@ -1,5 +1,7 @@
 import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
@@ -120,3 +122,74 @@ def _coerce_version_code(value: object) -> int:
         return int(str(value or "").strip())
     except ValueError:
         return 0
+
+
+# ── APK storage (in-app update) ────────────────────────────────────────────────
+# The released APK is kept at backend/In_App_Update_Apk_File/app-release.apk and
+# served (unauthenticated) by routers/app_download.py.
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+APK_DIR = _BACKEND_ROOT / "In_App_Update_Apk_File"
+APK_FILENAME = "app-release.apk"
+APK_MAX_BYTES = 300 * 1024 * 1024  # 300 MB safety cap
+
+
+def apk_path() -> Path:
+    return APK_DIR / APK_FILENAME
+
+
+async def save_apk_upload(upload) -> Path:
+    """Stream an uploaded APK to a temp file beside the target and return its path.
+
+    The caller validates the version, then calls promote_apk() to move it into
+    place — so an invalid upload never clobbers the currently-published APK.
+    """
+    APK_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = APK_DIR / f"{APK_FILENAME}.uploading"
+    total = 0
+    try:
+        with open(tmp, "wb") as dst:
+            while True:
+                chunk = await upload.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > APK_MAX_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="APK exceeds the 300 MB upload limit.",
+                    )
+                dst.write(chunk)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    finally:
+        await upload.close()
+    return tmp
+
+
+def promote_apk(tmp: Path) -> None:
+    os.replace(tmp, apk_path())
+
+
+def extract_apk_version(path: Path) -> tuple[str | None, int | None]:
+    """Best-effort read of (versionName, versionCode) from an APK.
+
+    Returns (None, None) if pyaxmlparser is unavailable or the file isn't a
+    parseable APK — the caller then falls back to manually entered values.
+    """
+    try:
+        from pyaxmlparser import APK
+    except Exception:
+        return None, None
+    try:
+        apk = APK(str(path))
+        name = (apk.version_name or "").strip() or None
+        try:
+            code = int(apk.version_code)
+        except (TypeError, ValueError):
+            code = None
+        if code is not None and code < 1:
+            code = None
+        return name, code
+    except Exception:
+        return None, None

@@ -26,6 +26,13 @@ flutter pub get
 flutter run
 ```
 
+On Linux workstations where Flutter is installed as a Snap, use the host
+toolchain launcher to avoid mixing Snap GLib libraries with host GStreamer:
+
+```sh
+./tool/run_linux_debug.sh
+```
+
 ## Android Release
 
 Create a private upload keystore first:
@@ -148,3 +155,7 @@ pos:outlet:<outletId>
 
 Customer websites should call the cloud API directly; this app no longer hosts a
 local LAN HTTP/WebSocket server.
+
+
+Note- linux run-cd /home/moon-ahmed/rastarant/admin_app
+./tool/run_linux_debug.sh

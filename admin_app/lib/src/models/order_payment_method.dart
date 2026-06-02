@@ -2,6 +2,7 @@ enum OrderPaymentMethod {
   cash,
   card,
   bkash,
+  nagad,
   payLater;
 
   String get value {
@@ -12,6 +13,8 @@ enum OrderPaymentMethod {
         return 'card';
       case OrderPaymentMethod.bkash:
         return 'bkash';
+      case OrderPaymentMethod.nagad:
+        return 'nagad';
       case OrderPaymentMethod.payLater:
         return 'pay_later';
     }
@@ -25,6 +28,8 @@ enum OrderPaymentMethod {
         return 'Card';
       case OrderPaymentMethod.bkash:
         return 'bKash';
+      case OrderPaymentMethod.nagad:
+        return 'Nagad';
       case OrderPaymentMethod.payLater:
         return 'Pay later';
     }
@@ -38,6 +43,8 @@ enum OrderPaymentMethod {
         return 'কার্ড';
       case OrderPaymentMethod.bkash:
         return 'বিকাশ';
+      case OrderPaymentMethod.nagad:
+        return 'নগদ';
       case OrderPaymentMethod.payLater:
         return 'পরে';
     }

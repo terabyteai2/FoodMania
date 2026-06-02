@@ -37,6 +37,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       title: text.reports,
       subtitle: text.reportsSubtitle,
       showDatePill: false,
+      showBackButton: true,
       centerHeader: true,
       actions: [
         PrimaryButton(

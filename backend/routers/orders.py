@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_device_payload, get_current_outlet_id
 from database import get_db
-from models import MenuItem, Order
+from models import AdminAccount, MenuItem, Order, PosShift
 from routers.ws import manager
 from schemas import (
     OrderDetailsUpdate,
@@ -81,6 +81,10 @@ async def _normalize_items_list(
                 or name_en
             )
             name_bn = _clean_text(menu_item.name_bn) or name_bn
+            if item.get("costPriceSnapshot") is None:
+                item["costPriceSnapshot"] = (
+                    float(menu_item.cost_price) if menu_item.cost_price is not None else 0
+                )
         name_en = name_en or fallback_name
         name = name_en or fallback_name or name_bn
         item["name"] = name
@@ -132,6 +136,7 @@ async def push_order(
     outlet_id: str,
     body: OrderPayload,
     current_outlet: str = Depends(get_current_outlet_id),
+    device_payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
@@ -146,6 +151,39 @@ async def push_order(
     if existing:
         return ok(_order_to_dict(existing))
 
+    desktop_account: AdminAccount | None = None
+    if (body.source or "").strip().lower() == "desktop_pos":
+        account_id = str(device_payload.get("account_id") or "")
+        desktop_account = (
+            await db.execute(
+                select(AdminAccount).where(
+                    AdminAccount.id == account_id,
+                    AdminAccount.outlet_id == outlet_id,
+                    AdminAccount.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if desktop_account is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Desktop POS sales require an authenticated account token.",
+            )
+        shift_id = (body.shiftId or "").strip()
+        active_shift = (
+            await db.execute(
+                select(PosShift).where(
+                    PosShift.id == shift_id,
+                    PosShift.outlet_id == outlet_id,
+                    PosShift.status == "open",
+                )
+            )
+        ).scalar_one_or_none()
+        if active_shift is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Desktop sales require an open outlet register shift.",
+            )
+
     now = datetime.now(timezone.utc)
     order = Order(
         id=body.id,
@@ -157,6 +195,7 @@ async def push_order(
         subtotal=body.subtotal if body.subtotal is not None else body.totalAmount,
         vat_rate_percent=body.vatRatePercent if body.vatRatePercent is not None else 0,
         vat_amount=body.vatAmount if body.vatAmount is not None else 0,
+        delivery_charge=body.deliveryCharge if body.deliveryCharge is not None else 0,
         service_type=body.serviceType,
         covers=body.covers,
         payment_method=body.paymentMethod,
@@ -170,8 +209,20 @@ async def push_order(
         customer_name=(body.customerName or "").strip() or None,
         delivery_address=(body.deliveryAddress or "").strip() or None,
         mobile_number=(body.mobileNumber or "").strip() or None,
-        created_by_account_id=body.createdByAccountId,
-        created_by_role=created_by_role,
+        created_by_account_id=desktop_account.id if desktop_account else body.createdByAccountId,
+        created_by_role=desktop_account.role if desktop_account else created_by_role,
+        shift_id=(body.shiftId or "").strip() or None,
+        discount_label=(body.discountLabel or "").strip() or None,
+        discount_amount=body.discountAmount or 0,
+        service_charge_rate_percent=body.serviceChargeRatePercent or 0,
+        service_charge_amount=body.serviceChargeAmount or 0,
+        billing_snapshot=body.billingSnapshot or {},
+        kot_batches=body.kotBatches or [],
+        settled_at=(
+            datetime.fromisoformat(body.settledAt.replace("Z", "+00:00"))
+            if body.settledAt
+            else None
+        ),
         created_at=now,
         updated_at=now,
     )
@@ -381,6 +432,8 @@ async def update_order_items(
         order.vat_rate_percent = body.vatRatePercent
     if body.vatAmount is not None:
         order.vat_amount = body.vatAmount
+    if body.deliveryCharge is not None:
+        order.delivery_charge = body.deliveryCharge
     order.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(order)

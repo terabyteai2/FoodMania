@@ -8,6 +8,7 @@ class ServerConfig {
     this.publicSlug = '',
     this.tableCount = 10,
     this.customerMenuTheme = 'sultans_hearth',
+    this.deliveryCharge = 0,
   });
 
   final String serverId;
@@ -18,6 +19,7 @@ class ServerConfig {
   final String publicSlug;
   final int tableCount;
   final String customerMenuTheme;
+  final double deliveryCharge;
 
   ServerConfig copyWith({
     String? serverId,
@@ -28,6 +30,7 @@ class ServerConfig {
     String? publicSlug,
     int? tableCount,
     String? customerMenuTheme,
+    double? deliveryCharge,
   }) {
     return ServerConfig(
       serverId: serverId ?? this.serverId,
@@ -38,6 +41,7 @@ class ServerConfig {
       publicSlug: publicSlug ?? this.publicSlug,
       tableCount: tableCount ?? this.tableCount,
       customerMenuTheme: customerMenuTheme ?? this.customerMenuTheme,
+      deliveryCharge: deliveryCharge ?? this.deliveryCharge,
     );
   }
 }

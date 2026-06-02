@@ -153,6 +153,11 @@ async def test_customer_delivery_order_persists_contact_info():
                 "category": "Main",
             },
         )
+        await client.patch(
+            f"/outlets/{outlet_id}/media",
+            headers=headers,
+            json={"deliveryCharge": 60},
+        )
 
         ok = await client.post(
             f"/customer/{outlet_id}/orders",
@@ -207,6 +212,10 @@ async def test_customer_delivery_order_persists_contact_info():
     assert body["deliveryAddress"] == "House 5, Road 12, Banani"
     assert body["mobileNumber"] == "01711223344"
     assert body["notes"] == "Ring the doorbell twice"
+    assert body["subtotal"] == 600
+    assert body["vatAmount"] == 30
+    assert body["deliveryCharge"] == 60
+    assert body["total"] == 690
 
     assert pulled.status_code == 200
     pulled_order = next(
@@ -217,6 +226,7 @@ async def test_customer_delivery_order_persists_contact_info():
     assert pulled_order["deliveryAddress"] == "House 5, Road 12, Banani"
     assert pulled_order["mobileNumber"] == "01711223344"
     assert pulled_order["notes"] == "Ring the doorbell twice"
+    assert pulled_order["deliveryCharge"] == 60
 
     assert missing.status_code == 422
     assert "Delivery requires" in missing.json()["detail"]
@@ -231,3 +241,4 @@ async def test_customer_delivery_order_persists_contact_info():
     assert table_body["customerName"] is None
     assert table_body["deliveryAddress"] is None
     assert table_body["mobileNumber"] is None
+    assert table_body["deliveryCharge"] == 0

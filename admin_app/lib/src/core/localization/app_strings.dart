@@ -90,11 +90,11 @@ class AppStrings {
       isBn ? 'অ্যাপের ভাষা নির্বাচন করুন।' : 'Choose app display language.';
   String get themeMode => isBn ? 'থিম মোড' : 'Theme mode';
   String get themeModeSubtitle => isBn
-      ? 'পুরো অ্যাপ Black, White বা Device mode-এ দেখান।'
+      ? 'পুরো অ্যাপ কালো, সাদা বা ডিভাইস মোডে দেখান।'
       : 'Use Black, White, or Device mode for the whole app.';
-  String get blackMode => isBn ? 'Black' : 'Black';
-  String get whiteMode => isBn ? 'White' : 'White';
-  String get deviceMode => isBn ? 'Device' : 'Device';
+  String get blackMode => isBn ? 'কালো' : 'Black';
+  String get whiteMode => isBn ? 'সাদা' : 'White';
+  String get deviceMode => isBn ? 'ডিভাইস' : 'Device';
   String get appLanguage => isBn ? 'অ্যাপ ভাষা' : 'App language';
   String get bangla => 'বাংলা';
   String get english => 'English';
@@ -119,28 +119,30 @@ class AppStrings {
   String get facebookPageAccessToken =>
       isBn ? 'Page access token' : 'Page access token';
   String get facebookPageAccessTokenHint =>
-      isBn ? 'নতুন Page token পেস্ট করুন' : 'Paste a new Page token';
+      isBn ? 'নতুন পেজ টোকেন পেস্ট করুন' : 'Paste a new Page token';
   String get facebookPageAccessTokenHelper => isBn
-      ? 'সেভ করার পর token backend-এ hidden থাকবে।'
+      ? 'সেভ করার পর টোকেন ব্যাকএন্ডে গোপন থাকবে।'
       : 'After saving, the token stays hidden on the backend.';
   String get connectFacebookPage =>
       isBn ? 'Facebook দিয়ে কানেক্ট করুন' : 'Connect with Facebook';
   String get reconnectFacebookPage =>
-      isBn ? 'Facebook Page আবার কানেক্ট করুন' : 'Reconnect Facebook Page';
+      isBn ? 'Facebook পেজ আবার কানেক্ট করুন' : 'Reconnect Facebook Page';
   String get facebookLoginTitle => isBn ? 'Facebook Login' : 'Facebook Login';
   String get facebookLoginComplete =>
-      isBn ? 'Facebook Page কানেক্ট হয়েছে' : 'Facebook Page connected';
+      isBn ? 'Facebook পেজ কানেক্ট হয়েছে' : 'Facebook Page connected';
   String get facebookLoginFailed => isBn
       ? 'Facebook Login সম্পন্ন হয়নি'
       : 'Facebook Login was not completed';
+  String get facebookLoginCancelled =>
+      isBn ? 'Facebook Login বাতিল করা হয়েছে' : 'Facebook Login was cancelled';
   String get selectFacebookPage =>
-      isBn ? 'Facebook Page বেছে নিন' : 'Choose a Facebook Page';
+      isBn ? 'Facebook পেজ বেছে নিন' : 'Choose a Facebook Page';
   String get selectFacebookPageSubtitle => isBn
-      ? 'এই আউটলেটের Messenger bot-এর সাথে যে Page যুক্ত হবে সেটি নিশ্চিত করুন।'
+      ? 'এই আউটলেটের Messenger বটের সাথে যে পেজ যুক্ত হবে সেটি নিশ্চিত করুন।'
       : 'Confirm which Page should be connected to this outlet Messenger bot.';
   String get confirmFacebookPage =>
-      isBn ? 'Page কানেক্ট করুন' : 'Connect selected Page';
-  String get facebookBotEnabled => isBn ? 'Bot চালু' : 'Bot enabled';
+      isBn ? 'পেজ কানেক্ট করুন' : 'Connect selected Page';
+  String get facebookBotEnabled => isBn ? 'বট চালু' : 'Bot enabled';
   String get facebookOrderingEnabled =>
       isBn ? 'ডেলিভারি অর্ডার চালু' : 'Delivery ordering enabled';
   String get facebookWebhookUrl =>
@@ -170,10 +172,10 @@ class AppStrings {
       ? 'কাস্টমার ওয়েব অ্যাপের সাথে এই ID শেয়ার করুন।'
       : 'Share this ID with the customer web app.';
 
-  String get tableQrCodes => isBn ? 'টেবিল QR কোড' : 'Table QR Codes';
+  String get tableQrCodes => isBn ? 'সব QR কোড' : 'All QR Codes';
   String get tableQrSubtitle => isBn
-      ? 'প্রতিটি টেবিলের জন্য QR কোড PDF প্রিন্ট করুন।'
-      : 'Print a QR code PDF for each table.';
+      ? 'রেস্টুরেন্ট মেনু ও প্রতিটি টেবিলের QR কোড PDF প্রিন্ট করুন।'
+      : 'Print restaurant-menu and table QR codes as a PDF.';
   String get orderingUrl => isBn ? 'অর্ডারিং URL' : 'Ordering URL';
   String get orderingUrlHint => isBn
       ? 'যেমন: https://order.myrestaurant.com'
@@ -182,6 +184,23 @@ class AppStrings {
   String get generateQrPdf => isBn ? 'PDF তৈরি করুন' : 'Generate PDF';
   String get scanToOrder => isBn ? 'অর্ডার করতে স্ক্যান করুন' : 'Scan to Order';
   String tableLabel(int n) => isBn ? 'টেবিল ${_n(n)}' : 'Table $n';
+  String get restaurantMenuQr => isBn ? 'রেস্টুরেন্ট মেনু' : 'Restaurant menu';
+  String get publicSlugRequired =>
+      isBn ? 'পাবলিক URL প্রয়োজন' : 'Public URL required';
+  String get print => isBn ? 'প্রিন্ট' : 'Print';
+  String get savePdf => isBn ? 'PDF সেভ করুন' : 'Save PDF';
+  String qrCodeSummary(int tableCount, String slug) => isBn
+      ? 'মূল মেনু ও ${_n(tableCount)} টি টেবিল কোড: $slug.quickbytes.buzz'
+      : 'Main menu and $tableCount table codes use $slug.quickbytes.buzz';
+  String get qrUrlSetupRequired => isBn
+      ? 'QR কোড তৈরির জন্য পাবলিক মেনু URL সেট করুন।'
+      : 'Set the public menu URL to generate QR codes.';
+  String get qrUrlSetupHelp => isBn
+      ? 'প্রথমে Public URL সেটিংসে একটি slug সেভ করুন।'
+      : 'Open Public URL settings and save a slug first.';
+  String get qrLinksHelp => isBn
+      ? 'মূল QR মেনু খুলবে; টেবিল QR সরাসরি টেবিল অর্ডার পেজ খুলবে।'
+      : 'The main QR opens the menu; table QRs open their table order pages.';
 
   String get cloudSync => isBn ? 'ক্লাউড সিঙ্ক' : 'Cloud Sync';
   String get cloudSyncSubtitle => isBn
@@ -190,7 +209,7 @@ class AppStrings {
   String get cloudApiUrlOverride =>
       isBn ? 'Cloud API URL override' : 'Cloud API URL override';
   String get cloudApiUrlHelper => isBn
-      ? 'APK-তে Supabase URL build করা থাকলে এটা default রাখুন।'
+      ? 'APK-তে Supabase URL যোগ করা থাকলে এটি ডিফল্ট রাখুন।'
       : 'Leave as default after the Supabase URL is built into the APK.';
   String get noManualApiKey =>
       isBn ? 'ম্যানুয়াল API key লাগবে না' : 'No manual API key required';
@@ -198,12 +217,12 @@ class AppStrings {
       ? 'Supabase secret Edge Function-এর ভিতরে থাকে। অ্যাপে শুধু রেস্টুরেন্ট ডিভাইস টোকেন থাকে।'
       : 'Supabase secrets stay inside the Edge Function. This app stores only its private restaurant device token.';
   String get deviceAuthorized => isBn
-      ? 'এই ডিভাইসটি বর্তমান রেস্টুরেন্ট/আউটলেটের জন্য authorized। টোকেন hidden ও auto-managed।'
+      ? 'এই ডিভাইসটি বর্তমান রেস্টুরেন্ট/আউটলেটের জন্য অনুমোদিত। টোকেন গোপন থাকবে এবং স্বয়ংক্রিয়ভাবে পরিচালিত হবে।'
       : 'This device is authorized for the current restaurant/outlet. The token is hidden and managed automatically.';
   String get supabaseUrlMissing =>
-      isBn ? 'Supabase URL build করা হয়নি' : 'Supabase URL not built in yet';
+      isBn ? 'Supabase URL যোগ করা হয়নি' : 'Supabase URL not built in yet';
   String get supabaseUrlMissingMessage => isBn
-      ? 'Admin যেন field edit না করে, APK build করার সময় POS_CLOUD_API_URL দিন।'
+      ? 'অ্যাডমিনকে যেন ফিল্ড সম্পাদনা করতে না হয়, APK তৈরির সময় POS_CLOUD_API_URL দিন।'
       : 'Build the APK with POS_CLOUD_API_URL so admins do not need to edit this field.';
   String get autoSyncInterval =>
       isBn ? 'অটো সিঙ্ক ইন্টারভাল' : 'Auto sync interval';
@@ -213,7 +232,7 @@ class AppStrings {
   String get enableCloudSync =>
       isBn ? 'ক্লাউড সিঙ্ক চালু করুন' : 'Enable cloud sync';
   String get cloudQueueSafe => isBn
-      ? 'ক্লাউড সাময়িক unavailable হলেও changes queue থাকবে।'
+      ? 'ক্লাউড সাময়িক অনুপলব্ধ হলেও পরিবর্তনগুলো তালিকায় থাকবে।'
       : 'Changes queue safely when the cloud is temporarily unavailable.';
   String get settingsSaved => isBn ? 'সেটিংস সেভ হয়েছে' : 'Settings saved';
   String get saveFailed => isBn ? 'সেভ ব্যর্থ হয়েছে' : 'Save failed';
@@ -222,10 +241,25 @@ class AppStrings {
       isBn ? 'কোনো সেটিংস পাওয়া যায়নি' : 'No settings found';
   String get tryDifferentSearch =>
       isBn ? 'অন্য সার্চ চেষ্টা করুন।' : 'Try a different search.';
+  String get settingsChatBot => isBn ? 'চ্যাটবট' : 'ChatBot';
+  String get settingsConnectPrinter =>
+      isBn ? 'প্রিন্টার কানেক্ট করুন' : 'Connect Printer';
+  String get settingsAllQrCodes => isBn ? 'সব QR কোড' : 'All QR Codes';
+  String get settingsWebsiteTheme => isBn ? 'ওয়েবসাইট থিম' : 'Website Theme';
+  String get settingsRestaurantDetails =>
+      isBn ? 'রেস্টুরেন্টের বিস্তারিত' : 'Restaurant Details';
+  String get settingsEmployeeAccountManagement =>
+      isBn ? 'কর্মচারী অ্যাকাউন্ট ম্যানেজমেন্ট' : 'Employee Account Management';
+  String get settingsImportSellsData =>
+      isBn ? 'বিক্রির ডাটা ইমপোর্ট' : 'Import Sales Data';
+  String get settingsSetTableNumbers =>
+      isBn ? 'টেবিল সংখ্যা সেট করুন' : 'Set Table Numbers';
+  String get settingsLogOut => isBn ? 'লগ আউট' : 'Log Out';
+  String get accountGroup => isBn ? 'অ্যাকাউন্ট' : 'Account';
 
   String get receiptPrinter => isBn ? 'রিসিট প্রিন্টার' : 'Receipt Printer';
   String get receiptPrinterSubtitle => isBn
-      ? 'Built-in printer, Type-C USB অথবা Bluetooth printing ব্যবহার করে।'
+      ? 'বিল্ট-ইন প্রিন্টার, Type-C USB অথবা Bluetooth প্রিন্টিং ব্যবহার করে।'
       : 'Uses built-in, type-C USB, or Bluetooth printing.';
   String get noPrinterSelected =>
       isBn ? 'কোনো প্রিন্টার সিলেক্ট করা নেই' : 'No printer selected';
@@ -233,16 +267,22 @@ class AppStrings {
       ? 'কানেক্টেড। নতুন অর্ডার অটোমেটিক প্রিন্ট হবে।'
       : 'Connected. New orders will print automatically.';
   String get pairPrinterInstruction => isBn
-      ? 'Built-in printer ব্যবহার করুন, Type-C cable লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে connect করুন।'
+      ? 'বিল্ট-ইন প্রিন্টার ব্যবহার করুন, Type-C কেবল লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে কানেক্ট করুন।'
       : 'Use the built-in printer, plug in type-C, or scan nearby Bluetooth devices.';
   String get autoPrintNewOrders => isBn
       ? 'অটো-অ্যাকসেপ্ট ও অটো-প্রিন্ট নতুন অর্ডার'
       : 'Auto-accept & auto-print new orders';
   String get autoPrintNewOrdersSubtitle => isBn
-      ? 'Cloud/manual order আসলে kitchen ticket অটোমেটিক প্রিন্ট হবে এবং কনফার্মেশন মডাল স্কিপ হবে — fast-paced cafe-র জন্য আদর্শ।'
+      ? 'ক্লাউড বা ম্যানুয়াল অর্ডার এলে রান্নাঘরের টিকেট স্বয়ংক্রিয়ভাবে প্রিন্ট হবে এবং নিশ্চিতকরণ মডাল বাদ যাবে।'
       : 'When a cloud/manual order arrives, the kitchen ticket prints automatically and the confirmation modal is skipped — ideal for fast-paced cafes.';
   String get refreshPairedPrinters =>
       isBn ? 'কাছের ডিভাইস স্ক্যান' : 'Scan for devices';
+  String get liveDiagnostics =>
+      isBn ? 'লাইভ ডায়াগনস্টিকস' : 'Live diagnostics';
+  String get liveDiagnosticsSubtitle => isBn
+      ? 'ক্লাউড, ডাটাবেজ, Facebook, চ্যাটবট ও লোকাল সিঙ্ক পরীক্ষা করুন।'
+      : 'Check cloud, database, Facebook, chatbot, and local sync readiness.';
+  String get refresh => isBn ? 'রিফ্রেশ' : 'Refresh';
   String get testPrint => isBn ? 'টেস্ট প্রিন্ট' : 'Test print';
   String get printerDiagnostics =>
       isBn ? 'প্রিন্টার ডায়াগনস্টিকস' : 'Printer diagnostics';
@@ -252,7 +292,7 @@ class AppStrings {
   String get close => isBn ? 'বন্ধ করুন' : 'Close';
   String get printFailed => isBn ? 'প্রিন্ট ব্যর্থ হয়েছে' : 'Print failed';
   String get printerNotConnectedHint => isBn
-      ? 'প্রিন্টার কানেক্ট নেই — built-in printer ব্যবহার করুন, Type-C cable লাগান বা Settings থেকে পেয়ার করুন।'
+      ? 'প্রিন্টার কানেক্ট নেই। বিল্ট-ইন প্রিন্টার ব্যবহার করুন, Type-C কেবল লাগান বা সেটিংস থেকে পেয়ার করুন।'
       : 'Printer not connected — use built-in, plug in type-C, or pair one in Settings.';
   String ticketPrinted(String seq) => isBn
       ? '${_digits(seq)}-এর টিকেট প্রিন্ট হয়েছে'
@@ -267,26 +307,27 @@ class AppStrings {
   String connectedTo(String name) =>
       isBn ? '$name কানেক্টেড হয়েছে' : 'Connected to $name';
   String get printerConnectionFailed =>
-      isBn ? 'Printer connection failed' : 'Printer connection failed';
+      isBn ? 'প্রিন্টার কানেকশন ব্যর্থ হয়েছে' : 'Printer connection failed';
   String get printerDisconnected =>
-      isBn ? 'Printer disconnected' : 'Printer disconnected';
+      isBn ? 'প্রিন্টার ডিসকানেক্ট হয়েছে' : 'Printer disconnected';
   String get disconnectFailed =>
-      isBn ? 'Disconnect failed' : 'Disconnect failed';
-  String get testTicketSent => isBn ? 'Test ticket sent' : 'Test ticket sent';
-  String get testFailed => isBn ? 'Test failed' : 'Test failed';
+      isBn ? 'ডিসকানেক্ট ব্যর্থ হয়েছে' : 'Disconnect failed';
+  String get testTicketSent =>
+      isBn ? 'টেস্ট টিকেট পাঠানো হয়েছে' : 'Test ticket sent';
+  String get testFailed => isBn ? 'টেস্ট ব্যর্থ হয়েছে' : 'Test failed';
 
   String get appCache => isBn ? 'অ্যাপ ক্যাশ' : 'App cache';
   String get clearCache => isBn ? 'ক্যাশ ক্লিয়ার' : 'Clear cache';
   String get clearCachedData =>
       isBn ? 'ক্যাশড ডেটা ক্লিয়ার করবেন?' : 'Clear cached data?';
   String get clearCachedDataMessage => isBn
-      ? 'এই ডিভাইস থেকে orders, menu items ও sync events মুছে যাবে। Demo menu আবার add হবে না।'
+      ? 'এই ডিভাইস থেকে অর্ডার, মেনু আইটেম ও সিঙ্ক ইভেন্ট মুছে যাবে। ডেমো মেনু আবার যোগ হবে না।'
       : 'Orders, menu items, and sync events will be cleared from this device. No demo menu will be added again.';
   String get clearData => isBn ? 'ডেটা ক্লিয়ার' : 'Clear Data';
   String get cachedDataCleared =>
-      isBn ? 'Cached data cleared' : 'Cached data cleared';
+      isBn ? 'ক্যাশড ডেটা মুছে ফেলা হয়েছে' : 'Cached data cleared';
   String get clearCacheSubtitle => isBn
-      ? 'এই ডিভাইসের cached menu, orders ও sync queue ক্লিয়ার করুন।'
+      ? 'এই ডিভাইসের ক্যাশড মেনু, অর্ডার ও সিঙ্ক তালিকা ক্লিয়ার করুন।'
       : 'Clear cached menu, orders, and sync queue from this device.';
   String get importOrderHistory =>
       isBn ? 'অর্ডার হিস্টরি ইমপোর্ট' : 'Import order history';
@@ -311,7 +352,7 @@ class AppStrings {
   String get yourRestaurantInfo =>
       isBn ? 'আপনার রেস্টুরেন্ট তথ্য' : 'Your Restaurant Info';
   String get yourRestaurantInfoSubtitle => isBn
-      ? 'পাবলিক যোগাযোগ তথ্য cloud-এ sync করুন।'
+      ? 'পাবলিক যোগাযোগ তথ্য ক্লাউডে সিঙ্ক করুন।'
       : 'Sync public restaurant contact details to cloud.';
   String get aboutUs => isBn ? 'আমাদের সম্পর্কে' : 'About Us';
   String get privacyPolicy => isBn ? 'প্রাইভেসি পলিসি' : 'Privacy Policy';
@@ -323,11 +364,10 @@ class AppStrings {
   String get staffAccountsSubtitle => isBn
       ? 'স্টাফের মোবাইল নম্বর যোগ করুন। তারা OTP দিয়ে যোগ দেবে।'
       : 'Add staff mobile numbers. They join via phone OTP.';
-  String get storeGroup => isBn ? 'স্টোর · Store' : 'Store · স্টোর';
-  String get deviceGroup => isBn ? 'ডিভাইস · Device' : 'Device · ডিভাইস';
-  String get adminGroup => isBn ? 'অ্যাডমিন · Admin' : 'Admin · অ্যাডমিন';
-  String get dangerZoneGroup =>
-      isBn ? 'ডেঞ্জার জোন · Danger' : 'Danger Zone · ডেঞ্জার';
+  String get storeGroup => isBn ? 'স্টোর' : 'Store';
+  String get deviceGroup => isBn ? 'ডিভাইস' : 'Device';
+  String get adminGroup => isBn ? 'অ্যাডমিন' : 'Admin';
+  String get dangerZoneGroup => isBn ? 'ডেঞ্জার জোন' : 'Danger Zone';
   String get wipeRestaurantData =>
       isBn ? 'রেস্টুরেন্ট ডাটা মুছুন' : 'Wipe restaurant data';
   String get wipeRestaurantDataSubtitle => isBn
@@ -416,7 +456,7 @@ class AppStrings {
       ? 'ইনস্টল পারমিশন দিন। অনুমতি দিলে অ্যাপে ফিরে আপডেট শুরু হবে।'
       : 'Allow install permission. The app will continue when you return.';
   String get appUpdatePermissionStillNeeded => isBn
-      ? 'আপডেট ইনস্টল করতে Install unknown apps permission দরকার।'
+      ? 'আপডেট ইনস্টল করতে অজানা অ্যাপ ইনস্টলের অনুমতি দরকার।'
       : 'Install unknown apps permission is required to update.';
   String get appUpdateDownloading =>
       isBn ? 'APK ডাউনলোড হচ্ছে...' : 'Downloading APK...';
@@ -425,6 +465,18 @@ class AppStrings {
   String get appUpdateAndroidNotice => isBn
       ? 'Android নিরাপত্তার কারণে শেষ ধাপে সিস্টেম ইনস্টলার থেকে নিশ্চিত করতে হবে।'
       : 'Android requires final confirmation in the system installer.';
+  String get adminBlockingNoticeEyebrow =>
+      isBn ? 'অ্যাপ সাময়িকভাবে বন্ধ' : 'APP TEMPORARILY LOCKED';
+  String get adminBlockingNoticeDefaultTitle =>
+      isBn ? 'টেরাফুডস থেকে জরুরি বার্তা' : 'Important message from Terafoods';
+  String get adminBlockingNoticeHelper => isBn
+      ? 'এই বার্তাটি শুধু টেরাফুডস সাপোর্ট সরাতে পারবে। অনুমতি ফিরলে অ্যাপ স্বয়ংক্রিয়ভাবে খুলে যাবে।'
+      : 'Only Terafoods support can remove this message. The app will unlock automatically when access is restored.';
+  String get adminBlockingNoticeCheckAgain =>
+      isBn ? 'আবার যাচাই করুন' : 'Check again';
+  String get adminBlockingNoticeRefreshFailed => isBn
+      ? 'সার্ভারে পৌঁছানো যায়নি। সংযোগ ঠিক হলে আবার যাচাই করুন।'
+      : 'Could not reach the server. Check again when the connection is available.';
   String get pendingTab => isBn ? 'পেন্ডিং' : 'Pending';
   String get acceptedTab => isBn ? 'অ্যাকসেপ্টেড' : 'Accepted';
   String get ordersTitle => isBn ? 'অর্ডার' : 'Orders';
@@ -478,6 +530,8 @@ class AppStrings {
         return isBn ? 'ক্লাউড / ওয়েব' : 'Cloud / web';
       case OrderSource.facebookMessenger:
         return isBn ? 'Messenger' : 'Messenger';
+      case OrderSource.desktopPos:
+        return isBn ? 'ডেস্কটপ POS' : 'Desktop POS';
       case OrderSource.manual:
         return isBn ? 'ম্যানুয়াল' : 'Manual';
       case OrderSource.localLan:
@@ -513,7 +567,7 @@ class AppStrings {
   String get website => isBn ? 'ওয়েবসাইট' : 'Website';
   String get description => isBn ? 'বর্ণনা' : 'Description';
   String get detailsPushed => isBn
-      ? 'রেস্টুরেন্ট তথ্য sync queue-তে যোগ হয়েছে'
+      ? 'রেস্টুরেন্ট তথ্য সিঙ্ক তালিকায় যোগ হয়েছে'
       : 'Restaurant info added to sync queue';
 
   String get payWithBkash => isBn
@@ -522,13 +576,13 @@ class AppStrings {
   String get monthly => isBn ? 'মাসিক' : 'Monthly';
   String get annual => isBn ? 'বার্ষিক' : 'Annual';
   String get bkashCheckoutLoadFailed => isBn
-      ? 'bKash checkout load হয়নি। ইন্টারনেট চেক করে আবার চেষ্টা করুন।'
+      ? 'bKash চেকআউট লোড হয়নি। ইন্টারনেট পরীক্ষা করে আবার চেষ্টা করুন।'
       : 'bKash checkout could not load. Check internet and try again.';
   String get bkashSessionCreateFailed => isBn
-      ? 'নতুন bKash payment session তৈরি হয়নি। Internet/backend setup চেক করুন।'
+      ? 'নতুন bKash পেমেন্ট সেশন তৈরি হয়নি। ইন্টারনেট ও ব্যাকএন্ড সেটআপ পরীক্ষা করুন।'
       : 'Could not create a fresh bKash payment session. Check internet and bKash backend setup.';
   String get bkashNotCompleted => isBn
-      ? 'bKash payment complete হয়নি। আবার চেষ্টা করুন।'
+      ? 'bKash পেমেন্ট সম্পন্ন হয়নি। আবার চেষ্টা করুন।'
       : 'bKash payment is not completed yet. Please retry.';
   String get bkashDemoPayment =>
       isBn ? 'bKash Demo Payment' : 'bKash Demo Payment';
@@ -538,7 +592,7 @@ class AppStrings {
   String get otp => isBn ? 'OTP' : 'OTP';
   String get pin => isBn ? 'PIN' : 'PIN';
   String get completeDemoPayment =>
-      isBn ? 'Demo Payment Complete করুন' : 'Complete Demo Payment';
+      isBn ? 'ডেমো পেমেন্ট সম্পন্ন করুন' : 'Complete Demo Payment';
 
   // ── Inventory ──────────────────────────────────────────────────────────────
 
@@ -609,28 +663,28 @@ class AppStrings {
   String get oneTimeSecureSetup =>
       isBn ? 'ONE-TIME SECURE SETUP' : 'ONE-TIME SECURE SETUP';
   String get setupRestaurantDescription => isBn
-      ? 'একবার রেস্টুরেন্ট সেটআপ করুন। অ্যাপ cloud-এ private restaurant/outlet identity অটোমেটিক তৈরি করবে।'
+      ? 'একবার রেস্টুরেন্ট সেটআপ করুন। অ্যাপ ক্লাউডে ব্যক্তিগত রেস্টুরেন্ট ও আউটলেট পরিচয় স্বয়ংক্রিয়ভাবে তৈরি করবে।'
       : 'Set up this restaurant once. The app will create a private restaurant/outlet identity in the cloud automatically.';
   String get restaurantNameHint =>
       isBn ? 'যেমন: Moon Bistro' : 'Example: Moon Bistro';
   String get outletNameHint =>
       isBn ? 'যেমন: Dhanmondi Branch' : 'Example: Dhanmondi Branch';
   String get cloudSetupFailed =>
-      isBn ? 'Cloud setup failed' : 'Cloud setup failed';
+      isBn ? 'ক্লাউড সেটআপ ব্যর্থ হয়েছে' : 'Cloud setup failed';
   String get deviceHasPrivateToken => isBn
-      ? 'এই ডিভাইসে ইতিমধ্যে private cloud token আছে।'
+      ? 'এই ডিভাইসে ইতিমধ্যে ব্যক্তিগত ক্লাউড টোকেন আছে।'
       : 'This device already has a private cloud token.';
   String get noApiKeySetupNeeded => isBn
-      ? 'API key setup দরকার নেই। Private device token issue হয়ে app-এর ভিতরে save হবে।'
+      ? 'API কী সেটআপ দরকার নেই। ব্যক্তিগত ডিভাইস টোকেন তৈরি হয়ে অ্যাপের ভিতরে সেভ হবে।'
       : 'No API key setup is needed. A private device token will be issued and stored inside this app.';
   String get configureCloudAdmin =>
-      isBn ? 'Cloud Admin কনফিগার করুন' : 'Configure Cloud Admin';
+      isBn ? 'ক্লাউড অ্যাডমিন কনফিগার করুন' : 'Configure Cloud Admin';
   String get cloudAdmin => isBn ? '✦  CLOUD ADMIN' : '✦  CLOUD ADMIN';
   String get runRestaurantCloud => isBn
       ? 'ক্লাউড থেকে\nরেস্টুরেন্ট চালান।'
       : 'Run your restaurant\nfrom the cloud.';
   String get modeIntroDescription => isBn
-      ? 'একটি secure cloud API দিয়ে menu, orders ও status updates manage করুন।'
+      ? 'নিরাপদ ক্লাউড API দিয়ে মেনু, অর্ডার ও অবস্থার আপডেট পরিচালনা করুন।'
       : 'Manage menu, orders, and status updates through a secure cloud API with realtime sync across customer websites.';
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
@@ -640,7 +694,7 @@ class AppStrings {
   String get restaurantDashboard =>
       isBn ? 'রেস্টুরেন্ট ড্যাশবোর্ড' : 'Restaurant dashboard';
   String get syncNow => isBn ? 'এখনই সিঙ্ক করুন' : 'Sync now';
-  String get todayLabel => isBn ? 'আজকে · Today' : 'Today · আজকের';
+  String get todayLabel => isBn ? 'আজকে' : 'Today';
   String get quickActions => isBn ? 'দ্রুত কাজ' : 'Quick actions';
   String get goodMorning => isBn ? 'শুভ সকাল' : 'Good morning';
   String get goodAfternoon => isBn ? 'শুভ বিকেল' : 'Good afternoon';
@@ -672,7 +726,7 @@ class AppStrings {
   String get testNotificationTitle =>
       isBn ? 'টেস্ট নোটিফিকেশন' : 'Test notification';
   String get testNotificationBody => isBn
-      ? 'এই শব্দ শুনতে পেলে alert ঠিকভাবে কাজ করছে।'
+      ? 'এই শব্দ শুনতে পেলে সতর্কতা ঠিকভাবে কাজ করছে।'
       : 'If you can hear this, alerts are wired up correctly.';
   String get orderNote => isBn
       ? 'অর্ডার নোট (যেমন: পেঁয়াজ ছাড়া, বেশি ঝাল)'
@@ -888,7 +942,7 @@ class AppStrings {
   String get menuDeleteTitle =>
       isBn ? 'মেনু আইটেম মুছবেন?' : 'Delete menu item?';
   String menuDeleteDescription(String itemName) => isBn
-      ? '$itemName মেনু থেকে সরানো হবে এবং ভবিষ্যৎ API response-এ থাকবে না।'
+      ? '$itemName মেনু থেকে সরানো হবে এবং ভবিষ্যৎ API রেসপন্সে থাকবে না।'
       : '$itemName will be removed from the admin app and future API responses.';
   String get deleteAction => isBn ? 'মুছুন' : 'Delete';
   String get menuDeleted =>
@@ -918,6 +972,15 @@ class AppStrings {
   String get menuAddOnsHint =>
       isBn ? 'প্রতি লাইন: নাম : দাম' : 'One per line: name : price';
   String get menuDiscountSummary => isBn ? 'ছাড়' : 'Discount';
+  String get menuDeliveryCharge => isBn ? 'ডেলিভারি চার্জ' : 'Delivery charge';
+  String get menuDeliveryChargeSubtitle => isBn
+      ? 'ডেলিভারি অর্ডারে যোগ হওয়া নির্দিষ্ট চার্জ'
+      : 'Flat charge added to delivery orders';
+  String get menuDeliveryChargeHint => isBn ? 'যেমন ৬০' : 'For example, 60';
+  String get menuDeliveryChargeInvalid =>
+      isBn ? 'সঠিক চার্জ লিখুন' : 'Enter a valid charge';
+  String get menuDeliveryChargeSaved =>
+      isBn ? 'ডেলিভারি চার্জ সেভ হয়েছে' : 'Delivery charge saved';
   String get menuImageUploadWarning => isBn
       ? 'ছবি লোকালি রাখা হয়েছে। ইন্টারনেটে আপলোডের জন্য সংযোগ দরকার।'
       : 'Image kept locally. Cloud upload needs internet.';
@@ -1114,7 +1177,7 @@ class AppStrings {
   String recurringWeeks(int weeks) =>
       isBn ? '${_n(weeks)} সপ্তাহ ধরে' : '$weeks wks in a row';
   String get expectedCountedLabel =>
-      isBn ? 'প্রত্যাশিত vs গণনাকৃত' : 'expected vs counted';
+      isBn ? 'প্রত্যাশিত বনাম গণনাকৃত' : 'expected vs counted';
   String get reorderSuggestion => isBn ? 'অর্ডার সাজেশন' : 'Reorder suggestion';
   String get share => isBn ? 'শেয়ার' : 'Share';
 
@@ -1142,11 +1205,11 @@ class AppStrings {
       isBn ? 'শীর্ষ বিক্রি আইটেম' : 'Top selling items';
   String get syncStatusTitle => isBn ? 'সিঙ্ক অবস্থা' : 'Sync Status';
   String get syncStatusSubtitle => isBn
-      ? 'ক্লাউড queue, failed events, retry এবং health check।'
+      ? 'ক্লাউড তালিকা, ব্যর্থ ইভেন্ট, পুনরায় চেষ্টা এবং স্বাস্থ্য পরীক্ষা।'
       : 'Cloud queue, failed events, retries, and health checks.';
   String get noSyncEvents => isBn ? 'কোনো সিঙ্ক ইভেন্ট নেই' : 'No sync events';
   String get queuedChangesWillAppear => isBn
-      ? 'ক্লাউডে পাঠানোর আগে queued changes এখানে দেখাবে।'
+      ? 'ক্লাউডে পাঠানোর আগে অপেক্ষমাণ পরিবর্তনগুলো এখানে দেখাবে।'
       : 'Queued changes will appear here before cloud delivery.';
 
   // Generic loading + offline banners

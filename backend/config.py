@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     # Facebook Messenger chatbot
     FACEBOOK_APP_ID: str = ""
     FACEBOOK_APP_SECRET: str = ""
+    FACEBOOK_ANDROID_CLIENT_TOKEN: str = ""
     FACEBOOK_WEBHOOK_VERIFY_TOKEN: str = ""
     META_GRAPH_API_VERSION: str = "v24.0"
     FACEBOOK_LOGIN_SCOPES: str = "pages_show_list,pages_manage_metadata,pages_messaging"

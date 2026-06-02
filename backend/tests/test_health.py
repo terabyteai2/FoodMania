@@ -15,3 +15,8 @@ async def test_health_returns_ok():
     data = body.get("data") or {}
     assert data.get("status") in ("ok", "degraded")
     assert "database" in data
+    diagnostics = data.get("diagnostics") or {}
+    assert "storage" in diagnostics
+    assert "facebook" in diagnostics
+    assert "nativeAndroidReady" in diagnostics["facebook"]
+    assert "chatbotAi" in diagnostics

@@ -18,6 +18,9 @@ import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 import 'daily_report_screen.dart';
 import 'stock_in_screen.dart';
+import 'used_stock_screen.dart';
+import 'end_of_day_count_screen.dart';
+import 'inventory_item_detail_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({
@@ -198,14 +201,10 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
               label: text.endOfDayCount,
               onTap: () {
                 Navigator.pop(context);
-                final app = AppScope.of(context);
-                showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _EndOfDaySheet(
-                    text: app.strings,
-                    items: app.inventoryItems,
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const EndOfDayCountScreen(),
                   ),
                 );
               },
@@ -216,11 +215,12 @@ void _showMoreMenu(BuildContext context, AppStrings text) {
               onTap: () async {
                 Navigator.pop(context);
                 final app = AppScope.of(context);
-                final result = await showModalBottomSheet<InventoryItem>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _ItemFormSheet(text: app.strings),
+                final result = await Navigator.push<InventoryItem>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        _ItemFormSheet(text: app.strings, fullScreen: true),
+                  ),
                 );
                 if (result != null) {
                   await app.saveInventoryItem(result);
@@ -911,7 +911,8 @@ class _InventoryRow extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _openCountSheet(context, item),
+          onTap: () => _openInventoryDetail(context, item),
+          onLongPress: () => _openQuickAdjustSheet(context, item),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
             child: Row(
@@ -1041,31 +1042,6 @@ class _InventoryRow extends StatelessWidget {
     );
   }
 
-  void _openCountSheet(BuildContext context, InventorySummaryItem summary) {
-    final app = AppScope.of(context);
-    final live = app.inventoryItems.firstWhere(
-      (i) => i.id == summary.id,
-      orElse: () => InventoryItem(
-        id: summary.id,
-        name: summary.nameEn,
-        category: summary.category,
-        unit: summary.unit,
-        quantity: summary.onHand,
-        minThreshold: summary.minThreshold,
-        costPerUnit: summary.costPerUnit,
-        notes: '',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ),
-    );
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _QuickCountSheet(item: live, text: app.strings),
-    ).then((_) => app.refreshInventorySummary());
-  }
-
   String _formatQty(BuildContext context, double value) {
     if (value == value.roundToDouble()) {
       return tfFormatNumber(context, value);
@@ -1180,16 +1156,12 @@ class _InventoryActionBar extends StatelessWidget {
                 label: text.startCount,
                 icon: Icons.fact_check_outlined,
                 onPressed: () {
-                  final app = AppScope.of(context);
-                  showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => _EndOfDaySheet(
-                      text: app.strings,
-                      items: app.inventoryItems,
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const EndOfDayCountScreen(),
                     ),
-                  ).then((_) => app.refreshInventorySummary());
+                  );
                 },
               ),
             ],
@@ -1641,10 +1613,15 @@ class _EndOfDaySheetState extends State<_EndOfDaySheet> {
 
 class _ItemFormSheet extends StatefulWidget {
   // ignore: unused_element_parameter
-  const _ItemFormSheet({required this.text, this.item});
+  const _ItemFormSheet({
+    required this.text,
+    this.item,
+    this.fullScreen = false,
+  });
 
   final AppStrings text;
   final InventoryItem? item;
+  final bool fullScreen;
 
   @override
   State<_ItemFormSheet> createState() => _ItemFormSheetState();
@@ -1658,6 +1635,8 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _minCtrl;
+  late final TextEditingController _reorderCtrl;
+  String? _supplierId;
 
   @override
   void initState() {
@@ -1677,6 +1656,10 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     _minCtrl = TextEditingController(
       text: item != null ? item.minThreshold.toString() : '0',
     );
+    _reorderCtrl = TextEditingController(
+      text: item?.defaultReorderQty.toString() ?? '0',
+    );
+    _supplierId = item?.defaultSupplierId;
   }
 
   @override
@@ -1686,6 +1669,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     _qtyCtrl.dispose();
     _priceCtrl.dispose();
     _minCtrl.dispose();
+    _reorderCtrl.dispose();
     super.dispose();
   }
 
@@ -1705,6 +1689,8 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
         minThreshold: double.tryParse(_minCtrl.text.trim()) ?? 0,
         costPerUnit: double.tryParse(_priceCtrl.text.trim()) ?? 0,
         notes: existing?.notes ?? '',
+        defaultSupplierId: _supplierId,
+        defaultReorderQty: double.tryParse(_reorderCtrl.text.trim()) ?? 0,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       ),
@@ -1717,70 +1703,114 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     final isEdit = widget.item != null;
     final unitLabel = InventoryUnits.displayLabel(_unit, isBn: text.isBn);
 
+    final form = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TfField(label: text.itemName, controller: _nameCtrl),
+        TfField(label: text.itemCategory, controller: _categoryCtrl),
+        TfText(
+          text.unit,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: PosColors.slate,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: InventoryUnits.all
+              .map((u) {
+                final selected = _unit == u;
+                return TfChip(
+                  label: InventoryUnits.displayLabel(u, isBn: text.isBn),
+                  active: selected,
+                  small: true,
+                  onTap: () => setState(() => _unit = u),
+                );
+              })
+              .toList(growable: false),
+        ),
+        const SizedBox(height: 14),
+        TfField(
+          label: '${text.unitPrice} ($unitLabel)',
+          controller: _priceCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+          ],
+        ),
+        TfField(
+          label: text.isBn
+              ? 'ডিফল্ট অর্ডার পরিমাণ'
+              : 'Default reorder quantity',
+          controller: _reorderCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+          ],
+        ),
+        DropdownButtonFormField<String?>(
+          initialValue: _supplierId,
+          decoration: InputDecoration(
+            labelText: text.isBn ? 'ডিফল্ট সাপ্লায়ার' : 'Default supplier',
+          ),
+          items: [
+            const DropdownMenuItem(value: null, child: TfText('No supplier')),
+            ...AppScope.of(context).inventorySuppliers.map(
+              (supplier) => DropdownMenuItem(
+                value: supplier.id,
+                child: TfText(supplier.name),
+              ),
+            ),
+          ],
+          onChanged: (value) => setState(() => _supplierId = value),
+        ),
+        const SizedBox(height: 12),
+        TfField(
+          label: '${text.openingStock} ($unitLabel)',
+          controller: _qtyCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+          ],
+        ),
+        TfField(
+          label: '${text.lowStockAlert} ($unitLabel)',
+          controller: _minCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+          ],
+        ),
+        const SizedBox(height: 6),
+        TfButton(
+          label: isEdit ? text.save : text.addInventoryItem,
+          onPressed: _submit,
+          size: TfButtonSize.lg,
+        ),
+      ],
+    );
+    if (widget.fullScreen) {
+      return Scaffold(
+        backgroundColor: PosColors.background,
+        appBar: AppBar(
+          backgroundColor: PosColors.background,
+          title: TfText(
+            isEdit ? text.editInventoryItem : text.addInventoryItem,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [form],
+        ),
+      );
+    }
     return _SheetShell(
       title: isEdit ? text.editInventoryItem : text.addInventoryItem,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TfField(label: text.itemName, controller: _nameCtrl),
-          TfField(label: text.itemCategory, controller: _categoryCtrl),
-          TfText(
-            text.unit,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: PosColors.slate,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: InventoryUnits.all
-                .map((u) {
-                  final selected = _unit == u;
-                  return TfChip(
-                    label: InventoryUnits.displayLabel(u, isBn: text.isBn),
-                    active: selected,
-                    small: true,
-                    onTap: () => setState(() => _unit = u),
-                  );
-                })
-                .toList(growable: false),
-          ),
-          const SizedBox(height: 14),
-          TfField(
-            label: '${text.unitPrice} ($unitLabel)',
-            controller: _priceCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-            ],
-          ),
-          TfField(
-            label: '${text.openingStock} ($unitLabel)',
-            controller: _qtyCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-            ],
-          ),
-          TfField(
-            label: '${text.lowStockAlert} ($unitLabel)',
-            controller: _minCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-            ],
-          ),
-          const SizedBox(height: 6),
-          TfButton(
-            label: isEdit ? text.save : text.addInventoryItem,
-            onPressed: _submit,
-            size: TfButtonSize.lg,
-          ),
-        ],
-      ),
+      child: form,
     );
   }
 }
@@ -2315,6 +2345,180 @@ class _StandardItemsHeader extends StatelessWidget {
   }
 }
 
+void _openInventoryDetail(
+  BuildContext context,
+  InventorySummaryItem summaryItem,
+) {
+  final app = AppScope.of(context);
+  final item = app.inventoryItems
+      .where((row) => row.id == summaryItem.id)
+      .firstOrNull;
+  if (item == null) return;
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (detailContext) => InventoryItemDetailScreen(
+        item: item,
+        onEdit: app.isManager
+            ? () async {
+                final latest =
+                    app.inventoryItems
+                        .where((row) => row.id == item.id)
+                        .firstOrNull ??
+                    item;
+                final result = await Navigator.push<InventoryItem>(
+                  detailContext,
+                  MaterialPageRoute(
+                    builder: (_) => _ItemFormSheet(
+                      text: app.strings,
+                      item: latest,
+                      fullScreen: true,
+                    ),
+                  ),
+                );
+                if (result != null) await app.saveInventoryItem(result);
+              }
+            : null,
+      ),
+    ),
+  );
+}
+
+void _openQuickAdjustSheet(
+  BuildContext context,
+  InventorySummaryItem summaryItem,
+) {
+  final app = AppScope.of(context);
+  final item = app.inventoryItems
+      .where((row) => row.id == summaryItem.id)
+      .firstOrNull;
+  if (item == null) return;
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _QuickAdjustSheet(item: item),
+  ).then((_) => app.refreshInventorySummary());
+}
+
+class _QuickAdjustSheet extends StatefulWidget {
+  const _QuickAdjustSheet({required this.item});
+  final InventoryItem item;
+
+  @override
+  State<_QuickAdjustSheet> createState() => _QuickAdjustSheetState();
+}
+
+class _QuickAdjustSheetState extends State<_QuickAdjustSheet> {
+  final _qtyCtrl = TextEditingController(text: '1');
+  bool _stockIn = true;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _max => _stockIn
+      ? (widget.item.quantity * 2).clamp(10, 100)
+      : widget.item.quantity.clamp(1, 100);
+  double get _qty => (double.tryParse(_qtyCtrl.text) ?? 0).clamp(0, _max);
+
+  Future<void> _save() async {
+    if (_qty <= 0) return;
+    setState(() => _saving = true);
+    final app = AppScope.of(context);
+    try {
+      if (_stockIn) {
+        await app.recordInventoryPurchase(
+          inventoryItemId: widget.item.id,
+          quantity: _qty,
+          totalCostBdt: _qty * widget.item.costPerUnit,
+        );
+      } else {
+        await app.recordInventoryUsage(
+          inventoryItemId: widget.item.id,
+          quantity: _qty,
+        );
+      }
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = InventoryUnits.displayLabel(
+      widget.item.unit,
+      isBn: tfIsBn(context),
+    );
+    return _SheetShell(
+      title: widget.item.localizedName(AppScope.of(context).language),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TfChip(
+                  label: 'IN',
+                  active: _stockIn,
+                  onTap: () => setState(() => _stockIn = true),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TfChip(
+                  label: 'USED',
+                  active: !_stockIn,
+                  onTap: () => setState(() => _stockIn = false),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _qtyCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+            ],
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(labelText: 'Quantity ($unit)'),
+          ),
+          Slider(
+            value: _qty,
+            max: _max,
+            onChanged: (value) =>
+                setState(() => _qtyCtrl.text = value.toStringAsFixed(1)),
+          ),
+          Wrap(
+            spacing: 8,
+            children: [1, 2, 5, 10]
+                .map(
+                  (value) => ActionChip(
+                    label: TfText('+$value'),
+                    onPressed: () => setState(
+                      () => _qtyCtrl.text = value.toStringAsFixed(0),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 12),
+          TfButton(
+            label: _stockIn ? 'Add to stock' : 'Record used stock',
+            busy: _saving,
+            onPressed: _saving ? null : _save,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StandardItemRow extends StatelessWidget {
   const _StandardItemRow({
     required this.item,
@@ -2336,7 +2540,8 @@ class _StandardItemRow extends StatelessWidget {
     final secondaryName = text.isBn ? item.nameEn : item.nameBn;
     final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
     return InkWell(
-      onTap: () => _openInventoryCountSheet(context, item),
+      onTap: () => _openInventoryDetail(context, item),
+      onLongPress: () => _openQuickAdjustSheet(context, item),
       child: Container(
         height: 64,
         padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -2564,34 +2769,6 @@ class _InventoryQuietStatus extends StatelessWidget {
       ),
     );
   }
-}
-
-void _openInventoryCountSheet(
-  BuildContext context,
-  InventorySummaryItem summary,
-) {
-  final app = AppScope.of(context);
-  final live = app.inventoryItems.firstWhere(
-    (item) => item.id == summary.id,
-    orElse: () => InventoryItem(
-      id: summary.id,
-      name: summary.nameEn,
-      category: summary.category,
-      unit: summary.unit,
-      quantity: summary.onHand,
-      minThreshold: summary.minThreshold,
-      costPerUnit: summary.costPerUnit,
-      notes: '',
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    ),
-  );
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => _QuickCountSheet(item: live, text: app.strings),
-  ).then((_) => app.refreshInventorySummary());
 }
 
 String _compactQty(double value) {
@@ -3639,15 +3816,24 @@ class _InvBottomActions extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: TfButton(
+            label: text.isBn ? 'ব্যবহৃত' : 'Used',
+            icon: Icons.remove_circle_outline,
+            variant: TfButtonVariant.paper,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UsedStockScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TfButton(
             label: text.endOfDayCount,
             icon: Icons.fact_check_outlined,
             variant: TfButtonVariant.dark,
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) =>
-                  _EndOfDaySheet(text: app.strings, items: app.inventoryItems),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const EndOfDayCountScreen()),
             ),
           ),
         ),

@@ -30,6 +30,7 @@ def order_to_dict(order: Order) -> dict:
         "subtotal": float(order.subtotal or order.total_amount or 0),
         "vatRatePercent": float(order.vat_rate_percent or 0),
         "vatAmount": float(order.vat_amount or 0),
+        "deliveryCharge": float(order.delivery_charge or 0),
         "serviceType": order.service_type,
         "covers": order.covers,
         "paymentMethod": order.payment_method,
@@ -41,20 +42,32 @@ def order_to_dict(order: Order) -> dict:
         "mobileNumber": order.mobile_number,
         "createdByAccountId": order.created_by_account_id,
         "createdByRole": order.created_by_role,
+        "shiftId": order.shift_id,
+        "discountLabel": order.discount_label,
+        "discountAmount": float(order.discount_amount or 0),
+        "serviceChargeRatePercent": float(order.service_charge_rate_percent or 0),
+        "serviceChargeAmount": float(order.service_charge_amount or 0),
+        "billingSnapshot": order.billing_snapshot or {},
+        "kotBatches": order.kot_batches or [],
+        "settledAt": order.settled_at.isoformat() if order.settled_at else None,
         "createdAt": order.created_at.isoformat(),
         "updatedAt": order.updated_at.isoformat(),
     }
 
 
-def delivery_order_totals(lines: list[DeliveryOrderLine]) -> dict:
+def delivery_order_totals(
+    lines: list[DeliveryOrderLine], *, delivery_charge: float = 0
+) -> dict:
     subtotal = round(sum(line.price * line.qty for line in lines), 2)
     vat_rate_percent = 5.0
     vat_amount = round(subtotal * vat_rate_percent / 100, 2)
-    total = round(subtotal + vat_amount, 2)
+    clean_delivery_charge = round(max(0, delivery_charge), 2)
+    total = round(subtotal + vat_amount + clean_delivery_charge, 2)
     return {
         "subtotal": subtotal,
         "vatRatePercent": vat_rate_percent,
         "vatAmount": vat_amount,
+        "deliveryCharge": clean_delivery_charge,
         "total": total,
     }
 
@@ -81,6 +94,7 @@ def public_order_response(order: Order) -> dict:
         "subtotal": float(order.subtotal or 0),
         "vatRatePercent": float(order.vat_rate_percent or 0),
         "vatAmount": float(order.vat_amount or 0),
+        "deliveryCharge": float(order.delivery_charge or 0),
         "items": order.items,
         "notes": order.notes,
         "serviceType": order.service_type,
@@ -137,7 +151,12 @@ async def create_delivery_order(
             detail="Delivery requires name, address, and mobile number",
         )
 
-    totals = delivery_order_totals(lines)
+    totals = delivery_order_totals(
+        lines,
+        delivery_charge=float(outlet.delivery_charge or 0)
+        if normalized_type == "delivery"
+        else 0,
+    )
     now = datetime.now(timezone.utc)
     order = Order(
         id=str(uuid.uuid4()),
@@ -148,6 +167,7 @@ async def create_delivery_order(
         subtotal=totals["subtotal"],
         vat_rate_percent=totals["vatRatePercent"],
         vat_amount=totals["vatAmount"],
+        delivery_charge=totals["deliveryCharge"],
         service_type=normalized_type,
         table_no=clean_table,
         items=_line_payload(lines),

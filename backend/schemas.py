@@ -21,7 +21,7 @@ class BootstrapRequest(BaseModel):
     outletName: str | None = None
     restaurantId: str | None = None
     outletId: str | None = None
-    tableCount: int | None = Field(default=None, ge=1, le=200)
+    tableCount: int | None = Field(default=None, ge=0, le=200)
 
 
 class BootstrapResponse(BaseModel):
@@ -31,7 +31,7 @@ class BootstrapResponse(BaseModel):
     restaurantName: str
     outletName: str
     deviceToken: str
-    tableCount: int = Field(default=10, ge=1, le=200)
+    tableCount: int = Field(default=10, ge=0, le=200)
 
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ class GoogleAdminAuthRequest(BaseModel):
     outletName: str | None = None
     restaurantId: str | None = None
     outletId: str | None = None
-    tableCount: int | None = Field(default=None, ge=1, le=200)
+    tableCount: int | None = Field(default=None, ge=0, le=200)
 
 
 class PhoneSendOtpRequest(BaseModel):
@@ -81,7 +81,7 @@ class PhoneCompleteManagerSignupRequest(BaseModel):
     outletName: str | None = None
     serverId: str | None = None
     outletId: str | None = None
-    tableCount: int | None = Field(default=None, ge=1, le=200)
+    tableCount: int | None = Field(default=None, ge=0, le=200)
 
 
 class StaffInviteRespondRequest(BaseModel):
@@ -135,6 +135,10 @@ class FacebookChatbotOAuthCompleteRequest(BaseModel):
     pageId: str
 
 
+class FacebookChatbotNativeOAuthRequest(BaseModel):
+    userAccessToken: str
+
+
 class StaffDevBypassLoginRequest(BaseModel):
     """Local/dev staff login without Google; server must set STAFF_DEV_BYPASS_SECRET."""
 
@@ -151,7 +155,7 @@ class DeviceRegisterRequest(BaseModel):
     outletId: str
     restaurantName: str
     outletName: str
-    tableCount: int | None = Field(default=None, ge=1, le=200)
+    tableCount: int | None = Field(default=None, ge=0, le=200)
     fcmToken: str | None = None
     pushPlatform: str | None = None
 
@@ -228,6 +232,8 @@ class InventoryItemPayload(BaseModel):
     minThreshold: float = 0
     costPerUnit: float = 0
     notes: str | None = ""
+    defaultSupplierId: str | None = None
+    defaultReorderQty: float = 0
     createdAt: str | None = None
     updatedAt: str | None = None
 
@@ -239,7 +245,29 @@ class StockAdjustmentPayload(BaseModel):
     type: str = "correction"
     note: str | None = ""
     totalCostBdt: float = 0
+    supplierId: str | None = None
+    supplierName: str | None = ""
+    reason: str | None = ""
+    billRef: str | None = ""
     createdAt: str | None = None
+
+
+class StockAdjustmentBatchPayload(BaseModel):
+    adjustments: list[StockAdjustmentPayload] = Field(min_length=1)
+
+
+class InventorySupplierPayload(BaseModel):
+    id: str | None = None
+    name: str = Field(min_length=1)
+    phone: str | None = ""
+    notes: str | None = ""
+
+
+class InventorySupplierPatchPayload(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    notes: str | None = None
+    isActive: bool | None = None
 
 
 class DailyStockCountPayload(BaseModel):
@@ -262,6 +290,10 @@ class OrderLineItemPayload(BaseModel):
     qty: int = Field(default=1, ge=1)
     price: float = 0
     lineTotal: float = 0
+    costPriceSnapshot: float | None = None
+    note: str | None = None
+    kotBatchId: str | None = None
+    kotSentAt: str | None = None
 
 
 class OrderPayload(BaseModel):
@@ -273,6 +305,7 @@ class OrderPayload(BaseModel):
     subtotal: float | None = None
     vatRatePercent: float | None = None
     vatAmount: float | None = None
+    deliveryCharge: float | None = Field(default=None, ge=0)
     serviceType: str | None = None
     covers: int | None = None
     paymentMethod: str | None = None
@@ -284,6 +317,14 @@ class OrderPayload(BaseModel):
     mobileNumber: str | None = None
     createdByAccountId: str | None = None
     createdByRole: str | None = None
+    shiftId: str | None = None
+    discountLabel: str | None = None
+    discountAmount: float | None = Field(default=None, ge=0)
+    serviceChargeRatePercent: float | None = Field(default=None, ge=0, le=100)
+    serviceChargeAmount: float | None = Field(default=None, ge=0)
+    billingSnapshot: dict | None = None
+    kotBatches: list[dict] | None = None
+    settledAt: str | None = None
     createdAt: str | None = None
     updatedAt: str | None = None
 
@@ -309,7 +350,83 @@ class OrderItemsUpdate(BaseModel):
     totalAmount: float | None = None
     vatRatePercent: float | None = None
     vatAmount: float | None = None
+    deliveryCharge: float | None = Field(default=None, ge=0)
     updatedAt: str | None = None
+
+
+# ── Desktop POS ───────────────────────────────────────────────────────────────
+
+class PosFloorTablePayload(BaseModel):
+    id: str
+    label: str = Field(min_length=1, max_length=32)
+    seats: int = Field(default=4, ge=1, le=99)
+    sortOrder: int = Field(default=0, ge=0)
+
+
+class PosFloorZonePayload(BaseModel):
+    id: str
+    name: str = Field(min_length=1, max_length=64)
+    sortOrder: int = Field(default=0, ge=0)
+    tables: list[PosFloorTablePayload] = Field(default_factory=list)
+
+
+class PosDiscountPresetPayload(BaseModel):
+    id: str
+    label: str = Field(min_length=1, max_length=64)
+    kind: str = "percent"
+    value: float = Field(ge=0)
+
+
+class PosSettingsPatchPayload(BaseModel):
+    floorLayout: list[PosFloorZonePayload] | None = None
+    vatRatePercent: float | None = Field(default=None, ge=0, le=100)
+    serviceChargePercent: float | None = Field(default=None, ge=0, le=100)
+    discountPresets: list[PosDiscountPresetPayload] | None = None
+
+
+class PosShiftOpenPayload(BaseModel):
+    id: str
+    openingCash: float = Field(default=0, ge=0)
+    denominations: dict[str, int] = Field(default_factory=dict)
+
+
+class PosShiftClosePayload(BaseModel):
+    countedCash: float = Field(ge=0)
+    denominations: dict[str, int] = Field(default_factory=dict)
+
+
+class PosSettlementLinePayload(BaseModel):
+    eventId: str
+    paymentMethod: str
+    amount: float
+    payerLabel: str | None = None
+
+
+class PosSettlementPayload(BaseModel):
+    shiftId: str
+    discountPresetId: str | None = None
+    customDiscountLabel: str | None = None
+    discountAmount: float = Field(default=0, ge=0)
+    serviceChargeRatePercent: float = Field(default=0, ge=0, le=100)
+    serviceChargeAmount: float = Field(default=0, ge=0)
+    totalAmount: float = Field(ge=0)
+    settlements: list[PosSettlementLinePayload] = Field(min_length=1)
+
+
+class PosKotPayload(BaseModel):
+    batchId: str
+    itemIds: list[str] = Field(min_length=1)
+    note: str | None = None
+
+
+class PosAuditPayload(BaseModel):
+    eventId: str
+    action: str
+    reason: str | None = None
+    shiftId: str | None = None
+    amount: float | None = None
+    paymentMethod: str | None = None
+    metadata: dict = Field(default_factory=dict)
 
 
 # ── BKash ─────────────────────────────────────────────────────────────────────
@@ -377,6 +494,11 @@ class PlatformAppUpdateRequest(BaseModel):
     releaseNotes: str | None = None
     required: bool = False
     enabled: bool = True
+
+
+class PlatformBlockingNoticeRequest(BaseModel):
+    title: str | None = None
+    message: str
 
 
 class PlatformAdminCreateRequest(BaseModel):

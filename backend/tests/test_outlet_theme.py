@@ -88,3 +88,28 @@ async def test_patch_media_theme_only_preserves_video_url():
     assert theme_only.status_code == 200
     assert theme_only.json()["data"]["menuTheme"] == "lantern"
     assert theme_only.json()["data"]["videoUrl"] == "https://example.com/clip.mp4"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_patch_media_updates_public_delivery_charge():
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        outlet_id, headers = await _bootstrap_outlet(client, "delivery-charge")
+
+        patch = await client.patch(
+            f"/outlets/{outlet_id}/media",
+            headers=headers,
+            json={"deliveryCharge": 60},
+        )
+        info = await client.get(f"/customer/{outlet_id}/info")
+        invalid = await client.patch(
+            f"/outlets/{outlet_id}/media",
+            headers=headers,
+            json={"deliveryCharge": -1},
+        )
+
+    assert patch.status_code == 200
+    assert patch.json()["data"]["deliveryCharge"] == 60
+    assert info.json()["data"]["deliveryCharge"] == 60
+    assert invalid.status_code == 422

@@ -11,6 +11,10 @@ class OrderItem {
     required this.lineTotal,
     this.nameEn = '',
     this.nameBn = '',
+    this.costPriceSnapshot = 0,
+    this.note,
+    this.kotBatchId,
+    this.kotSentAt,
   });
 
   final String id;
@@ -22,6 +26,10 @@ class OrderItem {
   final int qty;
   final double price;
   final double lineTotal;
+  final double costPriceSnapshot;
+  final String? note;
+  final String? kotBatchId;
+  final DateTime? kotSentAt;
 
   Map<String, Object?> toMap() {
     return {
@@ -34,6 +42,10 @@ class OrderItem {
       'qty': qty,
       'price': price,
       'lineTotal': lineTotal,
+      'costPriceSnapshot': costPriceSnapshot,
+      'note': note,
+      'kotBatchId': kotBatchId,
+      'kotSentAt': kotSentAt?.toIso8601String(),
     };
   }
 
@@ -48,6 +60,10 @@ class OrderItem {
       'qty': qty,
       'price': price,
       'lineTotal': lineTotal,
+      'costPriceSnapshot': costPriceSnapshot,
+      'note': note,
+      'kotBatchId': kotBatchId,
+      'kotSentAt': kotSentAt?.toIso8601String(),
     };
   }
 
@@ -64,6 +80,10 @@ class OrderItem {
       qty: _num(map['qty'], fallback: 1).toInt(),
       price: _num(map['price']),
       lineTotal: _num(map['lineTotal']),
+      costPriceSnapshot: _num(map['costPriceSnapshot']),
+      note: _text(map['note']),
+      kotBatchId: _text(map['kotBatchId']),
+      kotSentAt: DateTime.tryParse(map['kotSentAt']?.toString() ?? ''),
     );
   }
 
@@ -93,10 +113,29 @@ class OrderItem {
 }
 
 class OrderRequestItem {
-  OrderRequestItem({required this.menuItemId, required this.qty});
+  OrderRequestItem({
+    required this.menuItemId,
+    required this.qty,
+    this.note,
+    this.existingOrderItemId,
+    this.unitPrice,
+    this.lineTotal,
+    this.nameSuffix,
+    this.nameOverride,
+    this.nameEnOverride,
+    this.nameBnOverride,
+  });
 
   final String menuItemId;
   final int qty;
+  final String? note;
+  final String? existingOrderItemId;
+  final double? unitPrice;
+  final double? lineTotal;
+  final String? nameSuffix;
+  final String? nameOverride;
+  final String? nameEnOverride;
+  final String? nameBnOverride;
 
   factory OrderRequestItem.fromJson(Map<String, Object?> json) {
     final rawId = json['menuItemId'] ?? json['id'];
@@ -107,6 +146,23 @@ class OrderRequestItem {
     if (rawQty is! num) {
       throw FormatException('Each item must include a numeric qty.');
     }
-    return OrderRequestItem(menuItemId: rawId.trim(), qty: rawQty.toInt());
+    return OrderRequestItem(
+      menuItemId: rawId.trim(),
+      qty: rawQty.toInt(),
+      note: json['note']?.toString(),
+      existingOrderItemId: json['existingOrderItemId']?.toString(),
+      unitPrice: _jsonDouble(json['unitPrice'] ?? json['price']),
+      lineTotal: _jsonDouble(json['lineTotal']),
+      nameSuffix: json['nameSuffix']?.toString(),
+      nameOverride: json['name']?.toString(),
+      nameEnOverride: json['nameEn']?.toString(),
+      nameBnOverride: json['nameBn']?.toString(),
+    );
+  }
+
+  static double? _jsonDouble(Object? value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 }

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
@@ -22,6 +23,10 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config">
+        <!-- Facebook Login is configured only when Messenger setup is tapped. -->
+        <provider
+            android:name="com.facebook.internal.FacebookInitProvider"
+            tools:node="remove" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -78,6 +83,10 @@
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
         <package android:name="woyou.aidlservice.jiuiv5"/>
+        <!-- Facebook native variants plus Lite visibility for compatible routing. -->
+        <package android:name="com.facebook.katana"/>
+        <package android:name="com.facebook.wakizashi"/>
+        <package android:name="com.facebook.lite"/>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

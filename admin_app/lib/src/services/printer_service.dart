@@ -4,12 +4,13 @@ import 'dart:io';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'
-    as bt_serial;
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/localization/app_strings.dart';
@@ -29,7 +30,7 @@ class BluetoothPrinterDevice {
   String get label => name.trim().isEmpty ? address : name.trim();
 }
 
-enum PrinterTransport { none, builtIn, usb, bluetooth }
+enum PrinterTransport { none, builtIn, usb, windowsUsb, bluetooth }
 
 class PrinterRuntimeState {
   PrinterRuntimeState({
@@ -41,6 +42,8 @@ class PrinterRuntimeState {
     this.usbPrinterAvailable = false,
     this.selectedPrinterName,
     this.selectedPrinterAddress,
+    this.selectedWindowsQueueName,
+    this.windowsPaperWidthMm = 58,
     this.lastError,
     this.lastPrintedOrderNo,
     this.lastPrintedAt,
@@ -54,6 +57,8 @@ class PrinterRuntimeState {
   final bool usbPrinterAvailable;
   final String? selectedPrinterName;
   final String? selectedPrinterAddress;
+  final String? selectedWindowsQueueName;
+  final int windowsPaperWidthMm;
   final String? lastError;
   final String? lastPrintedOrderNo;
   final DateTime? lastPrintedAt;
@@ -61,6 +66,7 @@ class PrinterRuntimeState {
   bool get hasSelectedPrinter {
     return builtInPrinterAvailable ||
         usbPrinterAvailable ||
+        selectedWindowsQueueName?.trim().isNotEmpty == true ||
         selectedPrinterAddress != null &&
             selectedPrinterAddress!.trim().isNotEmpty;
   }
@@ -73,6 +79,10 @@ class PrinterRuntimeState {
     if (activeTransport == PrinterTransport.usb ||
         activeTransport == PrinterTransport.none && usbPrinterAvailable) {
       return 'USB printer (type-C)';
+    }
+    if (activeTransport == PrinterTransport.windowsUsb ||
+        selectedWindowsQueueName?.trim().isNotEmpty == true) {
+      return selectedWindowsQueueName!;
     }
     final name = selectedPrinterName?.trim();
     if (name != null && name.isNotEmpty) return name;
@@ -88,6 +98,8 @@ class PrinterRuntimeState {
     bool? usbPrinterAvailable,
     String? selectedPrinterName,
     String? selectedPrinterAddress,
+    String? selectedWindowsQueueName,
+    int? windowsPaperWidthMm,
     String? lastError,
     String? lastPrintedOrderNo,
     DateTime? lastPrintedAt,
@@ -108,6 +120,10 @@ class PrinterRuntimeState {
       selectedPrinterAddress: clearPrinter
           ? null
           : selectedPrinterAddress ?? this.selectedPrinterAddress,
+      selectedWindowsQueueName: clearPrinter
+          ? null
+          : selectedWindowsQueueName ?? this.selectedWindowsQueueName,
+      windowsPaperWidthMm: windowsPaperWidthMm ?? this.windowsPaperWidthMm,
       lastError: clearLastError ? null : lastError ?? this.lastError,
       lastPrintedOrderNo: lastPrintedOrderNo ?? this.lastPrintedOrderNo,
       lastPrintedAt: lastPrintedAt ?? this.lastPrintedAt,
@@ -175,6 +191,8 @@ class _ReceiptLabels {
         return 'Messenger';
       case OrderSource.manual:
         return _bn ? 'ম্যানুয়াল' : 'Manual';
+      case OrderSource.desktopPos:
+        return _bn ? 'ডেস্কটপ POS' : 'Desktop POS';
       case OrderSource.localLan:
         return _bn ? 'লিগ্যাসি LAN' : 'Legacy LAN';
     }
@@ -219,11 +237,16 @@ class PrinterService {
   static const MethodChannel _usbPrinterChannel = MethodChannel(
     'com.terabyteai.foodmania/usb_printer',
   );
+  static const MethodChannel _windowsPrinterChannel = MethodChannel(
+    'com.terabyteai.foodmania/windows_printer',
+  );
 
   static const String _autoPrintKey = 'printer_auto_print_enabled';
   static const String _printerNameKey = 'printer_selected_name';
   static const String _printerAddressKey = 'printer_selected_address';
   static const String _printedOrderIdsKey = 'printer_printed_order_ids';
+  static const String _windowsQueueKey = 'printer_windows_queue';
+  static const String _windowsPaperWidthKey = 'printer_windows_paper_width_mm';
   static const int _ticketWidth = 32;
 
   final StreamController<PrinterRuntimeState> _stateController =
@@ -239,9 +262,26 @@ class PrinterService {
   PrinterRuntimeState get state => _state;
   Stream<PrinterRuntimeState> get stateStream => _stateController.stream;
 
+  bool get _supportsSystemPrinterQueues =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  bool get supportsDirectBluetoothPrinting =>
+      Platform.isAndroid ||
+      Platform.isIOS ||
+      Platform.isMacOS ||
+      Platform.isWindows;
+
+  bool get _hasSelectedSystemPrinter =>
+      _supportsSystemPrinterQueues &&
+      (_state.selectedWindowsQueueName?.trim().isNotEmpty ?? false);
+
   Future<void> initialize() async {
     final preferences = await SharedPreferences.getInstance();
     final local = await _probeLocalPrinters();
+    final selectedSystemQueue = preferences.getString(_windowsQueueKey);
+    final hasSystemQueue =
+        _supportsSystemPrinterQueues &&
+        (selectedSystemQueue?.trim().isNotEmpty ?? false);
     if (kDebugMode) {
       debugPrint(
         '[QB-PRINTER] initialize builtInAvailable=${local.builtIn} '
@@ -260,27 +300,247 @@ class PrinterService {
         autoPrintEnabled: preferences.getBool(_autoPrintKey) ?? true,
         selectedPrinterName: preferences.getString(_printerNameKey),
         selectedPrinterAddress: preferences.getString(_printerAddressKey),
-        activeTransport: local.preferred,
+        selectedWindowsQueueName: selectedSystemQueue,
+        windowsPaperWidthMm: preferences.getInt(_windowsPaperWidthKey) ?? 58,
+        activeTransport: hasSystemQueue
+            ? PrinterTransport.windowsUsb
+            : local.preferred,
         builtInPrinterAvailable: local.builtIn,
         usbPrinterAvailable: local.usb,
-        connected: local.preferred != PrinterTransport.none,
+        connected: local.preferred != PrinterTransport.none || hasSystemQueue,
         clearLastError: true,
       ),
     );
   }
 
-  /// Scans for available Bluetooth devices nearby (not just paired ones).
-  /// On Android uses live discovery; on other platforms falls back to paired list.
+  Future<List<String>> listWindowsPrinterQueues() async {
+    return listSystemPrinterQueues();
+  }
+
+  Future<List<String>> listSystemPrinterQueues() async {
+    if (!_supportsSystemPrinterQueues) return const [];
+    final names = <String>{};
+    if (Platform.isWindows) {
+      try {
+        final windowsPrinters =
+            await _windowsPrinterChannel.invokeListMethod<String>(
+              'listPrinters',
+            ) ??
+            const [];
+        names.addAll(
+          windowsPrinters
+              .map((name) => name.trim())
+              .where((name) => name.isNotEmpty),
+        );
+      } catch (error) {
+        if (kDebugMode) {
+          debugPrint('[QB-PRINTER] Windows queue list failed: $error');
+        }
+      }
+    }
+    try {
+      final printers = await Printing.listPrinters();
+      names.addAll(
+        printers
+            .map((printer) => printer.name.trim())
+            .where((name) => name.isNotEmpty),
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[QB-PRINTER] System queue list failed: $error');
+      }
+    }
+    final sorted = names.toList()..sort();
+    return sorted;
+  }
+
+  Future<void> selectWindowsPrinterQueue(
+    String queueName, {
+    int paperWidthMm = 58,
+  }) async {
+    return selectSystemPrinterQueue(queueName, paperWidthMm: paperWidthMm);
+  }
+
+  Future<void> selectSystemPrinterQueue(
+    String queueName, {
+    int paperWidthMm = 58,
+  }) async {
+    if (!_supportsSystemPrinterQueues) {
+      throw PrinterException(
+        'USB/system printer selection is supported on desktop only.',
+      );
+    }
+    final clean = queueName.trim();
+    if (clean.isEmpty) {
+      throw PrinterException('Select a USB/system printer first.');
+    }
+    final width = paperWidthMm == 80 ? 80 : 58;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_windowsQueueKey, clean);
+    await preferences.setInt(_windowsPaperWidthKey, width);
+    _emit(
+      _state.copyWith(
+        activeTransport: PrinterTransport.windowsUsb,
+        selectedWindowsQueueName: clean,
+        windowsPaperWidthMm: width,
+        connected: true,
+        clearLastError: true,
+      ),
+    );
+  }
+
+  Future<bool> connectLocalUsbPrinterAuto() async {
+    return _withBusyBool(() async {
+      if (_hasSelectedSystemPrinter) {
+        final selected = _state.selectedWindowsQueueName?.trim() ?? '';
+        final queues = await listSystemPrinterQueues();
+        if (selected.isNotEmpty && queues.contains(selected)) {
+          _emit(
+            _state.copyWith(
+              activeTransport: PrinterTransport.windowsUsb,
+              connected: true,
+              clearLastError: true,
+            ),
+          );
+          return true;
+        }
+        throw PrinterException(
+          'The selected USB/system printer is unavailable.',
+        );
+      }
+
+      if (_supportsSystemPrinterQueues) {
+        final queues = await listSystemPrinterQueues();
+        if (queues.length == 1) {
+          await selectSystemPrinterQueue(
+            queues.single,
+            paperWidthMm: _state.windowsPaperWidthMm,
+          );
+          return true;
+        }
+        if (queues.length > 1) {
+          throw PrinterException('Choose a USB/system printer from the list.');
+        }
+      }
+
+      final local = await _probeLocalPrinters();
+      if (local.preferred != PrinterTransport.none) {
+        _emit(
+          _state.copyWith(
+            activeTransport: local.preferred,
+            builtInPrinterAvailable: local.builtIn,
+            usbPrinterAvailable: local.usb,
+            connected: true,
+            clearLastError: true,
+          ),
+        );
+        return true;
+      }
+
+      throw PrinterException(
+        'No USB printer found. Plug in a USB printer or use Bluetooth.',
+      );
+    });
+  }
+
+  Future<bool> printWindowsPdfFallback(
+    OrderModel order, {
+    String? restaurantName,
+    String? outletName,
+    AppLanguage language = AppLanguage.en,
+    bool isManagerCopy = false,
+  }) async {
+    return printSystemPdfFallback(
+      order,
+      restaurantName: restaurantName,
+      outletName: outletName,
+      language: language,
+      isManagerCopy: isManagerCopy,
+    );
+  }
+
+  Future<bool> printSystemPdfFallback(
+    OrderModel order, {
+    String? restaurantName,
+    String? outletName,
+    AppLanguage language = AppLanguage.en,
+    bool isManagerCopy = false,
+  }) async {
+    if (!_hasSelectedSystemPrinter) return false;
+    final selected = _state.selectedWindowsQueueName?.trim() ?? '';
+    if (selected.isEmpty) return false;
+    try {
+      final printers = await Printing.listPrinters();
+      Printer? printer;
+      for (final item in printers) {
+        if (item.name == selected) {
+          printer = item;
+          break;
+        }
+      }
+      if (printer == null) {
+        throw PrinterException(
+          'The selected USB/system printer is unavailable.',
+        );
+      }
+      final pngBytes = await _buildBitmapCopyPng(
+        order,
+        labels: _ReceiptLabels(language),
+        isManagerCopy: isManagerCopy,
+        restaurantName: restaurantName ?? 'HYBRID POS',
+        outletName: outletName ?? '',
+      );
+      final bitmap = img.decodePng(pngBytes);
+      if (bitmap == null) {
+        throw PrinterException('Could not decode rendered ticket bitmap.');
+      }
+      final document = pw.Document();
+      final width = _state.windowsPaperWidthMm.toDouble();
+      final receiptHeight = width * bitmap.height / bitmap.width;
+      final pageFormat = PdfPageFormat(
+        width * PdfPageFormat.mm,
+        receiptHeight * PdfPageFormat.mm,
+      );
+      document.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: pw.EdgeInsets.zero,
+          build: (_) =>
+              pw.Image(pw.MemoryImage(pngBytes), fit: pw.BoxFit.fitWidth),
+        ),
+      );
+      final ok = await Printing.directPrintPdf(
+        printer: printer,
+        name: 'Receipt ${order.displaySequence}',
+        format: pageFormat,
+        usePrinterSettings: true,
+        onLayout: (_) => document.save(),
+      );
+      _emit(
+        _state.copyWith(
+          activeTransport: ok
+              ? PrinterTransport.windowsUsb
+              : PrinterTransport.none,
+          connected: ok,
+          clearLastError: ok,
+        ),
+      );
+      return ok;
+    } catch (error) {
+      _emit(
+        _state.copyWith(lastError: _friendlyError(error), connected: false),
+      );
+      return false;
+    }
+  }
+
+  /// Lists paired Bluetooth printers without starting location-sensitive
+  /// Android discovery. Pairing remains a system-settings responsibility.
   Future<List<BluetoothPrinterDevice>> refreshPairedPrinters() async {
     _emit(_state.copyWith(busy: true, clearLastError: true));
     try {
       await _ensureBluetoothReady();
 
-      if (Platform.isAndroid) {
-        return await _scanAvailableAndroid();
-      }
-
-      // iOS / other: paired list only
       final devices = await PrintBluetoothThermal.pairedBluetooths;
       return devices
           .map(
@@ -304,46 +564,6 @@ class PrinterService {
         ),
       );
     }
-  }
-
-  /// Runs a 10-second Bluetooth Classic discovery on Android and returns
-  /// all discovered devices (both paired and new ones in range).
-  Future<List<BluetoothPrinterDevice>> _scanAvailableAndroid() async {
-    final seen = <String, BluetoothPrinterDevice>{};
-
-    // Seed with already-paired devices so they always appear in the list.
-    try {
-      final paired = await PrintBluetoothThermal.pairedBluetooths;
-      for (final d in paired) {
-        seen[d.macAdress] = BluetoothPrinterDevice(
-          name: d.name,
-          address: d.macAdress,
-        );
-      }
-    } catch (_) {}
-
-    try {
-      final sub = bt_serial.FlutterBluetoothSerial.instance
-          .startDiscovery()
-          .listen((result) {
-            seen[result.device.address] = BluetoothPrinterDevice(
-              name: result.device.name ?? '',
-              address: result.device.address,
-            );
-          });
-
-      // Wait for discovery to complete naturally or cut it off after 10 s.
-      await Future.any<void>([
-        sub.asFuture<void>(),
-        Future<void>.delayed(const Duration(seconds: 10)),
-      ]);
-      await sub.cancel();
-    } catch (_) {
-      // Discovery may fail on emulators or when BT adapter is busy — the
-      // paired list already populated above is still returned.
-    }
-
-    return seen.values.toList(growable: false);
   }
 
   Future<bool> connect(BluetoothPrinterDevice printer) async {
@@ -401,7 +621,7 @@ class PrinterService {
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady();
       final profile = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm58, profile);
+      final generator = Generator(_paperSize, profile);
       final now = DateTime.now();
       final testOrder = OrderModel(
         id: 'printer-diagnostic',
@@ -448,7 +668,16 @@ class PrinterService {
             : restaurantName,
         outletName: outletName,
       );
-      final ok = await _writeBytes(bytes);
+      var ok = await _writeBytes(bytes);
+      if (!ok && _hasSelectedSystemPrinter) {
+        ok = await printSystemPdfFallback(
+          testOrder,
+          restaurantName: restaurantName,
+          outletName: outletName,
+          language: AppLanguage.en,
+          isManagerCopy: true,
+        );
+      }
       _debugPrintWriteResult(
         testOrder,
         copyKind: 'diagnostic',
@@ -472,7 +701,7 @@ class PrinterService {
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady();
       final profile = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm58, profile);
+      final generator = Generator(_paperSize, profile);
       final labels = _ReceiptLabels(language);
 
       final managerCopyBytes = await _buildBitmapCopyBytes(
@@ -484,7 +713,16 @@ class PrinterService {
         outletName: outletName,
         orderDetailsUrl: orderDetailsUrl,
       );
-      final okManager = await _writeBytes(managerCopyBytes);
+      var okManager = await _writeBytes(managerCopyBytes);
+      if (!okManager && _hasSelectedSystemPrinter) {
+        okManager = await printSystemPdfFallback(
+          order,
+          restaurantName: restaurantName,
+          outletName: outletName,
+          language: language,
+          isManagerCopy: true,
+        );
+      }
       _debugPrintWriteResult(
         order,
         copyKind: 'manager',
@@ -521,7 +759,7 @@ class PrinterService {
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady();
       final profile = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm58, profile);
+      final generator = Generator(_paperSize, profile);
       final labels = _ReceiptLabels(language);
       final customerCopyBytes = await _buildBitmapCopyBytes(
         generator,
@@ -532,7 +770,15 @@ class PrinterService {
         outletName: outletName,
         orderDetailsUrl: orderDetailsUrl,
       );
-      final ok = await _writeBytes(customerCopyBytes);
+      var ok = await _writeBytes(customerCopyBytes);
+      if (!ok && _hasSelectedSystemPrinter) {
+        ok = await printSystemPdfFallback(
+          order,
+          restaurantName: restaurantName,
+          outletName: outletName,
+          language: language,
+        );
+      }
       _debugPrintWriteResult(
         order,
         copyKind: 'customer',
@@ -559,8 +805,7 @@ class PrinterService {
   /// reset / feed / cut commands. The bitmap path keeps the on-paper layout
   /// pixel-identical to the in-app preview regardless of printer firmware
   /// language support.
-  Future<List<int>> _buildBitmapCopyBytes(
-    Generator generator,
+  Future<Uint8List> _buildBitmapCopyPng(
     OrderModel order, {
     required _ReceiptLabels labels,
     required bool isManagerCopy,
@@ -620,6 +865,26 @@ class PrinterService {
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);
+    return pngBytes;
+  }
+
+  Future<List<int>> _buildBitmapCopyBytes(
+    Generator generator,
+    OrderModel order, {
+    required _ReceiptLabels labels,
+    required bool isManagerCopy,
+    required String restaurantName,
+    String outletName = '',
+    String? orderDetailsUrl,
+  }) async {
+    final pngBytes = await _buildBitmapCopyPng(
+      order,
+      labels: labels,
+      isManagerCopy: isManagerCopy,
+      restaurantName: restaurantName,
+      outletName: outletName,
+      orderDetailsUrl: orderDetailsUrl,
+    );
     final decoded = img.decodePng(pngBytes);
     if (decoded == null) {
       throw PrinterException('Could not decode rendered ticket bitmap.');
@@ -633,7 +898,10 @@ class PrinterService {
     );
     // Convert to grayscale before rasterisation so the ESC/POS driver gets
     // clean luminance values instead of antialiased RGBA noise.
-    final grayscale = img.grayscale(decoded);
+    final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
+        ? img.copyResize(decoded, width: 576)
+        : decoded;
+    final grayscale = img.grayscale(raster);
 
     // The QR code is rendered inline into the receipt bitmap (top-right
     // corner) by [TicketBitmapRenderer]. We deliberately do NOT use the
@@ -844,6 +1112,9 @@ class PrinterService {
 
   /// Lightweight check before auto-printing a batch of orders (no print, no busy).
   Future<String?> preflightBlockReason() async {
+    if (_hasSelectedSystemPrinter) {
+      return null;
+    }
     final local = await _probeLocalPrinters();
     if (local.preferred != PrinterTransport.none) {
       _emit(
@@ -900,6 +1171,9 @@ class PrinterService {
   }
 
   Future<void> _ensureAnyPrinterReady() async {
+    if (_hasSelectedSystemPrinter) {
+      return;
+    }
     final local = await _probeLocalPrinters();
     if (local.preferred != PrinterTransport.none) {
       _emit(
@@ -943,6 +1217,13 @@ class PrinterService {
   }
 
   Future<bool> _writeBytes(List<int> bytes) async {
+    if (Platform.isWindows &&
+        (_state.selectedWindowsQueueName?.trim().isNotEmpty ?? false)) {
+      return _writeWindowsRawBytes(bytes);
+    }
+    if (_hasSelectedSystemPrinter) {
+      return false;
+    }
     final local = await _probeLocalPrinters();
     if (kDebugMode) {
       debugPrint(
@@ -1023,6 +1304,40 @@ class PrinterService {
     return ok;
   }
 
+  Future<bool> _writeWindowsRawBytes(List<int> bytes) async {
+    final queueName = _state.selectedWindowsQueueName?.trim() ?? '';
+    if (!Platform.isWindows || queueName.isEmpty) return false;
+    try {
+      final ok =
+          await _windowsPrinterChannel.invokeMethod<bool>('printBytes', {
+            'printerName': queueName,
+            'bytes': Uint8List.fromList(bytes),
+          }) ??
+          false;
+      _emit(
+        _state.copyWith(
+          activeTransport: ok
+              ? PrinterTransport.windowsUsb
+              : PrinterTransport.none,
+          connected: ok,
+          clearLastError: ok,
+        ),
+      );
+      return ok;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[QB-PRINTER] Windows RAW write failed: $error');
+      }
+      _emit(
+        _state.copyWith(lastError: _friendlyError(error), connected: false),
+      );
+      return false;
+    }
+  }
+
+  PaperSize get _paperSize =>
+      _state.windowsPaperWidthMm == 80 ? PaperSize.mm80 : PaperSize.mm58;
+
   Future<({bool builtIn, bool usb, PrinterTransport preferred})>
   _probeLocalPrinters() async {
     final builtIn = await _hasBuiltInPrinter();
@@ -1042,6 +1357,7 @@ class PrinterService {
     ({bool builtIn, bool usb, PrinterTransport preferred}) local,
     bool bluetoothConnected,
   ) {
+    if (_hasSelectedSystemPrinter) return PrinterTransport.windowsUsb;
     if (local.preferred != PrinterTransport.none) return local.preferred;
     return bluetoothConnected
         ? PrinterTransport.bluetooth
@@ -1174,7 +1490,9 @@ class PrinterService {
           builtInPrinterAvailable: local.builtIn,
           usbPrinterAvailable: local.usb,
           connected:
-              local.preferred != PrinterTransport.none || bluetoothConnected,
+              local.preferred != PrinterTransport.none ||
+              bluetoothConnected ||
+              _hasSelectedSystemPrinter,
           lastError: _friendlyError(error),
         ),
       );
@@ -1190,7 +1508,9 @@ class PrinterService {
           builtInPrinterAvailable: local.builtIn,
           usbPrinterAvailable: local.usb,
           connected:
-              local.preferred != PrinterTransport.none || bluetoothConnected,
+              local.preferred != PrinterTransport.none ||
+              bluetoothConnected ||
+              _hasSelectedSystemPrinter,
         ),
       );
     }

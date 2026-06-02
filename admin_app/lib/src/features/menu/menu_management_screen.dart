@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../app_controller.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
@@ -12,6 +13,8 @@ import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
 import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
+import '../desktop_pos/widgets/pc_theme.dart';
+import '../desktop_pos/widgets/pc_widgets.dart';
 import 'square_image_cropper.dart';
 
 enum _MenuScanSource { camera, gallery }
@@ -20,12 +23,14 @@ class MenuManagementScreen extends StatefulWidget {
   const MenuManagementScreen({
     this.onNavigateToOrders,
     this.onNavigateToTarget,
+    this.desktop = false,
     super.key,
   });
 
   /// Called when a pending-order notification is opened from the bell here.
   final VoidCallback? onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+  final bool desktop;
 
   @override
   State<MenuManagementScreen> createState() => _MenuManagementScreenState();
@@ -70,6 +75,17 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       (id) => !app.menuItems.any((item) => item.id == id),
     );
 
+    if (widget.desktop) {
+      return _desktopBody(
+        app: app,
+        text: text,
+        language: language,
+        categories: categories,
+        items: items,
+        paused: paused,
+      );
+    }
+
     return Scaffold(
       backgroundColor: PosColors.background,
       floatingActionButton: app.isManager
@@ -101,7 +117,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                         if (app.isManager)
                           TfIconButton(
                             icon: TfNavIcon.settings,
-                            tooltip: text.isBn ? 'মেনু সেটিংস' : 'Menu settings',
+                            tooltip: text.isBn
+                                ? 'মেনু সেটিংস'
+                                : 'Menu settings',
                             onPressed: () => _openMenuSettings(context),
                           ),
                         HeaderModeButton(),
@@ -198,6 +216,256 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 
+  Widget _desktopBody({
+    required PosAppController app,
+    required AppStrings text,
+    required AppLanguage language,
+    required List<String> categories,
+    required List<MenuItem> items,
+    required int paused,
+  }) {
+    final total = app.menuItems.length;
+    final available = app.menuItems.where((item) => item.isAvailable).length;
+    return Container(
+      color: Pc.bg,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 850;
+              final search = SizedBox(
+                width: compact ? double.infinity : 340,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    hintText: text.menuSearchHint,
+                  ),
+                ),
+              );
+              final actions = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
+                  if (app.isManager) ...[
+                    PcBtn(
+                      label: text.menuNewButton,
+                      icon: 'plus',
+                      variant: PcVariant.surface,
+                      onTap: () => _openMenuForm(context),
+                    ),
+                    PcBtn(
+                      label: _scanBusy ? text.menuScanningShort : text.menuScan,
+                      icon: 'upload',
+                      variant: PcVariant.dark,
+                      onTap: _scanBusy ? null : () => _scanMenu(context),
+                    ),
+                    PcBtn(
+                      label: text.isBn ? 'সেটিংস' : 'Settings',
+                      icon: 'settings',
+                      variant: PcVariant.ghost,
+                      onTap: () => _openMenuSettings(context),
+                    ),
+                  ],
+                ],
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [search, const SizedBox(height: 10), actions],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: search),
+                  const SizedBox(width: 12),
+                  actions,
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _desktopStat(
+                  text.isBn ? 'মোট আইটেম' : 'Total items',
+                  '$total',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _desktopStat(
+                  text.isBn ? 'চালু' : 'Available',
+                  '$available',
+                  tone: PcTone.good,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _desktopStat(
+                  text.isBn ? 'বন্ধ' : 'Paused',
+                  '$paused',
+                  tone: paused > 0 ? PcTone.warn : PcTone.muted,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _desktopStat(
+                  text.isBn ? 'ক্যাটাগরি' : 'Categories',
+                  '${app.categories.length}',
+                ),
+              ),
+            ],
+          ),
+          if (app.menuItems.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _desktopCategories(text, language, categories, app.menuItems),
+          ],
+          if (_selectedItemIds.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _DesktopBulkToolbar(
+              count: _selectedItemIds.length,
+              onDiscount: () => _applyBulkDiscount(context),
+              onClear: () => setState(_selectedItemIds.clear),
+              isBn: text.isBn,
+            ),
+          ],
+          const SizedBox(height: 12),
+          Expanded(
+            child: app.menuItems.isEmpty
+                ? Center(
+                    child: _DesktopEmptyMenu(
+                      title: text.menuEmptyTitle,
+                      message: text.menuEmptyMessage,
+                    ),
+                  )
+                : items.isEmpty
+                ? Center(
+                    child: _DesktopEmptyMenu(
+                      title: text.menuNoResultsTitle,
+                      message: text.menuNoResultsMessage,
+                    ),
+                  )
+                : _DesktopMenuGrid(
+                    items: items,
+                    language: language,
+                    selectedIds: _selectedItemIds,
+                    selectionMode: _selectedItemIds.isNotEmpty,
+                    canEdit: app.isManager,
+                    onEdit: (item) => _openMenuForm(context, item: item),
+                    onSelect: (item) {
+                      if (!app.isManager) return;
+                      setState(() {
+                        if (!_selectedItemIds.add(item.id)) {
+                          _selectedItemIds.remove(item.id);
+                        }
+                      });
+                    },
+                    onDelete: (item) => _confirmDelete(context, item),
+                    onAvailabilityChanged: (item, value) async {
+                      if (!app.isManager) return;
+                      await app.toggleMenuAvailability(item.id, value);
+                    },
+                    onAddImage: (item) => _addImageToItem(context, item),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _desktopStat(
+    String label,
+    String value, {
+    PcTone tone = PcTone.muted,
+  }) {
+    final color = switch (tone) {
+      PcTone.good => Pc.good,
+      PcTone.warn => Pc.warn,
+      PcTone.bad => Pc.danger,
+      PcTone.accent => Pc.accent,
+      PcTone.muted => Pc.text,
+    };
+    return PcCard(
+      pad: 12,
+      child: Row(
+        children: [
+          Expanded(child: PcEyebrow(label)),
+          Text(value, style: Pc.num(20, color: color, letterSpacing: -0.3)),
+        ],
+      ),
+    );
+  }
+
+  Widget _desktopCategories(
+    AppStrings text,
+    AppLanguage language,
+    List<String> categories,
+    List<MenuItem> allItems,
+  ) {
+    int countOf(String category) => category == text.allCategories
+        ? allItems.length
+        : allItems
+              .where((i) => i.localizedCategory(language) == category)
+              .length;
+    return SizedBox(
+      height: 38,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final selected = category == _selectedCategory;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedCategory = category),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? Pc.ink : Pc.surface,
+                border: Border.all(color: selected ? Pc.ink : Pc.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    category == text.allCategories
+                        ? text.allCategories
+                        : category,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Pc.onInk : Pc.text,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${countOf(category)}',
+                    style: Pc.mono(
+                      10.5,
+                      color: selected
+                          ? Colors.white.withValues(alpha: 0.78)
+                          : Pc.textTer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _scanMenu(BuildContext context) async {
     final app = AppScope.of(context);
     final text = app.strings;
@@ -271,9 +539,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       builder: (_) => _MenuSettingsSheet(
         allCount: app.menuItems.length,
         selectedCount: _selectedItemIds.length,
+        deliveryCharge: app.serverConfig.deliveryCharge,
       ),
     );
     if (action == null || !context.mounted) return;
+    if (action.editDeliveryCharge) {
+      await _openDeliveryChargeEditor(context);
+      return;
+    }
     final selected = app.menuItems
         .where((item) => _selectedItemIds.contains(item.id))
         .toList(growable: false);
@@ -295,6 +568,24 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         clearSelection: action.target == _MenuSettingsTarget.selected,
       );
     }
+  }
+
+  Future<void> _openDeliveryChargeEditor(BuildContext context) async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final value = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _DeliveryChargeSheet(initialValue: app.serverConfig.deliveryCharge),
+    );
+    if (value == null || !context.mounted) return;
+    await app.updateDeliveryCharge(value);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: TfText(text.menuDeliveryChargeSaved)));
   }
 
   Future<void> _applyDiscountToItems(
@@ -635,7 +926,7 @@ class _MenuActionBar extends StatelessWidget {
                 Expanded(
                   child: _MenuActionButton(
                     label: scanBusy ? text.menuScanningShort : text.menuScan,
-                    icon: Icons.auto_awesome_rounded,
+                    icon: Icons.upload_file_outlined,
                     primary: true,
                     busy: scanBusy,
                     onPressed: onScan,
@@ -676,6 +967,385 @@ class _MenuActionButton extends StatelessWidget {
         busy: busy,
         variant: primary ? TfButtonVariant.primary : TfButtonVariant.dark,
         fullWidth: true,
+      ),
+    );
+  }
+}
+
+class _DesktopBulkToolbar extends StatelessWidget {
+  const _DesktopBulkToolbar({
+    required this.count,
+    required this.onDiscount,
+    required this.onClear,
+    required this.isBn,
+  });
+
+  final int count;
+  final VoidCallback onDiscount;
+  final VoidCallback onClear;
+  final bool isBn;
+
+  @override
+  Widget build(BuildContext context) {
+    return PcCard(
+      pad: 10,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              isBn ? '$count আইটেম নির্বাচিত' : '$count items selected',
+              style: const TextStyle(
+                color: Pc.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          PcBtn(
+            label: isBn ? 'ডিসকাউন্ট' : 'Discount',
+            icon: 'menu',
+            size: PcSize.sm,
+            variant: PcVariant.surface,
+            onTap: onDiscount,
+          ),
+          const SizedBox(width: 8),
+          PcBtn(
+            label: isBn ? 'ক্লিয়ার' : 'Clear',
+            icon: 'close',
+            size: PcSize.sm,
+            variant: PcVariant.ghost,
+            onTap: onClear,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopEmptyMenu extends StatelessWidget {
+  const _DesktopEmptyMenu({required this.title, required this.message});
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return PcCard(
+      pad: 24,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.restaurant_menu_outlined,
+            color: Pc.textTer,
+            size: 34,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Pc.text,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(message, style: const TextStyle(color: Pc.textSec)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopMenuGrid extends StatelessWidget {
+  const _DesktopMenuGrid({
+    required this.items,
+    required this.language,
+    required this.selectedIds,
+    required this.selectionMode,
+    required this.canEdit,
+    required this.onEdit,
+    required this.onSelect,
+    required this.onDelete,
+    required this.onAvailabilityChanged,
+    required this.onAddImage,
+  });
+
+  final List<MenuItem> items;
+  final AppLanguage language;
+  final Set<String> selectedIds;
+  final bool selectionMode;
+  final bool canEdit;
+  final ValueChanged<MenuItem> onEdit;
+  final ValueChanged<MenuItem> onSelect;
+  final ValueChanged<MenuItem> onDelete;
+  final void Function(MenuItem item, bool value) onAvailabilityChanged;
+  final ValueChanged<MenuItem> onAddImage;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 265,
+        mainAxisExtent: 190,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _DesktopMenuCard(
+          item: item,
+          language: language,
+          selected: selectedIds.contains(item.id),
+          selectionMode: selectionMode,
+          canEdit: canEdit,
+          onEdit: () => selectionMode ? onSelect(item) : onEdit(item),
+          onSelect: () => onSelect(item),
+          onDelete: () => onDelete(item),
+          onAvailabilityChanged: (value) => onAvailabilityChanged(item, value),
+          onAddImage: () => onAddImage(item),
+        );
+      },
+    );
+  }
+}
+
+class _DesktopMenuCard extends StatelessWidget {
+  const _DesktopMenuCard({
+    required this.item,
+    required this.language,
+    required this.selected,
+    required this.selectionMode,
+    required this.canEdit,
+    required this.onEdit,
+    required this.onSelect,
+    required this.onDelete,
+    required this.onAvailabilityChanged,
+    required this.onAddImage,
+  });
+
+  final MenuItem item;
+  final AppLanguage language;
+  final bool selected;
+  final bool selectionMode;
+  final bool canEdit;
+  final VoidCallback onEdit;
+  final VoidCallback onSelect;
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onAvailabilityChanged;
+  final VoidCallback onAddImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final extras = item.extras;
+    final hasImage = (item.imageUrl ?? '').trim().isNotEmpty;
+    final iconKey = resolveMenuIconKey(
+      iconKey: extras.iconKey,
+      name: item.name,
+      category: item.category,
+    );
+    final discounted = extras.discountedPrice(item.price);
+    final showDiscount = extras.hasDiscount && discounted < item.price;
+    final priceDecimals = item.price == item.price.roundToDouble() ? 0 : 2;
+    final category = item.localizedCategory(language);
+    final metaBadges = <String>[
+      if (extras.addOns.isNotEmpty) text.isBn ? 'অ্যাড-অন' : 'Add-ons',
+      if (extras.includes.isNotEmpty) text.isBn ? 'কম্বো' : 'Combo',
+      if (showDiscount) extras.discountBadgeLabel(),
+    ];
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canEdit ? onEdit : null,
+        onLongPress: canEdit ? onSelect : null,
+        borderRadius: BorderRadius.circular(Pc.rMd),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected ? Pc.accentWash : Pc.surface,
+            border: Border.all(color: selected ? Pc.accent : Pc.border),
+            borderRadius: BorderRadius.circular(Pc.rMd),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                height: 64,
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: canEdit ? onAddImage : null,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: 58,
+                          height: 58,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              MenuImageView(
+                                imageUrl: item.imageUrl,
+                                iconKey: iconKey,
+                              ),
+                              if (!hasImage && canEdit)
+                                Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: Container(
+                                    width: 18,
+                                    height: 18,
+                                    decoration: BoxDecoration(
+                                      color: Pc.surface,
+                                      borderRadius: BorderRadius.circular(9),
+                                      border: Border.all(color: Pc.border),
+                                    ),
+                                    child: const Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      size: 12,
+                                      color: Pc.text,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (canEdit)
+                      Positioned(
+                        top: -7,
+                        right: -8,
+                        child: Transform.scale(
+                          scale: 0.72,
+                          alignment: Alignment.topRight,
+                          child: Switch.adaptive(
+                            value: item.isAvailable,
+                            onChanged: onAvailabilityChanged,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                item.localizedName(language),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Pc.text,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  height: 1.12,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                category.trim().isEmpty ? 'General' : category,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: Pc.mono(10, color: Pc.textTer),
+              ),
+              const Spacer(),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 5,
+                runSpacing: 5,
+                children: [
+                  for (final badge in metaBadges.take(3))
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            showDiscount && badge == extras.discountBadgeLabel()
+                            ? Pc.dangerSoft
+                            : Pc.surfaceAlt,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        badge,
+                        style: Pc.mono(
+                          9,
+                          color:
+                              showDiscount &&
+                                  badge == extras.discountBadgeLabel()
+                              ? Pc.danger
+                              : Pc.textTer,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (showDiscount) ...[
+                    Text(
+                      tfFormatCurrency(
+                        context,
+                        item.price,
+                        decimalDigits: priceDecimals,
+                      ),
+                      style: const TextStyle(
+                        color: Pc.textTer,
+                        fontSize: 11,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    tfFormatCurrency(
+                      context,
+                      showDiscount ? discounted : item.price,
+                      decimalDigits: priceDecimals,
+                    ),
+                    style: Pc.num(
+                      14,
+                      color: showDiscount ? Pc.danger : Pc.text,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (canEdit) ...[
+                    _desktopIconAction(Icons.edit_outlined, onEdit),
+                    _desktopIconAction(
+                      Icons.photo_library_outlined,
+                      onAddImage,
+                    ),
+                    _desktopIconAction(Icons.delete_outline, onDelete),
+                  ] else
+                    PcPill(
+                      label: item.isAvailable
+                          ? (text.isBn ? 'চালু' : 'Available')
+                          : (text.isBn ? 'বন্ধ' : 'Paused'),
+                      tone: item.isAvailable ? PcTone.good : PcTone.warn,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _desktopIconAction(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Icon(icon, color: Pc.textTer, size: 16),
       ),
     );
   }
@@ -740,29 +1410,38 @@ class _CategoryStrip extends StatelessWidget {
 enum _MenuSettingsTarget { selected, all }
 
 class _MenuSettingsAction {
-  const _MenuSettingsAction({required this.target, required this.clearOnly});
+  const _MenuSettingsAction({required this.target, required this.clearOnly})
+    : editDeliveryCharge = false;
 
-  final _MenuSettingsTarget target;
+  const _MenuSettingsAction.deliveryCharge()
+    : target = null,
+      clearOnly = false,
+      editDeliveryCharge = true;
+
+  final _MenuSettingsTarget? target;
   final bool clearOnly;
+  final bool editDeliveryCharge;
 }
 
 class _MenuSettingsSheet extends StatelessWidget {
   const _MenuSettingsSheet({
     required this.allCount,
     required this.selectedCount,
+    required this.deliveryCharge,
   });
 
   final int allCount;
   final int selectedCount;
+  final double deliveryCharge;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final hasSelected = selectedCount > 0;
     void close(_MenuSettingsTarget target, bool clearOnly) {
-      Navigator.of(context).pop(
-        _MenuSettingsAction(target: target, clearOnly: clearOnly),
-      );
+      Navigator.of(
+        context,
+      ).pop(_MenuSettingsAction(target: target, clearOnly: clearOnly));
     }
 
     return Container(
@@ -782,23 +1461,87 @@ class _MenuSettingsSheet extends StatelessWidget {
                 text.isBn ? 'মেনু সেটিংস' : 'Menu settings',
                 style: TextStyle(
                   fontFamily: tfFontFamily(context),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                   color: PosColors.slate,
                 ),
               ),
               const SizedBox(height: 6),
               TfText(
                 text.isBn
-                    ? 'ডিসকাউন্ট নির্বাচিত আইটেম বা সব আইটেমে প্রয়োগ করুন।'
-                    : 'Apply or clear discounts for selected items or the full menu.',
+                    ? 'ডেলিভারি চার্জ এবং মেনু ডিসকাউন্ট পরিচালনা করুন।'
+                    : 'Manage delivery pricing and menu discounts.',
                 style: TextStyle(
                   color: PosColors.muted,
-                  fontSize: 12.5,
+                  fontSize: 12,
                   height: 1.35,
                 ),
               ),
               const SizedBox(height: 16),
+              TfCard(
+                padding: EdgeInsets.zero,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(PosRadii.md),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pop(const _MenuSettingsAction.deliveryCharge()),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.delivery_dining_outlined,
+                          size: 20,
+                          color: PosColors.muted,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TfText(
+                                text.menuDeliveryCharge,
+                                style: const TextStyle(
+                                  color: PosColors.slate,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              TfText(
+                                text.menuDeliveryChargeSubtitle,
+                                style: const TextStyle(
+                                  color: PosColors.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        TfMoney(
+                          deliveryCharge,
+                          style: const TextStyle(
+                            color: PosColors.slate,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 20,
+                          color: PosColors.muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TfSectionHeader(
+                label: text.isBn ? 'মেনু ডিসকাউন্ট' : 'Menu discounts',
+              ),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
@@ -848,6 +1591,115 @@ class _MenuSettingsSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _DeliveryChargeSheet extends StatefulWidget {
+  const _DeliveryChargeSheet({required this.initialValue});
+
+  final double initialValue;
+
+  @override
+  State<_DeliveryChargeSheet> createState() => _DeliveryChargeSheetState();
+}
+
+class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final value = widget.initialValue;
+    _controller = TextEditingController(
+      text: value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toStringAsFixed(2),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: PosColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TfText(
+                  text.menuDeliveryCharge,
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TfText(
+                  text.menuDeliveryChargeSubtitle,
+                  style: const TextStyle(
+                    color: PosColors.muted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TfField(
+                  label: text.menuDeliveryCharge,
+                  controller: _controller,
+                  hint: text.menuDeliveryChargeHint,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d*\.?\d{0,2}'),
+                    ),
+                  ],
+                  errorText: _error,
+                  prefix: const Icon(
+                    Icons.currency_exchange_rounded,
+                    color: PosColors.muted,
+                  ),
+                ),
+                TfButton(
+                  label: text.isBn ? 'সেভ করুন' : 'Save charge',
+                  icon: TfNavIcon.check,
+                  onPressed: _save,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _save() {
+    final value = double.tryParse(_controller.text.trim());
+    if (value == null || value < 0 || value > 100000) {
+      setState(
+        () => _error = AppScope.of(context).strings.menuDeliveryChargeInvalid,
+      );
+      return;
+    }
+    Navigator.of(context).pop(value);
   }
 }
 

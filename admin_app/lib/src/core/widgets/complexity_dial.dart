@@ -33,10 +33,7 @@ class HeaderComplexityDial extends StatelessWidget {
             PopupMenuItem<BusinessTier>(
               key: ValueKey('complexity-dial-${tier.key}'),
               value: tier,
-              child: _TierMenuItem(
-                tier: tier,
-                selected: tier == selectedTier,
-              ),
+              child: _TierMenuItem(tier: tier, selected: tier == selectedTier),
             ),
         ];
       },
@@ -52,7 +49,7 @@ class HeaderComplexityDial extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             TfText(
-              selectedTier.displayName,
+              selectedTier.displayNameFor(isBn: isBn),
               style: const TextStyle(
                 color: PosColors.primaryDark,
                 fontSize: 12,
@@ -73,10 +70,7 @@ class HeaderComplexityDial extends StatelessWidget {
 }
 
 class _TierMenuItem extends StatelessWidget {
-  const _TierMenuItem({
-    required this.tier,
-    required this.selected,
-  });
+  const _TierMenuItem({required this.tier, required this.selected});
 
   final BusinessTier tier;
   final bool selected;
@@ -115,7 +109,7 @@ class _TierMenuItem extends StatelessWidget {
           const SizedBox(width: PosSpacing.sp3),
           Expanded(
             child: TfText(
-              tier.displayName,
+              tier.displayNameFor(isBn: tfIsBn(context)),
               style: const TextStyle(
                 color: PosColors.primaryDark,
                 fontSize: 13,
