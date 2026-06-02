@@ -75,6 +75,71 @@ export async function apiFetch<T>(
   return (body?.data ?? undefined) as T;
 }
 
+/**
+ * Upload the admin APK as multipart/form-data and publish the update in one call.
+ * No Content-Type header is set so the browser adds the multipart boundary.
+ * The backend reads the version from the APK; versionName/versionCode are only a
+ * fallback if auto-detection fails.
+ */
+export async function uploadAppUpdate(
+  file: File,
+  fields: {
+    versionName?: string;
+    versionCode?: number;
+    releaseNotes?: string;
+    required?: boolean;
+  },
+): Promise<AppUpdateConfig> {
+  const form = new FormData();
+  form.append("file", file);
+  if (fields.versionName) form.append("versionName", fields.versionName);
+  if (fields.versionCode) form.append("versionCode", String(fields.versionCode));
+  if (fields.releaseNotes) form.append("releaseNotes", fields.releaseNotes);
+  form.append("required", String(fields.required ?? true));
+
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/platform/app-update/upload`, {
+      method: "POST",
+      body: form,
+      headers,
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach server at ${API_BASE || "/"} — check your connection`,
+      0,
+    );
+  }
+
+  let body: (ApiResponse<AppUpdateConfig> & { detail?: string }) | null = null;
+  try {
+    const text = await res.text();
+    if (text.trim()) {
+      body = JSON.parse(text) as ApiResponse<AppUpdateConfig> & { detail?: string };
+    }
+  } catch {
+    throw new ApiError(`Server returned non-JSON response (HTTP ${res.status})`, res.status);
+  }
+
+  if (!res.ok) {
+    const msg =
+      body?.error ||
+      (body && typeof body.detail === "string" ? body.detail : undefined) ||
+      `HTTP ${res.status}: ${res.statusText}`;
+    throw new ApiError(msg, res.status);
+  }
+  if (body?.error) {
+    throw new ApiError(body.error, res.status);
+  }
+  return body?.data as AppUpdateConfig;
+}
+
 // ── Core types ────────────────────────────────────────────────────────────────
 
 export type PlatformAdmin = {
@@ -241,6 +306,7 @@ export type AppUpdateConfig = {
   required: boolean;
   publishedAt: string | null;
   notifiedOutlets?: number;
+  autoDetectedVersion?: boolean;
 };
 
 // ── Health types ──────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppUpdateConfig, SystemConfig, apiFetch } from "../api/client";
+import { AppUpdateConfig, SystemConfig, apiFetch, uploadAppUpdate } from "../api/client";
 
 const emptyUpdateForm: AppUpdateConfig = {
   enabled: true,
@@ -7,7 +7,7 @@ const emptyUpdateForm: AppUpdateConfig = {
   versionCode: 1,
   apkUrl: "",
   releaseNotes: "",
-  required: false,
+  required: true, // forced by default — published updates block until installed
   publishedAt: null,
 };
 
@@ -18,6 +18,8 @@ export default function SystemConfigPage() {
   const [updateForm, setUpdateForm] = useState<AppUpdateConfig>(emptyUpdateForm);
   const [saving, setSaving] = useState(false);
   const [publishingUpdate, setPublishingUpdate] = useState(false);
+  const [apkFile, setApkFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [updateSaved, setUpdateSaved] = useState("");
   const [error, setError] = useState("");
@@ -97,6 +99,39 @@ export default function SystemConfigPage() {
       setUpdateError(e instanceof Error ? e.message : "Update publish failed");
     } finally {
       setPublishingUpdate(false);
+    }
+  }
+
+  async function uploadAndPublish() {
+    if (!apkFile) {
+      setUpdateError("Choose an APK file first.");
+      return;
+    }
+    setUploading(true);
+    setUpdateError("");
+    setUpdateSaved("");
+    try {
+      const updated = await uploadAppUpdate(apkFile, {
+        versionName: updateForm.versionName || undefined,
+        versionCode: updateForm.versionCode || undefined,
+        releaseNotes: updateForm.releaseNotes || undefined,
+        required: updateForm.required,
+      });
+      setAppUpdate(updated);
+      setUpdateForm(updated);
+      setApkFile(null);
+      const detected = updated.autoDetectedVersion ? " (version read from APK)" : "";
+      const reach =
+        typeof updated.notifiedOutlets === "number"
+          ? ` Sent to ${updated.notifiedOutlets} outlet${updated.notifiedOutlets === 1 ? "" : "s"}.`
+          : "";
+      setUpdateSaved(
+        `Published v${updated.versionName} · code ${updated.versionCode}${detected}.${reach}`,
+      );
+    } catch (e) {
+      setUpdateError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -209,67 +244,89 @@ export default function SystemConfigPage() {
           <div>
             <h2 style={{ margin: "0 0 6px", fontSize: 15 }}>Admin app APK update</h2>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              Publish a signed APK URL and all connected POS apps will prompt users to update.
+              Upload the signed release APK — its version is read from the file —
+              and every connected POS app on a lower version is prompted to update.
             </p>
           </div>
           <span className={`badge ${appUpdate?.enabled ? "badge-active" : "badge-pending"}`}>
-            {appUpdate?.enabled ? "active" : "disabled"}
+            {appUpdate?.enabled
+              ? `active · v${appUpdate.versionName} (code ${appUpdate.versionCode})`
+              : "disabled"}
           </span>
         </div>
 
-        <div className="two-col-grid" style={{ marginTop: 18 }}>
-          <div className="form-group">
-            <label>Version name</label>
-            <input
-              type="text"
-              value={updateForm.versionName}
-              onChange={(e) => setUpdateForm((f) => ({ ...f, versionName: e.target.value }))}
-              placeholder="1.3.2"
-            />
-          </div>
-          <div className="form-group">
-            <label>Version code</label>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={updateForm.versionCode || 1}
-              onChange={(e) => setUpdateForm((f) => ({ ...f, versionCode: Number(e.target.value) }))}
-              placeholder="3"
-            />
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>APK download URL</label>
+        <div className="form-group" style={{ marginTop: 18 }}>
+          <label>Release APK file (app-release.apk)</label>
           <input
-            type="url"
-            value={updateForm.apkUrl}
-            onChange={(e) => setUpdateForm((f) => ({ ...f, apkUrl: e.target.value }))}
-            placeholder="https://your-domain.com/downloads/quickbites-admin-1.3.2.apk"
+            type="file"
+            accept=".apk,application/vnd.android.package-archive"
+            onChange={(e) => setApkFile(e.target.files?.[0] ?? null)}
           />
           <span className="muted" style={{ fontSize: 12 }}>
-            Use the final signed release APK. Android will still show the system installer confirmation.
+            {apkFile
+              ? `Selected: ${apkFile.name} (${(apkFile.size / (1024 * 1024)).toFixed(1)} MB)`
+              : "Version name & code are auto-read from the APK; it is stored on the server and served to the apps."}
           </span>
         </div>
 
         <div className="form-group">
-          <label>Release notes</label>
+          <label>Update message (release notes)</label>
           <textarea
             rows={4}
             value={updateForm.releaseNotes || ""}
             onChange={(e) => setUpdateForm((f) => ({ ...f, releaseNotes: e.target.value }))}
-            placeholder="What changed in this update?"
+            placeholder="What changed in this update? (shown in the app)"
           />
         </div>
 
         <label className="toggle-row" style={{ marginTop: 8 }}>
-          <span>Required update</span>
+          <span>Required update (forces install)</span>
           <div
             className={`toggle-switch ${updateForm.required ? "on" : ""}`}
             onClick={() => setUpdateForm((f) => ({ ...f, required: !f.required }))}
           />
         </label>
+
+        <details style={{ marginTop: 12 }}>
+          <summary className="muted" style={{ fontSize: 12, cursor: "pointer" }}>
+            Advanced — manual version override / publish by URL
+          </summary>
+          <div className="two-col-grid" style={{ marginTop: 12 }}>
+            <div className="form-group">
+              <label>Version name (auto · override)</label>
+              <input
+                type="text"
+                value={updateForm.versionName}
+                onChange={(e) => setUpdateForm((f) => ({ ...f, versionName: e.target.value }))}
+                placeholder="auto-detected"
+              />
+            </div>
+            <div className="form-group">
+              <label>Version code (auto · override)</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={updateForm.versionCode || 1}
+                onChange={(e) => setUpdateForm((f) => ({ ...f, versionCode: Number(e.target.value) }))}
+                placeholder="auto-detected"
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>APK download URL</label>
+            <input
+              type="url"
+              value={updateForm.apkUrl}
+              onChange={(e) => setUpdateForm((f) => ({ ...f, apkUrl: e.target.value }))}
+              placeholder="https://your-domain.com/app-release.apk"
+            />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Auto-filled after an upload. Or paste a hosted URL and use “Publish by URL”
+              (needs version name + code above).
+            </span>
+          </div>
+        </details>
 
         {appUpdate?.publishedAt && (
           <p className="muted" style={{ fontSize: 12 }}>
@@ -283,16 +340,24 @@ export default function SystemConfigPage() {
           <button
             type="button"
             className="btn"
-            onClick={publishUpdate}
-            disabled={publishingUpdate}
+            onClick={uploadAndPublish}
+            disabled={uploading || publishingUpdate || !apkFile}
           >
-            {publishingUpdate ? "Publishing…" : "Publish update call"}
+            {uploading ? "Uploading…" : "Upload & Publish"}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={publishUpdate}
+            disabled={publishingUpdate || uploading || !updateForm.apkUrl}
+          >
+            {publishingUpdate ? "Publishing…" : "Publish by URL"}
           </button>
           <button
             type="button"
             className="btn-secondary"
             onClick={disableUpdate}
-            disabled={publishingUpdate || !appUpdate?.enabled}
+            disabled={publishingUpdate || uploading || !appUpdate?.enabled}
           >
             Disable prompt
           </button>
