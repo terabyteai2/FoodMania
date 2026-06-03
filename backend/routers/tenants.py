@@ -8,6 +8,7 @@ from client_api_base import client_visible_api_base
 from database import get_db
 from models import Outlet, Restaurant
 from schemas import BootstrapRequest, ok
+from subscription_service import get_or_create_subscription
 
 router = APIRouter()
 
@@ -21,6 +22,7 @@ async def bootstrap_tenant(
 ):
     # Re-use existing outlet if serverId already registered
     outlet = (await db.execute(select(Outlet).where(Outlet.server_id == body.serverId))).scalar_one_or_none()
+    outlet_name = (body.outletName or body.restaurantName).strip()
 
     if outlet is None:
         import uuid
@@ -52,10 +54,13 @@ async def bootstrap_tenant(
         outlet = Outlet(
             id=outlet_id,
             restaurant_id=restaurant.id,
-            name=body.outletName,
+            name=outlet_name,
             server_id=body.serverId,
+            table_count=body.tableCount if body.tableCount is not None else 10,
         )
         db.add(outlet)
+        await db.flush()
+        await get_or_create_subscription(db, outlet.id)
         await db.commit()
         await db.refresh(outlet)
         await db.refresh(restaurant)
@@ -65,8 +70,11 @@ async def bootstrap_tenant(
         if body.restaurantName.strip() and restaurant.name != body.restaurantName:
             restaurant.name = body.restaurantName
             changed = True
-        if body.outletName.strip() and outlet.name != body.outletName:
-            outlet.name = body.outletName
+        if outlet_name and outlet.name != outlet_name:
+            outlet.name = outlet_name
+            changed = True
+        if body.tableCount is not None and outlet.table_count != body.tableCount:
+            outlet.table_count = body.tableCount
             changed = True
         if changed:
             await db.commit()
@@ -80,6 +88,7 @@ async def bootstrap_tenant(
         "outletId": outlet.id,
         "restaurantName": restaurant.name,
         "outletName": outlet.name,
+        "tableCount": outlet.table_count if outlet.table_count is not None else 10,
         "deviceToken": token,
         "publicApiBaseUrl": client_visible_api_base(request),
     })

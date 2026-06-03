@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
@@ -8,10 +9,13 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from config import settings
-from database import create_tables
-from routers import admin, customer, devices, health, menu, orders, payments, platform, tenants, ws
+from database import AsyncSessionLocal, create_tables
+from models import OutletSubscription
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, tenants, ws
+from subscription_service import maybe_expire_subscription
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
 
@@ -55,6 +59,54 @@ def _start_ngrok() -> str | None:
     return None
 
 
+async def _expire_stale_subscriptions_loop() -> None:
+    """Periodically flip expired active subscriptions back to pending."""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # run every hour
+            async with AsyncSessionLocal() as db:
+                active_subs = (
+                    await db.execute(
+                        select(OutletSubscription).where(OutletSubscription.status == "active")
+                    )
+                ).scalars().all()
+                changed = 0
+                for sub in active_subs:
+                    original_status = sub.status
+                    await maybe_expire_subscription(db, sub)
+                    if sub.status != original_status:
+                        changed += 1
+                if changed:
+                    await db.commit()
+                    print(f"[expiry] Moved {changed} subscription(s) from active → pending")
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            print(f"[expiry] Background task error: {exc}")
+
+
+def _init_sentry() -> None:
+    dsn = settings.SENTRY_DSN.strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=(settings.SENTRY_ENVIRONMENT or settings.APP_ENV).strip() or "production",
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.1,
+        )
+    except Exception as exc:
+        print(f"[sentry] Init skipped: {exc}")
+
+
+_init_sentry()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_tables()
@@ -62,6 +114,8 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.HERO_MEDIA_DIR, exist_ok=True)
     os.makedirs(settings.OUTLET_IMAGES_DIR, exist_ok=True)
     os.makedirs(settings.OUTLET_VIDEOS_DIR, exist_ok=True)
+
+    expiry_task = asyncio.create_task(_expire_stale_subscriptions_loop())
 
     public_url = _start_ngrok()
     if public_url:
@@ -82,6 +136,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    expiry_task.cancel()
+    try:
+        await expiry_task
+    except asyncio.CancelledError:
+        pass
+
 
 app = FastAPI(title="Rastarant POS API", version="1.0.0", lifespan=lifespan)
 
@@ -100,13 +160,18 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.include_router(health.router)
 app.include_router(tenants.router)
 app.include_router(admin.router)
+app.include_router(chatbot.router)
 app.include_router(devices.router)
 app.include_router(menu.router)
+app.include_router(inventory.router)
+app.include_router(dashboard.router)
 app.include_router(orders.router)
+app.include_router(pos.router)
 app.include_router(payments.router)
 app.include_router(platform.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
+app.include_router(app_download.router)
 
 
 @app.exception_handler(Exception)
@@ -123,6 +188,18 @@ if (FRONTEND_DIST / "assets").exists():
 @app.get("/menu/{full_path:path}", include_in_schema=False)
 async def serve_menu_spa(full_path: str):
     """Serve the customer React SPA for all /menu/* routes."""
+    index = FRONTEND_DIST / "index.html"
+    if index.exists():
+        return FileResponse(
+            str(index),
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
+    return JSONResponse(status_code=503, content={"error": "Customer menu not built yet. Run: bash build_frontend.sh"})
+
+
+@app.get("/tableorder/{full_path:path}", include_in_schema=False)
+async def serve_table_order_spa(full_path: str):
+    """Serve the customer React SPA for table QR routes."""
     index = FRONTEND_DIST / "index.html"
     if index.exists():
         return FileResponse(

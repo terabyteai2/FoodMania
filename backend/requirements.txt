@@ -17,3 +17,17 @@ gunicorn>=21.2
 google-auth>=2.35
 requests>=2.32
 httpx>=0.27
+sentry-sdk[fastapi]>=2.0
+# CentOS 7 VPS has GCC 4.8; NumPy 2.3 falls back to a source build there.
+numpy<2.3
+# Pandas 3 likewise drops the wheel path used by the current VPS baseline.
+pandas<3
+# ujson 5.11+ falls back to a source build on the current VPS baseline.
+ujson<5.11
+pytest>=8.0
+pytest-asyncio>=0.24
+# Reads versionName/versionCode straight from an uploaded APK (pure-python; its
+# lxml dep ships manylinux2014 wheels, so it installs on the CentOS 7 VPS without
+# a source build). Used by the in-app-update upload endpoint; imported lazily with
+# a manual-entry fallback so the endpoint still works if the wheel is unavailable.
+pyaxmlparser>=0.3

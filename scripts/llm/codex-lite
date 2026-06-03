@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+COMPONENT="${1:-root}"
+
+case "$COMPONENT" in
+  root)
+    WORKDIR="$ROOT"
+    shift || true
+    ;;
+  backend)
+    WORKDIR="$ROOT/backend"
+    shift
+    ;;
+  admin|admin_app)
+    WORKDIR="$ROOT/admin_app"
+    shift
+    ;;
+  customer|customer_menu)
+    WORKDIR="$ROOT/customer_menu/frontend"
+    shift
+    ;;
+  platform|platform_admin)
+    WORKDIR="$ROOT/platform_admin"
+    shift
+    ;;
+  deploy)
+    WORKDIR="$ROOT/deploy"
+    shift
+    ;;
+  *)
+    WORKDIR="$ROOT"
+    ;;
+esac
+
+LITE_HOME="${CODEX_LITE_HOME:-$HOME/.codex-lite}"
+mkdir -p "$LITE_HOME"
+
+if [ ! -e "$LITE_HOME/auth.json" ] && [ -e "$HOME/.codex/auth.json" ]; then
+  ln -s "$HOME/.codex/auth.json" "$LITE_HOME/auth.json"
+fi
+
+if [ ! -f "$LITE_HOME/config.toml" ]; then
+  {
+    printf 'model_reasoning_effort = "low"\n\n'
+    printf '[projects."%s"]\ntrust_level = "trusted"\n\n' "$ROOT"
+    printf '[projects."%s/backend"]\ntrust_level = "trusted"\n\n' "$ROOT"
+    printf '[projects."%s/admin_app"]\ntrust_level = "trusted"\n\n' "$ROOT"
+    printf '[projects."%s/customer_menu/frontend"]\ntrust_level = "trusted"\n\n' "$ROOT"
+    printf '[projects."%s/platform_admin"]\ntrust_level = "trusted"\n\n' "$ROOT"
+    printf '[projects."%s/deploy"]\ntrust_level = "trusted"\n' "$ROOT"
+  } > "$LITE_HOME/config.toml"
+fi
+
+EFFORT="${CODEX_EFFORT:-low}"
+FEATURE_FLAGS=()
+if [ "${CODEX_FULL_FEATURES:-0}" != "1" ]; then
+  FEATURE_FLAGS=(
+    --disable plugins
+    --disable apps
+    --disable browser_use
+    --disable browser_use_external
+    --disable image_generation
+  )
+fi
+
+exec env CODEX_HOME="$LITE_HOME" codex \
+  "${FEATURE_FLAGS[@]}" \
+  -c "model_reasoning_effort=\"$EFFORT\"" \
+  --cd "$WORKDIR" \
+  "$@"

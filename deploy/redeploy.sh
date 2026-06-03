@@ -25,6 +25,41 @@ die()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 ssh -o BatchMode=yes -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "true" 2>/dev/null \
   || die "Keyless SSH not configured. Run bash deploy/bootstrap_vps.sh first."
 
+say "Installing customer menu dependencies"
+cd "${REPO_ROOT}/customer_menu/frontend"
+if [[ -f package-lock.json ]]; then
+  npm ci --silent 2>/dev/null || die "Customer menu npm ci failed"
+else
+  npm install --silent 2>/dev/null || die "Customer menu npm install failed"
+fi
+
+say "Building customer menu frontend"
+npm run build --silent 2>/dev/null || die "Customer menu build failed"
+cd "${REPO_ROOT}"
+
+say "Installing platform admin dependencies"
+cd "${REPO_ROOT}/platform_admin"
+if [[ -f package-lock.json ]]; then
+  npm ci --silent 2>/dev/null || die "Platform admin npm ci failed"
+else
+  npm install --silent 2>/dev/null || die "Platform admin npm install failed"
+fi
+
+say "Building platform admin"
+VITE_BASE_PATH=/admin/ npm run build --silent 2>/dev/null || die "Platform admin build failed"
+cd "${REPO_ROOT}"
+
+if [[ -f "${REPO_ROOT}/backend/.env" ]]; then
+  say "Syncing backend .env to VPS"
+  bash "${SCRIPT_DIR}/push-backend-env.sh" || true
+fi
+
+PLACEHOLDER_SOURCE="${REPO_ROOT}/backend/uploads/menu_placeholders"
+if [[ ! -d "${PLACEHOLDER_SOURCE}" ]]; then
+  PLACEHOLDER_SOURCE="${REPO_ROOT}/admin_app/assets/menu_placeholders"
+fi
+[[ -d "${PLACEHOLDER_SOURCE}" ]] || die "Missing menu placeholder source directory"
+
 say "Syncing code to ${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}"
 rsync -az --delete \
   -e "ssh -p ${VPS_PORT}" \
@@ -36,29 +71,84 @@ rsync -az --delete \
   --exclude='.venv/' \
   --exclude='venv/' \
   --exclude='deploy/.deploy-secrets' \
+  --exclude='landing/' \
   --exclude='Restuarent_POS_Admin_APP/' \
+  --exclude='admin_app/' \
+  --exclude='platform_admin/' \
   --exclude='customer_menu/frontend/node_modules/' \
   --exclude='customer_menu/frontend/dist/' \
   --exclude='backend/uploads/' \
+  --exclude='backend/In_App_Update_Apk_File/' \
   --exclude='backend/.env' \
   --exclude='*.apk' \
   --exclude='*.aab' \
   --exclude='*.keystore' \
   "${REPO_ROOT}/" "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 
-say "Reinstalling Python deps (in case requirements.txt changed) + restarting service"
+say "Syncing platform admin build"
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+  "mkdir -p '${REMOTE_DIR}/platform_admin'"
+rsync -az --delete \
+  -e "ssh -p ${VPS_PORT}" \
+  "${REPO_ROOT}/platform_admin/dist/" \
+  "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/platform_admin/"
+
+say "Syncing shipped menu placeholder pictures"
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+  "mkdir -p '${REMOTE_DIR}/backend/uploads/menu_placeholders'"
+rsync -az --delete \
+  -e "ssh -p ${VPS_PORT}" \
+  "${PLACEHOLDER_SOURCE}/" \
+  "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/backend/uploads/menu_placeholders/"
+
+say "Updating nginx routes + restarting backend"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" bash -s <<REMOTE
 set -euo pipefail
+if [[ -f ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf ]]; then
+  install -m 644 ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf /etc/nginx/conf.d/rastarant.conf
+fi
+if [[ -f ${REMOTE_DIR}/deploy/nginx/quickbytes.conf ]]; then
+  install -m 644 ${REMOTE_DIR}/deploy/nginx/quickbytes.conf /etc/nginx/conf.d/quickbytes.conf
+fi
+nginx -t
+systemctl reload nginx
+echo "  ✓ nginx reloaded"
 cd ${REMOTE_DIR}/backend
 ./.venv/bin/pip install -r requirements.txt --quiet
 systemctl restart ${SERVICE_NAME}
-sleep 2
+sleep 8
 curl -fsS http://127.0.0.1:8000/health >/dev/null && echo "  ✓ /health OK"
+systemctl is-active --quiet ${SERVICE_NAME} && echo "  ✓ ${SERVICE_NAME} active"
 REMOTE
 
-say "External check"
-if curl -fsS --max-time 10 "http://${VPS_HOST}/health" >/dev/null; then
-  ok "Deployed — http://${VPS_HOST} is live with the new code."
+API_BASE="${API_BASE:-https://quickbytes.buzz}"
+say "Smoke test (${API_BASE})"
+curl -fsS --max-time 15 "${API_BASE}/health" >/dev/null \
+  || die "Health check failed at ${API_BASE}/health"
+curl -fsS --max-time 15 "https://quickbytes.buzz/" | grep -q '<title>QuickBytes' \
+  || die "Landing page smoke check failed at https://quickbytes.buzz/"
+curl -fsS --max-time 15 "https://quickbytes.buzz/admin/" | grep -q '<title>Rastarant Platform Admin</title>' \
+  || die "Platform admin smoke check failed at https://quickbytes.buzz/admin/"
+curl -fsS --max-time 15 "https://demo.quickbytes.buzz/" | grep -q '<title>Menu</title>' \
+  || die "Customer menu smoke check failed at https://demo.quickbytes.buzz/"
+curl -fsS --max-time 15 "${API_BASE}/uploads/menu_placeholders/biryani-1.png" >/dev/null \
+  || die "Placeholder image smoke check failed at ${API_BASE}/uploads/menu_placeholders/biryani-1.png"
+upload_status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+  -X POST "${API_BASE}/platform/app-update/upload")"
+[[ "${upload_status}" == "401" || "${upload_status}" == "403" ]] \
+  || die "APK upload route smoke check failed at ${API_BASE}/platform/app-update/upload (HTTP ${upload_status})"
+download_headers="$(mktemp)"
+download_body="$(mktemp)"
+trap 'rm -f "${download_headers}" "${download_body}"' EXIT
+download_status="$(curl -sS --max-time 15 -D "${download_headers}" -o "${download_body}" \
+  -w '%{http_code}' "${API_BASE}/app-download/app-release.apk")"
+if [[ "${download_status}" == "404" ]]; then
+  grep -qi '^content-type: application/json' "${download_headers}" \
+    || die "APK download route returned HTTP 404 with an unexpected content type"
+elif [[ "${download_status}" == "200" ]]; then
+  grep -qi '^content-type: application/vnd.android.package-archive' "${download_headers}" \
+    || die "APK download route returned HTTP 200 without the APK content type"
 else
-  die "External /health failed. Run: ssh ${VPS_USER}@${VPS_HOST} 'journalctl -u ${SERVICE_NAME} --no-pager | tail -50'"
+  die "APK download route smoke check failed at ${API_BASE}/app-download/app-release.apk (HTTP ${download_status})"
 fi
+ok "Deployed — ${API_BASE}"

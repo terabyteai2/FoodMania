@@ -1,19 +1,28 @@
 """Public customer-facing endpoints — no device token required."""
 
-import uuid
-from datetime import datetime, timezone
-
+import html
+import json
+import logging
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from config import settings
 from database import get_db
-from models import MenuItem, Order, Outlet, Restaurant
-from routers.ws import manager
+from models import MenuItem, Order, Outlet
+from routers.menu import ALLOWED_MENU_THEMES, DEFAULT_MENU_THEME
+from services.customer_orders import (
+    DeliveryOrderLine,
+    create_delivery_order,
+    public_order_response,
+)
+from services.menu_placeholders import infer_icon_key, resolve_placeholder_url
 
 router = APIRouter(prefix="/customer", tags=["customer"])
+logger = logging.getLogger("quickbytes.customer")
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -41,17 +50,116 @@ def _rewrite_upload_url(request: Request, url: str | None) -> str | None:
     return f"{base}{url[idx:]}"
 
 
-def _item_to_dict(item: MenuItem, request: Request) -> dict:
-    return {
+def _public_menu_theme(value: str | None) -> str:
+    return value if value in ALLOWED_MENU_THEMES else DEFAULT_MENU_THEME
+
+
+def _icon_key_from_tags(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        tags = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(tags, list):
+        return None
+    for tag in tags:
+        if not isinstance(tag, str):
+            continue
+        value = tag.strip()
+        if value.lower().startswith("icon:"):
+            key = value.split(":", 1)[1].strip().lower()
+            return key or None
+    return None
+
+
+def _item_to_dict(item: MenuItem, request: Request, item_index: int = 0) -> dict:
+    icon_key = _icon_key_from_tags(item.tags_json) or infer_icon_key(
+        item.name,
+        item.category,
+    )
+    image_url = _rewrite_upload_url(request, item.image_url)
+    if not image_url:
+        image_url = resolve_placeholder_url(icon_key, item_index, request)
+    data = {
         "id": item.id,
         "name": item.name,
+        "nameEn": item.name_en or item.name,
+        "nameBn": item.name_bn or "",
         "description": item.description or "",
+        "descriptionEn": item.description_en or item.description or "",
+        "descriptionBn": item.description_bn or "",
         "price": float(item.price),
         "category": item.category or "General",
+        "categoryEn": item.category_en or item.category or "General",
+        "categoryBn": item.category_bn or "",
         "isAvailable": item.is_available,
-        "imageUrl": _rewrite_upload_url(request, item.image_url),
+        "imageUrl": image_url,
         "videoUrl": _rewrite_upload_url(request, item.video_url),
+        "iconKey": icon_key,
     }
+    return data
+
+
+def _money(value: object) -> str:
+    try:
+        return f"{float(value or 0):.2f}"
+    except (TypeError, ValueError):
+        return "0.00"
+
+
+def _order_details_html(order: Order, outlet: Outlet) -> str:
+    restaurant_name = html.escape(outlet.restaurant.name if outlet.restaurant else outlet.name)
+    service = html.escape((order.service_type or "dine_in").replace("_", " ").title())
+    rows = []
+    for item in order.items or []:
+        name = html.escape(str(item.get("nameEn") or item.get("name") or "Item"))
+        qty = html.escape(str(item.get("qty") or 1))
+        total = _money(item.get("lineTotal") or (float(item.get("price") or 0) * float(item.get("qty") or 1)))
+        rows.append(f"<tr><td>{qty}x {name}</td><td>৳{total}</td></tr>")
+    delivery = ""
+    if (order.service_type or "").lower() == "delivery":
+        delivery = f"""
+        <section>
+          <h2>Delivery</h2>
+          <p>{html.escape(order.customer_name or "")}</p>
+          <p>{html.escape(order.mobile_number or "")}</p>
+          <p>{html.escape(order.delivery_address or "")}</p>
+        </section>
+        """
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{restaurant_name} Order {order.serial_number}</title>
+  <style>
+    body {{ margin: 0; font-family: Inter, system-ui, sans-serif; background: #f7f2e8; color: #201812; }}
+    main {{ max-width: 720px; margin: 0 auto; padding: 28px 18px 48px; }}
+    h1 {{ margin: 0 0 6px; font-size: 30px; }}
+    h2 {{ margin: 22px 0 8px; font-size: 15px; text-transform: uppercase; letter-spacing: .08em; }}
+    .meta, table, section {{ background: white; border: 1px solid #e4d8c4; border-radius: 12px; padding: 14px; }}
+    .meta p, section p {{ margin: 4px 0; }}
+    table {{ width: 100%; border-collapse: separate; border-spacing: 0 8px; }}
+    td:last-child {{ text-align: right; white-space: nowrap; }}
+    .total {{ font-size: 22px; font-weight: 700; text-align: right; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{restaurant_name}</h1>
+    <div class="meta">
+      <p><strong>Order:</strong> #{order.serial_number or "-"}</p>
+      <p><strong>Type:</strong> {service}</p>
+      <p><strong>Status:</strong> {html.escape(order.status.title())}</p>
+    </div>
+    {delivery}
+    <h2>Items</h2>
+    <table><tbody>{"".join(rows)}</tbody></table>
+    <p class="total">Total ৳{_money(order.total_amount)}</p>
+  </main>
+</body>
+</html>"""
 
 
 async def _get_outlet(outlet_ref: str, db: AsyncSession) -> Outlet:
@@ -59,6 +167,7 @@ async def _get_outlet(outlet_ref: str, db: AsyncSession) -> Outlet:
         await db.execute(
             select(Outlet).where(
                 (Outlet.id == outlet_ref) | (Outlet.server_id == outlet_ref)
+                | (Outlet.public_slug == outlet_ref.lower())
             )
         )
     ).scalar_one_or_none()
@@ -90,7 +199,7 @@ async def get_public_menu(
             .order_by(MenuItem.category, MenuItem.name)
         )
     ).scalars().all()
-    return _ok([_item_to_dict(i, request) for i in items])
+    return _ok([_item_to_dict(i, request, index) for index, i in enumerate(items)])
 
 
 # ── POST order ────────────────────────────────────────────────────────────────
@@ -106,6 +215,81 @@ class CustomerOrderRequest(BaseModel):
     items: list[CustomerOrderItem]
     tableNo: str | None = None
     note: str | None = None
+    orderType: str | None = None
+    customerName: str | None = None
+    deliveryAddress: str | None = None
+    mobileNumber: str | None = None
+
+
+class ReverseGeocodeRequest(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+
+
+async def _reverse_geocode_address(lat: float, lng: float) -> str:
+    api_key = settings.GOOGLE_GEOCODING_API_KEY.strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Address lookup is not configured.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={
+                    "latlng": f"{lat},{lng}",
+                    "key": api_key,
+                    "language": "en",
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Address lookup failed.",
+        ) from exc
+
+    google_status = payload.get("status")
+    if google_status == "ZERO_RESULTS":
+        raise HTTPException(status_code=404, detail="No address found near this location.")
+    if google_status != "OK":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Address lookup failed.",
+        )
+
+    results = payload.get("results") or []
+    result = next((item for item in results if item.get("formatted_address")), None)
+    address = (result or {}).get("formatted_address", "").strip()
+    if not address:
+        raise HTTPException(status_code=404, detail="No address found near this location.")
+    return address
+
+
+@router.post("/{outlet_id}/geocode/reverse")
+async def reverse_geocode_customer_location(
+    outlet_id: str,
+    body: ReverseGeocodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a formatted address for a customer-provided browser location."""
+    await _get_outlet(outlet_id, db)
+    logger.info(
+        "[QB-CUSTOMER-GEO] reverse request outlet=%s lat=%.6f lng=%.6f",
+        outlet_id,
+        body.lat,
+        body.lng,
+    )
+    address = await _reverse_geocode_address(body.lat, body.lng)
+    logger.info(
+        "[QB-CUSTOMER-GEO] reverse success outlet=%s address_len=%s",
+        outlet_id,
+        len(address),
+    )
+    return {"address": address}
 
 
 @router.post("/{outlet_id}/orders")
@@ -115,78 +299,50 @@ async def place_customer_order(
     db: AsyncSession = Depends(get_db),
 ):
     """Place an order from the customer menu web app."""
-    if not body.items:
-        raise HTTPException(status_code=422, detail="Order must contain at least one item")
-
     outlet = await _get_outlet(outlet_id, db)
-
-    total = sum(item.price * item.qty for item in body.items)
-    now = datetime.now(timezone.utc)
-    order_id = str(uuid.uuid4())
-
-    items_payload = [
-        {
-            "menuItemId": item.menuItemId,
-            "name": item.name,
-            "qty": item.qty,
-            "price": item.price,
-            "lineTotal": round(item.price * item.qty, 2),
-        }
+    lines = [
+        DeliveryOrderLine(
+            menu_item_id=item.menuItemId,
+            name=item.name,
+            qty=item.qty,
+            price=item.price,
+        )
         for item in body.items
     ]
-
-    order = Order(
-        id=order_id,
-        outlet_id=outlet.id,
-        source="customer_web",
-        status="pending",
-        total_amount=round(total, 2),
-        items=items_payload,
-        notes=body.tableNo and f"Table {body.tableNo}" or body.note,
-        created_at=now,
-        updated_at=now,
+    order_type = (body.orderType or "delivery").strip().lower()
+    order = await create_delivery_order(
+        db=db,
+        outlet=outlet,
+        lines=lines,
+        customer_name=body.customerName,
+        delivery_address=body.deliveryAddress,
+        mobile_number=body.mobileNumber,
+        note=body.note,
+        service_type=order_type,
+        table_no=body.tableNo,
     )
-    db.add(order)
-    await db.commit()
-    await db.refresh(order)
+    return _ok(public_order_response(order))
 
-    # Assign a 1-based serial number scoped to this outlet
-    count_res = await db.execute(
-        select(func.count()).select_from(Order).where(Order.outlet_id == outlet.id)
+
+@router.get("/orders/{order_id}")
+async def get_public_order_details_page(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    order = (
+        await db.execute(
+            select(Order)
+            .where(Order.id == order_id)
+            .options(joinedload(Order.outlet).joinedload(Outlet.restaurant))
+        )
+    ).scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return Response(
+        content=_order_details_html(order, order.outlet),
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store, max-age=0"},
     )
-    order.serial_number = count_res.scalar()
-    await db.commit()
-
-    # Broadcast to the admin POS via WebSocket
-    await manager.broadcast(
-        outlet.id,
-        {
-            "type": "order_created",
-            "data": {
-                "id": order.id,
-                "outletId": order.outlet_id,
-                "serialNumber": order.serial_number,
-                "source": order.source,
-                "status": order.status,
-                "totalAmount": float(order.total_amount),
-                "items": order.items,
-                "notes": order.notes,
-                "createdByAccountId": None,
-                "createdByRole": "customer",
-                "createdAt": order.created_at.isoformat(),
-                "updatedAt": order.updated_at.isoformat(),
-            },
-        },
-    )
-
-    return _ok({
-        "orderId": order.id,
-        "serialNumber": order.serial_number,
-        "status": order.status,
-        "total": float(order.total_amount),
-        "items": order.items,
-        "notes": order.notes,
-    })
 
 
 # ── GET restaurant info ────────────────────────────────────────────────────────
@@ -203,7 +359,11 @@ async def get_outlet_info(
     outlet = (
         await db.execute(
             select(Outlet)
-            .where((Outlet.id == outlet_id) | (Outlet.server_id == outlet_id))
+            .where(
+                (Outlet.id == outlet_id)
+                | (Outlet.server_id == outlet_id)
+                | (Outlet.public_slug == outlet_id.lower())
+            )
             .options(joinedload(Outlet.restaurant))
         )
     ).scalar_one_or_none()
@@ -218,5 +378,7 @@ async def get_outlet_info(
         "outletName": outlet.name,
         "bannerUrl": _rewrite_upload_url(request, outlet.banner_url),
         "videoUrl": _rewrite_upload_url(request, outlet.video_url),
+        "deliveryCharge": float(outlet.delivery_charge or 0),
         "galleryImages": gallery,
+        "menuTheme": _public_menu_theme(outlet.menu_theme),
     })

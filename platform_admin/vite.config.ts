@@ -3,16 +3,19 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/admin/",
-  build: {
-    outDir: "dist",
-  },
+  base: process.env.VITE_BASE_PATH || "/",
   server: {
     host: true,
     port: 5174,
     proxy: {
+      // Only used when VITE_API_BASE_URL is NOT set (relative URL mode).
+      // When VITE_API_BASE_URL=https://quickbytes.buzz, these are bypassed.
       "/platform": {
-        target: "http://127.0.0.1:8000",
+        target: "https://quickbytes.buzz",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: "https://quickbytes.buzz",
         changeOrigin: true,
       },
     },

@@ -1,0 +1,422 @@
+import 'dart:convert';
+
+import '../core/localization/app_strings.dart';
+import 'sync_status.dart';
+
+class MenuItem {
+  MenuItem({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.category,
+    required this.price,
+    required this.isAvailable,
+    required this.createdAt,
+    required this.updatedAt,
+    this.costPrice,
+    this.nameEn = '',
+    this.nameBn = '',
+    this.descriptionEn = '',
+    this.descriptionBn = '',
+    this.categoryEn = '',
+    this.categoryBn = '',
+    this.syncStatus = SyncStatus.synced,
+    this.version = 1,
+    this.deletedAt,
+    this.imageUrl,
+    this.preparationTimeMinutes,
+    this.tags = const [],
+  });
+
+  final String id;
+  final String name;
+  final String nameEn;
+  final String nameBn;
+  final String description;
+  final String descriptionEn;
+  final String descriptionBn;
+  final String category;
+  final String categoryEn;
+  final String categoryBn;
+  final double price;
+
+  /// Owner-entered ingredient cost; null when unset. Drives Review-tab
+  /// food-cost % / margin. Preserved on sync so it isn't wiped by round-trips.
+  final double? costPrice;
+  final String? imageUrl;
+  final bool isAvailable;
+  final int? preparationTimeMinutes;
+  final List<String> tags;
+  final SyncStatus syncStatus;
+  final int version;
+  final DateTime? deletedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  MenuItem copyWith({
+    String? id,
+    String? name,
+    String? nameEn,
+    String? nameBn,
+    String? description,
+    String? descriptionEn,
+    String? descriptionBn,
+    String? category,
+    String? categoryEn,
+    String? categoryBn,
+    double? price,
+    double? costPrice,
+    bool clearCostPrice = false,
+    String? imageUrl,
+    bool? isAvailable,
+    int? preparationTimeMinutes,
+    List<String>? tags,
+    SyncStatus? syncStatus,
+    int? version,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return MenuItem(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      nameEn: nameEn ?? this.nameEn,
+      nameBn: nameBn ?? this.nameBn,
+      description: description ?? this.description,
+      descriptionEn: descriptionEn ?? this.descriptionEn,
+      descriptionBn: descriptionBn ?? this.descriptionBn,
+      category: category ?? this.category,
+      categoryEn: categoryEn ?? this.categoryEn,
+      categoryBn: categoryBn ?? this.categoryBn,
+      price: price ?? this.price,
+      costPrice: clearCostPrice ? null : costPrice ?? this.costPrice,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isAvailable: isAvailable ?? this.isAvailable,
+      preparationTimeMinutes:
+          preparationTimeMinutes ?? this.preparationTimeMinutes,
+      tags: tags ?? this.tags,
+      syncStatus: syncStatus ?? this.syncStatus,
+      version: version ?? this.version,
+      deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  Map<String, Object?> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'nameEn': nameEn,
+      'nameBn': nameBn,
+      'description': description,
+      'descriptionEn': descriptionEn,
+      'descriptionBn': descriptionBn,
+      'category': category,
+      'categoryEn': categoryEn,
+      'categoryBn': categoryBn,
+      'price': price,
+      'costPrice': costPrice,
+      'imageUrl': imageUrl,
+      'isAvailable': isAvailable ? 1 : 0,
+      'preparationTimeMinutes': preparationTimeMinutes,
+      'tags': jsonEncode(tags),
+      'syncStatus': syncStatus.value,
+      'version': version,
+      'deletedAt': deletedAt?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'nameEn': nameEn,
+      'nameBn': nameBn,
+      'description': description,
+      'descriptionEn': descriptionEn,
+      'descriptionBn': descriptionBn,
+      'category': category,
+      'categoryEn': categoryEn,
+      'categoryBn': categoryBn,
+      'price': price,
+      'costPrice': costPrice,
+      'imageUrl': imageUrl,
+      'isAvailable': isAvailable,
+      'preparationTimeMinutes': preparationTimeMinutes,
+      'tags': tags,
+      'syncStatus': syncStatus.value,
+      'version': version,
+      'deletedAt': deletedAt?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory MenuItem.fromMap(Map<String, Object?> map) {
+    final name = map['name'] as String;
+    final description = map['description'] as String? ?? '';
+    final category = map['category'] as String? ?? 'General';
+    return MenuItem(
+      id: map['id'] as String,
+      name: name,
+      nameEn: _text(map['nameEn']) ?? name,
+      nameBn: _text(map['nameBn']) ?? _splitLegacy(name).$2,
+      description: description,
+      descriptionEn: _text(map['descriptionEn']) ?? description,
+      descriptionBn:
+          _text(map['descriptionBn']) ?? _splitLegacy(description).$2,
+      category: category,
+      categoryEn: _text(map['categoryEn']) ?? category,
+      categoryBn: _text(map['categoryBn']) ?? _splitLegacy(category).$2,
+      price: (map['price'] as num).toDouble(),
+      costPrice: (map['costPrice'] as num?)?.toDouble(),
+      imageUrl: map['imageUrl'] as String?,
+      isAvailable: _decodeBool(map['isAvailable']),
+      preparationTimeMinutes: map['preparationTimeMinutes'] as int?,
+      tags: _decodeTags(map['tags']),
+      syncStatus: SyncStatus.parse(map['syncStatus'] as String?),
+      version: map['version'] as int? ?? 1,
+      deletedAt: _tryParseDate(map['deletedAt'] as String?),
+      createdAt: DateTime.parse(map['createdAt'] as String),
+      updatedAt: DateTime.parse(map['updatedAt'] as String),
+    );
+  }
+
+  String localizedName(AppLanguage language) {
+    return _localized(language, nameEn, nameBn, name);
+  }
+
+  String localizedDescription(AppLanguage language) {
+    return _localized(language, descriptionEn, descriptionBn, description);
+  }
+
+  String localizedCategory(AppLanguage language) {
+    return _localized(language, categoryEn, categoryBn, category);
+  }
+
+  String searchText(AppLanguage language) {
+    return [
+      name,
+      nameEn,
+      nameBn,
+      description,
+      descriptionEn,
+      descriptionBn,
+      category,
+      categoryEn,
+      categoryBn,
+      localizedName(language),
+      localizedDescription(language),
+      localizedCategory(language),
+    ].join(' ').toLowerCase();
+  }
+
+  static String _localized(
+    AppLanguage language,
+    String english,
+    String bangla,
+    String fallback,
+  ) {
+    final primary = language == AppLanguage.bn ? bangla : english;
+    if (primary.trim().isNotEmpty) return primary.trim();
+    final secondary = language == AppLanguage.bn ? english : bangla;
+    if (secondary.trim().isNotEmpty) return secondary.trim();
+    return fallback.trim();
+  }
+
+  static String? _text(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  static (String, String) _splitLegacy(String value) {
+    if (!value.contains('/')) return (value.trim(), '');
+    final parts = value.split('/');
+    return (parts.first.trim(), parts.skip(1).join('/').trim());
+  }
+
+  static DateTime? _tryParseDate(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    return DateTime.tryParse(value);
+  }
+
+  static bool _decodeBool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value == 1;
+    if (value is String) return value.toLowerCase() == 'true' || value == '1';
+    return true;
+  }
+
+  static List<String> _decodeTags(Object? rawTags) {
+    if (rawTags is List) {
+      return rawTags.map((tag) => tag.toString()).toList(growable: false);
+    }
+    if (rawTags is! String || rawTags.trim().isEmpty) return [];
+    final decoded = jsonDecode(rawTags);
+    if (decoded is List) {
+      return decoded.map((tag) => tag.toString()).toList(growable: false);
+    }
+    return [];
+  }
+
+  MenuItemExtras get extras => MenuItemExtras.fromTags(tags);
+}
+
+/// Lightweight metadata sidecar parsed out of the [MenuItem.tags] list. Tags
+/// use prefixes so we don't need a backend schema change:
+///   `icon:<key>`           – placeholder icon hint, e.g. `icon:pizza`
+///   `discount:percent:<n>` – percent-off discount
+///   `discount:flat:<n>`    – flat-amount discount
+///   `inc:<text>`           – set-meal included item line
+///   `addon:<price>:<name>` – add-on entry
+class MenuItemExtras {
+  const MenuItemExtras({
+    this.iconKey,
+    this.discountPercent,
+    this.discountFlat,
+    this.includes = const [],
+    this.addOns = const [],
+    this.passthrough = const [],
+  });
+
+  final String? iconKey;
+  final double? discountPercent;
+  final double? discountFlat;
+  final List<String> includes;
+  final List<MenuAddOn> addOns;
+
+  /// Tags we didn't recognise — kept so toTags() round-trips cleanly.
+  final List<String> passthrough;
+
+  bool get hasDiscount =>
+      (discountPercent != null && discountPercent! > 0) ||
+      (discountFlat != null && discountFlat! > 0);
+
+  String discountBadgeLabel() {
+    if (discountPercent != null && discountPercent! > 0) {
+      final n = discountPercent!;
+      if (n == n.roundToDouble()) return '-${n.toInt()}%';
+      return '-${n.toStringAsFixed(1)}%';
+    }
+    if (discountFlat != null && discountFlat! > 0) {
+      final n = discountFlat!;
+      if (n == n.roundToDouble()) return '-৳${n.toInt()}';
+      return '-৳${n.toStringAsFixed(2)}';
+    }
+    return '';
+  }
+
+  double discountedPrice(double basePrice) {
+    if (discountPercent != null && discountPercent! > 0) {
+      final off = basePrice * (discountPercent!.clamp(0, 100) / 100.0);
+      final v = basePrice - off;
+      return v < 0 ? 0 : v;
+    }
+    if (discountFlat != null && discountFlat! > 0) {
+      final v = basePrice - discountFlat!;
+      return v < 0 ? 0 : v;
+    }
+    return basePrice;
+  }
+
+  factory MenuItemExtras.fromTags(List<String> tags) {
+    String? iconKey;
+    double? discountPercent;
+    double? discountFlat;
+    final includes = <String>[];
+    final addOns = <MenuAddOn>[];
+    final passthrough = <String>[];
+    for (final raw in tags) {
+      final tag = raw.trim();
+      if (tag.isEmpty) continue;
+      if (tag.startsWith('icon:')) {
+        final v = tag.substring(5).trim();
+        if (v.isNotEmpty) iconKey = v;
+      } else if (tag.startsWith('discount:percent:')) {
+        discountPercent = double.tryParse(tag.substring(17).trim());
+      } else if (tag.startsWith('discount:flat:')) {
+        discountFlat = double.tryParse(tag.substring(14).trim());
+      } else if (tag.startsWith('inc:')) {
+        final v = tag.substring(4).trim();
+        if (v.isNotEmpty) includes.add(v);
+      } else if (tag.startsWith('addon:')) {
+        final body = tag.substring(6);
+        final i = body.indexOf(':');
+        if (i > 0) {
+          final price = double.tryParse(body.substring(0, i).trim()) ?? 0;
+          final name = body.substring(i + 1).trim();
+          if (name.isNotEmpty) addOns.add(MenuAddOn(name: name, price: price));
+        }
+      } else {
+        passthrough.add(tag);
+      }
+    }
+    return MenuItemExtras(
+      iconKey: iconKey,
+      discountPercent: discountPercent,
+      discountFlat: discountFlat,
+      includes: includes,
+      addOns: addOns,
+      passthrough: passthrough,
+    );
+  }
+
+  List<String> toTags() {
+    final out = <String>[];
+    if (iconKey != null && iconKey!.isNotEmpty) {
+      out.add('icon:$iconKey');
+    }
+    if (discountPercent != null && discountPercent! > 0) {
+      out.add('discount:percent:${_fmt(discountPercent!)}');
+    } else if (discountFlat != null && discountFlat! > 0) {
+      out.add('discount:flat:${_fmt(discountFlat!)}');
+    }
+    for (final inc in includes) {
+      final v = inc.trim();
+      if (v.isNotEmpty) out.add('inc:$v');
+    }
+    for (final addon in addOns) {
+      final name = addon.name.trim();
+      if (name.isEmpty) continue;
+      out.add('addon:${_fmt(addon.price)}:$name');
+    }
+    out.addAll(passthrough);
+    return out;
+  }
+
+  MenuItemExtras copyWith({
+    String? iconKey,
+    double? discountPercent,
+    double? discountFlat,
+    bool clearDiscount = false,
+    List<String>? includes,
+    List<MenuAddOn>? addOns,
+    List<String>? passthrough,
+  }) {
+    return MenuItemExtras(
+      iconKey: iconKey ?? this.iconKey,
+      discountPercent:
+          clearDiscount ? null : (discountPercent ?? this.discountPercent),
+      discountFlat:
+          clearDiscount ? null : (discountFlat ?? this.discountFlat),
+      includes: includes ?? this.includes,
+      addOns: addOns ?? this.addOns,
+      passthrough: passthrough ?? this.passthrough,
+    );
+  }
+
+  static String _fmt(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(2);
+  }
+}
+
+class MenuAddOn {
+  const MenuAddOn({required this.name, required this.price});
+  final String name;
+  final double price;
+}

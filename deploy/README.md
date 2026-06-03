@@ -21,7 +21,7 @@ If you're on CentOS 7 (default on some BDIX VPS plans including GotMyHost), the 
 Then on your laptop, clear the old SSH fingerprint + secrets and re-run:
 
 ```bash
-ssh-keygen -R 103.191.240.34
+ssh-keygen -R 160.187.130.80
 rm -f deploy/.deploy-secrets
 bash deploy/bootstrap_vps.sh
 ```
@@ -44,9 +44,25 @@ What happens:
 2. Generates a strong Postgres password and `SECRET_KEY`, stores them in `deploy/.deploy-secrets` (gitignored, chmod 600).
 3. rsyncs the code to `/var/www/rastarant` on the VPS.
 4. On the VPS: installs `python3-venv`, `postgresql`, `nginx`, builds a Python venv, creates the DB + user, writes `.env`, installs the `rastarant` systemd unit, installs an nginx vhost on port 80, and starts everything.
-5. Curls `http://103.191.240.34/health` from your laptop to confirm.
+5. Curls `http://160.187.130.80/health` from your laptop to confirm.
 
 If the external `/health` check fails the script will tell you the most likely cause (usually the VPS firewall — see *Troubleshooting* below).
+
+## Database backups
+
+On the VPS, install a daily cron (03:15 UTC) after the first deploy:
+
+```bash
+bash /var/www/rastarant/deploy/scripts/install-backup-cron.sh
+```
+
+Manual backup:
+
+```bash
+bash /var/www/rastarant/deploy/scripts/backup-postgres.sh
+```
+
+Backups are gzip SQL dumps under `/var/backups/rastarant/` (14-day retention by default). Logs: `/var/log/rastarant-backup.log`.
 
 ## Re-deploy after code changes
 
@@ -55,6 +71,16 @@ bash deploy/redeploy.sh
 ```
 
 This only rsyncs the new code, runs `pip install -r requirements.txt`, and restarts the systemd service. It does **not** touch the `.env`, the DB, nginx, or the systemd unit. Safe to run as often as you like.
+
+## Backend env sync
+
+Keep backend secrets in local `backend/.env` and the VPS env file, never in Git. After rotating Scan Menu keys, set `OCR_SPACE_API_KEY`, `GROQ_API_KEY`, any backup provider keys, and any OCR or `MENU_SCAN_*_MODEL` overrides locally, then merge the VPS-safe values and restart the service with:
+
+```bash
+bash deploy/push-backend-env.sh
+```
+
+The sync script leaves VPS-owned `DATABASE_URL` and `SECRET_KEY` untouched.
 
 ## Where things live on the VPS
 
@@ -67,7 +93,7 @@ This only rsyncs the new code, runs `pip install -r requirements.txt`, and resta
 /etc/nginx/sites-enabled/rastarant        # reverse proxy on :80 -> uvicorn :8000
 ```
 
-## Useful commands on the VPS (`ssh root@103.191.240.34`)
+## Useful commands on the VPS (`ssh root@160.187.130.80`)
 
 ```bash
 systemctl status rastarant            # is the backend up?
@@ -108,8 +134,8 @@ VPS_HOST=1.2.3.4 VPS_USER=ubuntu bash deploy/bootstrap_vps.sh
 
 ## Security checklist
 
-- [ ] The root password GotMyHost emailed you is in this chat history — rotate it on the VPS: `ssh root@103.191.240.34 'passwd'`.
+- [ ] The root password GotMyHost emailed you is in this chat history — rotate it on the VPS: `ssh root@160.187.130.80 'passwd'`.
 - [ ] After `bootstrap_vps.sh` succeeds and key auth works, disable SSH password auth: set `PasswordAuthentication no` in `/etc/ssh/sshd_config`, then `systemctl restart ssh`.
 - [ ] Set up a firewall: `ufw allow 22/tcp && ufw allow 80/tcp && ufw --force enable`.
-- [ ] Plan a TLS cert (Certbot + a domain name pointing at 103.191.240.34) so the admin app can talk over HTTPS instead of HTTP.
+- [ ] Plan a TLS cert (Certbot + a domain name pointing at 160.187.130.80) so the admin app can talk over HTTPS instead of HTTP.
 - [ ] `deploy/.deploy-secrets` lives on your laptop only — back it up safely. If you lose it, you can read the values out of `/var/www/rastarant/backend/.env` on the VPS.

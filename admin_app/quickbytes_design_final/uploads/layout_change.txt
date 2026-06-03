@@ -1,0 +1,104 @@
+﻿The Literacy Boundary
+There's a single dividing line in this product that matters more than the others:
+Tier 1 + 2: Cash-and-items thinking. Operators want concrete nouns — taka and item names. They compare today to yesterday in absolute terms ("১০৯০ টাকা বেশি"), not percentages.
+Tier 3 + 4: Pattern thinking. Operators have enough volume and enough delegation that they need to extract patterns — peak hours, average ticket trends, outlet comparisons. The bar chart earns its place here.
+Every Review layout should be designed against this boundary, not against feature parity.
+________________
+
+
+Tier 1 — Foodcart (Lebu Fresh type)
+Who's reading this: The owner-operator. He's standing at the cart at end of day. He has no staff, no manager, no separation between him and the cash drawer. He already knows roughly what happened today because he was present for every transaction. He just wants confirmation.
+What he actually wants to know:
+* How much is in the drawer
+* Which items he should restock tomorrow
+There is no Review tab at Tier 1. The product spec is right about this — at SIMPLE position, the dashboard IS the day summary. Trying to add a separate Review concept here would be inventing complexity the operator didn't ask for.
+Layout — single screen, no toggle:
+* Hero zone: "আজকের নগদ" / "Today's cash" eyebrow, then ৳6,240 in numericHero. Below it: "38 orders". That's it. No delta, no comparison, no chart. He'll know if today was better than yesterday — he doesn't need the app to tell him.
+* Top items today: Ranked list with item name, count sold, and revenue. "Lemon Mint ×24 · ৳1,440". This is the most important section on the screen and should occupy 60% of the vertical space.
+* Close day action: Sticky bottom button. Single accent CTA. "দিন শেষ করুন / Close day".
+Deliberately excluded:
+* Bar chart of any kind
+* "vs yesterday" delta
+* Hourly breakdown
+* Average ticket
+* Peak hour
+* Source breakdown (cash-only operation per spec)
+________________
+
+
+Tier 2 — Small Cafe, 4–10 tables (Cha Ghor type)
+Who's reading this: Owner or owner-manager. Sometimes on the floor, sometimes in the back. 3–4 waiters whose names he knows. Checks the app at the end of lunch service and end of night. He's thinking about "আজকে কেমন গেলো" in plain Bangla terms — was it busy, what sold, did anything go wrong.
+What he actually wants to know:
+* How much today's earnings were
+* Whether today was better or worse than yesterday (in taka, not percent)
+* What items moved
+* Whether any orders went badly (late, comped)
+He does not have a mental model for hourly bar charts yet. The current build shows him a 14-bar hourly chart embedded in the hero card. He's not extracting value from that. He's skipping past it.
+Layout:
+* Hero card: "আজকের আয়" eyebrow, then ৳14,820 in numericHero. Below it, a plain language line, not a chart: "কালকের চেয়ে ৳1,090 বেশি · Strong lunch period". The chart is deleted from the hero entirely.
+* Two stat tiles: Orders (42) · Covers (87). Two columns, not three. Drop "Peak Hour." A small cafe owner doesn't optimize around peak hour — he already knows lunch and dinner are busy. The metric is jargon.
+* Top items section — promoted to be the screen's main content: Ranked list, larger than current implementation. Item name, Bangla name, count, revenue per item. Top 5 visible without scrolling, scroll for more. This is where the operator's eyes should naturally land.
+* Today's issues (only if any exist): A single grouped section showing late orders or comped items from today. No section header if empty — collapses entirely. If something happened: "Table 3 · Order #84 · 24 min late" in urgentSoft row.
+* By source (collapsed by default): Cash / Card / Online split. Most Tier 2 operators are 80%+ cash. Hidden behind a one-line collapsible row.
+Deliberately excluded:
+* Hourly bar chart (the big one)
+* "Revenue by hour" section entirely
+* Today vs Yesterday chart toggle
+* Average ticket
+* Peak hour metric
+* Food cost %
+* Staff scoreboard (he knows his 3 waiters personally; this is overkill)
+* 7-day average comparisons
+This is a significant reduction from the current Cha Ghor screen. That's the point. The current screen is built for someone with Tier 3 literacy living in a Tier 2 business.
+________________
+
+
+Tier 3 — Medium Restaurant, 11–20 tables (Spice Garden type)
+Who's reading this: Owner with a separate manager underneath. 5–8 staff. He's not personally watching every order anymore — he's delegating. He now genuinely needs the app to tell him things he doesn't already know. This is where analytical features start earning their keep.
+What he actually wants to know:
+* How today compared to typical days (not just yesterday — 7-day average)
+* When the rush hit (peak hour matters now because staffing decisions follow)
+* Food cost — is the kitchen burning money
+* Staff performance — who did well, who didn't
+* Top items with margin (not just revenue)
+This is where the bar chart finally earns its place. And honestly, this operator might want even more — he's the one looking for "why was Wednesday slow last week?"
+Layout:
+* Hero card: ৳42,380 in numericHero. Delta: "vs 7-day avg ৳38,420". Insight line: "Strongest dinner this week — 87% capacity at 8 PM peak". No chart in the hero card itself — this stays clean. The chart gets its own section below.
+* KPI row, 4 columns: Orders · Covers · Avg Ticket · Food Cost %. Drop Turns/Tbl from primary KPIs — it's a derived metric that most owners can compute mentally from Covers÷Tables. Surface FC% as a top-row KPI; this is the number that matters most for profitability at this tier.
+* Revenue by hour — dedicated section, full-width chart: Today as solid bars, 7-day average as ghost line. Peak hour annotated directly on the chart, not in a separate caption. This is the first place a bar chart appears in the product.
+* Staff today — moved up from current bottom position: This is the most actionable section for end-of-service review. Each waiter row: name, covers, avg ticket, comps. TOP badge on best performer. Compact — 5 rows visible without scroll. The current build buries this; it should sit second after the hero.
+* What sold (top items with margin): Same list pattern as Tier 2 but with margin % per item. warningSoft chip on any item where margin is below threshold — "Lamb Karahi · ৳11,200 · margin 18% ⚠". Plain language flag, no jargon.
+* By source: Still collapsible. At Tier 3, card and online start mattering more, so it's defaulted-open with the three numbers, but no chart.
+Deliberately excluded:
+* Profitability quadrant matrix (Stars/Puzzle/Steady/Review). The concept is right for this tier, but the labels are MBA jargon that a Dhaka restaurant owner doesn't have a mental hook for. The warningSoft flag on individual items in the top sellers list does the same job in plain language.
+* Multi-day trends beyond 7-day average
+* Outlet comparisons (he has one location)
+________________
+
+
+Tier 4 — Enterprise (multi-outlet)
+Who's reading this: A fleet owner. Possibly a regional manager. Sophisticated operator, looks at this morning-after with a coffee. Outlets are his unit of comparison, not items or hours.
+What he actually wants to know:
+* Which outlets had problems today (and which kinds of problems)
+* Which outlet won
+* Fleet-level revenue and FC%
+* Whether any operational pattern is emerging across outlets
+Key shift from the current Enterprise build: The current screen leads with fleet total + bar chart + outlet ranking. But the most urgent content for a fleet owner is operational alerts — "Mirpur had 14% late rate today" is the kind of thing that prompts a phone call before he reads anything else. Operational health should lead, ranking should follow.
+Layout:
+* Hero card: ৳1,84,200 fleet revenue. Delta vs 7-day avg. Insight: "4 of 5 outlets above target — Dhanmondi leading by ৳3,860". Optional small chart here is fine — this audience has the literacy.
+* Outlet ranking — but with health signals inline: Five outlet rows, ranked by revenue. Each row carries the revenue figure, FC%, and a status chip when something's wrong: LATE 14% or WASTE 6.2% or VAR -৳620 rendered in urgentSoft / warningSoft / dangerSoft as appropriate. The operator scans down the list and sees both who won and who's broken in one pass.
+* Fleet KPI row, 4 columns: Covers · Avg Ticket · Fleet FC% · On Goal (X/5).
+* Revenue by hour (fleet aggregate): Bar chart with 7-day comparison. At this tier the chart is fully earned.
+* Capacity right now: Three outlets shown with capacity bars and labels (FULL >85% · BUSY 60–85% · STEADY <60%). The label key sits as a one-line footnote — defines the terms inline, no separate legend.
+* Top movers fleet-wide: Cross-outlet aggregate top items. "Beef Tehari · ৳1,84,000 across 4 outlets".
+Deliberately included that wasn't before: Health signals as inline chips on outlet rows. This collapses what was previously two separate sections (outlet list + operational health) into one scannable list. Saves vertical space and makes the which outlet is the problem question answerable in one glance.
+Deliberately excluded:
+* Standalone operational health section (now inline in outlet ranking)
+* AI forecasting (not in scope for daily review — belongs in a separate planning view)
+________________
+
+
+What changed structurally
+The biggest shift: the bar chart, hourly revenue, peak hour metric, and "vs 7-day average" all disappear from Tier 2. They appear for the first time at Tier 3. This contradicts the current build, which introduces them at Tier 2.
+The second shift: Top items takes over the primary screen real estate at Tier 1 and Tier 2. At those tiers the item list isn't a section under the chart — it is the report. The hero number above it answers "how much," and the item list answers "what." Nothing else is required for those operators.
+Third shift: Tier 4 collapses two sections into one by putting operational health chips directly on outlet rows. A fleet owner shouldn't have to scroll between "who won" and "who broke."

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en" data-accent="teal">
+<head>
+<meta charset="UTF-8" />
+<title>Terafoods · Design System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Hind+Siliguri:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tf-ds.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: var(--w-regular) var(--t-body)/var(--lh-en) var(--font-en);
+    -webkit-font-smoothing: antialiased;
+  }
+  .bn { font-family: var(--font-bn); line-height: var(--lh-bn); }
+  .mono { font-family: "JetBrains Mono", monospace; }
+
+  /* ---- layout ---- */
+  .wrap { display: grid; grid-template-columns: 248px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
+  aside {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: var(--s6) var(--s4); border-right: 1px solid var(--line);
+  }
+  aside .brand { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s5); }
+  aside .brand b { font-weight: var(--w-medium); font-size: var(--t-title); letter-spacing: -0.3px; }
+  aside nav a {
+    display: block; padding: 7px 10px; border-radius: var(--r-sm); margin-bottom: 2px;
+    color: var(--ink-soft); text-decoration: none; font-size: var(--t-bodys);
+  }
+  aside nav a:hover { background: var(--accent-wash); color: var(--ink); }
+  aside nav a .n { color: var(--muted-soft); font-size: var(--t-label); margin-right: 8px; font-family: "JetBrains Mono", monospace; }
+
+  main { padding: var(--s7) clamp(24px, 5vw, 64px) 120px; min-width: 0; }
+
+  /* ---- topbar / accent switcher ---- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(6px); margin: calc(var(--s7) * -1) calc(-1 * clamp(24px,5vw,64px)) var(--s6);
+    padding: var(--s3) clamp(24px,5vw,64px); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+  }
+  .topbar .lede { font-size: var(--t-label); color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
+  .swatches { display: flex; gap: var(--s2); margin-left: auto; }
+  .swatch {
+    width: 30px; height: 30px; border-radius: var(--r-pill); cursor: pointer;
+    border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line);
+    transition: transform var(--d-fast) var(--ease-standard);
+  }
+  .swatch:hover { transform: scale(1.12); }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); transform: scale(1.12); }
+
+  /* ---- section scaffolding ---- */
+  section { margin-bottom: var(--s7); scroll-margin-top: 76px; }
+  h2 { font-size: var(--t-headline); font-weight: var(--w-medium); letter-spacing: -0.4px; margin: 0 0 6px; }
+  h2 .num { color: var(--accent); font-family: "JetBrains Mono", monospace; font-size: var(--t-title); margin-right: 10px; }
+  .sec-intro { color: var(--ink-soft); max-width: 64ch; margin: 0 0 var(--s4); }
+  h3 { font-size: var(--t-title); font-weight: var(--w-medium); margin: var(--s5) 0 var(--s2); }
+  p { max-width: 70ch; }
+  .note { font-size: var(--t-bodys); color: var(--ink-soft); }
+  .flag { border-left: 3px solid var(--warning); background: var(--warning-soft); color: #5c4408;
+          padding: 10px 14px; border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: var(--t-bodys); margin: var(--s3) 0; }
+  .rule-ok, .rule-no { font-size: var(--t-bodys); padding: 8px 12px; border-radius: var(--r-sm); margin: 4px 0; }
+  .rule-ok { background: var(--success-soft); color: #1c4d30; }
+  .rule-no { background: var(--danger-soft); color: #7a241b; }
+
+  /* ---- tables ---- */
+  table { width: 100%; border-collapse: collapse; font-size: var(--t-bodys); margin: var(--s3) 0; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-weight: var(--w-medium); color: var(--muted); font-size: var(--t-label);
+       text-transform: uppercase; letter-spacing: 0.4px; }
+  td.mono, td .mono { font-size: var(--t-numsmall); }
+  .sw { width: 22px; height: 22px; border-radius: var(--r-xs); border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
+  .swrow { display: flex; align-items: center; gap: var(--s2); }
+
+  /* ---- token grids ---- */
+  .grid { display: grid; gap: var(--s2); }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .tile { border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s3); background: var(--surface); }
+  .tile .cap { font-size: var(--t-label); color: var(--muted); margin-top: 6px; }
+  .chip-demo { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; }
+
+  /* ---- spacing / radius rulers ---- */
+  .ruler { display: flex; align-items: center; gap: var(--s3); margin: 5px 0; }
+  .ruler .bar { background: var(--accent); height: 16px; border-radius: 3px; }
+  .radius-demo { display: flex; gap: var(--s3); flex-wrap: wrap; }
+  .radius-demo div { width: 84px; height: 56px; background: var(--accent-soft); border: 1px solid var(--accent);
+                     display: grid; place-items: center; font-size: var(--t-label); color: var(--ink); }
+
+  /* ---- type specimen ---- */
+  .specimen { border-bottom: 1px solid var(--line); padding: 10px 0; display: flex; align-items: baseline; gap: var(--s4); }
+  .specimen .meta { font-size: var(--t-label); color: var(--muted); font-family: "JetBrains Mono", monospace; width: 168px; flex-shrink: 0; }
+
+  /* ---- phone mock for onboarding ---- */
+  .phone { width: 240px; border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: 14px; background: var(--surface); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <aside>
+    <div class="brand">
+      <span style="width:26px;height:26px;border-radius:7px;background:var(--accent);display:inline-block;"></span>
+      <b>Terafoods DS</b>
+    </div>
+    <nav>
+      <a href="#s1"><span class="n">01</span>Color</a>
+      <a href="#s2"><span class="n">02</span>Typography</a>
+      <a href="#s3"><span class="n">03</span>Shape</a>
+      <a href="#s4"><span class="n">04</span>Spacing</a>
+      <a href="#s5"><span class="n">05</span>Shadow</a>
+      <a href="#s6"><span class="n">06</span>Motion</a>
+      <a href="#s7"><span class="n">07</span>Haptics</a>
+      <a href="#s8"><span class="n">08</span>Voice</a>
+      <a href="#s9"><span class="n">09</span>Accent onboarding</a>
+      <a href="#s10"><span class="n">10</span>Component impact</a>
+      <a href="#s11"><span class="n">11</span>Enforcement</a>
+      <a href="#s12"><span class="n">12</span>Migration</a>
+      <a href="#summary"><span class="n">→</span>Summary</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <span class="lede">Live accent — click to recolor the system</span>
+      <div class="swatches" id="swatches">
+        <button class="swatch" data-set="teal"    style="background:#0E7B6E" aria-pressed="true"  title="Teal (default)"></button>
+        <button class="swatch" data-set="saffron" style="background:#B45A12" aria-pressed="false" title="Saffron"></button>
+        <button class="swatch" data-set="rose"    style="background:#B23E61" aria-pressed="false" title="Rose"></button>
+        <button class="swatch" data-set="forest"  style="background:#2F7A43" aria-pressed="false" title="Forest"></button>
+        <button class="swatch" data-set="ocean"   style="background:#1F6FB2" aria-pressed="false" title="Ocean"></button>
+        <button class="swatch" data-set="clay"    style="background:#A8553C" aria-pressed="false" title="Clay"></button>
+      </div>
+    </div>
+
+    <header style="margin-bottom:var(--s7)">
+      <h2 style="font-size:var(--t-display)"><span class="num" style="font-size:var(--t-headline)">DS</span>Terafoods Design System</h2>
+      <p class="sec-intro">A neutral, professional base with a customizable accent chosen per outlet. The base palette never changes; the accent is one of six the owner picks. One identical system that feels <em>appropriate</em> across four tiers — a juice-bar counter to a multi-outlet group. Tuned for budget Android (Helio G35 / 720p / sunlight / one thumb), bilingual EN&nbsp;/&nbsp;<span class="bn">বাংলা</span>, ৳&nbsp;currency.</p>
+    </header>
+
+    <!-- ============================ 1 · COLOR ============================ -->
+    <section id="s1">
+      <h2><span class="num">01</span>Color tokens</h2>
+      <p class="sec-intro">Three layers: a fixed neutral base, six swappable accents, and fixed functional signals. Accent and signals never overlap in meaning.</p>
+
+      <h3>a · Neutral base <span class="note">— fixed, never changes per outlet</span></h3>
+      <table>
+        <thead><tr><th>Token</th><th>Hex</th><th></th><th>Use</th><th>Contrast</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">bg</td><td class="mono">#F5F5F2</td><td><span class="sw" style="background:#F5F5F2"></span></td><td>App background</td><td class="mono">ink 15.9:1 AAA</td></tr>
+          <tr><td class="mono">surface</td><td class="mono">#FFFFFF</td><td><span class="sw" style="background:#FFFFFF"></span></td><td>Cards, sheets, fields</td><td class="mono">ink 17.4:1 AAA</td></tr>
+          <tr><td class="mono">ink</td><td class="mono">#1A1A18</td><td><span class="sw" style="background:#1A1A18"></span></td><td>Primary text, icons</td><td class="mono">AAA on bg/surface</td></tr>
+          <tr><td class="mono">ink-soft</td><td class="mono">#585852</td><td><span class="sw" style="background:#585852"></span></td><td>Secondary text</td><td class="mono">7.0:1 AAA</td></tr>
+          <tr><td class="mono">muted</td><td class="mono">#6E6E68</td><td><span class="sw" style="background:#6E6E68"></span></td><td>Labels, captions</td><td class="mono">5.1:1 AA</td></tr>
+          <tr><td class="mono">muted-soft</td><td class="mono">#A2A29B</td><td><span class="sw" style="background:#A2A29B"></span></td><td>Placeholder, disabled <span class="note">(decorative — never body)</span></td><td class="mono">2.6:1</td></tr>
+          <tr><td class="mono">line</td><td class="mono">#E7E7E2</td><td><span class="sw" style="background:#E7E7E2"></span></td><td>Hairline borders, dividers</td><td class="mono">—</td></tr>
+          <tr><td class="mono">line-strong</td><td class="mono">#D2D2CB</td><td><span class="sw" style="background:#D2D2CB"></span></td><td>Focused field, strong divider</td><td class="mono">—</td></tr>
+        </tbody>
+      </table>
+
+      <h3>b · Six accents <span class="note">— owner picks one; default teal. accentInk is always white.</span></h3>
+      <table>
+        <thead><tr><th>Accent</th><th>accent</th><th>soft</th><th>wash</th><th>ink</th><th>Rationale (BD context)</th></tr></thead>
+        <tbody>
+          <tr><td>Teal <span class="note">default</span></td>
+            <td class="swrow"><span class="sw" style="background:#0E7B6E"></span><span class="mono">#0E7B6E</span></td>
+            <td><span class="sw" style="background:#D5EBE7"></span></td><td><span class="sw" style="background:#EEF6F5"></span></td><td class="mono">#FFF 4.7:1</td>
+            <td>Professional, fresh, trusted — neutral enough for Tier 4.</td></tr>
+          <tr><td>Saffron</td>
+            <td class="swrow"><span class="sw" style="background:#B45A12"></span><span class="mono">#B45A12</span></td>
+            <td><span class="sw" style="background:#F6E4D2"></span></td><td><span class="sw" style="background:#FBF2EA"></span></td><td class="mono">#FFF 4.6:1</td>
+            <td>Marigold (গাঁদা) warmth & festivity — the juice-bar's "warm" choice.</td></tr>
+          <tr><td>Rose</td>
+            <td class="swrow"><span class="sw" style="background:#B23E61"></span><span class="mono">#B23E61</span></td>
+            <td><span class="sw" style="background:#F6DEE6"></span></td><td><span class="sw" style="background:#FBEEF2"></span></td><td class="mono">#FFF 4.8:1</td>
+            <td>Jaba (জবা) red — hospitality, sweetshop warmth.</td></tr>
+          <tr><td>Forest</td>
+            <td class="swrow"><span class="sw" style="background:#2F7A43"></span><span class="mono">#2F7A43</span></td>
+            <td><span class="sw" style="background:#DCEDE1"></span></td><td><span class="sw" style="background:#EFF6F1"></span></td><td class="mono">#FFF 4.6:1</td>
+            <td>Paddy green — growth, freshness, halal/herbal associations.</td></tr>
+          <tr><td>Ocean</td>
+            <td class="swrow"><span class="sw" style="background:#1F6FB2"></span><span class="mono">#1F6FB2</span></td>
+            <td><span class="sw" style="background:#D7E7F3"></span></td><td><span class="sw" style="background:#EEF4FA"></span></td><td class="mono">#FFF 4.5:1</td>
+            <td>River blue — calm, reliable, scale (multi-outlet).</td></tr>
+          <tr><td>Clay</td>
+            <td class="swrow"><span class="sw" style="background:#A8553C"></span><span class="mono">#A8553C</span></td>
+            <td><span class="sw" style="background:#F0DED6"></span></td><td><span class="sw" style="background:#F9EFEB"></span></td><td class="mono">#FFF 4.7:1</td>
+            <td>Terracotta — earthen, handmade, traditional eatery feel.</td></tr>
+        </tbody>
+      </table>
+      <p class="note">Live demo — these recolor with the switcher above:</p>
+      <div class="chip-demo" style="margin-bottom:var(--s3)">
+        <button class="tf-btn tf-btn--primary">Take payment</button>
+        <button class="tf-fab">+</button>
+        <span class="tf-chip tf-chip--active">Dine-in</span>
+        <span class="tf-chip">Takeaway</span>
+        <span style="padding:8px 14px;border-radius:var(--r-sm);background:var(--accent-soft);color:var(--ink);font-size:var(--t-bodys)">accent-soft surface</span>
+      </div>
+
+      <h3>c · Signal colors <span class="note">— functional, fixed regardless of accent</span></h3>
+      <table>
+        <thead><tr><th>Token</th><th>Hex</th><th></th><th>Soft bg</th><th>Used for</th><th>On-white</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">success</td><td class="mono">#2E7D4F</td><td><span class="sw" style="background:#2E7D4F"></span></td><td><span class="sw" style="background:#E4F1E9"></span></td><td>Positive delta, paid, in-stock, sync OK</td><td class="mono">4.8:1</td></tr>
+          <tr><td class="mono">warning</td><td class="mono">#946A0F</td><td><span class="sw" style="background:#946A0F"></span></td><td><span class="sw" style="background:#F7EDD3"></span></td><td>Low stock, approaching a limit</td><td class="mono">5.0:1</td></tr>
+          <tr><td class="mono">danger</td><td class="mono">#BC3A2B</td><td><span class="sw" style="background:#BC3A2B"></span></td><td><span class="sw" style="background:#FBE6E2"></span></td><td>Negative delta, errors, void, out-of-stock</td><td class="mono">5.1:1</td></tr>
+          <tr><td class="mono">urgent</td><td class="mono">#DC4A18</td><td><span class="sw" style="background:#DC4A18"></span></td><td><span class="sw" style="background:#FBE4D9"></span></td><td>Late orders ONLY (replaces coral)</td><td class="mono">4.6:1</td></tr>
+        </tbody>
+      </table>
+      <div class="chip-demo">
+        <span class="tf-badge tf-badge--success">▲ Paid</span>
+        <span class="tf-badge tf-badge--warning">Low · 0.8kg</span>
+        <span class="tf-badge tf-badge--danger">▼ 8%</span>
+        <span class="tf-badge tf-badge--urgent">LATE · 24m</span>
+      </div>
+      <div class="flag"><b>Hue-lane discipline.</b> Saffron/clay accents are warm cousins of warning/urgent. They never collide because <b>signals only ever appear with their soft background + an icon/word</b>, and the accent never appears as a status tag. Warning lives in a mustard lane (#946A0F), urgent in vivid orange (#DC4A18), danger in true red (#BC3A2B) — three separated hues.</div>
+
+      <h3>d · Data-viz <span class="note">— categorical, lower-chroma so it reads as "data," not "brand"</span></h3>
+      <div class="chip-demo" style="margin-bottom:var(--s2)">
+        <span class="swrow"><span class="sw" style="background:#4C6FA5"></span><span class="mono">viz-1 #4C6FA5</span></span>
+        <span class="swrow"><span class="sw" style="background:#C28A3D"></span><span class="mono">viz-2 #C28A3D</span></span>
+        <span class="swrow"><span class="sw" style="background:#8A6FA0"></span><span class="mono">viz-3 #8A6FA0</span></span>
+        <span class="swrow"><span class="sw" style="background:#6F9B6A"></span><span class="mono">viz-4 #6F9B6A</span></span>
+        <span class="swrow"><span class="sw" style="background:#54827E"></span><span class="mono">viz-5 #54827E</span></span>
+      </div>
+      <div style="display:flex;height:34px;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--line);max-width:420px">
+        <div style="flex:3;background:#4C6FA5"></div><div style="flex:2;background:#C28A3D"></div><div style="flex:2;background:#8A6FA0"></div><div style="flex:1.4;background:#6F9B6A"></div><div style="flex:1;background:#54827E"></div>
+      </div>
+      <p class="note">Distinguishable when adjacent; deliberately desaturated. The accent is <b>never</b> used as a chart series, so chart colors stay self-contained regardless of which accent is active.</p>
+
+      <h3>e · Color usage rules <span class="note">— enforceable</span></h3>
+      <div class="rule-ok">✓ Accent appears ONLY on: CTAs / primary buttons, the FAB, selected states, focus rings, and accent-soft / accent-wash tinted surfaces.</div>
+      <div class="rule-no">✗ Accent never signals status. It cannot mean warning, error, or a negative/positive delta.</div>
+      <div class="rule-ok">✓ Negative deltas always use <span class="mono">danger</span>; positive deltas always use <span class="mono">success</span> — never the accent, regardless of outlet.</div>
+      <div class="rule-no">✗ Signal colors never used as decoration. <span class="mono">urgent</span> only when a late value &gt; 0; a count of 0 uses muted, not a green "0".</div>
+      <div class="rule-ok">✓ Zero-state vs no-data: a real <b>0</b> renders in <span class="mono">ink</span> (it's a fact). <b>No data yet</b> renders the label in <span class="mono">muted-soft</span> with an em-dash "—" — never a colored signal.</div>
+      <div class="rule-no">✗ Never paint a full surface in accent at full strength behind body text (accentInk is for short labels/buttons, not paragraphs).</div>
+    </section>
+
+    <!-- ============================ 2 · TYPE ============================ -->
+    <section id="s2">
+      <h2><span class="num">02</span>Typography</h2>
+      <p class="sec-intro">Two families, two weights. Hierarchy comes from size, color, and tabular numerics — not from many weights, which muddy on low-DPI screens in sunlight.</p>
+
+      <h3>a · Families</h3>
+      <table>
+        <thead><tr><th>Role</th><th>Family</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>EN UI / body</td><td class="mono">Roboto (system)</td><td>Shipped with Android — zero font payload, perfectly hinted for low-DPI, has true tabular figures. The performance-correct choice over a webfont on Helio G35.</td></tr>
+          <tr><td>BN UI / body</td><td class="mono">Hind Siliguri</td><td>Drawn for screen UI: open counters, simplified conjuncts that survive 13–15px on 720p. Ships 400/500. Bundled (subset) so BN never falls back to a fuzzy system face.</td></tr>
+          <tr><td>Numerals</td><td class="mono">Roboto tabular</td><td><span class="mono" style="font-variant-numeric:tabular-nums">font-variant-numeric: tabular-nums lining-nums</span> on every financial figure so columns align.</td></tr>
+        </tbody>
+      </table>
+      <div class="flag"><b>BD numerals decision (override of the brief's implied requirement).</b> Currency is always rendered in Western-Arabic digits (৳1,86,400), even in BN mode. Bengali digit glyphs (০-৯) aren't reliably tabular and slow reading at service speed. We translate <em>words and labels</em> to Bengali, not the money digits.</div>
+
+      <h3>b · Two-weight rule</h3>
+      <p class="note">Only <b style="font-weight:400">w400 (Regular)</b> and <b style="font-weight:500">w500 (Medium)</b>. No w600+. Two weights ship smaller, stay consistent, and avoid the sub-pixel smear heavier weights show on low-DPI in sunlight.</p>
+      <div class="flag"><b>The one tension:</b> numericHero (the single dominant money number) wants more punch than w500 gives in bright light. We compensate with <b>size + near-black ink + tight tracking</b> rather than adding a weight. This is the only place the two-weight rule is under strain — flagged, held.</div>
+
+      <h3>c · Size scale</h3>
+      <div class="specimen"><span class="meta">display · 32 / w500</span><span style="font-size:32px;font-weight:500;letter-spacing:-0.6px">Pick a colour</span></div>
+      <div class="specimen"><span class="meta">headline · 22 / w500</span><span style="font-size:22px;font-weight:500;letter-spacing:-0.3px">Good evening, Karim</span></div>
+      <div class="specimen"><span class="meta">title · 17 / w500</span><span style="font-size:17px;font-weight:500">Needs your eye</span></div>
+      <div class="specimen"><span class="meta">body · 15 / w400</span><span style="font-size:15px">Table 6 has been waiting 48 minutes.</span></div>
+      <div class="specimen"><span class="meta">bodyS · 13 / w400</span><span style="font-size:13px">Beef Tehari ×2 · over the 20-minute mark</span></div>
+      <div class="specimen"><span class="meta">label · 12 / w500 (EN)</span><span style="font-size:12px;font-weight:500;letter-spacing:0.4px;text-transform:uppercase">Earned today</span></div>
+      <div class="specimen"><span class="meta">micro · 11 (EN only)</span><span style="font-size:11px;color:var(--muted)">synced 2 min ago</span></div>
+      <div class="specimen"><span class="meta">BN floor · 13 / w400</span><span class="bn" style="font-size:13px">আজকের আয় · দেরি হওয়া অর্ডার</span></div>
+
+      <h3>d · Numeric scale <span class="note">— all tabular</span></h3>
+      <table>
+        <thead><tr><th>Token</th><th>Size / weight</th><th>Used for</th><th>Sample</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">numericSmall</td><td class="mono">13 / w500</td><td>Inline qty, table cells</td><td style="font-variant-numeric:tabular-nums;font-weight:500">×24</td></tr>
+          <tr><td class="mono">numericMedium</td><td class="mono">17 / w500</td><td>KPI tile value, list amount</td><td style="font-variant-numeric:tabular-nums;font-weight:500">৳490</td></tr>
+          <tr><td class="mono">numericLarge</td><td class="mono">28 / w500</td><td>Card hero amount (T2/T3)</td><td style="font-variant-numeric:tabular-nums;font-weight:500;letter-spacing:-0.5px">৳42,180</td></tr>
+          <tr><td class="mono">numericHero</td><td class="mono">38 / w500</td><td>The one dominant number (T1 earned, T4 goal)</td><td style="font-variant-numeric:tabular-nums;font-weight:500;letter-spacing:-1px">৳1,86,400</td></tr>
+        </tbody>
+      </table>
+
+      <h3>e · Bilingual rules</h3>
+      <ul class="note" style="max-width:70ch;line-height:1.7">
+        <li><b>Digits:</b> currency & counts stay Western-Arabic in both languages (see flag above). Only prose translates.</li>
+        <li><b>৳ symbol:</b> always precedes the number with a hair-space (৳&#8201;240), never a trailing "Tk". Part of the numeric token, inherits tabular metrics.</li>
+        <li><b>Grouping:</b> South-Asian lakh/crore grouping — ৳1,86,400 not ৳186,400. Whole Taka in operational views; paisa (.50) only in formal financial reports.</li>
+        <li><b>Line-height:</b> EN 1.35, BN 1.55. BN strings get the larger leading so conjuncts don't clip the line above.</li>
+        <li><b>BN minimum:</b> Bengali never renders below 13px even where the EN token is 12/11.</li>
+      </ul>
+    </section>
+
+    <!-- ============================ 3 · SHAPE ============================ -->
+    <section id="s3">
+      <h2><span class="num">03</span>Shape tokens</h2>
+      <p class="sec-intro">Five radii, nothing in between. A tight set keeps the UI calm and makes regressions greppable.</p>
+      <div class="radius-demo">
+        <div style="border-radius:6px">xs · 6<br>badges</div>
+        <div style="border-radius:8px">sm · 8<br>chips/inputs</div>
+        <div style="border-radius:12px">md · 12<br>cards/buttons</div>
+        <div style="border-radius:16px">lg · 16<br>sheets/modals</div>
+        <div style="border-radius:999px">pill<br>FAB/toggle</div>
+      </div>
+      <table>
+        <thead><tr><th>Token</th><th>px</th><th>Applies to</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">r-xs</td><td class="mono">6</td><td>Status badges, tiny tags</td><td>Small elements need a small radius or they look like pills.</td></tr>
+          <tr><td class="mono">r-sm</td><td class="mono">8</td><td>Chips, small inputs, quick-action tiles</td><td>One step down from cards; reads as "interactive control."</td></tr>
+          <tr><td class="mono">r-md</td><td class="mono">12</td><td>Cards, buttons, fields, alert rows</td><td>The workhorse. Friendly but not bubbly at 720p.</td></tr>
+          <tr><td class="mono">r-lg</td><td class="mono">16</td><td>Bottom sheets, modals (top corners)</td><td>Larger surfaces need a larger radius to stay proportional.</td></tr>
+          <tr><td class="mono">r-pill</td><td class="mono">999</td><td>Pills, toggles, FAB (circular & extended)</td><td>Fully round = unmistakably a primary affordance.</td></tr>
+        </tbody>
+      </table>
+      <div class="rule-no">✗ No other radii. <span class="mono">grep -rnE "borderRadius:\s*(BorderRadius\.circular\()?(?!6|8|12|16|999)[0-9]+" lib/features</span> must return nothing.</div>
+    </section>
+
+    <!-- ============================ 4 · SPACING ============================ -->
+    <section id="s4">
+      <h2><span class="num">04</span>Spacing tokens</h2>
+      <p class="sec-intro">A 7-step scale on a 4px base. Everything from icon-to-label to tablet screen padding maps to one of these.</p>
+      <table>
+        <thead><tr><th>Token</th><th>px</th><th>Primary use</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">s1</td><td class="mono">4</td><td>Icon-to-label, badge padding</td><td><span class="ruler"><span class="bar" style="width:4px"></span></span></td></tr>
+          <tr><td class="mono">s2</td><td class="mono">8</td><td>Chip gap, tight vertical stack</td><td><span class="ruler"><span class="bar" style="width:8px"></span></span></td></tr>
+          <tr><td class="mono">s3</td><td class="mono">12</td><td>Card inner padding, list-row gap</td><td><span class="ruler"><span class="bar" style="width:12px"></span></span></td></tr>
+          <tr><td class="mono">s4</td><td class="mono">16</td><td>Phone screen padding, section inner</td><td><span class="ruler"><span class="bar" style="width:16px"></span></span></td></tr>
+          <tr><td class="mono">s5</td><td class="mono">20</td><td>Between sections</td><td><span class="ruler"><span class="bar" style="width:20px"></span></span></td></tr>
+          <tr><td class="mono">s6</td><td class="mono">24</td><td>Major section break</td><td><span class="ruler"><span class="bar" style="width:24px"></span></span></td></tr>
+          <tr><td class="mono">s7</td><td class="mono">32</td><td>Tablet screen padding, empty-state inset</td><td><span class="ruler"><span class="bar" style="width:32px"></span></span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================ 5 · SHADOW ============================ -->
+    <section id="s5">
+      <h2><span class="num">05</span>Shadow tokens</h2>
+      <p class="sec-intro">Hard performance ceiling: single layer, blur ≤ 8px, no BackdropFilter. On a PowerVR GE8320 every blurred shadow is fill-rate the GPU pays for each frame during scroll — so <b>most cards use a 1px border, not a shadow.</b></p>
+      <div class="grid cols-3" style="margin:var(--s3) 0">
+        <div class="tile" style="box-shadow:var(--e0);border:1px solid var(--line)"><b>e0 · none</b><div class="cap">Default. Cards, rows, fields → 1px <span class="mono">--line</span> border.</div></div>
+        <div class="tile" style="box-shadow:var(--e2)"><b>e2 · FAB / sticky CTA</b><div class="cap mono">0 2px 8px /.12</div></div>
+        <div class="tile" style="box-shadow:var(--e3)"><b>e3 · modal / sheet</b><div class="cap mono">0 4px 8px /.16 + scrim</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Token</th><th>Value</th><th>Max blur</th><th>Permitted on</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">e0</td><td class="mono">none</td><td>—</td><td>Everything by default (border instead)</td></tr>
+          <tr><td class="mono">e1</td><td class="mono">0 1px 2px /.06</td><td>2px</td><td>Rare faint lift; avoid in long scroll lists</td></tr>
+          <tr><td class="mono">e2</td><td class="mono">0 2px 8px /.12</td><td>8px</td><td>FAB, sticky bottom CTA, dropdown menu</td></tr>
+          <tr><td class="mono">e3</td><td class="mono">0 4px 8px /.16</td><td>8px</td><td>Modal & bottom-sheet only, always with a scrim</td></tr>
+        </tbody>
+      </table>
+      <div class="rule-no">✗ Max layer count = 1. No multi-layer "soft" shadows, no blur &gt; 8, no <span class="mono">BackdropFilter</span> / frosted glass anywhere in the app.</div>
+    </section>
+
+    <!-- ============================ 6 · MOTION ============================ -->
+    <section id="s6">
+      <h2><span class="num">06</span>Motion tokens</h2>
+      <p class="sec-intro">Four durations, three curves. Animate only <b>transform</b> and <b>opacity</b> — never height, shadow, or blur — so the budget GPU never reflows mid-animation.</p>
+      <div class="grid cols-2">
+        <table>
+          <thead><tr><th>Duration</th><th>ms</th><th>For</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">instant</td><td class="mono">80</td><td>Chip/toggle state flip</td></tr>
+            <tr><td class="mono">fast</td><td class="mono">140</td><td>FAB scale, tab switch, press</td></tr>
+            <tr><td class="mono">base</td><td class="mono">220</td><td>Page push, sheet open</td></tr>
+            <tr><td class="mono">slow</td><td class="mono">320</td><td>Full-screen cover, large reveal</td></tr>
+          </tbody>
+        </table>
+        <table>
+          <thead><tr><th>Curve</th><th>cubic-bezier</th><th>For</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">standard</td><td class="mono">.2,0,0,1</td><td>Most transitions, state changes</td></tr>
+            <tr><td class="mono">entrance</td><td class="mono">0,0,0,1</td><td>Elements arriving (decelerate)</td></tr>
+            <tr><td class="mono">exit</td><td class="mono">.4,0,1,1</td><td>Elements leaving (accelerate)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <table>
+        <thead><tr><th>Transition</th><th>Duration</th><th>Curve</th></tr></thead>
+        <tbody>
+          <tr><td>Page push / pop</td><td class="mono">base 220</td><td class="mono">standard / exit</td></tr>
+          <tr><td>Bottom sheet open / close</td><td class="mono">base 220 / fast 140</td><td class="mono">entrance / exit</td></tr>
+          <tr><td>Chip toggle, FAB scale</td><td class="mono">fast 140</td><td class="mono">standard</td></tr>
+        </tbody>
+      </table>
+      <div class="flag"><b>Jank watch:</b> no staggered list-entrance animations on scroll, no animating <span class="mono">box-shadow</span> (swap opacity of a pre-rendered shadow layer instead), no <span class="mono">AnimatedContainer</span> on height — animate a scaleY transform or cross-fade.</div>
+    </section>
+
+    <!-- ============================ 7 · HAPTICS ============================ -->
+    <section id="s7">
+      <h2><span class="num">07</span>Haptic policy</h2>
+      <p class="sec-intro">Six patterns, fired only from the widget primitive layer — developers never call <span class="mono">HapticFeedback</span> directly, so feedback stays consistent and can't be sprinkled ad-hoc.</p>
+      <table>
+        <thead><tr><th>Event</th><th>Pattern</th><th>Flutter call</th><th>Fires from</th></tr></thead>
+        <tbody>
+          <tr><td>Primary CTA tap</td><td>Light impact</td><td class="mono">HapticFeedback.lightImpact()</td><td><span class="mono">TfButton(primary)</span> onTap</td></tr>
+          <tr><td>Destructive confirm</td><td>Heavy impact</td><td class="mono">HapticFeedback.heavyImpact()</td><td><span class="mono">TfButton(danger)</span> on confirm</td></tr>
+          <tr><td>Chip / picker select</td><td>Selection click</td><td class="mono">HapticFeedback.selectionClick()</td><td><span class="mono">TfChip</span>, <span class="mono">TfTabs</span></td></tr>
+          <tr><td>Order success</td><td>Medium ×2 (light double)</td><td class="mono">mediumImpact() ×2 @ 90ms</td><td>Order-placed callback</td></tr>
+          <tr><td>Validation error</td><td>Sharp double</td><td class="mono">heavyImpact() ×2 @ 70ms</td><td><span class="mono">TfField</span> error state</td></tr>
+          <tr><td>Background sync complete</td><td><b>None</b> — silent</td><td class="mono">—</td><td>Never. No buzz when the owner isn't looking.</td></tr>
+        </tbody>
+      </table>
+      <div class="rule-no">✗ No haptic on scroll, on every keystroke, or on background/automatic events. Haptics confirm <em>user-initiated</em> actions only.</div>
+    </section>
+
+    <!-- ============================ 8 · VOICE ============================ -->
+    <section id="s8">
+      <h2><span class="num">08</span>Voice &amp; language</h2>
+      <p class="sec-intro">Plain, direct, owner-to-owner. We state facts with units and tell people what to do with verbs.</p>
+      <table>
+        <thead><tr><th>We write</th><th>We don't write</th></tr></thead>
+        <tbody>
+          <tr><td>Take payment</td><td>Payment</td></tr>
+          <tr><td>Close day · ৳14,820</td><td>Submit</td></tr>
+          <tr><td>Add item</td><td>New</td></tr>
+          <tr><td>Table 6 waiting 48 min</td><td>Table 6 has an issue</td></tr>
+          <tr><td>Mutton low · 0.8 kg left</td><td>Inventory alert</td></tr>
+          <tr><td>3 orders still open</td><td>Some orders pending</td></tr>
+          <tr><td>▲ 12% vs yesterday</td><td>Up from yesterday</td></tr>
+          <tr><td>Reorder now</td><td>Manage stock</td></tr>
+          <tr><td>Pick a colour that feels like your place</td><td>Select your brand theme</td></tr>
+          <tr><td>Done for the day?</td><td>Proceed to end-of-day reconciliation</td></tr>
+        </tbody>
+      </table>
+      <ul class="note" style="max-width:70ch;line-height:1.7">
+        <li><b>Always include units:</b> "14 min", "0.8 kg", "৳490 avg ticket", "3.2 turns/day" — never a bare number where a unit clarifies it.</li>
+        <li><b>Buttons are imperative verbs:</b> Take payment, Print bill, Reorder, Close day. Verbs over nouns, always.</li>
+        <li><b>BN is hand-written, never machine-translated.</b> Bengali strings are authored by a native writer in the casual register an owner actually speaks (আজকের আয়, not a stiff literal gloss). Every EN string has a reviewed BN pair before ship.</li>
+        <li><b>Numbers:</b> whole Taka in operational UI (round to nearest ৳), two decimals only in financial reports. Percentages to whole numbers unless &lt;1% (then one decimal).</li>
+      </ul>
+    </section>
+
+    <!-- ============================ 9 · ONBOARDING ============================ -->
+    <section id="s9">
+      <h2><span class="num">09</span>Accent onboarding flow</h2>
+      <p class="sec-intro">One step during signup, right after the outlet name. The owner picks the colour that feels like their place — with a live preview, so it's a real choice, not an abstract swatch.</p>
+      <div style="display:flex;gap:var(--s6);flex-wrap:wrap;align-items:flex-start">
+        <div class="phone">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">Step 3 of 4</div>
+          <div style="font-size:20px;font-weight:500;letter-spacing:-0.3px;margin:6px 0 2px">Pick a colour that<br>feels like your place</div>
+          <div class="bn" style="font-size:13px;color:var(--muted);margin-bottom:14px">আপনার পছন্দের রং বেছে নিন</div>
+          <!-- live preview -->
+          <div style="border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;margin-bottom:14px">
+            <div style="background:var(--accent);color:var(--accent-ink);padding:10px 12px;font-size:13px;font-weight:500">Spice Garden</div>
+            <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
+              <div style="font-variant-numeric:tabular-nums;font-weight:500;font-size:24px;letter-spacing:-0.5px">৳42,180</div>
+              <div style="display:flex;gap:6px"><span class="tf-chip tf-chip--active" style="min-height:28px;padding:5px 10px">Dine-in</span><span class="tf-chip" style="min-height:28px;padding:5px 10px">Takeaway</span></div>
+              <button class="tf-btn tf-btn--primary" style="height:40px;width:100%">Take payment</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center" id="ob-swatches">
+            <span class="ob-dot" data-set="teal" style="background:#0E7B6E"></span>
+            <span class="ob-dot" data-set="saffron" style="background:#B45A12"></span>
+            <span class="ob-dot" data-set="rose" style="background:#B23E61"></span>
+            <span class="ob-dot" data-set="forest" style="background:#2F7A43"></span>
+            <span class="ob-dot" data-set="ocean" style="background:#1F6FB2"></span>
+            <span class="ob-dot" data-set="clay" style="background:#A8553C"></span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:280px">
+          <table>
+            <tbody>
+              <tr><th>Presentation</th><td>Six dots in a row under a <b>live preview</b> card (app-bar + money + chips + CTA). Tapping a dot recolours the preview instantly — try the dots in the mock, or the switcher at the top of this page.</td></tr>
+              <tr><th>Saved where</th><td>Per <b>outlet</b>, on the outlet record server-side — never per device. A staff phone logging into that outlet inherits the colour.</td></tr>
+              <tr><th>Change later</th><td><span class="mono">Settings › Appearance › Accent colour</span>. Same six dots, same live preview.</td></tr>
+              <tr><th>On tier upgrade</th><td>Accent <b>persists</b>. Upgrading Counter → Multi-unit never resets or re-prompts the colour.</td></tr>
+              <tr><th>Default</th><td>If skipped or unset, <b>teal</b> — silently, no nag.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ 10 · COMPONENTS ============================ -->
+    <section id="s10">
+      <h2><span class="num">10</span>Component impact guide</h2>
+      <p class="sec-intro">What changes per Tf* widget. Most are pure token swaps — only two need a behaviour change beyond re-pointing tokens.</p>
+      <table>
+        <thead><tr><th>Widget</th><th>Old usage</th><th>New token usage</th><th>Behaviour change?</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">TfButton</td><td>bg #F5C127, text ink</td><td>primary: bg <span class="mono">--accent</span>, text <span class="mono">--accent-ink (#FFF)</span>; danger: <span class="mono">--danger</span></td><td><b>Yes</b> — text flips ink→white on primary (teal needs white). Verify all primary buttons.</td></tr>
+          <tr><td class="mono">TfCard</td><td>white + 1px #E8E4DC</td><td>bg <span class="mono">--surface</span>, border <span class="mono">--line</span>, radius <span class="mono">--r-md</span></td><td>No</td></tr>
+          <tr><td class="mono">TfChip</td><td>active bg yellow</td><td>active bg <span class="mono">--accent-soft</span>, border <span class="mono">--accent</span>, text <span class="mono">--ink</span></td><td>No</td></tr>
+          <tr><td class="mono">TfFab</td><td>bg yellow, ink icon</td><td>bg <span class="mono">--accent</span>, icon <span class="mono">--accent-ink</span>, shadow <span class="mono">--e2</span></td><td><b>Yes</b> — icon colour flips to white.</td></tr>
+          <tr><td class="mono">TfText</td><td>fixed Inter</td><td><span class="mono">--font-en</span>/<span class="mono">--font-bn</span> by locale; w400/w500; size tokens</td><td>No (locale font swap already wired)</td></tr>
+          <tr><td class="mono">TfMoney</td><td>Inter, manual figures</td><td><span class="mono">--font-num</span> + tabular-nums; numeric size tokens; lakh grouping</td><td>No</td></tr>
+          <tr><td class="mono">TfSectionHeader</td><td>ink title</td><td>title token + <span class="mono">--muted</span> BN subtitle</td><td>No</td></tr>
+          <tr><td class="mono">TfStatusBadge</td><td>coral / green / yellow</td><td><span class="mono">--success / --warning / --danger / --urgent</span> + soft bg</td><td><b>Verify</b> — "coral" maps to <span class="mono">--urgent</span>; remove any yellow status.</td></tr>
+          <tr><td class="mono">TfTabs</td><td>yellow active pill</td><td>active text <span class="mono">--ink</span>, indicator <span class="mono">--accent</span></td><td>No</td></tr>
+          <tr><td class="mono">TfBottomNav</td><td>yellow active</td><td>active icon/label <span class="mono">--accent</span>, rest <span class="mono">--muted</span></td><td>No</td></tr>
+          <tr><td class="mono">TfStickyCTA</td><td>dark bar + yellow btn</td><td>bar <span class="mono">--ink</span>, button <span class="mono">--accent</span>/<span class="mono">--accent-ink</span>, <span class="mono">--e2</span></td><td>No</td></tr>
+          <tr><td class="mono">TfEmptyState</td><td>grey art</td><td>art <span class="mono">--muted-soft</span>, no-data uses "—", CTA <span class="mono">--accent</span></td><td>No</td></tr>
+          <tr><td class="mono">TfAppBar</td><td>cream bg</td><td>bg <span class="mono">--surface</span>/<span class="mono">--bg</span>, title ink; no accent fill</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================ 11 · ENFORCEMENT ============================ -->
+    <section id="s11">
+      <h2><span class="num">11</span>Enforcement</h2>
+      <p class="sec-intro">Run in a pre-commit hook and in CI. Any non-empty output fails the build.</p>
+      <table>
+        <thead><tr><th>Rule</th><th>Command (fails if it prints anything)</th></tr></thead>
+        <tbody>
+          <tr><td>No hex literals in feature code</td><td class="mono">grep -rnE "#[0-9A-Fa-f]{6}" lib/features</td></tr>
+          <tr><td>No weight ≥ 600</td><td class="mono">grep -rnE "FontWeight\.(w[6-9]00|bold)" lib</td></tr>
+          <tr><td>No raw Text()</td><td class="mono">grep -rnE "(^|[^f])\bText\(" lib/features</td></tr>
+          <tr><td>No banned radii</td><td class="mono">grep -rnE "circular\(\s*(?!6|8|12|16)[0-9]" lib</td></tr>
+          <tr><td>No banned shadows / blur</td><td class="mono">grep -rnE "blurRadius:\s*(9|[1-9][0-9])|BackdropFilter" lib</td></tr>
+          <tr><td>No direct haptics</td><td class="mono">grep -rn "HapticFeedback\." lib/features</td></tr>
+        </tbody>
+      </table>
+      <div class="tile" style="background:var(--ink);color:#dfe);border:none;color:#E7E7E2;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;padding:var(--s4)">
+        <div style="color:var(--muted-soft)"># .git/hooks/pre-commit</div>
+        set -e<br>
+        FAIL=0<br>
+        for rule in \<br>
+        &nbsp;&nbsp;'#[0-9A-Fa-f]{6}::lib/features' \<br>
+        &nbsp;&nbsp;'FontWeight\.(w[6-9]00|bold)::lib' \<br>
+        &nbsp;&nbsp;'HapticFeedback\.::lib/features'; do<br>
+        &nbsp;&nbsp;pat="${rule%%::*}"; path="${rule##*::}"<br>
+        &nbsp;&nbsp;if grep -rnE "$pat" "$path"; then echo "✗ token rule: $pat"; FAIL=1; fi<br>
+        done<br>
+        exit $FAIL
+      </div>
+    </section>
+
+    <!-- ============================ 12 · MIGRATION ============================ -->
+    <section id="s12">
+      <h2><span class="num">12</span>Migration checklist</h2>
+      <p class="sec-intro">Tokens first, then components, then onboarding, then any screen-specific fixes. Done in order, feature screens never get touched.</p>
+      <h3>Edit these</h3>
+      <ol class="note" style="max-width:70ch;line-height:1.8">
+        <li><b>theme/tokens.dart</b> — replace the palette with the base + signal + data-viz tokens and the six accent maps (ThemeExtension). <em>Do this first; nothing else compiles against new names until it exists.</em></li>
+        <li><b>theme/accent.dart</b> — new: the six accent definitions + the resolver that reads the outlet's saved choice (default teal).</li>
+        <li><b>widgets/Tf*</b> — re-point each primitive at the new tokens per Section 10. Only TfButton + TfFab need the ink→white text flip; the rest are swaps.</li>
+        <li><b>onboarding/accent_step.dart</b> — new step + live preview (Section 9).</li>
+        <li><b>settings/appearance.dart</b> — "Change accent" entry.</li>
+      </ol>
+      <h3>Don't edit</h3>
+      <div class="rule-ok">✓ Feature screens (orders, menu, inventory, dashboards, reports) — <b>as long as they only use Tf* primitives and token names</b>, they inherit everything. Audit for stray hex/raw-Text first (Section 11); fix those, not the layouts.</div>
+      <h3>Existing outlets without an accent</h3>
+      <div class="rule-ok">✓ Default to <b>teal</b> silently on first load post-migration. Do not interrupt an established owner with a colour prompt; surface it once as a dismissible tip in Settings.</div>
+    </section>
+
+    <!-- ============================ SUMMARY ============================ -->
+    <section id="summary">
+      <h2><span class="num">→</span>Summary</h2>
+      <div class="grid cols-3">
+        <div class="tile"><b>Biggest visual change</b><p class="note" style="margin:6px 0 0">The fixed yellow-on-cream brand is gone. The base is now a neutral professional grey-white that never changes, and "the brand colour" becomes a per-outlet accent (default teal) confined to CTAs, FAB, selected states and soft tints. The app stops looking like one festive restaurant and starts looking like infrastructure that each owner tints as their own.</p></div>
+        <div class="tile"><b>The trade-off to know</b><p class="note" style="margin:6px 0 0">Restraint costs a little warmth. A Tier-1 owner who loved the all-yellow feel now gets neutral surfaces with a saffron accent — warm, but calmer. The system gains coherence and tier-range; it loses some of the cheerful, maximal personality the old palette had. That's the intended swap, but it's a real one.</p></div>
+        <div class="tile"><b>First three to build</b><p class="note" style="margin:6px 0 0">1 · <b>tokens.dart</b> — base + signals + data-viz + six accent maps. 2 · <b>TfButton &amp; TfFab</b> — the ink→white flip is the only true behaviour change; get it right and the rest are swaps. 3 · <b>Accent onboarding step</b> + the resolver that defaults to teal — so new outlets exercise the system end-to-end.</p></div>
+      </div>
+      <p class="note" style="margin-top:var(--s5)"><b>On your constraints:</b> all sound and held exactly — fixed base, no tier palettes, deltas always signal-coloured, accent never signals status, single-layer shadows / blur ≤ 8 / no BackdropFilter, WCAG AA body (AAA where stated). The four places I overrode or flagged: BN never below 13px (not 12), currency digits stay Western-Arabic even in BN (speed + tabular alignment), signal hues pushed into separate lanes so saffron/clay accents can't read as warning/urgent, and numericHero leans on size+ink rather than a third weight.</p>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const topBtns = [...document.querySelectorAll('#swatches .swatch')];
+  const obDots = [...document.querySelectorAll('#ob-swatches .ob-dot')];
+  function setAccent(name) {
+    root.setAttribute('data-accent', name);
+    topBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.set === name)));
+    obDots.forEach(d => d.style.outline = d.dataset.set === name ? '2px solid var(--ink)' : '2px solid var(--surface)');
+    try { localStorage.setItem('tf-ds-accent', name); } catch (e) {}
+  }
+  topBtns.forEach(b => b.addEventListener('click', () => setAccent(b.dataset.set)));
+  obDots.forEach(d => d.addEventListener('click', () => setAccent(d.dataset.set)));
+  setAccent((() => { try { return localStorage.getItem('tf-ds-accent') || 'teal'; } catch (e) { return 'teal'; } })());
+</script>
+
+<style>
+  .ob-dot { width: 26px; height: 26px; border-radius: 999px; display: inline-block; cursor: pointer;
+            outline: 2px solid var(--surface); outline-offset: 1px; }
+</style>
+</body>
+</html>

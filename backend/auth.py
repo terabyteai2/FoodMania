@@ -11,6 +11,7 @@ from config import settings
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 365
 PLATFORM_TOKEN_EXPIRE_HOURS = 8
+SIGNUP_TOKEN_EXPIRE_MINUTES = 15
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -92,3 +93,40 @@ def get_current_platform_admin_id(
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     return str(decode_platform_payload(credentials.credentials)["sub"])
+
+
+def create_signup_token(
+    *,
+    phone: str,
+    purpose: str,
+    invite_id: str | None = None,
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=SIGNUP_TOKEN_EXPIRE_MINUTES)
+    payload: dict[str, Any] = {
+        "type": "phone_signup",
+        "phone": phone,
+        "purpose": purpose,
+        "exp": expire,
+    }
+    if invite_id:
+        payload["invite_id"] = invite_id
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_signup_token(token: str, *, expected_purpose: str | None = None) -> dict[str, Any]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "phone_signup":
+            raise ValueError("Invalid signup token type")
+        phone = payload.get("phone", "")
+        if not phone:
+            raise ValueError("Missing phone in signup token")
+        purpose = payload.get("purpose", "")
+        if expected_purpose and purpose != expected_purpose:
+            raise ValueError("Signup token purpose mismatch")
+        return payload
+    except (JWTError, ValueError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid or expired signup token. {error}",
+        ) from error

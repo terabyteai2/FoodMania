@@ -1,12 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react'
+import {
+  ThemeProvider,
+  useTokens,
+  resolveTheme,
+  resolveOverrides,
+  themeAssetPaths,
+  DEFAULT_THEME_SLUG,
+} from './themes'
 
 const API_BASE = ''
 const MENU_REFRESH_MS = 5000
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyARB64Gh6KXFDjL_rZMqAGFlfNNGcuBWKw'
+let googleMapsLoadPromise = null
 
 // ── PDF receipt generator ─────────────────────────────────────────────────────
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
 
-async function generateReceipt(order, info, cartItems) {
+export async function generateReceipt(order, info, cartItems) {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'pt', format: 'a5' })
   const W = doc.internal.pageSize.getWidth()
@@ -113,18 +123,84 @@ async function generateReceipt(order, info, cartItems) {
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
-const T = {
-  bg:      '#1c1410',
-  bgWarm:  '#241914',
-  bgCard:  '#2b1f18',
-  ink:     '#fff3e0',
-  inkSoft: 'rgba(255,243,224,.65)',
-  inkFaint:'rgba(255,243,224,.4)',
-  ember:   '#ff6a3d',
-  amber:   '#ffb547',
-  line:    'rgba(255,243,224,.12)',
+// Module-level fallback tokens used only by the menu-icon constants below
+// (which are evaluated at import time, before any React tree exists). Every
+// component grabs its live theme tokens via `useTokens()` at render time.
+const T_FALLBACK = {
+  amber: '#ffb547',
   display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
-  body:    '"Hind Siliguri", system-ui, -apple-system, sans-serif',
+}
+
+const MENU_ICON_STYLES = {
+  pizza:    { glyph: '🍕', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
+  burger:   { glyph: '☰', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  biryani:  { glyph: '◉', color: '#e28714', bg: 'rgba(226,135,20,.20)' },
+  rice:     { glyph: '◌', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
+  curry:    { glyph: '◒', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
+  soup:     { glyph: '∪', color: '#e65a3c', bg: 'rgba(230,90,60,.16)' },
+  vegetable:{ glyph: '✦', color: '#3d7a5a', bg: 'rgba(61,122,90,.20)' },
+  noodle:   { glyph: '≈', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  bread:    { glyph: '▱', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  chicken:  { glyph: '◔', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
+  fish:     { glyph: '◇', color: '#2f7ea8', bg: 'rgba(47,126,168,.18)' },
+  beef:     { glyph: '◆', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  snack:    { glyph: '✚', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  fruit:    { glyph: '●', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  dessert:  { glyph: '✸', color: '#c54862', bg: 'rgba(197,72,98,.18)' },
+  drink:    { glyph: '▯', color: '#2e9b79', bg: 'rgba(46,155,121,.18)' },
+  coffee:   { glyph: '☕', color: '#8a5a32', bg: 'rgba(138,90,50,.22)' },
+  tea:      { glyph: '◡', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
+  breakfast:{ glyph: '◐', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
+  set_meal: { glyph: '▦', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
+  general:  { glyph: '✦', color: T_FALLBACK.amber, bg: 'rgba(255,181,71,.14)' },
+}
+
+export function inferIconKey(item) {
+  const explicit = String(item?.iconKey || '').trim().toLowerCase()
+  if (explicit) return explicit
+  const text = `${item?.name || ''} ${item?.category || ''}`.toLowerCase()
+  const has = words => words.some(w => text.includes(w))
+  if (has(['pizza'])) return 'pizza'
+  if (has(['burger', 'sandwich'])) return 'burger'
+  if (has(['biryani', 'biriyani', 'kacchi', 'tehari', 'polao', 'পোলাও', 'বিরিয়ানি'])) return 'biryani'
+  if (has(['rice', 'fried rice', 'ভাত'])) return 'rice'
+  if (has(['curry', 'masala', 'korma', 'bhuna', 'ভুনা', 'কারি'])) return 'curry'
+  if (has(['soup'])) return 'soup'
+  if (has(['salad', 'veg', 'vegetable', 'সবজি'])) return 'vegetable'
+  if (has(['noodle', 'chowmein', 'chow mein'])) return 'noodle'
+  if (has(['bread', 'naan', 'paratha', 'রুটি', 'পরোটা'])) return 'bread'
+  if (has(['chicken', 'চিকেন', 'মুরগি'])) return 'chicken'
+  if (has(['fish', 'prawn', 'shrimp', 'rui', 'ilish', 'মাছ'])) return 'fish'
+  if (has(['beef', 'mutton', 'kebab', 'kabab', 'গরু', 'খাসি'])) return 'beef'
+  if (has(['snack', 'samosa', 'roll', 'fries', 'singara', 'সমুচা'])) return 'snack'
+  if (has(['fruit', 'juice'])) return 'fruit'
+  if (has(['dessert', 'sweet', 'cake', 'firni', 'ice cream', 'মিষ্টি'])) return 'dessert'
+  if (has(['drink', 'soda', 'lassi', 'borhani', 'beverage', 'পানীয়'])) return 'drink'
+  if (has(['coffee'])) return 'coffee'
+  if (has(['tea', 'cha', 'চা'])) return 'tea'
+  if (has(['breakfast', 'omelet', 'omelette'])) return 'breakfast'
+  if (has(['set meal', 'set_menu', 'combo', 'platter', 'থালি'])) return 'set_meal'
+  return 'general'
+}
+
+export function iconStyleFor(item) {
+  return MENU_ICON_STYLES[inferIconKey(item)] || MENU_ICON_STYLES.general
+}
+
+export function MenuFallbackIcon({ item, size = 32 }) {
+  const T = useTokens()
+  const style = iconStyleFor(item)
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+      background: style.bg,
+    }}>
+      <span style={{
+        color: style.color, fontSize: size, fontFamily: T.display,
+        lineHeight: 1, fontWeight: 800, opacity: .95,
+      }}>{style.glyph}</span>
+    </div>
+  )
 }
 
 // ── Demo data ─────────────────────────────────────────────────────────────────
@@ -137,37 +213,62 @@ const DEMO_INFO = {
 }
 
 const DEMO_ITEMS = [
-  { id: 'kacchi',   name: 'Mutton Kacchi Biryani', category: 'Biryani',  price: 450, description: 'Slow-cooked basmati with marinated mutton, potato, saffron and ghee.', tag: "Chef's pick", imageUrl: null },
-  { id: 'chickenb', name: 'Chicken Biryani',        category: 'Biryani',  price: 320, description: 'Aromatic basmati layered with spiced chicken thigh.',                  tag: null,          imageUrl: null },
-  { id: 'beeft',    name: 'Beef Tehari',             category: 'Mains',   price: 280, description: 'Short-grain rice cooked with tender beef cubes and green chillies.',   tag: null,          imageUrl: null },
-  { id: 'pizza',    name: 'Margherita Pizza',        category: 'Mains',   price: 1299,description: 'Wood-fired crust, San Marzano tomato, fior di latte, basil.',          tag: 'Popular',     imageUrl: null },
-  { id: 'samosa',   name: 'Keema Samosa',            category: 'Snacks',  price: 60,  description: 'Crisp pastry with spiced minced beef. Served with tamarind chutney.',  tag: null,          imageUrl: null },
-  { id: 'firni',    name: 'Saffron Firni',           category: 'Desserts',price: 120, description: 'Slow-cooked rice pudding with cardamom, saffron and pistachio.',       tag: null,          imageUrl: null },
-  { id: 'borhani',  name: 'Borhani',                 category: 'Drinks',  price: 80,  description: 'Spiced yogurt drink with mint and roasted cumin.',                     tag: null,          imageUrl: null },
-  { id: 'kebab',    name: 'Sheekh Kebab',            category: 'Mains',   price: 240, description: 'Charcoal-grilled minced beef skewers with cumin and onion.',           tag: null,          imageUrl: null },
+  { id: 'kacchi',   name: 'Mutton Kacchi Biryani', category: 'Biryani',  price: 450, description: 'Slow-cooked basmati with marinated mutton, potato, saffron and ghee.', tag: "Chef's pick", imageUrl: null, iconKey: 'biryani' },
+  { id: 'chickenb', name: 'Chicken Biryani',        category: 'Biryani',  price: 320, description: 'Aromatic basmati layered with spiced chicken thigh.',                  tag: null,          imageUrl: null, iconKey: 'biryani' },
+  { id: 'beeft',    name: 'Beef Tehari',             category: 'Mains',   price: 280, description: 'Short-grain rice cooked with tender beef cubes and green chillies.',   tag: null,          imageUrl: null, iconKey: 'beef' },
+  { id: 'pizza',    name: 'Margherita Pizza',        category: 'Mains',   price: 1299,description: 'Wood-fired crust, San Marzano tomato, fior di latte, basil.',          tag: 'Popular',     imageUrl: null, iconKey: 'pizza' },
+  { id: 'samosa',   name: 'Keema Samosa',            category: 'Snacks',  price: 60,  description: 'Crisp pastry with spiced minced beef. Served with tamarind chutney.',  tag: null,          imageUrl: null, iconKey: 'snack' },
+  { id: 'firni',    name: 'Saffron Firni',           category: 'Desserts',price: 120, description: 'Slow-cooked rice pudding with cardamom, saffron and pistachio.',       tag: null,          imageUrl: null, iconKey: 'dessert' },
+  { id: 'borhani',  name: 'Borhani',                 category: 'Drinks',  price: 80,  description: 'Spiced yogurt drink with mint and roasted cumin.',                     tag: null,          imageUrl: null, iconKey: 'drink' },
+  { id: 'kebab',    name: 'Sheekh Kebab',            category: 'Mains',   price: 240, description: 'Charcoal-grilled minced beef skewers with cumin and onion.',           tag: null,          imageUrl: null, iconKey: 'beef' },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function getOutletId() {
+function getRouteContext() {
+  const host = window.location.hostname.toLowerCase()
+  const rootDomain = 'quickbytes.buzz'
   const p = new URLSearchParams(window.location.search)
-  if (p.get('demo') === '1') return '__demo__'
-  if (p.get('outlet')) return p.get('outlet')
   const parts = window.location.pathname.split('/').filter(Boolean)
+  const tableIdx = parts.indexOf('tableorder')
+  const tableNo = tableIdx !== -1 && parts[tableIdx + 1]
+    ? decodeURIComponent(parts[tableIdx + 1]).trim()
+    : ''
+  const tableMode = tableNo.length > 0
+  if (host.endsWith(`.${rootDomain}`)) {
+    const subdomain = host.slice(0, -rootDomain.length - 1).split('.')[0]
+    if (subdomain && subdomain !== 'www') {
+      return { outletId: subdomain, tableNo, tableMode }
+    }
+  }
+
+  if (p.get('demo') === '1') return { outletId: '__demo__', tableNo, tableMode }
+  if (p.get('outlet')) return { outletId: p.get('outlet'), tableNo, tableMode }
   const idx = parts.indexOf('menu')
-  if (idx !== -1 && parts[idx + 1]) return parts[idx + 1]
-  return parts[parts.length - 1] || null
+  if (idx !== -1 && parts[idx + 1]) {
+    return { outletId: parts[idx + 1], tableNo, tableMode }
+  }
+  return { outletId: parts[parts.length - 1] || null, tableNo, tableMode }
 }
 
-function cartTotal(cart, items) {
+function getOutletId() {
+  return getRouteContext().outletId
+}
+
+export function cartTotal(cart, items) {
   return Object.entries(cart).reduce((sum, [id, qty]) => {
     const item = items.find(i => i.id === id)
     return sum + (item ? item.price * qty : 0)
   }, 0)
 }
-function cartCount(cart) { return Object.values(cart).reduce((s, q) => s + q, 0) }
-function taka(n) { return '৳' + Math.round(n).toLocaleString('en-BD') }
+export function cartCount(cart) { return Object.values(cart).reduce((s, q) => s + q, 0) }
+export function taka(n) { return '৳' + Math.round(n).toLocaleString('en-BD') }
 
-function buildMedia(item) {
+export function localizedItemName(item, lang = 'en') {
+  if (lang === 'bn' && item?.nameBn) return item.nameBn
+  return item?.nameEn || item?.name || item?.nameBn || 'Item'
+}
+
+export function buildMedia(item) {
   const media = []
   if (item.imageUrl) media.push({ type: 'image', url: item.imageUrl })
   if (item.videoUrl) media.push({ type: 'video', url: item.videoUrl })
@@ -196,15 +297,147 @@ async function loadJson(path) {
   return unwrapApi(body)
 }
 
+export function loadGoogleMapsApi() {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Maps can only load in a browser.'))
+  }
+  if (window.google?.maps?.importLibrary) {
+    return Promise.resolve(window.google.maps)
+  }
+  if (!GOOGLE_MAPS_API_KEY) {
+    return Promise.reject(new Error('Google Maps key is missing.'))
+  }
+  if (googleMapsLoadPromise) return googleMapsLoadPromise
+
+  googleMapsLoadPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-rastarant-google-maps="true"]')
+    const callback = `__rastarantGoogleMapsLoaded_${Date.now()}`
+    const cleanup = () => {
+      try { delete window[callback] } catch { window[callback] = undefined }
+    }
+
+    window[callback] = () => {
+      cleanup()
+      if (window.google?.maps?.importLibrary) resolve(window.google.maps)
+      else {
+        googleMapsLoadPromise = null
+        reject(new Error('Google Maps did not finish loading.'))
+      }
+    }
+
+    if (existing) {
+      existing.addEventListener('load', () => {
+        cleanup()
+        if (window.google?.maps?.importLibrary) resolve(window.google.maps)
+        else {
+          googleMapsLoadPromise = null
+          reject(new Error('Google Maps did not finish loading.'))
+        }
+      }, { once: true })
+      existing.addEventListener('error', () => {
+        cleanup()
+        googleMapsLoadPromise = null
+        existing.remove()
+        reject(new Error('Could not load Google Maps.'))
+      }, { once: true })
+      return
+    }
+
+    const params = new URLSearchParams({
+      key: GOOGLE_MAPS_API_KEY,
+      v: 'weekly',
+      loading: 'async',
+      auth_referrer_policy: 'origin',
+      callback,
+    })
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`
+    script.async = true
+    script.defer = true
+    script.dataset.rastarantGoogleMaps = 'true'
+    script.onerror = () => {
+      cleanup()
+      googleMapsLoadPromise = null
+      script.remove()
+      reject(new Error('Could not load Google Maps.'))
+    }
+    document.head.appendChild(script)
+  })
+
+  return googleMapsLoadPromise
+}
+
+export function getBrowserPosition() {
+  if (!navigator.geolocation) {
+    console.info('[QB-CUSTOMER-GEO] geolocation unavailable')
+    return Promise.reject(new Error('Location is not available in this browser.'))
+  }
+  console.info('[QB-CUSTOMER-GEO] browser location request started')
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const result = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        }
+        console.info('[QB-CUSTOMER-GEO] browser location success', result)
+        resolve(result)
+      },
+      error => {
+        const denied = error.code === error.PERMISSION_DENIED
+        console.info('[QB-CUSTOMER-GEO] browser location failed', {
+          code: error.code,
+          message: error.message,
+        })
+        reject(new Error(denied ? 'Location permission was denied.' : 'Could not detect your location.'))
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 },
+    )
+  })
+}
+
+export async function reverseGeocodePosition(position, outletId) {
+  if (!outletId || outletId === '__demo__') {
+    console.info('[QB-CUSTOMER-GEO] reverse geocode skipped', { outletId })
+    throw new Error('Address lookup is not available for this menu.')
+  }
+  console.info('[QB-CUSTOMER-GEO] reverse geocode request', { outletId, position })
+  const res = await fetch(`${API_BASE}/customer/${encodeURIComponent(outletId)}/geocode/reverse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    body: JSON.stringify(position),
+  })
+  let body = null
+  try {
+    body = await res.json()
+  } catch {
+    // Keep the clearer status error below.
+  }
+  if (!res.ok) {
+    console.info('[QB-CUSTOMER-GEO] reverse geocode failed', { status: res.status, body })
+    throw new Error(body?.detail || body?.error || 'Could not detect address.')
+  }
+  const data = body?.ok === true ? body.data : body?.data ?? body
+  const address = data?.address?.trim()
+  if (!address) throw new Error('No address found near this location.')
+  console.info('[QB-CUSTOMER-GEO] reverse geocode success', { address })
+  return address
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const outletId = getOutletId()
+  const routeContext = getRouteContext()
+  const outletId = routeContext.outletId
+  const tableNo = routeContext.tableNo
+  const isTableOrder = routeContext.tableMode
   const [phase, setPhase]       = useState('loading')
   const [info, setInfo]         = useState(null)
   const [items, setItems]       = useState([])
   const [cart, setCart]         = useState({})
   const [activeCategory, setCat]= useState('All')
   const [note, setNote]         = useState('')
+  const [delivery, setDelivery] = useState({ name: '', address: '', mobile: '' })
   const [submitting, setSub]    = useState(false)
   const [errorMsg, setErr]      = useState('')
   const [orderRef, setOrderRef] = useState(null)
@@ -214,7 +447,9 @@ export default function App() {
   useEffect(() => {
     if (!outletId) { setPhase('error'); setErr('Invalid menu link.'); return }
     if (outletId === '__demo__') {
-      setInfo(DEMO_INFO)
+      const params = new URLSearchParams(window.location.search)
+      const themeOverride = params.get('theme')
+      setInfo(themeOverride ? { ...DEMO_INFO, menuTheme: themeOverride } : DEMO_INFO)
       setItems(DEMO_ITEMS)
       setPhase('welcome')
       return
@@ -283,21 +518,43 @@ export default function App() {
       return
     }
     try {
+      const lang = new URLSearchParams(window.location.search).get('lang') === 'bn'
+        ? 'bn'
+        : 'en'
       const orderItems = Object.entries(cart).map(([id, qty]) => {
         const item = items.find(i => i.id === id)
-        return { menuItemId: id, name: item.name, qty, price: item.price }
+        return {
+          menuItemId: id,
+          name: localizedItemName(item, lang),
+          qty,
+          price: item.price,
+        }
       })
+      const payload = isTableOrder
+        ? {
+            items: orderItems,
+            orderType: 'dine_in',
+            tableNo,
+          }
+        : {
+            items: orderItems,
+            note: note || null,
+            orderType: 'delivery',
+            customerName: delivery.name.trim(),
+            deliveryAddress: delivery.address.trim(),
+            mobileNumber: delivery.mobile.trim(),
+          }
       const res = await fetch(`${API_BASE}/customer/${outletId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: orderItems, note: note || null }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || data.error || 'Order failed')
       const orderData = unwrapApi(data)
       setLastCart(Object.entries(cart).map(([id, qty]) => {
         const item = items.find(i => i.id === id)
-        return { name: item.name, qty, price: item.price }
+        return { name: localizedItemName(item, lang), qty, price: item.price }
       }))
       setOrderRef(orderData)
       setPhase('success')
@@ -305,45 +562,97 @@ export default function App() {
     finally { setSub(false) }
   }
 
-  if (phase === 'loading') return <LoadingScreen />
-  if (phase === 'error')   return <ErrorScreen message={errorMsg} />
-  if (phase === 'success') return (
-    <SuccessScreen order={orderRef} info={info} cartItems={lastCart}
-      onBack={() => { setCart({}); setLastCart([]); setNote(''); setPhase('menu') }} />
-  )
-  if (phase === 'cart') return (
-    <CartScreen cart={cart} items={items} note={note} onNote={setNote}
-      onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
-      onPlace={placeOrder} submitting={submitting} info={info} />
-  )
-  if (phase === 'welcome') return (
-    <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
-  )
+  const themeSlug = info?.menuTheme || DEFAULT_THEME_SLUG
+  const overrides = resolveOverrides(themeSlug)
 
-  return (
-    <>
-      <MenuScreen
-        info={info} items={visible} allItems={items} cart={cart}
-        categories={categories} activeCategory={activeCategory}
-        onCategory={setCat} onAdd={add} onRemove={rem}
-        onOpenCart={() => setPhase('cart')}
-        onOpenDetail={item => setLightbox({ item })}
+  let body
+  if (phase === 'loading') {
+    body = overrides ? <overrides.Loading /> : <LoadingScreen />
+  } else if (phase === 'error') {
+    body = overrides
+      ? <overrides.Error message={errorMsg} />
+      : <ErrorScreen message={errorMsg} />
+  } else if (phase === 'success') {
+    const onBack = () => {
+      setCart({}); setLastCart([]); setNote('')
+      setDelivery({ name: '', address: '', mobile: '' })
+      setPhase('menu')
+    }
+    body = overrides
+      ? <overrides.Success order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
+      : <SuccessScreen order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
+  } else if (phase === 'cart') {
+    body = overrides ? (
+      <overrides.Cart
+        cart={cart} items={items} note={note} onNote={setNote}
+        delivery={delivery} onDelivery={setDelivery}
+        onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
+        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
+        isTableOrder={isTableOrder} tableNo={tableNo}
       />
-      {lightbox && (
-        <ItemDetailSheet
-          item={lightbox.item}
-          qty={cart[lightbox.item.id] || 0}
-          onAdd={() => add(lightbox.item.id)}
-          onRemove={() => rem(lightbox.item.id)}
-          onClose={() => setLightbox(null)}
+    ) : (
+      <CartScreen cart={cart} items={items} note={note} onNote={setNote}
+        delivery={delivery} onDelivery={setDelivery}
+        onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
+        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
+        isTableOrder={isTableOrder} tableNo={tableNo} />
+    )
+  } else if (overrides) {
+    // For themes that ship a single-page Storefront (e.g. Hearth),
+    // 'welcome' and 'menu' phases both render the same scrollable
+    // surface — the only difference is whether to land at the menu
+    // anchor on mount.
+    body = (
+      <>
+        <overrides.Storefront
+          info={info} items={items} cart={cart}
+          onAdd={add} onRemove={rem}
+          onOpenCart={() => setPhase('cart')}
+          onOpenDetail={item => setLightbox({ item })}
+          initialView={phase === 'menu' ? 'menu' : 'hero'}
         />
-      )}
-    </>
-  )
+        {lightbox && (
+          <overrides.ItemSheet
+            item={lightbox.item}
+            qty={cart[lightbox.item.id] || 0}
+            onAdd={() => add(lightbox.item.id)}
+            onRemove={() => rem(lightbox.item.id)}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </>
+    )
+  } else if (phase === 'welcome') {
+    body = <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
+  } else {
+    body = (
+      <>
+        <MenuScreen
+          info={info} items={visible} allItems={items} cart={cart}
+          categories={categories} activeCategory={activeCategory}
+          onCategory={setCat} onAdd={add} onRemove={rem}
+          onOpenCart={() => setPhase('cart')}
+          onOpenDetail={item => setLightbox({ item })}
+        />
+        {lightbox && (
+          <ItemDetailSheet
+            item={lightbox.item}
+            qty={cart[lightbox.item.id] || 0}
+            onAdd={() => add(lightbox.item.id)}
+            onRemove={() => rem(lightbox.item.id)}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </>
+    )
+  }
+
+  return <ThemeProvider slug={themeSlug}>{body}</ThemeProvider>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 function LoadingScreen() {
+  const T = useTokens()
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -365,6 +674,7 @@ function LoadingScreen() {
 }
 
 function ErrorScreen({ message }) {
+  const T = useTokens()
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -381,6 +691,7 @@ function ErrorScreen({ message }) {
 
 // ── Welcome Screen ────────────────────────────────────────────────────────────
 function WelcomeScreen({ info, onEnter }) {
+  const T = useTokens()
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const touchX = useRef(null)
@@ -389,6 +700,10 @@ function WelcomeScreen({ info, onEnter }) {
   const hasGallery = !hasVideo && gallery.length > 0
   const hasBanner = !hasVideo && !hasGallery && !!info?.bannerUrl
   const hasMedia = hasVideo || hasGallery || hasBanner
+  // Per-theme placeholder paths reserved for future use; the actual asset
+  // files live under public/themes/<slug>/ and are dropped in by the owner.
+  // eslint-disable-next-line no-unused-vars
+  const _placeholderAssets = themeAssetPaths(T._slug)
 
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return
@@ -417,17 +732,17 @@ function WelcomeScreen({ info, onEnter }) {
     >
       {/* Background media */}
       {hasVideo ? (
-        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline preload="metadata"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : hasGallery ? (
         gallery.map((url, i) => (
-          <img key={url} src={url} alt="" style={{
+          <img key={url} src={url} alt="" loading="lazy" style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
             opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
           }} />
         ))
       ) : hasBanner ? (
-        <img src={info.bannerUrl} alt=""
+        <img src={info.bannerUrl} alt="" loading="lazy"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         <>
@@ -520,6 +835,7 @@ function WelcomeScreen({ info, onEnter }) {
 
 // ── Menu Screen ───────────────────────────────────────────────────────────────
 function MenuScreen({ info, items, allItems, cart, categories, activeCategory, onCategory, onAdd, onRemove, onOpenCart, onOpenDetail }) {
+  const T = useTokens()
   const count = cartCount(cart)
   const total = cartTotal(cart, allItems)
 
@@ -615,6 +931,7 @@ function MenuScreen({ info, items, allItems, cart, categories, activeCategory, o
 
 // ── Menu Hero (short, inside menu page) ───────────────────────────────────────
 function MenuHero({ info }) {
+  const T = useTokens()
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const gallery = info?.galleryImages || []
@@ -634,17 +951,17 @@ function MenuHero({ info }) {
   return (
     <div style={{ position: 'relative', height: 200, flexShrink: 0, background: T.bgWarm, overflow: 'hidden' }}>
       {hasVideo ? (
-        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline
+        <video ref={videoRef} src={info.videoUrl} autoPlay muted loop playsInline preload="metadata"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : hasGallery ? (
         gallery.map((url, i) => (
-          <img key={url} src={url} alt="" style={{
+          <img key={url} src={url} alt="" loading="lazy" style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
             opacity: i === slide ? 1 : 0, transition: 'opacity 0.7s ease',
           }} />
         ))
       ) : info?.bannerUrl ? (
-        <img src={info.bannerUrl} alt=""
+        <img src={info.bannerUrl} alt="" loading="lazy"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : null}
 
@@ -683,7 +1000,11 @@ function MenuHero({ info }) {
 
 // ── Menu Card (2-col grid) ────────────────────────────────────────────────────
 function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
+  const T = useTokens()
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const hasImage = !!item.imageUrl
+  const displayName = localizedItemName(item, lang)
+  const description = lang === 'bn' && item.descriptionBn ? item.descriptionBn : item.description
 
   return (
     <div
@@ -709,12 +1030,7 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
         } : {}),
         flexShrink: 0,
       }}>
-        {!hasImage && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-            fontSize: 28, opacity: .3,
-          }}>🍽️</div>
-        )}
+        {!hasImage && <MenuFallbackIcon item={item} size={32} />}
         {item.tag && (
           <span style={{
             position: 'absolute', top: 7, left: 7,
@@ -767,12 +1083,12 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
           fontFamily: T.display, fontSize: 14, fontWeight: 700, lineHeight: 1.05,
           textTransform: 'uppercase', color: '#fff',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{item.name}</div>
-        {item.description && (
+        }}>{displayName}</div>
+        {description && (
           <div style={{
             fontSize: 10, color: T.inkSoft, marginTop: 3,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{item.description}</div>
+          }}>{description}</div>
         )}
         <div style={{ flex: 1 }} />
         <div style={{
@@ -785,6 +1101,8 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
 
 // ── Item Detail Sheet ─────────────────────────────────────────────────────────
 function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
+  const T = useTokens()
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const media = buildMedia(item)
   const videoRef = useRef(null)
   const current = media[0]
@@ -798,6 +1116,9 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  const displayName = localizedItemName(item, lang)
+  const description = lang === 'bn' && item.descriptionBn ? item.descriptionBn : item.description
 
   return (
     <div
@@ -853,9 +1174,7 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
             display: 'grid', placeItems: 'center',
             WebkitTapHighlightColor: 'transparent',
           }}>✕</button>
-          {!current && (
-            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 40 }}>🍽️</div>
-          )}
+          {!current && <MenuFallbackIcon item={item} size={54} />}
         </div>
 
         {/* Scrolling body */}
@@ -863,10 +1182,10 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
           <div style={{
             fontFamily: T.display, fontSize: 26, lineHeight: .92, textTransform: 'uppercase',
             color: '#fff', fontWeight: 800, letterSpacing: '-.01em',
-          }}>{item.name}</div>
-          {item.description && (
+          }}>{displayName}</div>
+          {description && (
             <div style={{ marginTop: 10, fontSize: 13, color: T.inkSoft, lineHeight: 1.55 }}>
-              {item.description}
+              {description}
             </div>
           )}
           <div style={{
@@ -923,11 +1242,62 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
 }
 
 // ── Cart Screen ───────────────────────────────────────────────────────────────
-function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlace, submitting, info }) {
+function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, onRemove, onBack, onPlace, submitting, info, outletId, isTableOrder = false, tableNo = '' }) {
+  const T = useTokens()
+  const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
     .filter(Boolean)
   const total = cartTotal(cart, items)
+  const deliveryReady = isTableOrder || (delivery.name.trim() && delivery.address.trim() && delivery.mobile.trim().length >= 7)
+  const [geo, setGeo] = useState({ status: 'idle', address: '', position: null, error: '' })
+  const mountedRef = useRef(true)
+  const addressRef = useRef(delivery.address)
+
+  useEffect(() => {
+    addressRef.current = delivery.address
+  }, [delivery.address])
+
+  useEffect(() => {
+    mountedRef.current = true
+    if (!isTableOrder) detectAddress()
+    return () => { mountedRef.current = false }
+  }, [isTableOrder])
+
+  function setGeoIfMounted(next) {
+    if (!mountedRef.current) return
+    if (typeof next === 'function') setGeo(next)
+    else setGeo(next)
+  }
+
+  async function detectAddress() {
+    if (!outletId || outletId === '__demo__') {
+      setGeoIfMounted({
+        status: 'error',
+        address: '',
+        position: null,
+        error: 'Address lookup is not available for this menu.',
+      })
+      return
+    }
+    setGeoIfMounted(current => ({ ...current, status: 'locating', error: '' }))
+    try {
+      const position = await getBrowserPosition()
+      setGeoIfMounted({ status: 'geocoding', address: '', position, error: '' })
+      const address = await reverseGeocodePosition(position, outletId)
+      if (!mountedRef.current) return
+      setGeo({ status: 'ready', address, position, error: '' })
+      if (!addressRef.current.trim()) {
+        onDelivery(current => ({ ...current, address }))
+      }
+    } catch (error) {
+      setGeoIfMounted(current => ({
+        ...current,
+        status: 'error',
+        error: error.message || 'Could not detect address.',
+      }))
+    }
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', fontFamily: T.body }}>
@@ -965,19 +1335,21 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
             display: 'flex', gap: 12, alignItems: 'flex-start',
             animationDelay: `${i * 0.05}s`,
           }}>
-            {item.imageUrl && (
-              <div style={{
-                width: 56, height: 56, borderRadius: 10, flexShrink: 0,
-                backgroundColor: T.bgCard,
+            <div style={{
+              width: 56, height: 56, borderRadius: 10, flexShrink: 0,
+              backgroundColor: T.bgCard, position: 'relative', overflow: 'hidden',
+              ...(item.imageUrl ? {
                 backgroundImage: `url(${item.imageUrl})`,
                 backgroundSize: 'cover', backgroundPosition: 'center',
-              }} />
-            )}
+              } : {}),
+            }}>
+              {!item.imageUrl && <MenuFallbackIcon item={item} size={24} />}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontFamily: T.display, fontSize: 16, textTransform: 'uppercase',
                 color: '#fff', fontWeight: 700, lineHeight: 1.1,
-              }}>{item.name}</div>
+              }}>{localizedItemName(item, lang)}</div>
               <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{taka(item.price)} each</div>
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{
@@ -1000,24 +1372,87 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
         {/* Divider */}
         <div style={{ height: 1, background: T.line, margin: '12px 0' }} />
 
-        {/* Note */}
-        <div style={{ marginTop: 4 }}>
+        {isTableOrder ? (
           <div style={{
-            fontFamily: T.display, fontSize: 13, color: T.amber,
-            letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
-          }}>Note for kitchen</div>
-          <textarea
-            style={{
-              width: '100%', padding: '12px 14px', borderRadius: 10,
-              border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
-              fontSize: 13, fontFamily: T.body, resize: 'none', outline: 'none',
-            }}
-            placeholder="e.g. no onion, extra spicy · বিশেষ নির্দেশনা"
-            value={note}
-            onChange={e => onNote(e.target.value)}
-            rows={3}
-          />
-        </div>
+            margin: '14px 0 16px',
+            padding: '14px 16px',
+            border: `1px solid ${T.line}`,
+            borderRadius: 12,
+            background: 'rgba(255,181,71,.10)',
+            color: T.amber,
+            fontFamily: T.display,
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+          }}>Table {tableNo}</div>
+        ) : (
+          <>
+            <div style={{ marginTop: 4, marginBottom: 16 }}>
+              <div style={{
+                fontFamily: T.display, fontSize: 13, color: T.amber,
+                letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+              }}>Delivery Details</div>
+            </div>
+            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                type="text"
+                placeholder="Full name"
+                value={delivery.name}
+                onChange={e => onDelivery({ ...delivery, name: e.target.value })}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 14, fontFamily: T.body, outline: 'none',
+                }}
+              />
+              <AddressAssistSection
+                geo={geo}
+                currentAddress={delivery.address}
+                onRetry={detectAddress}
+                onUseAddress={() => onDelivery({ ...delivery, address: geo.address })}
+              />
+              <textarea
+                placeholder="Delivery address"
+                rows={2}
+                value={delivery.address}
+                onChange={e => onDelivery({ ...delivery, address: e.target.value })}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 14, fontFamily: T.body, resize: 'none', outline: 'none',
+                }}
+              />
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="Mobile number"
+                value={delivery.mobile}
+                onChange={e => onDelivery({ ...delivery, mobile: e.target.value })}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 14, fontFamily: T.body, outline: 'none',
+                }}
+              />
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <div style={{
+                fontFamily: T.display, fontSize: 13, color: T.amber,
+                letterSpacing: '.16em', textTransform: 'uppercase', marginBottom: 8,
+              }}>Note for kitchen</div>
+              <textarea
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 10,
+                  border: `1px solid ${T.line}`, background: T.bgCard, color: T.ink,
+                  fontSize: 13, fontFamily: T.body, resize: 'none', outline: 'none',
+                }}
+                placeholder="e.g. no onion, extra spicy · বিশেষ নির্দেশনা"
+                value={note}
+                onChange={e => onNote(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </>
+        )}
 
         {/* Total */}
         <div style={{ marginTop: 12, padding: '14px 0', borderTop: `1px solid ${T.line}` }}>
@@ -1044,11 +1479,11 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
             fontFamily: T.display, fontSize: 18, textTransform: 'uppercase',
             cursor: 'pointer', letterSpacing: '.04em', fontWeight: 700,
             boxShadow: '0 14px 30px rgba(255,106,61,.35)',
-            opacity: submitting ? 0.7 : 1,
+            opacity: (submitting || !deliveryReady) ? 0.5 : 1,
             display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10,
             WebkitTapHighlightColor: 'transparent',
           }}
-          disabled={submitting}
+          disabled={submitting || !deliveryReady}
           onClick={onPlace}
         >
           {submitting ? 'Placing Order…' : <>Place Order · অর্ডার করুন <span style={{ fontSize: 20 }}>→</span></>}
@@ -1058,8 +1493,169 @@ function CartScreen({ cart, items, note, onNote, onAdd, onRemove, onBack, onPlac
   )
 }
 
+function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
+  const T = useTokens()
+  const isLoading = geo.status === 'locating' || geo.status === 'geocoding'
+  const hasAddress = geo.status === 'ready' && geo.address
+  const hasError = geo.status === 'error'
+  const addressMatches = hasAddress && currentAddress.trim() === geo.address.trim()
+  const title = hasAddress ? 'Check delivery address' : isLoading ? 'Finding delivery address' : 'Delivery location'
+  const message = hasAddress
+    ? geo.address
+    : hasError
+    ? geo.error
+    : geo.status === 'geocoding'
+    ? 'Checking the closest street address...'
+    : 'Waiting for location permission...'
+
+  return (
+    <div style={{
+      border: `1px solid ${hasError ? 'rgba(255,106,61,.35)' : T.line}`,
+      background: 'rgba(255,243,224,.045)',
+      borderRadius: 10,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: 10,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: T.display,
+            fontSize: 13,
+            color: hasError ? T.ember : T.amber,
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+            lineHeight: 1.1,
+          }}>{title}</div>
+          <div style={{
+            marginTop: 5,
+            color: hasError ? 'rgba(255,166,145,.95)' : T.inkSoft,
+            fontSize: 12,
+            lineHeight: 1.35,
+          }}>{message}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isLoading}
+          style={{
+            border: `1px solid ${T.line}`,
+            background: isLoading ? 'rgba(255,243,224,.04)' : 'rgba(255,243,224,.08)',
+            color: isLoading ? T.inkFaint : T.ink,
+            borderRadius: 8,
+            padding: '7px 10px',
+            fontSize: 12,
+            fontFamily: T.body,
+            cursor: isLoading ? 'default' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isLoading ? 'Checking' : hasError ? 'Retry' : 'Refresh'}
+        </button>
+      </div>
+      {geo.position && (
+        <AddressMapPreview position={geo.position} />
+      )}
+      {hasAddress && !addressMatches && (
+        <button
+          type="button"
+          onClick={onUseAddress}
+          style={{
+            width: '100%',
+            border: 'none',
+            borderTop: `1px solid ${T.line}`,
+            background: 'rgba(255,181,71,.12)',
+            color: T.amber,
+            padding: '10px 12px',
+            fontFamily: T.display,
+            fontSize: 13,
+            textTransform: 'uppercase',
+            letterSpacing: '.08em',
+            cursor: 'pointer',
+          }}
+        >
+          Use detected address
+        </button>
+      )}
+    </div>
+  )
+}
+
+function AddressMapPreview({ position }) {
+  const T = useTokens()
+  const mapRef = useRef(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setFailed(false)
+
+    async function renderMap() {
+      try {
+        await loadGoogleMapsApi()
+        const { Map } = await window.google.maps.importLibrary('maps')
+        if (cancelled || !mapRef.current) return
+        new Map(mapRef.current, {
+          center: position,
+          zoom: 17,
+          disableDefaultUI: true,
+          gestureHandling: 'none',
+          keyboardShortcuts: false,
+          clickableIcons: false,
+        })
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    }
+
+    renderMap()
+    return () => { cancelled = true }
+  }, [position.lat, position.lng])
+
+  return (
+    <div style={{
+      height: 118,
+      position: 'relative',
+      borderTop: `1px solid ${T.line}`,
+      background: T.bgWarm,
+      overflow: 'hidden',
+    }}>
+      {failed ? (
+        <div style={{
+          height: '100%',
+          display: 'grid',
+          placeItems: 'center',
+          color: T.inkFaint,
+          fontSize: 12,
+        }}>Map preview unavailable</div>
+      ) : (
+        <>
+          <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+          <div style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 16,
+            height: 16,
+            borderRadius: 999,
+            background: T.ember,
+            border: '2px solid #fff',
+            boxShadow: '0 6px 18px rgba(0,0,0,.35)',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+          }} />
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Success Screen ────────────────────────────────────────────────────────────
 function SuccessScreen({ order, info, cartItems, onBack }) {
+  const T = useTokens()
   const totalItems = cartItems.reduce((s, i) => s + i.qty, 0)
 
   return (

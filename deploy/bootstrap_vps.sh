@@ -93,8 +93,10 @@ rsync -az --delete \
   --exclude='venv/' \
   --exclude='deploy/.deploy-secrets' \
   --exclude='Restuarent_POS_Admin_APP/' \
+  --exclude='admin_app/' \
   --exclude='customer_menu/frontend/node_modules/' \
   --exclude='customer_menu/frontend/dist/' \
+  --exclude='backend/In_App_Update_Apk_File/' \
   --exclude='*.apk' \
   --exclude='*.aab' \
   --exclude='*.keystore' \
@@ -108,7 +110,7 @@ say "Running remote bootstrap on the VPS (this takes 2–3 minutes the first tim
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
     "REMOTE_DIR='${REMOTE_DIR}' \
      SERVICE_NAME='${SERVICE_NAME}' \
-     BASE_URL='http://${VPS_HOST}' \
+     BASE_URL='https://quickbytes.buzz' \
      DB_PASS='${DB_PASS}' \
      SECRET_KEY='${SECRET_KEY}' \
      GOOGLE_CLIENT_IDS='${GOOGLE_CLIENT_IDS_VALUE}' \
@@ -153,7 +155,7 @@ if [[ "${FAMILY}" == "debian" ]]; then
     postgresql postgresql-contrib \
     nginx \
     curl ca-certificates gnupg lsb-release \
-    build-essential libpq-dev \
+    build-essential libpq-dev libgl1 \
     >/dev/null
 else
   # RHEL family — prefer dnf, fall back to yum.
@@ -165,7 +167,7 @@ else
     postgresql-server postgresql-contrib \
     nginx \
     curl ca-certificates gnupg2 \
-    gcc gcc-c++ make libpq-devel \
+    gcc gcc-c++ make libpq-devel mesa-libGL \
     >/dev/null
 
   # Initialise the Postgres data directory if it's empty (RHEL doesn't do this on install)
@@ -221,6 +223,7 @@ fi
 
 # Ensure uploads dirs exist
 mkdir -p "${REMOTE_DIR}/backend/uploads/menu_images" \
+         "${REMOTE_DIR}/backend/uploads/menu_placeholders" \
          "${REMOTE_DIR}/backend/uploads/hero_media" \
          "${REMOTE_DIR}/backend/uploads/outlet_images" \
          "${REMOTE_DIR}/backend/uploads/outlet_videos"

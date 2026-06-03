@@ -6,7 +6,11 @@ import DashboardPage from "./pages/DashboardPage";
 import RestaurantsPage from "./pages/RestaurantsPage";
 import OutletDetailPage from "./pages/OutletDetailPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
-import PaymentsPage from "./pages/PaymentsPage";
+import ActivationsPage from "./pages/ActivationsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import SystemHealthPage from "./pages/SystemHealthPage";
+import SystemConfigPage from "./pages/SystemConfigPage";
+import PlatformAdminsPage from "./pages/PlatformAdminsPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!getToken()) {
@@ -31,7 +35,12 @@ export default function App() {
         <Route path="restaurants" element={<RestaurantsPage />} />
         <Route path="outlets/:outletId" element={<OutletDetailPage />} />
         <Route path="subscriptions" element={<SubscriptionsPage />} />
-        <Route path="payments" element={<PaymentsPage />} />
+        <Route path="activations" element={<ActivationsPage />} />
+        <Route path="payments" element={<ActivationsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="health" element={<SystemHealthPage />} />
+        <Route path="config" element={<SystemConfigPage />} />
+        <Route path="admins" element={<PlatformAdminsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

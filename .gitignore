@@ -8,6 +8,7 @@
 .DS_Store
 Thumbs.db
 *.swp
+.vscode/
 
 # ---------- Deploy secrets ----------
 deploy/.deploy-secrets
@@ -22,9 +23,26 @@ __pycache__/
 # ---------- Node deps (HUGE, regenerable via npm/yarn install) ----------
 node_modules/
 
+# ---------- Build outputs (regenerable) ----------
+build/
+dist/
+.cache/
+.turbo/
+.vite/
+.vercel/
+coverage/
+backend/frontend_dist/
+
 # ---------- Secrets & runtime (never push) ----------
 backend/.env
+platform_admin/.env
+platform_admin/.env.*
 backend/uploads/
+backend/In_App_Update_Apk_File/
+**/android/local.properties
+**/android/key.properties
+**/*.jks
+**/*.keystore
 
 # ---------- Logs ----------
 *.log
