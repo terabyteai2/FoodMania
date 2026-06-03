@@ -126,7 +126,7 @@ void main() {
     );
 
     expect(state.hasSelectedPrinter, isTrue);
-    expect(state.selectedPrinterLabel, 'Built-in printer (SUNMI)');
+    expect(state.selectedPrinterLabel, 'Built-in printer');
   });
 
   test('USB printer remains a selected local fallback', () {

@@ -1,0 +1,5 @@
+sdk.dir=/home/moon-ahmed/Android/Sdk
+flutter.sdk=/home/moon-ahmed/snap/flutter/common/flutter
+flutter.buildMode=release
+flutter.versionName=1.3.2
+flutter.versionCode=3
