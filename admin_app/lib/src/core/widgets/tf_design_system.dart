@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -2090,7 +2090,7 @@ class TfFohTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          minHeight: 96,
+          constraints: const BoxConstraints(minHeight: 96),
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
@@ -2647,7 +2647,7 @@ class _LineChartPainter extends CustomPainter {
   void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
     const double dashWidth = 3, dashSpace = 3;
     double distance = 0.0;
-    for (final PathMetric measure in path.computeMetrics()) {
+    for (final ui.PathMetric measure in path.computeMetrics()) {
       while (distance < measure.length) {
         canvas.drawPath(
           measure.extractPath(distance, distance + dashWidth),
@@ -2672,7 +2672,7 @@ class _LineChartPainter extends CustomPainter {
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
-      textDirection: TextDirection.ltr,
+      textDirection: ui.TextDirection.ltr,
     );
     tp.layout();
     double dx = offset.dx;
