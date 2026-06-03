@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -156,6 +157,192 @@ class TfText extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// TfMicroLabel — Uppercase micro-label in tabular mono spacing.
+// ---------------------------------------------------------------------------
+class TfMicroLabel extends StatelessWidget {
+  const TfMicroLabel(this.text, {this.color, this.style, super.key});
+  final String text;
+  final Color? color;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        tfIsBn(context) ? tfToBnNumbers(text).toUpperCase() : text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontFamily: tfEnglishFontFamily,
+          fontWeight: FontWeight.w600,
+          color: color ?? PosColors.mutedSoft,
+          letterSpacing: 0.6,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ).merge(style),
+      );
+}
+
+// ---------------------------------------------------------------------------
+// TfDelta — Inline plain-language comparison.
+// ---------------------------------------------------------------------------
+class TfDelta extends StatelessWidget {
+  const TfDelta({
+    required this.value,
+    this.pct,
+    this.down = false,
+    this.baselineLabel,
+    this.prefix,
+    this.size = 13.0,
+    super.key,
+  });
+
+  final String value;
+  final String? pct;
+  final bool down;
+  final String? baselineLabel;
+  final String? prefix;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final up = !down;
+    final color = up ? PosColors.good : PosColors.danger;
+    final verb = prefix ?? (up ? 'more than' : 'less than');
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: up ? '↑ ' : '↓ ',
+            style: TextStyle(fontSize: size - 1, fontWeight: FontWeight.w700),
+          ),
+          TextSpan(
+            text: value,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: size),
+          ),
+          if (baselineLabel != null) ...[
+            TextSpan(
+              text: ' $verb ',
+              style: TextStyle(
+                color: PosColors.text,
+                fontWeight: FontWeight.w500,
+                fontSize: size,
+              ),
+            ),
+            TextSpan(
+              text: baselineLabel,
+              style: TextStyle(
+                color: PosColors.text,
+                fontWeight: FontWeight.w500,
+                fontSize: size,
+              ),
+            ),
+          ],
+          if (pct != null)
+            TextSpan(
+              text: ' ($pct)',
+              style: TextStyle(
+                color: PosColors.textSec,
+                fontWeight: FontWeight.w500,
+                fontSize: size,
+              ),
+            ),
+        ],
+      ),
+      style: TextStyle(
+        color: color,
+        fontFamily: tfFontFamily(context),
+        height: 1.3,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfOpenTicketsBar — Slim one-line strip for live operational numbers.
+// ---------------------------------------------------------------------------
+class TfOpenTicketsBar extends StatelessWidget {
+  const TfOpenTicketsBar({
+    required this.count,
+    required this.total,
+    this.late = 0,
+    super.key,
+  });
+
+  final int count;
+  final String total;
+  final int late;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
+        runSpacing: 6,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: PosColors.primaryDark,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '$count open',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    TextSpan(
+                      text: ' · $total in flight',
+                      style: const TextStyle(
+                        color: PosColors.textSec,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: PosColors.text,
+                  letterSpacing: -0.1,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          if (late > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: PosColors.lateSoft,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '$late LATE',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontFamily: tfEnglishFontFamily,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.late,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // TfMoney — Native Taka component featuring dynamic structural translation.
@@ -1522,4 +1709,1351 @@ class TfNavIcon {
   static const IconData chevron = Icons.chevron_right_rounded;
   static const IconData sparkle = Icons.auto_awesome_outlined;
   static const IconData flame = Icons.local_fire_department_outlined;
+}
+
+// ---------------------------------------------------------------------------
+// TfDividerBand — Horizontal structural divider with center chip.
+// ---------------------------------------------------------------------------
+class TfDividerBand extends StatelessWidget {
+  const TfDividerBand({required this.label, this.labelBn, super.key});
+  final String label;
+  final String? labelBn;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            const Expanded(
+              child:
+                  Divider(color: PosColors.lineStrong, thickness: 1, height: 1),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: PosColors.surface,
+                border: Border.all(color: PosColors.lineStrong, width: 0.5),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: const BoxDecoration(
+                      color: PosColors.textTer,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  TfText(
+                    label.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.textSec,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Expanded(
+              child:
+                  Divider(color: PosColors.lineStrong, thickness: 1, height: 1),
+            ),
+          ],
+        ),
+      );
+}
+
+// ---------------------------------------------------------------------------
+// TfDashTopBar — Compact app bar for dashboards.
+// ---------------------------------------------------------------------------
+class TfDashTopBar extends StatelessWidget {
+  const TfDashTopBar({
+    required this.outlet,
+    this.mode,
+    this.time,
+    this.role,
+    this.onRoleChange,
+    this.drawer,
+    this.drawerLabel = 'Drawer',
+    super.key,
+  });
+
+  final String outlet;
+  final String? mode;
+  final String? time;
+  final String? role;
+  final ValueChanged<String>? onRoleChange;
+  final String? drawer;
+  final String drawerLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      outlet,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.text,
+                        letterSpacing: -0.4,
+                        height: 1.1,
+                      ),
+                    ),
+                    if (mode != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PosColors.surfaceSunk,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: PosColors.line, width: 1),
+                        ),
+                        child: Text(
+                          mode!.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontFamily: tfEnglishFontFamily,
+                            fontWeight: FontWeight.w700,
+                            color: PosColors.textSec,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                if (time != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    time!,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: PosColors.textSec,
+                      fontWeight: FontWeight.w500,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (role != null)
+            TfCompactRoleToggle(role: role!, onChanged: onRoleChange!),
+          if (drawer != null) ...[
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                TfMicroLabel(drawerLabel, color: PosColors.textTer),
+                const SizedBox(height: 2),
+                Text(
+                  drawer!,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.text,
+                    letterSpacing: -0.2,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfCompactRoleToggle — Small segmented toggle for the app bar.
+// ---------------------------------------------------------------------------
+class TfCompactRoleToggle extends StatelessWidget {
+  const TfCompactRoleToggle({
+    required this.role,
+    required this.onChanged,
+    super.key,
+  });
+
+  final String role;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: PosColors.surfaceSunk,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: PosColors.line, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildItem('Mgr', 'manager'),
+          _buildItem('Owner', 'owner'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItem(String label, String value) {
+    final on = role == value;
+    return GestureDetector(
+      onTap: () => onChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: on ? PosColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: on
+              ? Border.all(color: PosColors.lineStrong, width: 1)
+              : Border.all(color: Colors.transparent, width: 1),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: on ? PosColors.text : PosColors.textSec,
+            letterSpacing: -0.1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfPeriodSelector — Primary control on the Owner screen.
+// ---------------------------------------------------------------------------
+class TfPeriodSelector extends StatelessWidget {
+  const TfPeriodSelector({
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  static const List<String> periods = ['Today', 'Week', 'Month', 'Custom'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.line, width: 1),
+        boxShadow: PosShadows.soft,
+      ),
+      child: Row(
+        children: periods.map((p) {
+          final on = p == value;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(p),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: on ? PosColors.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      p,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+                        color: on ? Colors.white : PosColors.textSec,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    if (p == 'Custom') ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '▾',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: (on ? Colors.white : PosColors.textSec)
+                              .withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfPeriodSubtitle — Baseline label under the selector.
+// ---------------------------------------------------------------------------
+class TfPeriodSubtitle extends StatelessWidget {
+  const TfPeriodSubtitle({required this.range, required this.compare, super.key});
+  final String range;
+  final String compare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            range,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: PosColors.textSec,
+              fontWeight: FontWeight.w600,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            'vs $compare',
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: PosColors.textTer,
+              fontFamily: tfEnglishFontFamily,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfFohTile — Text-first ring-up tiles.
+// ---------------------------------------------------------------------------
+class TfFohTile extends StatelessWidget {
+  const TfFohTile({
+    required this.name,
+    required this.price,
+    this.category,
+    this.glyph,
+    this.tint,
+    this.qty = 0,
+    this.onTap,
+    super.key,
+  });
+
+  final String name;
+  final String price;
+  final String? category;
+  final IconData? glyph;
+  final Color? tint;
+  final int qty;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = qty > 0;
+    return Material(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          minHeight: 96,
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active ? PosColors.text : PosColors.line,
+              width: 1,
+            ),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (tint != null)
+                Positioned(
+                  left: -14,
+                  top: 10,
+                  bottom: 10,
+                  child: Container(
+                    width: 2.5,
+                    decoration: BoxDecoration(
+                      color: tint,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              if (active)
+                Positioned(
+                  top: -20,
+                  right: -18,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 22),
+                    height: 22,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: PosColors.text,
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(color: PosColors.background, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$qty',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (glyph != null || category != null) ...[
+                        Row(
+                          children: [
+                            if (glyph != null) ...[
+                              Icon(glyph, size: 13, color: PosColors.textSec),
+                              const SizedBox(width: 5),
+                            ],
+                            if (category != null)
+                              Text(
+                                category!.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontFamily: tfEnglishFontFamily,
+                                  fontWeight: FontWeight.w600,
+                                  color: PosColors.textSec,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                      ],
+                      Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.text,
+                          letterSpacing: -0.1,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    price,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.text,
+                      letterSpacing: -0.1,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfFohCounter — Ring-up tile grid.
+// ---------------------------------------------------------------------------
+class TfFohCounter extends StatelessWidget {
+  const TfFohCounter({
+    required this.tiles,
+    this.title = 'Counter · top sellers',
+    this.action = 'Edit',
+    this.onAction,
+    this.cols = 3,
+    super.key,
+  });
+
+  final String title;
+  final List<TfFohTile> tiles;
+  final String action;
+  final VoidCallback? onAction;
+  final int cols;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: PosColors.text,
+                letterSpacing: -0.1,
+              ),
+            ),
+            InkWell(
+              onTap: onAction,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: PosColors.surface,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: PosColors.line, width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(TfNavIcon.settings, size: 12),
+                    const SizedBox(width: 6),
+                    Text(
+                      action,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: tfEnglishFontFamily,
+                        letterSpacing: 0.5,
+                        color: PosColors.textSec,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            mainAxisExtent: 96,
+          ),
+          itemCount: tiles.length,
+          itemBuilder: (context, index) => tiles[index],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfCreateOrderTray — Sticky cart summary above bottom nav.
+// ---------------------------------------------------------------------------
+class TfCreateOrderTray extends StatelessWidget {
+  const TfCreateOrderTray({
+    required this.count,
+    required this.total,
+    this.label = 'Create order',
+    this.onTap,
+    super.key,
+  });
+
+  final int count;
+  final String total;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 11, 11, 11),
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: PosColors.line, width: 1),
+          boxShadow: PosShadows.raised,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TfMicroLabel('$count items in order'),
+            ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                decoration: BoxDecoration(
+                  color: PosColors.primary,
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: PosShadows.glow,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      total,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfCollapsedSummary — Demoted today-summary for Manager screens.
+// ---------------------------------------------------------------------------
+class TfCollapsedSummary extends StatefulWidget {
+  const TfCollapsedSummary({
+    required this.cash,
+    required this.orders,
+    this.top,
+    super.key,
+  });
+
+  final String cash;
+  final int orders;
+  final String? top;
+
+  @override
+  State<TfCollapsedSummary> createState() => _TfCollapsedSummaryState();
+}
+
+class _TfCollapsedSummaryState extends State<TfCollapsedSummary> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.line, width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const TfMicroLabel('Today so far'),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              widget.cash,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: PosColors.text,
+                                letterSpacing: -0.3,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              '${widget.orders} orders',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: PosColors.textSec,
+                                fontWeight: FontWeight.w500,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: PosColors.textSec,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            Container(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: PosColors.divider, width: 1)),
+              ),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.top != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const TfMicroLabel('TOP ITEM'),
+                        Text(
+                          widget.top!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: PosColors.text,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  const Text(
+                    'Open the Reports tab for hour-by-hour and menu trends.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: PosColors.textTer,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfLineChart — Excel-familiar revenue line.
+// ---------------------------------------------------------------------------
+class TfLineChart extends StatelessWidget {
+  const TfLineChart({
+    required this.today,
+    this.yesterday,
+    this.height = 140,
+    this.todayLabel = 'Today',
+    this.priorLabel = 'Prior',
+    this.xLabels = const ['9 AM', '12 PM', '3 PM', '6 PM', '11 PM'],
+    super.key,
+  });
+
+  final List<double> today;
+  final List<double>? yesterday;
+  final double height;
+  final String todayLabel;
+  final String priorLabel;
+  final List<String> xLabels;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(double.infinity, height),
+      painter: _LineChartPainter(
+        today: today,
+        yesterday: yesterday,
+        todayLabel: todayLabel,
+        priorLabel: priorLabel,
+        xLabels: xLabels,
+        isBn: tfIsBn(context),
+      ),
+    );
+  }
+}
+
+class _LineChartPainter extends CustomPainter {
+  _LineChartPainter({
+    required this.today,
+    required this.yesterday,
+    required this.todayLabel,
+    required this.priorLabel,
+    required this.xLabels,
+    required this.isBn,
+  });
+
+  final List<double> today;
+  final List<double>? yesterday;
+  final String todayLabel;
+  final String priorLabel;
+  final List<String> xLabels;
+  final bool isBn;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double padL = 8;
+    const double padR = 56;
+    const double padTop = 18;
+    const double padBot = 26;
+
+    final double maxVal = ([...today, ...(yesterday ?? [0.0])].reduce((a, b) => a > b ? a : b) * 1.08).clamp(1.0, double.infinity);
+    final double innerW = size.width - padL - padR;
+    final double innerH = size.height - padTop - padBot;
+
+    // Gridlines
+    final gridPaint = Paint()
+      ..color = PosColors.divider
+      ..strokeWidth = 0.5;
+
+    for (int i = 1; i <= 4; i++) {
+      final y = padTop + innerH - (i / 4) * innerH;
+      canvas.drawLine(Offset(padL, y), Offset(padL + innerW, y), gridPaint);
+    }
+    
+    // Bottom border
+    gridPaint.color = PosColors.lineStrong;
+    canvas.drawLine(Offset(padL, padTop + innerH), Offset(padL + innerW, padTop + innerH), gridPaint);
+
+    Offset getPos(int index, double value, int total) {
+      final x = padL + (index / (total - 1)) * innerW;
+      final y = padTop + innerH - (value / maxVal) * innerH;
+      return Offset(x, y);
+    }
+
+    // Draw Yesterday (dashed)
+    if (yesterday != null && yesterday!.isNotEmpty) {
+      final priorPaint = Paint()
+        ..color = PosColors.textTer
+        ..strokeWidth = 1.4
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+
+      final path = Path();
+      for (int i = 0; i < yesterday!.length; i++) {
+        final pos = getPos(i, yesterday![i], yesterday!.length);
+        if (i == 0) path.moveTo(pos.dx, pos.dy);
+        else path.lineTo(pos.dx, pos.dy);
+      }
+      
+      // Dashed effect implementation
+      _drawDashedPath(canvas, path, priorPaint);
+
+      // Prior end dot
+      final lastPos = getPos(yesterday!.length - 1, yesterday!.last, yesterday!.length);
+      canvas.drawCircle(lastPos, 2, Paint()..color = PosColors.surface);
+      canvas.drawCircle(lastPos, 2, priorPaint..style = PaintingStyle.stroke..strokeWidth = 1.2);
+      
+      // Prior labels
+      _drawLabel(canvas, lastPos + const Offset(6, 4), _fmt(yesterday!.last), PosColors.textSec, 10.5, FontWeight.w600);
+      _drawLabel(canvas, lastPos + const Offset(6, -7), priorLabel.toUpperCase(), PosColors.textTer, 8.5, FontWeight.w600, letterSpacing: 0.4);
+    }
+
+    // Draw Today
+    if (today.isNotEmpty) {
+      final todayPaint = Paint()
+        ..color = PosColors.accent
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
+      final path = Path();
+      for (int i = 0; i < today.length; i++) {
+        final pos = getPos(i, today[i], today.length);
+        if (i == 0) path.moveTo(pos.dx, pos.dy);
+        else path.lineTo(pos.dx, pos.dy);
+      }
+      canvas.drawPath(path, todayPaint);
+
+      // Today end dot
+      final lastPos = getPos(today.length - 1, today.last, today.length);
+      canvas.drawCircle(lastPos, 3, Paint()..color = PosColors.surface);
+      canvas.drawCircle(lastPos, 3, todayPaint..style = PaintingStyle.stroke..strokeWidth = 2.0);
+
+      // Today labels
+      _drawLabel(canvas, lastPos + const Offset(6, 4), _fmt(today.last), PosColors.accent, 10.5, FontWeight.w700);
+      _drawLabel(canvas, lastPos + const Offset(6, -7), todayLabel.toUpperCase(), PosColors.textSec, 8.5, FontWeight.w600, letterSpacing: 0.4);
+    }
+
+    // X Labels
+    for (int i = 0; i < xLabels.length; i++) {
+      final f = i / (xLabels.length - 1);
+      final x = padL + f * innerW;
+      final align = i == 0 ? TextAlign.start : (i == xLabels.length - 1 ? TextAlign.end : TextAlign.center);
+      _drawLabel(canvas, Offset(x, size.height - 8), xLabels[i], PosColors.textTer, 9, FontWeight.w600, align: align, letterSpacing: 0.4);
+    }
+  }
+
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
+    const double dashWidth = 3, dashSpace = 3;
+    double distance = 0.0;
+    for (final PathMetric measure in path.computeMetrics()) {
+      while (distance < measure.length) {
+        canvas.drawPath(
+          measure.extractPath(distance, distance + dashWidth),
+          paint,
+        );
+        distance += dashWidth + dashSpace;
+      }
+      distance = 0.0;
+    }
+  }
+
+  void _drawLabel(Canvas canvas, Offset offset, String text, Color color, double fontSize, FontWeight weight, {TextAlign align = TextAlign.start, double letterSpacing = 0.2}) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: weight,
+          fontFamily: tfEnglishFontFamily,
+          letterSpacing: letterSpacing,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout();
+    double dx = offset.dx;
+    if (align == TextAlign.center) dx -= tp.width / 2;
+    else if (align == TextAlign.end) dx -= tp.width;
+    tp.paint(canvas, Offset(dx, offset.dy - tp.height / 2));
+  }
+
+  String _fmt(double v) {
+    final s = v >= 1000 ? '৳${(v / 1000).round()}k' : '৳${v.round()}';
+    return isBn ? tfToBnNumbers(s) : s;
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class TfLineChartCard extends StatelessWidget {
+  const TfLineChartCard({
+    required this.title,
+    required this.today,
+    this.yesterday,
+    this.todayLabel = 'Today',
+    this.priorLabel = 'Prior',
+    this.xLabels = const ['9 AM', '12 PM', '3 PM', '6 PM', '11 PM'],
+    this.peakNote,
+    super.key,
+  });
+
+  final String title;
+  final List<double> today;
+  final List<double>? yesterday;
+  final String todayLabel;
+  final String priorLabel;
+  final List<String> xLabels;
+  final String? peakNote;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.line, width: 1),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                TfMicroLabel(title, color: PosColors.textSec),
+                if (peakNote != null) TfMicroLabel(peakNote!, color: PosColors.textSec),
+              ],
+            ),
+          ),
+          TfLineChart(
+            today: today,
+            yesterday: yesterday,
+            todayLabel: todayLabel,
+            priorLabel: priorLabel,
+            xLabels: xLabels,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+            child: Row(
+              children: [
+                _LegendItem(label: todayLabel, color: PosColors.accent),
+                if (yesterday != null) ...[
+                  const SizedBox(width: 14),
+                  _LegendItem(label: priorLabel, color: PosColors.textTer, dashed: true),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.label, required this.color, this.dashed = false});
+  final String label;
+  final Color color;
+  final bool dashed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (dashed)
+          CustomPaint(
+            size: const Size(16, 2),
+            painter: _DashPainter(color: color),
+          )
+        else
+          Container(
+            width: 16,
+            height: 2,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: PosColors.textSec),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashPainter extends CustomPainter {
+  _DashPainter({required this.color});
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..strokeWidth = 1.4;
+    canvas.drawLine(Offset.zero, const Offset(3, 0), paint);
+    canvas.drawLine(const Offset(6, 0), const Offset(9, 0), paint);
+    canvas.drawLine(const Offset(12, 0), const Offset(15, 0), paint);
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ---------------------------------------------------------------------------
+// TfMenuPerfTable — Excel-like table for menu performance.
+// ---------------------------------------------------------------------------
+class TfMenuPerfRow {
+  const TfMenuPerfRow({
+    required this.name,
+    required this.qty,
+    required this.rev,
+    this.share,
+    this.margin,
+    this.vsPrev,
+    this.warn,
+  });
+  final String name;
+  final int qty;
+  final String rev;
+  final String? share;
+  final String? margin;
+  final String? vsPrev;
+  final String? warn;
+}
+
+class TfMenuPerfTable extends StatelessWidget {
+  const TfMenuPerfTable({
+    required this.rows,
+    this.showMargin = false,
+    super.key,
+  });
+
+  final List<TfMenuPerfRow> rows;
+  final bool showMargin;
+
+  @override
+  Widget build(BuildContext context) {
+    final cols = showMargin
+        ? const [1.5, 0.6, 1.1, 0.7, 1.0]
+        : const [1.6, 0.6, 1.1, 0.7, 1.0];
+    final headers = showMargin
+        ? ['Item', 'Qty', 'Revenue', 'Margin', 'vs prev']
+        : ['Item', 'Qty', 'Revenue', 'Share', 'vs prev'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.line, width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            color: PosColors.surfaceSunk,
+            child: _GridRow(
+              flexes: cols,
+              children: headers.map((h) => TfMicroLabel(h, color: PosColors.textTer)).toList(),
+            ),
+          ),
+          // Rows
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: rows.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final r = rows[index];
+              final deltaUp = !(r.vsPrev ?? '').startsWith('-') && !(r.vsPrev ?? '').startsWith('−');
+              final deltaCol = r.vsPrev == null || r.vsPrev == '—'
+                  ? PosColors.textTer
+                  : (deltaUp ? PosColors.good : PosColors.danger);
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: _GridRow(
+                  flexes: cols,
+                  children: [
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          child: TfMicroLabel('${index + 1}'.padLeft(2, '0')),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            r.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: PosColors.text,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ),
+                        if (r.warn != null) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: PosColors.warnSoft,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: TfMicroLabel(r.warn!, color: PosColors.warn, style: const TextStyle(fontSize: 8.5)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      '${r.qty}',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      r.rev,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      showMargin ? (r.margin ?? '') : (r.share ?? ''),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: PosColors.textSec,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (r.vsPrev != null && r.vsPrev != '—')
+                          Text(
+                            deltaUp ? '↑' : '↓',
+                            style: TextStyle(color: deltaCol, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        const SizedBox(width: 3),
+                        Text(
+                          r.vsPrev ?? '—',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: deltaCol,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GridRow extends StatelessWidget {
+  const _GridRow({required this.flexes, required this.children});
+  final List<double> flexes;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(children.length, (i) {
+        return Expanded(
+          flex: (flexes[i] * 100).toInt(),
+          child: children[i],
+        );
+      }),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfMenuPerfHeader — Sortable column chips.
+// ---------------------------------------------------------------------------
+class TfMenuPerfHeader extends StatelessWidget {
+  const TfMenuPerfHeader({required this.sort, required this.onChanged, super.key});
+  final String sort;
+  final ValueChanged<String> onChanged;
+
+  static const List<Map<String, String>> sorts = [
+    {'id': 'rev', 'l': 'Revenue'},
+    {'id': 'qty', 'l': 'Qty'},
+    {'id': 'margin', 'l': 'Margin'},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+      child: Row(
+        children: [
+          const TfMicroLabel('Sort', color: PosColors.textTer),
+          const SizedBox(width: 10),
+          ...sorts.map((s) {
+            final on = s['id'] == sort;
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: InkWell(
+                onTap: () => onChanged(s['id']!),
+                borderRadius: BorderRadius.circular(999),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: on ? PosColors.accentSoft : PosColors.surface,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: on ? Colors.transparent : PosColors.line, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        s['l']!,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+                          color: on ? PosColors.accentSoftInk : PosColors.textSec,
+                        ),
+                      ),
+                      if (on) ...[
+                        const SizedBox(width: 4),
+                        const Opacity(opacity: 0.7, child: Text('▼', style: TextStyle(fontSize: 9, color: PosColors.accentSoftInk))),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 }
