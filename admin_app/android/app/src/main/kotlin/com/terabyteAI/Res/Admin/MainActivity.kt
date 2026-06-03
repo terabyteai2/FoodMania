@@ -39,6 +39,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
+import java.lang.reflect.Modifier
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,6 +78,10 @@ class MainActivity : FlutterActivity() {
     private data class PendingUsbPrint(
         val bytes: ByteArray,
         val result: MethodChannel.Result,
+    )
+
+    private data class BuiltInPrinterTarget(
+        val vendor: String,
     )
 
     private var pendingUsbPrint: PendingUsbPrint? = null
@@ -263,14 +268,18 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, builtInPrinterChannelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "hasPrinter" -> result.success(hasSunmiPrinter())
+                    "hasPrinter" -> {
+                        val target = findBuiltInPrinterTarget()
+                        printerLog("built-in hasPrinter=${target != null} vendor=${target?.vendor ?: "none"}")
+                        result.success(target != null)
+                    }
                     "printBytes" -> {
                         val bytes = call.argument<ByteArray>("bytes")
                         if (bytes == null || bytes.isEmpty()) {
                             result.error("INVALID_ARGUMENT", "bytes are required", null)
                             return@setMethodCallHandler
                         }
-                        result.success(printSunmiPrinterBytes(bytes))
+                        result.success(printBuiltInPrinterBytes(bytes))
                     }
                     "getDiagnostics" -> result.success(readPrinterDiagnostics())
                     "clearDiagnostics" -> {
@@ -442,6 +451,180 @@ class MainActivity : FlutterActivity() {
             printerLog("SUNMI printBytes failed bytes=${bytes.size}", error)
             false
         }
+    }
+
+    private fun findBuiltInPrinterTarget(): BuiltInPrinterTarget? {
+        if (hasSunmiPrinter()) return BuiltInPrinterTarget("SUNMI")
+        if (hasIminPrinterBridge()) return BuiltInPrinterTarget("iMin")
+        if (hasPaxPrinterBridge()) return BuiltInPrinterTarget("PAX")
+        return null
+    }
+
+    private fun printBuiltInPrinterBytes(bytes: ByteArray): Boolean {
+        val target = findBuiltInPrinterTarget() ?: run {
+            printerLog("built-in printBytes failed: no supported built-in bridge")
+            return false
+        }
+        return when (target.vendor) {
+            "SUNMI" -> printSunmiPrinterBytes(bytes)
+            "iMin" -> printIminPrinterBytes(bytes)
+            "PAX" -> printPaxPrinterBytes(bytes)
+            else -> false
+        }
+    }
+
+    private fun hasIminPrinterBridge(): Boolean {
+        val likelyDevice = deviceIdentity().contains("imin")
+        val available = classAvailable("com.imin.printerlib.IminPrintUtils")
+        if (likelyDevice || available) {
+            printerLog("iMin bridge check device=$likelyDevice sdkClass=$available")
+        }
+        return available
+    }
+
+    private fun printIminPrinterBytes(bytes: ByteArray): Boolean {
+        val printer = singletonInstance(
+            "com.imin.printerlib.IminPrintUtils",
+            applicationContext,
+        ) ?: run {
+            printerLog("iMin printBytes failed: IminPrintUtils unavailable")
+            return false
+        }
+        return try {
+            invokeNoArgIfPresent(printer, listOf("initPrinter", "init"))
+            val rawOk = invokeRawBytes(
+                printer,
+                bytes,
+                listOf("sendRAWData", "sendRawData", "printRawData", "printBytes"),
+            )
+            invokeNoArgIfPresent(printer, listOf("printAndFeedPaper", "feedPaper"))
+            printerLog("iMin printBytes rawOk=$rawOk bytes=${bytes.size}")
+            rawOk
+        } catch (error: Exception) {
+            printerLog("iMin printBytes failed bytes=${bytes.size}", error)
+            false
+        }
+    }
+
+    private fun hasPaxPrinterBridge(): Boolean {
+        val likelyDevice = deviceIdentity().contains("pax")
+        val available = classAvailable("com.pax.neptunelite.api.NeptuneLiteUser")
+        if (likelyDevice || available) {
+            printerLog("PAX bridge check device=$likelyDevice sdkClass=$available")
+        }
+        return available
+    }
+
+    private fun printPaxPrinterBytes(bytes: ByteArray): Boolean {
+        val printer = paxPrinterInstance() ?: run {
+            printerLog("PAX printBytes failed: printer service unavailable")
+            return false
+        }
+        return try {
+            invokeNoArgIfPresent(printer, listOf("init"))
+            val rawOk = invokeRawBytes(
+                printer,
+                bytes,
+                listOf("sendRAWData", "sendRawData", "printRawData", "printBytes"),
+            )
+            if (rawOk) {
+                invokeNoArgIfPresent(printer, listOf("start"))
+            }
+            printerLog("PAX printBytes rawOk=$rawOk bytes=${bytes.size}")
+            rawOk
+        } catch (error: Exception) {
+            printerLog("PAX printBytes failed bytes=${bytes.size}", error)
+            false
+        }
+    }
+
+    private fun paxPrinterInstance(): Any? {
+        val user = singletonInstance(
+            "com.pax.neptunelite.api.NeptuneLiteUser",
+        ) ?: return null
+        val dal = invokeFirst(user, listOf("getDal"), applicationContext) ?: return null
+        return invokeFirst(dal, listOf("getPrinter", "printer"))
+    }
+
+    private fun singletonInstance(className: String, vararg args: Any): Any? {
+        return try {
+            val clazz = Class.forName(className)
+            val candidates = clazz.methods.filter {
+                it.name == "getInstance" && Modifier.isStatic(it.modifiers)
+            }
+            for (method in candidates) {
+                val types = method.parameterTypes
+                if (types.isEmpty()) return method.invoke(null)
+                if (types.size == args.size && types.indices.all { index ->
+                        types[index].isAssignableFrom(args[index].javaClass)
+                    }
+                ) {
+                    return method.invoke(null, *args)
+                }
+            }
+            null
+        } catch (error: Exception) {
+            printerLog("$className singleton unavailable", error)
+            null
+        }
+    }
+
+    private fun invokeFirst(target: Any, names: List<String>, vararg args: Any): Any? {
+        for (method in target.javaClass.methods) {
+            if (!names.any { method.name.equals(it, ignoreCase = true) }) continue
+            val types = method.parameterTypes
+            if (types.size != args.size) continue
+            if (!types.indices.all { index -> types[index].isAssignableFrom(args[index].javaClass) }) {
+                continue
+            }
+            return method.invoke(target, *args)
+        }
+        return null
+    }
+
+    private fun invokeNoArgIfPresent(target: Any, names: List<String>): Boolean {
+        for (method in target.javaClass.methods) {
+            if (!names.any { method.name.equals(it, ignoreCase = true) }) continue
+            if (method.parameterTypes.isNotEmpty()) continue
+            method.invoke(target)
+            return true
+        }
+        return false
+    }
+
+    private fun invokeRawBytes(target: Any, bytes: ByteArray, names: List<String>): Boolean {
+        for (method in target.javaClass.methods) {
+            if (!names.any { method.name.equals(it, ignoreCase = true) }) continue
+            val types = method.parameterTypes
+            if (types.size == 1 && types[0] == ByteArray::class.java) {
+                method.invoke(target, bytes)
+                return true
+            }
+            if (types.size == 2 && types[0] == ByteArray::class.java) {
+                method.invoke(target, bytes, null)
+                return true
+            }
+        }
+        printerLog(
+            "raw byte method unavailable on ${target.javaClass.name}; " +
+                "USB/Bluetooth fallback will be used"
+        )
+        return false
+    }
+
+    private fun classAvailable(className: String): Boolean {
+        return try {
+            Class.forName(className)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun deviceIdentity(): String {
+        return listOf(Build.MANUFACTURER, Build.BRAND, Build.MODEL)
+            .joinToString(" ")
+            .lowercase(Locale.US)
     }
 
     private fun printUsbPrinterBytes(bytes: ByteArray, result: MethodChannel.Result) {

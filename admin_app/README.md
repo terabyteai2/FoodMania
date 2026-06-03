@@ -57,6 +57,17 @@ Build release APK:
 flutter build apk --release
 ```
 
+Build POS-terminal release APK:
+
+```sh
+tool/build_terminal_apk.sh
+```
+
+The terminal APK targets Android 5.1/API 22 for older SUNMI, iMin, and PAX POS
+devices. Normal Android builds keep Flutter's default minSdk; only terminal
+builds use the lower SDK floor and compatible AndroidX dependency pins. The
+helper copies the result to `build/app/outputs/flutter-apk/app-terminal-release.apk`.
+
 The Flutter POS ships with compile‑defaults targeting **`backend/.env`**: **`POS_CLOUD_API_URL`** (HTTPS ngrok base, optional override).
 
 Defaults mirror **`NGROK_STATIC_DOMAIN`** (`POS_NGROK_DOMAIN`; fallback hostname **`kiwi-equator-banknote.ngrok-free.dev`**):

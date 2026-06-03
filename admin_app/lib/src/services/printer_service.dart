@@ -74,7 +74,7 @@ class PrinterRuntimeState {
   String get selectedPrinterLabel {
     if (activeTransport == PrinterTransport.builtIn ||
         activeTransport == PrinterTransport.none && builtInPrinterAvailable) {
-      return 'Built-in printer (SUNMI)';
+      return 'Built-in printer';
     }
     if (activeTransport == PrinterTransport.usb ||
         activeTransport == PrinterTransport.none && usbPrinterAvailable) {
