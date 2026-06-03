@@ -64,6 +64,7 @@ from services.app_update import (
     promote_apk,
     save_apk_upload,
     set_app_update,
+    validate_apk_file,
 )
 from services.blocking_notice import (
     clear_blocking_notice,
@@ -1474,12 +1475,13 @@ async def upload_app_update(
     _ = admin
     tmp = await save_apk_upload(file)
     try:
+        validate_apk_file(tmp)
         detected_name, detected_code = extract_apk_version(tmp)
         final_name = detected_name or (versionName or "").strip()
         final_code = detected_code if detected_code is not None else versionCode
         if not final_name or not final_code or final_code < 1:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     "Could not read the APK version automatically. "
                     "Enter the version name and version code, then upload again."

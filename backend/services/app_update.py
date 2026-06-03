@@ -1,5 +1,6 @@
 import json
 import os
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -131,6 +132,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 APK_DIR = _BACKEND_ROOT / "In_App_Update_Apk_File"
 APK_FILENAME = "app-release.apk"
 APK_MAX_BYTES = 300 * 1024 * 1024  # 300 MB safety cap
+APK_MANIFEST_NAME = "AndroidManifest.xml"
 
 
 def apk_path() -> Path:
@@ -169,6 +171,34 @@ async def save_apk_upload(upload) -> Path:
 
 def promote_apk(tmp: Path) -> None:
     os.replace(tmp, apk_path())
+
+
+def validate_apk_file(path: Path) -> None:
+    """Reject uploads that are not APK-shaped before publishing them.
+
+    We still allow manual version metadata when pyaxmlparser cannot decode the
+    manifest, but the uploaded file must at least be a valid ZIP with the
+    Android manifest entry every APK contains.
+    """
+    try:
+        with zipfile.ZipFile(path) as apk:
+            names = set(apk.namelist())
+            if APK_MANIFEST_NAME not in names:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Uploaded file is not a valid APK: AndroidManifest.xml is missing.",
+                )
+            bad_entry = apk.testzip()
+            if bad_entry is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=f"Uploaded APK is corrupt near ZIP entry: {bad_entry}",
+                )
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Uploaded file is not a valid APK ZIP archive.",
+        ) from exc
 
 
 def extract_apk_version(path: Path) -> tuple[str | None, int | None]:
