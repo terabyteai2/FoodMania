@@ -16,6 +16,8 @@ class DesktopMenuOption {
   bool get hasPriceDelta => priceDelta.abs() >= 0.005;
 }
 
+const DesktopMenuOption _baseMenuOption = DesktopMenuOption(label: '');
+
 class DesktopMenuLineSelection {
   const DesktopMenuLineSelection({
     required this.item,
@@ -82,13 +84,44 @@ class DesktopMenuLineSelection {
   }
 }
 
+DesktopMenuLineSelection desktopRegularMenuLine(
+  MenuItem item, {
+  int qty = 1,
+  String? note,
+}) {
+  return DesktopMenuLineSelection(
+    item: item,
+    option: _baseMenuOption,
+    addOns: const <MenuAddOn>[],
+    qty: qty < 1 ? 1 : qty,
+    note: note,
+  );
+}
+
 Future<DesktopMenuLineSelection?> showDesktopMenuLineCustomizer(
   BuildContext context, {
   required MenuItem item,
   required bool isBn,
   int initialQty = 1,
+}) async {
+  final selections = await showDesktopMenuLineCustomizerLines(
+    context,
+    item: item,
+    isBn: isBn,
+    initialQty: initialQty,
+  );
+  if (selections == null || selections.isEmpty) return null;
+  return selections.first;
+}
+
+Future<List<DesktopMenuLineSelection>?> showDesktopMenuLineCustomizerLines(
+  BuildContext context, {
+  required MenuItem item,
+  required bool isBn,
+  int initialQty = 1,
 }) {
-  return showDialog<DesktopMenuLineSelection>(
+  debugPrint('[POS] Showing menu customizer for item=${item.name} id=${item.id} tags=${item.tags}');
+  return showDialog<List<DesktopMenuLineSelection>>(
     context: context,
     builder: (_) => _MenuLineCustomizerDialog(
       item: item,
@@ -99,45 +132,25 @@ Future<DesktopMenuLineSelection?> showDesktopMenuLineCustomizer(
 }
 
 List<DesktopMenuOption> desktopMenuOptionsFor(MenuItem item) {
-  final parsed = <DesktopMenuOption>[];
-  for (final raw in item.tags) {
-    final tag = raw.trim();
-    if (tag.startsWith('size:')) {
-      final option = _parseOptionTag(tag.substring(5));
-      if (option != null) parsed.add(option);
-    } else if (tag.startsWith('option:')) {
-      final option = _parseOptionTag(tag.substring(7));
-      if (option != null) parsed.add(option);
-    }
-  }
-  if (parsed.isNotEmpty) return _dedupeOptions(parsed);
-  return const [
-    DesktopMenuOption(label: 'Small'),
-    DesktopMenuOption(label: 'Medium'),
-    DesktopMenuOption(label: 'Large'),
-  ];
+  final parsed = desktopConfiguredMenuOptionsFor(item);
+  if (parsed.isNotEmpty) return parsed;
+  return const [_baseMenuOption];
 }
 
-DesktopMenuOption? _parseOptionTag(String body) {
-  final parts = body.split(':').map((part) => part.trim()).toList();
-  parts.removeWhere((part) => part.isEmpty);
-  if (parts.isEmpty) return null;
-  if (parts.length == 1) return DesktopMenuOption(label: parts.first);
-  final firstPrice = double.tryParse(parts.first);
-  if (firstPrice != null) {
-    return DesktopMenuOption(
-      priceDelta: firstPrice,
-      label: parts.skip(1).join(': ').trim(),
-    );
+List<DesktopMenuOption> desktopConfiguredMenuOptionsFor(MenuItem item) {
+  return _dedupeOptions([
+    for (final option in item.extras.options)
+      DesktopMenuOption(label: option.name, priceDelta: option.priceDelta),
+  ]);
+}
+
+bool desktopMenuNeedsCustomization(MenuItem item) {
+  final needs = desktopConfiguredMenuOptionsFor(item).isNotEmpty ||
+      item.extras.addOns.isNotEmpty;
+  if (!needs) {
+    debugPrint('[POS] Item does NOT need customization: ${item.name} id=${item.id} optionsCount=${item.extras.options.length} addOnsCount=${item.extras.addOns.length}');
   }
-  final lastPrice = double.tryParse(parts.last);
-  if (lastPrice != null) {
-    return DesktopMenuOption(
-      label: parts.take(parts.length - 1).join(': ').trim(),
-      priceDelta: lastPrice,
-    );
-  }
-  return DesktopMenuOption(label: parts.join(': '));
+  return needs;
 }
 
 List<DesktopMenuOption> _dedupeOptions(List<DesktopMenuOption> options) {
@@ -202,12 +215,16 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
   late final List<DesktopMenuOption> _options = desktopMenuOptionsFor(
     widget.item,
   );
-  late DesktopMenuOption _option = _options.length > 1
+  late final bool _hasOptions = _options.any(
+    (option) => option.label.trim().isNotEmpty || option.hasPriceDelta,
+  );
+  late final DesktopMenuOption _option = _options.length > 1
       ? _options.firstWhere(
           (option) => option.label.toLowerCase() == 'medium',
           orElse: () => _options.first,
         )
       : _options.first;
+  late final List<int> _optionQtys = List<int>.filled(_options.length, 0);
   late int _qty = widget.initialQty < 1 ? 1 : widget.initialQty;
   final Set<int> _addOnIndexes = <int>{};
   final TextEditingController _note = TextEditingController();
@@ -228,12 +245,14 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
       for (var i = 0; i < addOns.length; i++)
         if (_addOnIndexes.contains(i)) addOns[i],
     ];
-    final selection = DesktopMenuLineSelection(
-      item: widget.item,
-      option: _option,
-      addOns: selectedAddOns,
-      qty: _qty,
-      note: _note.text.trim().isEmpty ? null : _note.text.trim(),
+    final selections = _selectedLines(selectedAddOns);
+    final lineTotal = selections.fold<double>(
+      0,
+      (sum, selection) => sum + selection.lineTotal,
+    );
+    final selectedQty = selections.fold<int>(
+      0,
+      (sum, selection) => sum + selection.qty,
     );
 
     return AlertDialog(
@@ -272,23 +291,22 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
                 ],
               ),
               const SizedBox(height: 16),
-              Text(
-                tr('Size / option', 'সাইজ / অপশন'),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final option in _options)
-                    ChoiceChip(
-                      selected: identical(option, _option),
-                      label: Text(_optionLabel(option)),
-                      onSelected: (_) => setState(() => _option = option),
-                    ),
+              if (_hasOptions) ...[
+                Text(
+                  tr('Size / option', 'সাইজ / অপশন'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  tr('Set quantity for each option', 'প্রতি অপশনের পরিমাণ দিন'),
+                  style: Pc.mono(12, color: Pc.textTer),
+                ),
+                const SizedBox(height: 8),
+                for (var i = 0; i < _options.length; i++) ...[
+                  _optionQuantityRow(i),
+                  if (i != _options.length - 1) const SizedBox(height: 8),
                 ],
-              ),
+              ],
               if (addOns.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -327,23 +345,24 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text(tr('Quantity', 'পরিমাণ')),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _qty <= 1
-                        ? null
-                        : () => setState(() => _qty -= 1),
-                    icon: const Icon(Icons.remove),
-                  ),
-                  Text('$_qty', style: Pc.num(15)),
-                  IconButton(
-                    onPressed: () => setState(() => _qty += 1),
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
+              if (!_hasOptions)
+                Row(
+                  children: [
+                    Text(tr('Quantity', 'পরিমাণ')),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _qty <= 1
+                          ? null
+                          : () => setState(() => _qty -= 1),
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Text('$_qty', style: Pc.num(15)),
+                    IconButton(
+                      onPressed: () => setState(() => _qty += 1),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
               const Divider(height: 24),
               Row(
                 children: [
@@ -352,7 +371,7 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
                     style: const TextStyle(color: Pc.textSec),
                   ),
                   const Spacer(),
-                  Text(pcMoney(selection.lineTotal), style: Pc.num(18)),
+                  Text(pcMoney(lineTotal), style: Pc.num(18)),
                 ],
               ),
             ],
@@ -365,11 +384,91 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
           child: Text(tr('Cancel', 'বাতিল')),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, selection),
-          child: Text(tr('Add to ticket', 'টিকেটে যোগ করুন')),
+          onPressed: selections.isEmpty
+              ? null
+              : () => Navigator.pop(context, selections),
+          child: Text(
+            selectedQty > 1
+                ? tr('Add $selectedQty to ticket', '$selectedQtyটি যোগ করুন')
+                : tr('Add to ticket', 'টিকেটে যোগ করুন'),
+          ),
         ),
       ],
     );
+  }
+
+  List<DesktopMenuLineSelection> _selectedLines(List<MenuAddOn> addOns) {
+    final note = _note.text.trim().isEmpty ? null : _note.text.trim();
+    if (_hasOptions) {
+      return [
+        for (var i = 0; i < _options.length; i++)
+          if (_optionQtys[i] > 0)
+            DesktopMenuLineSelection(
+              item: widget.item,
+              option: _options[i],
+              addOns: addOns,
+              qty: _optionQtys[i],
+              note: note,
+            ),
+      ];
+    }
+    return [
+      DesktopMenuLineSelection(
+        item: widget.item,
+        option: _option,
+        addOns: addOns,
+        qty: _qty,
+        note: note,
+      ),
+    ];
+  }
+
+  Widget _optionQuantityRow(int index) {
+    final option = _options[index];
+    final qty = _optionQtys[index];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Pc.border),
+        borderRadius: BorderRadius.circular(Pc.rSm),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _optionLabel(option),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: qty <= 0 ? null : () => _setOptionQty(index, qty - 1),
+            icon: const Icon(Icons.remove),
+          ),
+          SizedBox(
+            width: 34,
+            child: Text(
+              '${qty}x',
+              textAlign: TextAlign.center,
+              style: Pc.num(14),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _setOptionQty(index, qty + 1),
+            icon: const Icon(Icons.add),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _setOptionQty(int index, int value) {
+    setState(() {
+      _optionQtys[index] = value < 0 ? 0 : value;
+    });
   }
 
   String _optionLabel(DesktopMenuOption option) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -11,9 +13,9 @@ import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/dashboard_summary.dart';
 import '../../models/menu_item.dart';
-import '../../models/order_item.dart';
 import '../../models/order_service_type.dart';
 import '../../models/pos_notification.dart';
+import '../desktop_pos/widgets/menu_line_customizer.dart';
 import '../orders/orders_screen.dart';
 
 // Tab indices mirroring _AppTab in app.dart.
@@ -1203,33 +1205,64 @@ class _DashT1Counter extends StatefulWidget {
 }
 
 class _DashT1CounterState extends State<_DashT1Counter> {
-  final Map<String, int> _cart = {};
+  final List<DesktopMenuLineSelection> _cartLines = [];
   bool _creatingOrder = false;
 
-  void _increment(String itemId) {
-    setState(() => _cart[itemId] = (_cart[itemId] ?? 0) + 1);
+  Future<void> _increment(MenuItem item) async {
+    final selections = desktopMenuNeedsCustomization(item)
+        ? await showDesktopMenuLineCustomizerLines(
+            context,
+            item: item,
+            isBn: AppScope.of(context).strings.isBn,
+          )
+        : [desktopRegularMenuLine(item)];
+    if (selections == null || selections.isEmpty || !mounted) return;
+    setState(() {
+      for (final selection in selections) {
+        final index = _cartLines.indexWhere(
+          (line) => line.lineKey == selection.lineKey,
+        );
+        if (index >= 0) {
+          final current = _cartLines[index];
+          _cartLines[index] = DesktopMenuLineSelection(
+            item: current.item,
+            option: current.option,
+            addOns: current.addOns,
+            qty: current.qty + selection.qty,
+            note: current.note,
+          );
+        } else {
+          _cartLines.add(selection);
+        }
+      }
+    });
   }
 
   void _decrement(String itemId) {
     setState(() {
-      final qty = _cart[itemId] ?? 0;
-      if (qty <= 1) {
-        _cart.remove(itemId);
+      final index = _cartLines.lastIndexWhere((line) => line.item.id == itemId);
+      if (index < 0) return;
+      final line = _cartLines[index];
+      if (line.qty <= 1) {
+        _cartLines.removeAt(index);
       } else {
-        _cart[itemId] = qty - 1;
+        _cartLines[index] = DesktopMenuLineSelection(
+          item: line.item,
+          option: line.option,
+          addOns: line.addOns,
+          qty: line.qty - 1,
+          note: line.note,
+        );
       }
     });
   }
 
   Future<void> _createOrder() async {
-    if (_cart.isEmpty || _creatingOrder) return;
+    if (_cartLines.isEmpty || _creatingOrder) return;
     setState(() => _creatingOrder = true);
     try {
       final order = await widget.app.createManualOrder(
-        requestedItems: [
-          for (final entry in _cart.entries)
-            OrderRequestItem(menuItemId: entry.key, qty: entry.value),
-        ],
+        requestedItems: [for (final line in _cartLines) line.toRequestItem()],
         serviceType: OrderServiceType.takeaway,
         paymentMethod: null,
       );
@@ -1241,7 +1274,7 @@ class _DashT1CounterState extends State<_DashT1Counter> {
           !widget.app.printerService.hasPrintedOrder(order.id);
       if (shouldPrint) await widget.app.printOrderTicket(order);
       if (!mounted) return;
-      setState(_cart.clear);
+      setState(_cartLines.clear);
       await openOrderCreatedPage(context, order: order);
     } catch (error) {
       if (!mounted) return;
@@ -1276,23 +1309,23 @@ class _DashT1CounterState extends State<_DashT1Counter> {
         .where((item) => item.isAvailable)
         .take(8)
         .toList(growable: false);
-    final cartItems = [
-      for (final item in menuItems)
-        if ((_cart[item.id] ?? 0) > 0) item,
-    ];
-    final cartQty = _cart.values.fold(0, (sum, qty) => sum + qty);
-    final cartTotal = cartItems.fold<double>(
+    final cartQtyByItemId = <String, int>{};
+    for (final line in _cartLines) {
+      cartQtyByItemId[line.item.id] =
+          (cartQtyByItemId[line.item.id] ?? 0) + line.qty;
+    }
+    final cartQty = _cartLines.fold(0, (sum, line) => sum + line.qty);
+    final cartTotal = _cartLines.fold<double>(
       0,
-      (sum, item) => sum + item.price * (_cart[item.id] ?? 0),
+      (sum, line) => sum + line.lineTotal,
     );
 
     return Scaffold(
       backgroundColor: PosColors.background,
-      bottomNavigationBar: cartItems.isEmpty
+      bottomNavigationBar: _cartLines.isEmpty
           ? null
           : _SimpleCartTray(
-              items: cartItems,
-              cart: _cart,
+              lines: _cartLines,
               totalQty: cartQty,
               total: cartTotal,
               busy: _creatingOrder,
@@ -1484,8 +1517,8 @@ class _DashT1CounterState extends State<_DashT1Counter> {
                         return _SellTile(
                           item: item,
                           price: price,
-                          qty: _cart[item.id] ?? 0,
-                          onTap: () => _increment(item.id),
+                          qty: cartQtyByItemId[item.id] ?? 0,
+                          onTap: () => unawaited(_increment(item)),
                           onDecrement: () => _decrement(item.id),
                         );
                       },
@@ -1696,16 +1729,14 @@ class _SellTile extends StatelessWidget {
 
 class _SimpleCartTray extends StatelessWidget {
   const _SimpleCartTray({
-    required this.items,
-    required this.cart,
+    required this.lines,
     required this.totalQty,
     required this.total,
     required this.busy,
     required this.onPressed,
   });
 
-  final List<MenuItem> items;
-  final Map<String, int> cart;
+  final List<DesktopMenuLineSelection> lines;
   final int totalQty;
   final double total;
   final bool busy;
@@ -1713,9 +1744,10 @@ class _SimpleCartTray extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final summary = items
+    final language = AppScope.of(context).language;
+    final summary = lines
         .take(2)
-        .map((item) => '${item.name} ×${cart[item.id]}')
+        .map((line) => '${line.localizedDisplayName(language)} ×${line.qty}')
         .join(' · ');
     return SafeArea(
       top: false,

@@ -1447,6 +1447,30 @@ class CloudApiService {
     return [];
   }
 
+  Future<String> uploadOutletLogo(String dataUrl) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/logo');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'POST',
+      uri,
+      body: {
+        'dataUrl': dataUrl,
+        'fileName': 'logo-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      },
+    );
+    final data = response['data'] is Map
+        ? Map<String, Object?>.from(response['data'] as Map)
+        : response;
+    final url = data['logoUrl']?.toString().trim() ?? '';
+    if (url.isEmpty) {
+      throw CloudApiException('Logo upload did not return a public URL.');
+    }
+    return url;
+  }
+
   Future<void> updateOutletMedia({String? videoUrl}) async {
     final config = _requireServerConfig();
     final uri = _uri('/outlets/${config.outletId}/media');
@@ -1454,6 +1478,15 @@ class CloudApiService {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
     await _sendJson('PATCH', uri, body: {'videoUrl': videoUrl});
+  }
+
+  Future<void> updateOutletLogo(String? logoUrl) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/media');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    await _sendJson('PATCH', uri, body: {'logoUrl': logoUrl});
   }
 
   Future<void> updateOutletMenuTheme(String slug) async {

@@ -91,6 +91,34 @@ async def test_patch_media_theme_only_preserves_video_url():
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_patch_media_updates_public_logo_url():
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        outlet_id, headers = await _bootstrap_outlet(client, "logo-media")
+
+        patch = await client.patch(
+            f"/outlets/{outlet_id}/media",
+            headers=headers,
+            json={"logoUrl": "https://example.com/logo.png"},
+        )
+        info = await client.get(f"/customer/{outlet_id}/info")
+        clear = await client.patch(
+            f"/outlets/{outlet_id}/media",
+            headers=headers,
+            json={"logoUrl": None},
+        )
+        cleared_info = await client.get(f"/customer/{outlet_id}/info")
+
+    assert patch.status_code == 200
+    assert patch.json()["data"]["logoUrl"] == "https://example.com/logo.png"
+    assert info.json()["data"]["logoUrl"] == "https://example.com/logo.png"
+    assert clear.status_code == 200
+    assert clear.json()["data"]["logoUrl"] is None
+    assert cleared_info.json()["data"]["logoUrl"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_patch_media_updates_public_delivery_charge():
     await create_tables()
     transport = ASGITransport(app=app)

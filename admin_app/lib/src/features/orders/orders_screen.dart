@@ -20,6 +20,7 @@ import '../../models/order_service_type.dart';
 import '../../models/order_source.dart';
 import '../../models/order_status.dart';
 import '../../models/pos_notification.dart';
+import '../desktop_pos/widgets/menu_line_customizer.dart';
 import 'order_list_filters.dart';
 
 Future<void> openNewOrderForm(
@@ -117,17 +118,17 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
     final ok = await app.printOrderTicket(widget.order);
     if (!mounted) return;
     setState(() => _printingKot = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-        content: TfText(
-          ok
-              ? app.strings.ticketPrinted(widget.order.displaySequence)
-              : (app.printerState.lastError ?? app.strings.printFailed),
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+          content: TfText(
+            app.strings.ticketPrinted(widget.order.displaySequence),
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   Future<void> _printReceipt() async {
@@ -137,17 +138,17 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
     final ok = await app.printCustomerInvoice(widget.order);
     if (!mounted) return;
     setState(() => _printingReceipt = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-        content: TfText(
-          ok
-              ? app.strings.billPrinted(widget.order.displaySequence)
-              : (app.printerState.lastError ?? app.strings.printFailed),
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+          content: TfText(
+            app.strings.billPrinted(widget.order.displaySequence),
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -528,15 +529,11 @@ class _OrdersScreenState extends State<OrdersScreen>
     final text = app.strings;
     final ok = await app.printCustomerInvoice(order);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: TfText(
-          ok
-              ? text.billPrinted(order.displaySequence)
-              : (app.printerState.lastError ?? text.printFailed),
-        ),
-      ),
-    );
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText(text.billPrinted(order.displaySequence))),
+      );
+    }
   }
 
   Future<void> _changeStatus(
@@ -2398,7 +2395,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   OrderServiceType? _source;
   String? _selectedTable;
 
-  final Map<String, int> _cart = {};
+  final List<DesktopMenuLineSelection> _cartLines = [];
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
@@ -2416,15 +2413,25 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final initialQuantities = widget.initialMenuItemQuantities ?? const {};
     for (final entry in initialQuantities.entries) {
       if (validIds.contains(entry.key) && entry.value > 0) {
-        _cart[entry.key] = entry.value;
+        final item = widget.menuItems.firstWhere(
+          (item) => item.id == entry.key,
+        );
+        _cartLines.add(desktopRegularMenuLine(item, qty: entry.value));
       }
     }
-    if (widget.menuItems.any((item) => item.id == widget.initialMenuItemId)) {
-      _cart[widget.initialMenuItemId!] = 1;
+    MenuItem? initialMenuItem;
+    for (final item in widget.menuItems) {
+      if (item.id == widget.initialMenuItemId) {
+        initialMenuItem = item;
+        break;
+      }
+    }
+    if (initialMenuItem != null) {
+      _cartLines.add(desktopRegularMenuLine(initialMenuItem));
     }
     if (widget.counterMode) {
       // Simple tier: skip source/table selection, start at items step.
-      _step = widget.startAtReview && _cart.isNotEmpty ? 2 : 1;
+      _step = widget.startAtReview && _cartLines.isNotEmpty ? 2 : 1;
       _source = OrderServiceType.takeaway;
       _selectedTable = '';
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2496,36 +2503,70 @@ class _NewOrderPageState extends State<_NewOrderPage> {
       })
       .toList(growable: false);
 
-  int get _totalQty => _cart.values.fold(0, (s, q) => s + q);
+  Map<String, int> get _cartQtyByItemId {
+    final out = <String, int>{};
+    for (final line in _cartLines) {
+      out[line.item.id] = (out[line.item.id] ?? 0) + line.qty;
+    }
+    return out;
+  }
+
+  int get _totalQty => _cartLines.fold(0, (s, line) => s + line.qty);
 
   double get _subtotal {
-    var sum = 0.0;
-    for (final entry in _cart.entries) {
-      final item = widget.menuItems.firstWhere(
-        (m) => m.id == entry.key,
-        orElse: () => widget.menuItems.first,
-      );
-      sum += item.price * entry.value;
-    }
-    return sum;
+    return _cartLines.fold<double>(0, (sum, line) => sum + line.lineTotal);
   }
 
   double get _total => _roundMoney(_subtotal);
 
   double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
 
-  void _tap(String id) {
+  Future<void> _tap(MenuItem item) async {
     HapticFeedback.lightImpact();
-    setState(() => _cart[id] = (_cart[id] ?? 0) + 1);
+    final selections = desktopMenuNeedsCustomization(item)
+        ? await showDesktopMenuLineCustomizerLines(
+            context,
+            item: item,
+            isBn: AppScope.of(context).strings.isBn,
+          )
+        : [desktopRegularMenuLine(item)];
+    if (selections == null || selections.isEmpty || !mounted) return;
+    setState(() {
+      for (final selection in selections) {
+        final index = _cartLines.indexWhere(
+          (line) => line.lineKey == selection.lineKey,
+        );
+        if (index >= 0) {
+          final current = _cartLines[index];
+          _cartLines[index] = DesktopMenuLineSelection(
+            item: current.item,
+            option: current.option,
+            addOns: current.addOns,
+            qty: current.qty + selection.qty,
+            note: current.note,
+          );
+        } else {
+          _cartLines.add(selection);
+        }
+      }
+    });
   }
 
   void _decrement(String id) {
     setState(() {
-      final current = _cart[id] ?? 0;
-      if (current <= 1) {
-        _cart.remove(id);
+      final index = _cartLines.lastIndexWhere((line) => line.item.id == id);
+      if (index < 0) return;
+      final line = _cartLines[index];
+      if (line.qty <= 1) {
+        _cartLines.removeAt(index);
       } else {
-        _cart[id] = current - 1;
+        _cartLines[index] = DesktopMenuLineSelection(
+          item: line.item,
+          option: line.option,
+          addOns: line.addOns,
+          qty: line.qty - 1,
+          note: line.note,
+        );
       }
     });
   }
@@ -2536,14 +2577,14 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   }
 
   void _goToReview() {
-    if (_cart.isEmpty) return;
+    if (_cartLines.isEmpty) return;
     _goToStep(2);
   }
 
   Future<void> _submit() async {
-    if (_cart.isEmpty || _source == null || _creating) return;
-    final items = _cart.entries
-        .map((e) => OrderRequestItem(menuItemId: e.key, qty: e.value))
+    if (_cartLines.isEmpty || _source == null || _creating) return;
+    final items = _cartLines
+        .map((line) => line.toRequestItem())
         .toList(growable: false);
     final isDineIn = _source == OrderServiceType.dineIn;
     final tableNo = isDineIn && (_selectedTable ?? '').isNotEmpty
@@ -2586,17 +2627,15 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final ok = await app.printCustomerInvoice(order);
     if (!mounted) return;
     setState(() => _printingReceipt = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-        content: TfText(
-          ok
-              ? app.strings.billPrinted(order.displaySequence)
-              : (app.printerState.lastError ?? app.strings.printFailed),
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+          content: TfText(app.strings.billPrinted(order.displaySequence)),
         ),
-      ),
-    );
+      );
+    }
   }
 
   Future<void> _printCreatedKot() async {
@@ -2607,17 +2646,15 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final ok = await app.printOrderTicket(order);
     if (!mounted) return;
     setState(() => _printingKot = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-        content: TfText(
-          ok
-              ? app.strings.ticketPrinted(order.displaySequence)
-              : (app.printerState.lastError ?? app.strings.printFailed),
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
+          content: TfText(app.strings.ticketPrinted(order.displaySequence)),
         ),
-      ),
-    );
+      );
+    }
   }
 
   String get _tableLabel {
@@ -2631,6 +2668,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   @override
   Widget build(BuildContext context) {
     final isSuccess = _step == 3;
+    final cartQtyByItemId = _cartQtyByItemId;
     return Scaffold(
       backgroundColor: PosColors.background,
       body: SafeArea(
@@ -2667,11 +2705,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                         : null,
                   ),
                   _MenuStep(
-                    menuItems: widget.menuItems,
                     visibleItems: _visibleItems,
                     categories: _categories,
                     selectedCategory: _selectedCategory,
-                    cart: _cart,
+                    cart: cartQtyByItemId,
+                    lineCount: _cartLines.length,
                     total: _total,
                     totalQty: _totalQty,
                     searchCtrl: _searchCtrl,
@@ -2681,13 +2719,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     onLayoutChanged: _selectMenuLayout,
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),
-                    onTap: _tap,
+                    onTap: (item) => unawaited(_tap(item)),
                     onDecrement: _decrement,
-                    onSubmit: _cart.isNotEmpty ? _goToReview : null,
+                    onSubmit: _cartLines.isNotEmpty ? _goToReview : null,
                   ),
                   _ReviewStep(
-                    menuItems: widget.menuItems,
-                    cart: _cart,
+                    lines: _cartLines,
                     totalQty: _totalQty,
                     total: _total,
                     noteCtrl: _noteCtrl,
@@ -3081,8 +3118,7 @@ class _SourceTile extends StatelessWidget {
 
 class _ReviewStep extends StatelessWidget {
   const _ReviewStep({
-    required this.menuItems,
-    required this.cart,
+    required this.lines,
     required this.totalQty,
     required this.total,
     required this.noteCtrl,
@@ -3092,8 +3128,7 @@ class _ReviewStep extends StatelessWidget {
     required this.creating,
   });
 
-  final List<MenuItem> menuItems;
-  final Map<String, int> cart;
+  final List<DesktopMenuLineSelection> lines;
   final int totalQty;
   final double total;
   final TextEditingController noteCtrl;
@@ -3190,11 +3225,7 @@ class _ReviewStep extends StatelessWidget {
                       height: 1,
                       thickness: 0.5,
                     ),
-                    ...cart.entries.map((entry) {
-                      final item = menuItems.firstWhere(
-                        (m) => m.id == entry.key,
-                        orElse: () => menuItems.first,
-                      );
+                    ...lines.map((line) {
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
                         child: Row(
@@ -3202,7 +3233,7 @@ class _ReviewStep extends StatelessWidget {
                             SizedBox(
                               width: 36,
                               child: TfText(
-                                '${tfFormatNumber(context, entry.value)}×',
+                                '${tfFormatNumber(context, line.qty)}×',
                                 style: TextStyle(
                                   fontFamily: tfFontFamily(context),
                                   fontWeight: FontWeight.w500,
@@ -3213,7 +3244,7 @@ class _ReviewStep extends StatelessWidget {
                             ),
                             Expanded(
                               child: TfText(
-                                item.localizedName(app.language),
+                                line.localizedDisplayName(app.language),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: PosColors.slate,
@@ -3223,10 +3254,7 @@ class _ReviewStep extends StatelessWidget {
                               ),
                             ),
                             TfText(
-                              tfFormatCurrency(
-                                context,
-                                item.price * entry.value,
-                              ),
+                              tfFormatCurrency(context, line.lineTotal),
                               style: TextStyle(
                                 fontFamily: tfFontFamily(context),
                                 fontWeight: FontWeight.w500,
@@ -3713,11 +3741,11 @@ class _TableTile extends StatelessWidget {
 
 class _MenuStep extends StatelessWidget {
   const _MenuStep({
-    required this.menuItems,
     required this.visibleItems,
     required this.categories,
     required this.selectedCategory,
     required this.cart,
+    required this.lineCount,
     required this.total,
     required this.totalQty,
     required this.searchCtrl,
@@ -3731,11 +3759,11 @@ class _MenuStep extends StatelessWidget {
     required this.onSubmit,
   });
 
-  final List<MenuItem> menuItems;
   final List<MenuItem> visibleItems;
   final List<String> categories;
   final String selectedCategory;
   final Map<String, int> cart;
+  final int lineCount;
   final double total;
   final int totalQty;
   final TextEditingController searchCtrl;
@@ -3744,7 +3772,7 @@ class _MenuStep extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<_MenuLayoutMode> onLayoutChanged;
   final ValueChanged<String> onCategorySelected;
-  final ValueChanged<String> onTap;
+  final ValueChanged<MenuItem> onTap;
   final ValueChanged<String> onDecrement;
   final VoidCallback? onSubmit;
 
@@ -3817,7 +3845,7 @@ class _MenuStep extends StatelessWidget {
         ),
         _CartFooter(
           cart: cart,
-          menuItems: menuItems,
+          lineCount: lineCount,
           total: total,
           totalQty: totalQty,
           onSubmit: onSubmit,
@@ -3877,7 +3905,7 @@ class _MenuGrid extends StatelessWidget {
   final List<MenuItem> items;
   final Map<String, int> cart;
   final _MenuLayoutMode layoutMode;
-  final ValueChanged<String> onTap;
+  final ValueChanged<MenuItem> onTap;
   final ValueChanged<String> onDecrement;
 
   @override
@@ -3904,7 +3932,7 @@ class _MenuGrid extends StatelessWidget {
         itemBuilder: (_, i) => _CompactMenuTile(
           item: items[i],
           qty: cart[items[i].id] ?? 0,
-          onTap: () => onTap(items[i].id),
+          onTap: () => onTap(items[i]),
           onDecrement: () => onDecrement(items[i].id),
         ),
       );
@@ -3922,7 +3950,7 @@ class _MenuGrid extends StatelessWidget {
       itemBuilder: (_, i) => _MenuTile(
         item: items[i],
         qty: cart[items[i].id] ?? 0,
-        onTap: () => onTap(items[i].id),
+        onTap: () => onTap(items[i]),
         onDecrement: () => onDecrement(items[i].id),
       ),
     );
@@ -3947,7 +3975,7 @@ class _CompactMenuTile extends StatelessWidget {
     final app = AppScope.of(context);
     final inCart = qty > 0;
     final extras = item.extras;
-    final hasAddOns = extras.addOns.isNotEmpty;
+    final hasChoices = desktopMenuNeedsCustomization(item);
     final iconStyle = menuIconStyleFor(
       resolveMenuIconKey(
         iconKey: extras.iconKey,
@@ -4027,7 +4055,7 @@ class _CompactMenuTile extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (hasAddOns && !inCart) ...[
+                          if (hasChoices && !inCart) ...[
                             const SizedBox(width: 3),
                             Icon(
                               Icons.tune_rounded,
@@ -4112,16 +4140,8 @@ class _MenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final inCart = qty > 0;
-    final hasImage = (item.imageUrl ?? '').isNotEmpty;
     final extras = item.extras;
-    final hasAddOns = extras.addOns.isNotEmpty;
-    final iconStyle = menuIconStyleFor(
-      resolveMenuIconKey(
-        iconKey: extras.iconKey,
-        name: item.name,
-        category: item.category,
-      ),
-    );
+    final hasChoices = desktopMenuNeedsCustomization(item);
 
     return GestureDetector(
       onTap: onTap,
@@ -4129,14 +4149,10 @@ class _MenuTile extends StatelessWidget {
         duration: Duration(milliseconds: 150),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: hasImage
-              ? Colors.black
-              : (inCart ? PosColors.slate : PosColors.surface),
+          color: Colors.black,
           borderRadius: BorderRadius.circular(PosRadii.md),
           border: Border.all(
-            color: inCart
-                ? PosColors.primary
-                : (hasImage ? Colors.transparent : PosColors.line),
+            color: inCart ? PosColors.primary : Colors.transparent,
             width: inCart ? 2 : 1,
           ),
           boxShadow: [
@@ -4151,34 +4167,32 @@ class _MenuTile extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // ── Background image ──────────────────────────────────────────
-            if (hasImage)
-              _ItemImage(
-                url: item.imageUrl!,
-                iconKey: resolveMenuIconKey(
-                  iconKey: extras.iconKey,
-                  name: item.name,
-                  category: item.category,
-                ),
+            _ItemImage(
+              url: item.imageUrl ?? '',
+              iconKey: resolveMenuIconKey(
+                iconKey: extras.iconKey,
+                name: item.name,
+                category: item.category,
               ),
+            ),
 
             // ── Gradient overlay for readability ──────────────────────────
-            if (hasImage)
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.0),
-                      Colors.black.withValues(alpha: 0.72),
-                    ],
-                    stops: const [0.3, 1.0],
-                  ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.72),
+                  ],
+                  stops: const [0.3, 1.0],
                 ),
               ),
+            ),
 
             // ── Yellow tint when in cart (image mode) ─────────────────────
-            if (hasImage && inCart)
+            if (inCart)
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: PosColors.primary.withValues(alpha: 0.22),
@@ -4186,63 +4200,53 @@ class _MenuTile extends StatelessWidget {
               ),
 
             // ── Text content ──────────────────────────────────────────────
-            if (hasImage)
-              Padding(
-                padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TfText(
-                      item.localizedName(app.language),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                        color: Colors.white,
-                        height: 1.2,
-                      ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TfText(
+                    item.localizedName(app.language),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                      color: Colors.white,
+                      height: 1.2,
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TfText(
-                            tfFormatCurrency(context, item.price),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13,
-                              color: Colors.white.withValues(alpha: 0.85),
-                            ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TfText(
+                          tfFormatCurrency(context, item.price),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.85),
                           ),
                         ),
-                        if (hasAddOns) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.tune_rounded,
-                            size: 13,
-                            color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ],
+                      ),
+                      if (hasChoices) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.tune_rounded,
+                          size: 13,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
                       ],
-                    ),
-                  ],
-                ),
-              )
-            else
-              _PlainMenuTileContent(
-                item: item,
-                qty: qty,
-                inCart: inCart,
-                hasAddOns: hasAddOns,
-                iconStyle: iconStyle,
-                onDecrement: onDecrement,
+                    ],
+                  ),
+                ],
               ),
+            ),
 
             // ── Quantity stepper (top-right) ──────────────────────────────
-            if (hasImage && inCart)
+            if (inCart)
               Positioned(
                 top: 6,
                 right: 6,
@@ -4298,7 +4302,7 @@ class _PlainMenuTileContent extends StatelessWidget {
     required this.item,
     required this.qty,
     required this.inCart,
-    required this.hasAddOns,
+    required this.hasChoices,
     required this.iconStyle,
     required this.onDecrement,
   });
@@ -4306,7 +4310,7 @@ class _PlainMenuTileContent extends StatelessWidget {
   final MenuItem item;
   final int qty;
   final bool inCart;
-  final bool hasAddOns;
+  final bool hasChoices;
   final MenuIconStyle iconStyle;
   final VoidCallback onDecrement;
 
@@ -4408,7 +4412,7 @@ class _PlainMenuTileContent extends StatelessWidget {
                   ),
                 ),
               ),
-              if (hasAddOns) ...[
+              if (hasChoices) ...[
                 const SizedBox(width: 5),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -4490,14 +4494,14 @@ class _ItemImage extends StatelessWidget {
 class _CartFooter extends StatelessWidget {
   const _CartFooter({
     required this.cart,
-    required this.menuItems,
+    required this.lineCount,
     required this.total,
     required this.totalQty,
     required this.onSubmit,
   });
 
   final Map<String, int> cart;
-  final List<MenuItem> menuItems;
+  final int lineCount;
   final double total;
   final int totalQty;
   final VoidCallback? onSubmit;
@@ -4545,7 +4549,7 @@ class _CartFooter extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TfText(
-                      text.orderItemsLine(totalQty, cart.length),
+                      text.orderItemsLine(totalQty, lineCount),
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.white.withValues(alpha: 0.68),

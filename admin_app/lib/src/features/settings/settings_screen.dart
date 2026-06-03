@@ -63,6 +63,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       TextEditingController();
   final TextEditingController _settingsSearchController =
       TextEditingController();
+  final MenuImageService _imageService = MenuImageService();
+  bool _savingLogo = false;
   Timer? _autoSaveDebounce;
   bool _cloudSyncEnabled = false;
   bool _importingOrderHistory = false;
@@ -187,6 +189,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: text.heroMediaSubtitle,
                   icon: Icons.photo_library_outlined,
                   onTap: _openHeroMedia,
+                ),
+                _SettingActionData(
+                  title: text.heroLogoTitle,
+                  subtitle: text.heroLogoSubtitle,
+                  icon: Icons.storefront_outlined,
+                  trailing: _savingLogo
+                      ? (text.isBn ? 'আপলোড হচ্ছে...' : 'Uploading...')
+                      : null,
+                  onTap: _savingLogo ? null : _openRestaurantLogoUpload,
                 ),
                 _SettingActionData(
                   title: text.settingsWebsiteTheme,
@@ -621,6 +632,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openRestaurantLogoUpload() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    try {
+      final dataUrl = await _imageService.pickMenuImageDataUrl();
+      if (dataUrl == null) return;
+      setState(() => _savingLogo = true);
+      await app.cloudApiService.uploadOutletLogo(dataUrl);
+      setState(() => _savingLogo = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(text.heroLogoUploaded)),
+      );
+    } catch (e) {
+      setState(() => _savingLogo = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    }
   }
 
   Future<void> _openQrCodes() async {
@@ -3054,6 +3087,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   final _imageService = MenuImageService();
   final _videoPicker = ImagePicker();
   List<String> _gallery = [];
+  String? _currentLogoUrl;
   String? _currentVideoUrl;
   bool _loading = true;
   bool _saving = false;
@@ -3096,6 +3130,9 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _gallery = rawGallery is List
             ? rawGallery.map((e) => e.toString()).toList()
             : [];
+        _currentLogoUrl = info['logoUrl']?.toString().trim().isEmpty == true
+            ? null
+            : info['logoUrl']?.toString().trim();
         _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true
             ? null
             : info['videoUrl']?.toString().trim();
@@ -3106,6 +3143,53 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _pickAndUploadLogo() async {
+    try {
+      final dataUrl = await _imageService.pickMenuImageDataUrl();
+      if (dataUrl == null) return;
+      setState(() => _saving = true);
+      final url =
+          await widget.cloudApiService.uploadOutletLogo(dataUrl) as String;
+      setState(() {
+        _currentLogoUrl = url;
+        _saving = false;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppScope.of(context).strings.heroLogoUploaded)),
+      );
+    } on MenuImageException catch (e) {
+      setState(() => _saving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      setState(() => _saving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _clearLogo() async {
+    setState(() => _saving = true);
+    try {
+      await widget.cloudApiService.updateOutletLogo(null);
+      setState(() {
+        _currentLogoUrl = null;
+        _saving = false;
+      });
+    } catch (e) {
+      setState(() => _saving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -3257,6 +3341,92 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  TfText(
+                    text.heroLogoTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  TfText(
+                    text.heroLogoSubtitle,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: _currentLogoUrl != null
+                              ? Image.network(
+                                  _currentLogoUrl!,
+                                  width: 72,
+                                  height: 72,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                        width: 72,
+                                        height: 72,
+                                        color: Colors.grey.shade200,
+                                        child: const Icon(
+                                          Icons.broken_image_outlined,
+                                        ),
+                                      ),
+                                )
+                              : Container(
+                                  width: 72,
+                                  height: 72,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest,
+                                  child: const Icon(
+                                    Icons.storefront_outlined,
+                                    size: 30,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TfText(
+                            _currentLogoUrl == null
+                                ? text.heroAddLogo
+                                : text.heroLogoSet,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        if (_currentLogoUrl != null) ...[
+                          TfButton(
+                            label: text.remove,
+                            icon: Icons.delete_outline,
+                            variant: TfButtonVariant.paper,
+                            size: TfButtonSize.sm,
+                            fullWidth: false,
+                            onPressed: _saving ? null : _clearLogo,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        TfButton(
+                          label: _currentLogoUrl == null
+                              ? text.heroAddLogo
+                              : text.heroReplaceLogo,
+                          icon: Icons.add_photo_alternate_outlined,
+                          variant: TfButtonVariant.paper,
+                          size: TfButtonSize.sm,
+                          fullWidth: false,
+                          busy: _saving,
+                          onPressed: _saving ? null : _pickAndUploadLogo,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
                   TfText(
                     text.heroPhotosTitle,
                     style: Theme.of(context).textTheme.titleMedium,

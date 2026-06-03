@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -238,6 +240,8 @@ class _MainShellState extends State<MainShell> {
   late _AppTab _selected;
   List<_AppTab> _currentTabOrder = _managerTabOrder;
   String? _lastShownNotificationKey;
+  String? _pendingNotificationToastKey;
+  Timer? _notificationToastDebounce;
   int? _lastShownAppUpdateVersionCode;
   bool _appUpdateDialogShowing = false;
   int _receiptPrinterOpenRequest = 0;
@@ -260,6 +264,12 @@ class _MainShellState extends State<MainShell> {
       final vi = widget.initialIndex.clamp(0, _currentTabOrder.length - 1);
       _selected = _currentTabOrder[vi];
     }
+  }
+
+  @override
+  void dispose() {
+    _notificationToastDebounce?.cancel();
+    super.dispose();
   }
 
   _Destination _destinationFor(_AppTab tab, AppStrings _) {
@@ -449,26 +459,71 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _maybeShowNotification(PosAppController app) {
-    if (app.notifications.isEmpty) return;
-    final latest = app.notifications.first;
-    if (latest.isRead) return;
-    final alertKey = latest.orderId != null
+    final unread = app.notifications
+        .where((notification) => !notification.isRead)
+        .toList(growable: false);
+    if (unread.isEmpty) return;
+    final latest = unread.first;
+    final alertKey = unread.length > 1
+        ? 'bulk:${unread.length}:${latest.id}'
+        : latest.orderId != null
         ? '${latest.orderId}:${latest.type.name}'
         : latest.id;
-    if (alertKey == _lastShownNotificationKey) return;
-    _lastShownNotificationKey = alertKey;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (alertKey == _lastShownNotificationKey ||
+        alertKey == _pendingNotificationToastKey) {
+      return;
+    }
+
+    _pendingNotificationToastKey = alertKey;
+    _notificationToastDebounce?.cancel();
+    _notificationToastDebounce = Timer(const Duration(milliseconds: 600), () {
       if (!mounted) return;
-      showTopNotificationToast(
-        context,
-        title: latest.title,
-        body: latest.body,
-        onOpen: () {
+      _showPendingNotificationToast();
+    });
+  }
+
+  void _showPendingNotificationToast() {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final unread = app.notifications
+        .where((notification) => !notification.isRead)
+        .toList(growable: false);
+    if (unread.isEmpty) {
+      _pendingNotificationToastKey = null;
+      return;
+    }
+    final latest = unread.first;
+    final alertKey = unread.length > 1
+        ? 'bulk:${unread.length}:${latest.id}'
+        : latest.orderId != null
+        ? '${latest.orderId}:${latest.type.name}'
+        : latest.id;
+    if (alertKey == _lastShownNotificationKey) {
+      _pendingNotificationToastKey = null;
+      return;
+    }
+
+    _lastShownNotificationKey = alertKey;
+    _pendingNotificationToastKey = null;
+    showTopNotificationToast(
+      context,
+      title: unread.length > 1
+          ? text.notificationSummaryTitle(unread.length)
+          : latest.title,
+      body: unread.length > 1 ? text.notificationSummaryBody : latest.body,
+      onOpen: () {
+        if (unread.length > 1) {
+          showNotificationCenter(
+            context,
+            onNavigateToOrders: () => _selectTab(_AppTab.orders),
+            onNavigateToTarget: _navigateNotificationTarget,
+          );
+        } else {
           app.markNotificationRead(latest.id);
           _navigateNotificationTarget(latest.target);
-        },
-      );
-    });
+        }
+      },
+    );
   }
 
   void _maybeShowAppUpdatePrompt(PosAppController app) {

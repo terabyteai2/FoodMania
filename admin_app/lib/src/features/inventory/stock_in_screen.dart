@@ -343,6 +343,13 @@ class _StockInScreenState extends State<StockInScreen> {
     );
     return Scaffold(
       backgroundColor: PosColors.background,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _ScanFloatingActions(
+        busy: _scanning,
+        text: text,
+        onPickGallery: () => _pickAndScan(fromCamera: false),
+        onCapture: () => _pickAndScan(fromCamera: true),
+      ),
       appBar: AppBar(
         backgroundColor: PosColors.background,
         elevation: 0,
@@ -374,18 +381,18 @@ class _StockInScreenState extends State<StockInScreen> {
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 176),
           children: [
             _DateRow(date: _date, text: text),
-            const SizedBox(height: 14),
-            _ScanCard(
-              text: text,
-              busy: _scanning,
-              error: _scanError,
-              provider: _scanProvider,
-              onPickGallery: () => _pickAndScan(fromCamera: false),
-              onCapture: () => _pickAndScan(fromCamera: true),
-            ),
+            if (_scanning || _scanError != null || _scanProvider != null) ...[
+              const SizedBox(height: 10),
+              _ScanStatusLine(
+                text: text,
+                busy: _scanning,
+                error: _scanError,
+                provider: _scanProvider,
+              ),
+            ],
             const SizedBox(height: 16),
             _InventoryInlinePicker(
               items: app.inventoryItems,
@@ -776,124 +783,117 @@ class _DateRow extends StatelessWidget {
   }
 }
 
-class _ScanCard extends StatelessWidget {
-  const _ScanCard({
+class _ScanStatusLine extends StatelessWidget {
+  const _ScanStatusLine({
     required this.text,
     required this.busy,
     required this.error,
     required this.provider,
-    required this.onPickGallery,
-    required this.onCapture,
   });
 
   final AppStrings text;
   final bool busy;
   final String? error;
   final String? provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = busy
+        ? text.scanningReceipt
+        : error ??
+              (provider == null
+                  ? ''
+                  : text.isBn
+                  ? 'AI ($provider) সফলভাবে পড়েছে'
+                  : 'AI ($provider) read it');
+    if (message.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: PosColors.primarySoft,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: PosColors.primary.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        children: [
+          if (busy)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Icon(
+              error == null
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.error_outline_rounded,
+              size: 18,
+              color: PosColors.primaryDark,
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TfText(
+              message,
+              style: const TextStyle(
+                color: PosColors.primaryDark,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScanFloatingActions extends StatelessWidget {
+  const _ScanFloatingActions({
+    required this.busy,
+    required this.text,
+    required this.onPickGallery,
+    required this.onCapture,
+  });
+
+  final bool busy;
+  final AppStrings text;
   final VoidCallback onPickGallery;
   final VoidCallback onCapture;
 
   @override
   Widget build(BuildContext context) {
-    return TfCard(
-      color: PosColors.primarySoft,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final width = MediaQuery.sizeOf(context).width;
+    return SizedBox(
+      width: width - 32,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.document_scanner_outlined,
-                color: PosColors.primaryDark,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TfText(
-                  text.scanSupplierBill,
-                  style: TextStyle(
-                    color: PosColors.primaryDark,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
+          FloatingActionButton.small(
+            heroTag: 'stock-in-gallery-scan',
+            tooltip: text.isBn ? 'গ্যালারি থেকে স্ক্যান' : 'Scan from gallery',
+            onPressed: busy ? null : onPickGallery,
+            backgroundColor: PosColors.surface,
+            foregroundColor: PosColors.primaryDark,
+            child: const Icon(Icons.photo_library_outlined),
           ),
-          const SizedBox(height: 4),
-          TfText(
-            text.aiReadsItemsQtyPrices,
-            style: TextStyle(
-              color: PosColors.primaryDark.withValues(alpha: 0.7),
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-            ),
+          const Spacer(),
+          FloatingActionButton(
+            heroTag: 'stock-in-camera-scan',
+            tooltip: text.isBn ? 'ক্যামেরা স্ক্যান' : 'Scan with camera',
+            onPressed: busy ? null : onCapture,
+            backgroundColor: PosColors.primary,
+            foregroundColor: PosColors.primaryDark,
+            child: busy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: PosColors.primaryDark,
+                    ),
+                  )
+                : const Icon(Icons.photo_camera_rounded),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TfButton(
-                  onPressed: busy ? null : onCapture,
-                  icon: Icons.photo_camera_rounded,
-                  label: text.isBn ? 'ক্যামেরা' : 'Camera',
-                  variant: TfButtonVariant.dark,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TfButton(
-                  onPressed: busy ? null : onPickGallery,
-                  icon: Icons.photo_library_outlined,
-                  label: text.isBn ? 'গ্যালারি' : 'Gallery',
-                  variant: TfButtonVariant.paper,
-                ),
-              ),
-            ],
-          ),
-          if (busy) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 8),
-                TfText(
-                  text.scanningReceipt,
-                  style: TextStyle(
-                    color: PosColors.primaryDark,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (error != null && !busy) ...[
-            const SizedBox(height: 10),
-            TfText(
-              error!,
-              style: TextStyle(
-                color: PosColors.primaryDark,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-          if (provider != null && error == null && !busy) ...[
-            const SizedBox(height: 6),
-            TfText(
-              text.isBn
-                  ? 'AI ($provider) সফলভাবে পড়েছে'
-                  : 'AI ($provider) read it',
-              style: TextStyle(
-                color: PosColors.primaryDark.withValues(alpha: 0.7),
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
         ],
       ),
     );

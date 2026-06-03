@@ -153,6 +153,13 @@ function makeOverrides(C) {
           fontFamily: langFont(lang, C.body), fontSize: 13, fontWeight: 700, textDecoration: 'none',
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         }}>{t('langToggle', lang)}</a>
+        {info?.logoUrl && (
+          <img src={info.logoUrl} alt="" aria-hidden="true" style={{
+            position: 'absolute', top: 'calc(env(safe-area-inset-top) + 16px)', left: 16, zIndex: 4,
+            width: 54, height: 54, objectFit: 'cover', borderRadius: C.langRadius,
+            background: C.langBg, border: `1px solid ${C.line}`, boxShadow: '0 8px 28px rgba(0,0,0,.28)',
+          }} />
+        )}
         <div style={{
           position: 'absolute', inset: 0, zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center',
           padding: 'calc(env(safe-area-inset-top) + 72px) 24px calc(env(safe-area-inset-bottom) + 26px)', textAlign: 'center',

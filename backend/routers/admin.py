@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 import requests as http_requests
@@ -175,7 +175,7 @@ def _public_menu_url(slug: str | None) -> str | None:
 
 def _media_urls_for_wipe(outlet: Outlet, menu_items: list[MenuItem]) -> list[str]:
     urls: list[str] = []
-    for value in [outlet.banner_url, outlet.video_url]:
+    for value in [outlet.banner_url, outlet.logo_url, outlet.video_url]:
         if value:
             urls.append(value)
     for value in outlet.gallery_images or []:
@@ -196,7 +196,11 @@ def _delete_media_for_outlet(outlet_id: str, urls: list[str]) -> dict[str, int]:
     for url in urls:
         storage.delete_by_url(url)
         deleted_urls += 1
-    for prefix in (f"hero_media/{outlet_id}/images", f"hero_media/{outlet_id}/video"):
+    for prefix in (
+        f"hero_media/{outlet_id}/images",
+        f"hero_media/{outlet_id}/logo",
+        f"hero_media/{outlet_id}/video",
+    ):
         for key in storage.list_keys(prefix):
             storage.delete_key(key)
             deleted_keys += 1
@@ -275,11 +279,12 @@ async def admin_app_access(
 
 @router.get("/admin/app-update")
 async def admin_app_update(
+    app: str = Query("admin"),
     payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
     _ = payload
-    return ok(await get_app_update(db))
+    return ok(await get_app_update(db, app=app))
 
 
 async def _current_account(

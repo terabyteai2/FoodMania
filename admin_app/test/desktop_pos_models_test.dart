@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_pos/src/features/desktop_pos/widgets/menu_line_customizer.dart';
 import 'package:local_pos/src/models/desktop_pos.dart';
+import 'package:local_pos/src/models/menu_item.dart';
 import 'package:local_pos/src/models/order_item.dart';
 import 'package:local_pos/src/models/order_model.dart';
 import 'package:local_pos/src/models/order_payment_method.dart';
@@ -32,6 +34,68 @@ void main() {
     expect(settings.floorLayout.single.name, 'Main');
     expect(settings.floorLayout.single.tables, isEmpty);
   });
+
+  test('menu customizer is required only for configured choices', () {
+    final plain = _menuItem();
+    final withOption = _menuItem(tags: const ['option:Large:30']);
+    final withSizeAlias = _menuItem(tags: const ['size:Medium:10']);
+    final withAddOn = _menuItem(tags: const ['addon:20:Cheese']);
+
+    expect(desktopMenuNeedsCustomization(plain), isFalse);
+    expect(desktopMenuOptionsFor(plain).single.label, isEmpty);
+    expect(desktopMenuNeedsCustomization(withOption), isTrue);
+    expect(
+      desktopConfiguredMenuOptionsFor(withSizeAlias).single.label,
+      'Medium',
+    );
+    expect(desktopMenuNeedsCustomization(withAddOn), isTrue);
+  });
+
+  test('menu extras round trip size options as order variants', () {
+    final extras = MenuItemExtras.fromTags(const [
+      'option:Large:30',
+      'size:Medium:10',
+      'addon:15:Cheese',
+    ]);
+
+    expect(extras.options.map((option) => option.name).toList(), [
+      'Large',
+      'Medium',
+    ]);
+    expect(extras.options.map((option) => option.priceDelta).toList(), [
+      30,
+      10,
+    ]);
+    expect(extras.toTags(), [
+      'option:Large:30',
+      'option:Medium:10',
+      'addon:15:Cheese',
+    ]);
+  });
+
+  test(
+    'menu customizer selection carries price and suffix into request item',
+    () {
+      final item = _menuItem(
+        tags: const ['option:Large:30', 'addon:15:Cheese'],
+      );
+      final option = desktopConfiguredMenuOptionsFor(item).single;
+      final addOn = item.extras.addOns.single;
+      final selection = DesktopMenuLineSelection(
+        item: item,
+        option: option,
+        addOns: [addOn],
+        qty: 2,
+      );
+
+      final request = selection.toRequestItem();
+
+      expect(selection.unitPrice, 145);
+      expect(selection.lineTotal, 290);
+      expect(request.unitPrice, 145);
+      expect(request.nameSuffix, 'Large, Cheese');
+    },
+  );
 
   test('desktop order snapshots survive SQLite map round trip', () {
     final now = DateTime(2026, 6, 2, 12);
@@ -124,4 +188,19 @@ void main() {
     expect(decoded.coversByHour[13], 6);
     expect(decoded.auditCounts['refund'], 1);
   });
+}
+
+MenuItem _menuItem({List<String> tags = const []}) {
+  final now = DateTime(2026, 6, 2, 12);
+  return MenuItem(
+    id: 'menu-1',
+    name: 'Burger',
+    description: '',
+    category: 'Food',
+    price: 100,
+    isAvailable: true,
+    tags: tags,
+    createdAt: now,
+    updatedAt: now,
+  );
 }

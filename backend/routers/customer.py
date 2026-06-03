@@ -377,6 +377,7 @@ async def get_outlet_info(
         "restaurantName": outlet.restaurant.name if outlet.restaurant else "",
         "outletName": outlet.name,
         "bannerUrl": _rewrite_upload_url(request, outlet.banner_url),
+        "logoUrl": _rewrite_upload_url(request, outlet.logo_url),
         "videoUrl": _rewrite_upload_url(request, outlet.video_url),
         "deliveryCharge": float(outlet.delivery_charge or 0),
         "galleryImages": gallery,

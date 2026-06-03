@@ -828,12 +828,14 @@ class _OrderScreenState extends State<OrderScreen> {
     );
     if (picked == null) return;
     if (!mounted) return;
-    final selection = await showDesktopMenuLineCustomizer(
-      context,
-      item: picked,
-      isBn: widget.chrome.isBn,
-    );
-    if (selection == null || !mounted) return;
+    final selections = desktopMenuNeedsCustomization(picked)
+        ? await showDesktopMenuLineCustomizerLines(
+            context,
+            item: picked,
+            isBn: widget.chrome.isBn,
+          )
+        : [desktopRegularMenuLine(picked)];
+    if (selections == null || selections.isEmpty || !mounted) return;
     setState(() => _busy = true);
     try {
       final requests = <OrderRequestItem>[
@@ -849,7 +851,9 @@ class _OrderScreenState extends State<OrderScreen> {
             nameBnOverride: item.nameBn,
           ),
       ];
-      requests.add(selection.toRequestItem());
+      requests.addAll([
+        for (final selection in selections) selection.toRequestItem(),
+      ]);
       await app.updateOrderItems(order.id, requests);
       final updated = await app.database.getOrderById(order.id);
       if (updated != null) widget.onChanged(updated);

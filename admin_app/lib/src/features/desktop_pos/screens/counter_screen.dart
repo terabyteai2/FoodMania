@@ -274,7 +274,9 @@ class _CounterScreenState extends State<CounterScreen> {
         .fold<int>(0, (sum, line) => sum + line.qty);
     final on = qty > 0;
     final hasAddOns = item.extras.addOns.isNotEmpty;
-    final tag = hasAddOns ? tr('ADD-ON', 'অ্যাড-অন') : tr('SIZE', 'সাইজ');
+    final hasOptions = desktopConfiguredMenuOptionsFor(item).isNotEmpty;
+    final hasChoices = hasAddOns || hasOptions;
+    final tag = hasAddOns ? tr('ADD-ON', 'অ্যাড-অন') : tr('OPTION', 'অপশন');
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -298,26 +300,27 @@ class _CounterScreenState extends State<CounterScreen> {
                     children: [
                       DesktopMenuThumb(item: item, size: 40, radius: Pc.rSm),
                       const Spacer(),
-                      Container(
-                        constraints: const BoxConstraints(maxWidth: 86),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: hasAddOns ? Pc.goodSoft : Pc.surfaceAlt,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          tag.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Pc.mono(
-                            9.5,
-                            color: hasAddOns ? Pc.good : Pc.textTer,
+                      if (hasChoices)
+                        Container(
+                          constraints: const BoxConstraints(maxWidth: 86),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: hasAddOns ? Pc.goodSoft : Pc.surfaceAlt,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            tag.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Pc.mono(
+                              9.5,
+                              color: hasAddOns ? Pc.good : Pc.textTer,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   Column(
@@ -773,24 +776,28 @@ class _CounterScreenState extends State<CounterScreen> {
   };
 
   Future<void> _addMenuItem(MenuItem item) async {
-    final selection = await showDesktopMenuLineCustomizer(
-      context,
-      item: item,
-      isBn: widget.chrome.isBn,
-    );
-    if (selection == null || !mounted) return;
+    final selections = desktopMenuNeedsCustomization(item)
+        ? await showDesktopMenuLineCustomizerLines(
+            context,
+            item: item,
+            isBn: widget.chrome.isBn,
+          )
+        : [desktopRegularMenuLine(item)];
+    if (selections == null || selections.isEmpty || !mounted) return;
     setState(() {
-      final index = _cartLines.indexWhere(
-        (line) => line.lineKey == selection.lineKey,
-      );
-      if (index >= 0) {
-        final current = _cartLines[index];
-        _cartLines[index] = _copyLine(
-          current,
-          qty: current.qty + selection.qty,
+      for (final selection in selections) {
+        final index = _cartLines.indexWhere(
+          (line) => line.lineKey == selection.lineKey,
         );
-      } else {
-        _cartLines.add(selection);
+        if (index >= 0) {
+          final current = _cartLines[index];
+          _cartLines[index] = _copyLine(
+            current,
+            qty: current.qty + selection.qty,
+          );
+        } else {
+          _cartLines.add(selection);
+        }
       }
     });
   }

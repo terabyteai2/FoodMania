@@ -96,6 +96,7 @@ async def _ensure_platform_columns(conn) -> None:
             "ALTER TABLE outlets ADD COLUMN status VARCHAR DEFAULT 'active'",
             "ALTER TABLE outlets ADD COLUMN public_slug VARCHAR",
             "ALTER TABLE outlets ADD COLUMN notes TEXT",
+            "ALTER TABLE outlets ADD COLUMN logo_url TEXT",
             "ALTER TABLE outlets ADD COLUMN table_count INTEGER DEFAULT 10",
             "ALTER TABLE uddoktapay_sessions ADD COLUMN outlet_id VARCHAR",
         ]
@@ -114,6 +115,7 @@ async def _ensure_platform_columns(conn) -> None:
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS public_slug VARCHAR",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_outlets_public_slug ON outlets(public_slug)",
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS notes TEXT",
+        "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS logo_url TEXT",
         "ALTER TABLE outlets ADD COLUMN IF NOT EXISTS table_count INTEGER DEFAULT 10",
         "ALTER TABLE uddoktapay_sessions ADD COLUMN IF NOT EXISTS outlet_id VARCHAR",
     ]
@@ -394,6 +396,7 @@ async def seed_system_config() -> None:
         "maintenance_mode": "false",
         "support_email": "",
         "admin_app_update": "",
+        "terminal_app_update": "",
         "admin_blocking_notice": "",
     }
     async with AsyncSessionLocal() as db:

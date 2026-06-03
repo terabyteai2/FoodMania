@@ -38,6 +38,7 @@ class Outlet(Base):
     public_slug: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     banner_url: Mapped[str | None] = mapped_column(Text)
+    logo_url: Mapped[str | None] = mapped_column(Text)
     video_url: Mapped[str | None] = mapped_column(Text)
     gallery_images: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
     menu_theme: Mapped[str] = mapped_column(String, default="sultans_hearth")

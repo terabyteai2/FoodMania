@@ -57,6 +57,7 @@ flutter:
     - assets/brand/
     - assets/brand/splash.jpeg
     - assets/sounds/
+    - assets/menu_placeholders/
 
   fonts:
     - family: Inter

@@ -208,6 +208,7 @@ const DEMO_INFO = {
   restaurantName: 'Helium',
   outletName: 'Main Outlet',
   bannerUrl: null,
+  logoUrl: null,
   galleryImages: [],
   videoUrl: null,
 }
@@ -782,7 +783,11 @@ function WelcomeScreen({ info, onEnter }) {
           fontFamily: T.display, fontSize: 56, color: T.amber, lineHeight: 1,
           boxShadow: '0 12px 40px rgba(255,181,71,.2)',
         }}>
-          {info?.restaurantName?.[0]?.toUpperCase() || 'R'}
+          {info?.logoUrl ? (
+            <img src={info.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 48 }} />
+          ) : (
+            info?.restaurantName?.[0]?.toUpperCase() || 'R'
+          )}
         </div>
 
         {/* Restaurant name */}

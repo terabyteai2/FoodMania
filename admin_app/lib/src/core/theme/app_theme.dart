@@ -15,15 +15,22 @@ class PosColors {
   static const Color primarySoft = Color(0xFFE8D8F0);  // accentSoft — selected backgrounds
   static const Color primaryWash = Color(0xFFF4EDF8);  // accentWash — hover tints only
   static const Color accentInk = Color(0xFFFFFFFF);    // text/icons on accent surfaces
+  static const Color accentSoftInk = Color(0xFF16101E); // text on accentSoft (= ink)
+  static const Color accentOnInk = Color(0xFFE8D8F0);   // accentSoft used as accent-on-dark
 
   // Ink — Violet-black (tonally related to accent)
   static const Color primaryDark = Color(0xFF16101E);  // ink — primary text, headings
   static const Color inkSoft = Color(0xFF2D2438);      // inkSoft — secondary emphasis
+  static const Color onInk = Color(0xFFFFFFFF);        // text on dark background
+  static const Color onInkSec = Color(0xB8FFFFFF);     // white 0.72
+  static const Color onInkTer = Color(0x7AFFFFFF);     // white 0.48
 
   // Scaffold — Neutral-cool violet base
   static const Color background = Color(0xFFF8F8FA);   // paper — scaffold background
   static const Color surface = Color(0xFFFFFFFF);      // surface — cards, sheets, inputs
   static const Color surfaceSunk = Color(0xFFF1F1F5);  // surfaceSunk — search wells, fills
+  static const Color track = Color(0xFFF1F1F5);       // track fill
+  static const Color trackInk = Color(0x24FFFFFF);     // rgba(255,255,255,0.14)
 
   // Secondary text
   static const Color muted = Color(0xFF635B6E);        // muted — secondary text, helpers
@@ -32,16 +39,23 @@ class PosColors {
   // Borders
   static const Color line = Color(0xFFE2DDE8);         // line — 0.5px default borders
   static const Color lineStrong = Color(0xFFCAC3D4);   // lineStrong — active/focused
+  static const Color divider = Color(0xFFE2DDE8);
 
   // Signals — functional only, never decorative
   static const Color success = Color(0xFF15803D);
   static const Color successSoft = Color(0xFFDCFCE7);
+  static const Color good = success;
+  static const Color goodSoft = successSoft;
   static const Color warning = Color(0xFFB45309);
   static const Color warningSoft = Color(0xFFFEF3C7);
+  static const Color warn = warning;
+  static const Color warnSoft = warningSoft;
   static const Color danger = Color(0xFF7F1D1D);
   static const Color dangerSoft = Color(0xFFFEE2E2);
   static const Color urgent = Color(0xFF9A3412);       // late orders, expedite signals
   static const Color urgentSoft = Color(0xFFFFEDD5);
+  static const Color late = urgent;
+  static const Color lateSoft = urgentSoft;
 
   // ---------------------------------------------------------------------------
   // Aliases — kept for backward compatibility with existing screens
@@ -53,6 +67,9 @@ class PosColors {
   static const Color accentWash = primaryWash;
   static const Color slate = primaryDark;          // ink alias
   static const Color slateSoft = inkSoft;
+  static const Color text = primaryDark;
+  static const Color textSec = muted;
+  static const Color textTer = mutedSoft;
   static const Color primaryGlow = primary;
   static const Color surfaceWarm = background;
   static const Color surfaceTinted = surface;

@@ -1,4 +1,5 @@
 import base64
+import binascii
 import json
 import logging
 import uuid
@@ -23,6 +24,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 MAX_MENU_SCAN_PAGES = 6
 MAX_MENU_SCAN_PAGE_BYTES = 1200 * 1024
+MANAGER_SCAN_ROLES = frozenset({"manager", "owner", "admin", "staff"})
 
 ALLOWED_MENU_THEMES = frozenset(
     {
@@ -157,9 +159,10 @@ async def _require_manager_scan_access(
     account = (
         await db.execute(select(AdminAccount).where(AdminAccount.id == account_id))
     ).scalar_one_or_none()
-    if account is None or not account.is_active or account.outlet_id != outlet_id:
+    if account is None or not account.is_active or str(account.outlet_id) != outlet_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Manager account is not active.")
-    if account.role != "manager":
+    role = (account.role or "manager").strip().lower()
+    if role not in MANAGER_SCAN_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
 
 
@@ -384,15 +387,17 @@ async def scan_menu_pages(
     )
 
 
-# ── Hero media endpoints (welcome-screen video + menu-page slider images) ─────
+# ── Hero media endpoints (logo + welcome video + menu-page slider images) ─────
 #
 # Files are stored under:
 #   hero_media/{outlet_id}/images/{uuid}.{ext}   ← menu-page slider
+#   hero_media/{outlet_id}/logo/{uuid}.{ext}     ← restaurant logo
 #   hero_media/{outlet_id}/video/{uuid}.{ext}    ← welcome-screen video
 
 
 class OutletMediaPatch(pydantic.BaseModel):
     videoUrl: str | None = None
+    logoUrl: str | None = None
     menuTheme: str | None = None
     deliveryCharge: float | None = pydantic.Field(default=None, ge=0, le=100000)
 
@@ -401,8 +406,37 @@ def _hero_images_prefix(outlet_id: str) -> str:
     return f"hero_media/{outlet_id}/images"
 
 
+def _hero_logo_prefix(outlet_id: str) -> str:
+    return f"hero_media/{outlet_id}/logo"
+
+
 def _hero_video_prefix(outlet_id: str) -> str:
     return f"hero_media/{outlet_id}/video"
+
+
+def _data_url_image_parts(data_url: str) -> tuple[bytes, str]:
+    try:
+        header, encoded = data_url.split(",", 1)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid dataUrl format.",
+        ) from exc
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image data.",
+        ) from exc
+    lower = header.lower()
+    if "png" in lower:
+        ext = "png"
+    elif "webp" in lower:
+        ext = "webp"
+    else:
+        ext = "jpg"
+    return image_bytes, ext
 
 
 @router.post("/outlets/{outlet_id}/images")
@@ -422,13 +456,7 @@ async def upload_outlet_image(
     if len(gallery) >= 5:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Maximum 5 hero images allowed.")
 
-    try:
-        header, encoded = body.dataUrl.split(",", 1)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid dataUrl format.")
-
-    image_bytes = base64.b64decode(encoded)
-    ext = "png" if "png" in header else "jpg"
+    image_bytes, ext = _data_url_image_parts(body.dataUrl)
     filename = f"{uuid.uuid4()}.{ext}"
     public_url = storage.save(f"{_hero_images_prefix(outlet_id)}/{filename}", image_bytes, request)
     gallery.append(public_url)
@@ -460,6 +488,37 @@ async def delete_outlet_image(
     storage.delete_by_url(removed_url)
 
     return ok({"galleryImages": gallery})
+
+
+@router.post("/outlets/{outlet_id}/logo")
+async def upload_outlet_logo(
+    outlet_id: str,
+    body: ImageUploadRequest,
+    request: Request,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one_or_none()
+    if outlet is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
+
+    image_bytes, ext = _data_url_image_parts(body.dataUrl)
+    prefix = _hero_logo_prefix(outlet_id)
+    new_key = f"{prefix}/{uuid.uuid4()}.{ext}"
+    public_url = storage.save(new_key, image_bytes, request)
+
+    previous_url = outlet.logo_url
+    outlet.logo_url = public_url
+    await db.commit()
+
+    for old_key in storage.list_keys(prefix):
+        if old_key != new_key:
+            storage.delete_key(old_key)
+    if previous_url and previous_url != public_url:
+        storage.delete_by_url(previous_url)
+
+    return ok({"logoUrl": public_url})
 
 
 @router.post("/outlets/{outlet_id}/video")
@@ -514,9 +573,13 @@ async def update_outlet_media(
 
     fields_set = body.model_fields_set
     previous_url = outlet.video_url
+    previous_logo_url = outlet.logo_url
     video_changed = "videoUrl" in fields_set
+    logo_changed = "logoUrl" in fields_set
     if video_changed:
         outlet.video_url = body.videoUrl
+    if logo_changed:
+        outlet.logo_url = body.logoUrl
 
     if "menuTheme" in fields_set:
         outlet.menu_theme = _normalize_menu_theme(body.menuTheme)
@@ -528,9 +591,12 @@ async def update_outlet_media(
 
     if video_changed and previous_url and previous_url != body.videoUrl:
         storage.delete_by_url(previous_url)
+    if logo_changed and previous_logo_url and previous_logo_url != body.logoUrl:
+        storage.delete_by_url(previous_logo_url)
 
     return ok({
         "videoUrl": outlet.video_url,
+        "logoUrl": outlet.logo_url,
         "menuTheme": outlet.menu_theme if outlet.menu_theme in ALLOWED_MENU_THEMES else DEFAULT_MENU_THEME,
         "deliveryCharge": float(outlet.delivery_charge or 0),
     })

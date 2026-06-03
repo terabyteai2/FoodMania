@@ -1,0 +1,915 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'app_controller.dart';
+import 'app_scope.dart';
+import 'core/localization/app_strings.dart';
+import 'core/theme/app_theme.dart';
+import 'core/widgets/notification_center.dart';
+import 'core/widgets/tf_design_system.dart';
+import 'models/app_update_info.dart';
+import 'models/pos_notification.dart';
+import 'features/auth/staff_invite_screen.dart';
+import 'features/menu/menu_management_screen.dart';
+import 'features/onboarding/subscription_screen.dart';
+import 'features/orders/orders_screen.dart';
+import 'features/settings/settings_screen.dart';
+import 'features/setup/tenant_setup_screen.dart';
+import 'features/splash/mode_intro_screen.dart';
+import 'features/splash/splash_screen.dart';
+import 'features/system/admin_blocking_notice_screen.dart';
+import 'features/terminal/terminal_home_screen.dart';
+
+class LocalPosApp extends StatefulWidget {
+  const LocalPosApp({super.key});
+
+  @override
+  State<LocalPosApp> createState() => _LocalPosAppState();
+}
+
+class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
+  late final PosAppController _controller;
+  late final Future<void> _bootFuture;
+  bool _showSplash = true;
+  bool _showIntro = false;
+  int _initialShellIndex = _homeTabIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _controller = PosAppController();
+    _bootFuture = _controller.initialize();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _controller.onResumed();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _controller.onPaused();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppScope(
+      controller: _controller,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final uiScale = _controller.uiScale;
+          final text = _controller.strings;
+          PosColors.setTone(PosThemeTone.light);
+          return MaterialApp(
+            title: text.appTitle,
+            debugShowCheckedModeBanner: false,
+            locale: _controller.language.locale,
+            supportedLocales: AppLanguage.values
+                .map((language) => language.locale)
+                .toList(growable: false),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: AppTheme.light(uiScale: uiScale),
+            themeMode: ThemeMode.light,
+            builder: (context, child) {
+              final mediaQuery = MediaQuery.of(context);
+              return MediaQuery(
+                data: mediaQuery.copyWith(
+                  textScaler: mediaQuery.textScaler.clamp(
+                    minScaleFactor: 1.0,
+                    maxScaleFactor: 1.16,
+                  ),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
+            home: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _home(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _onIntroFinished(String? nextStep) {
+    setState(() {
+      _showIntro = false;
+      _initialShellIndex = _homeTabIndex;
+    });
+  }
+
+  Widget _home() {
+    if (_showSplash) {
+      return SplashScreen(
+        bootFuture: _bootFuture,
+        onFinished: () {
+          setState(() {
+            _showSplash = false;
+            _showIntro = !_controller.hasSeenIntro;
+            _initialShellIndex = _homeTabIndex;
+          });
+        },
+      );
+    }
+    final blockingNotice = _controller.adminBlockingNotice;
+    if (blockingNotice?.isBlocking == true) {
+      return AdminBlockingNoticeScreen(
+        key: const ValueKey('admin-blocking-notice-screen'),
+        notice: blockingNotice!,
+        refreshing: _controller.adminBlockingNoticeRefreshing,
+        error: _controller.adminBlockingNoticeError,
+        onRetry: _controller.refreshAdminBlockingNotice,
+      );
+    }
+    if (_controller.pendingStaffInvite != null) {
+      return StaffInviteScreen(
+        onFinished: () => setState(() => _initialShellIndex = _homeTabIndex),
+      );
+    }
+    if (_showIntro) {
+      return ModeIntroScreen(onFinished: _onIntroFinished);
+    }
+    if (!_controller.isLoggedIn) {
+      final signupToken = _controller.phoneSignupToken?.trim() ?? '';
+      if (signupToken.isNotEmpty) {
+        return TenantSetupScreen(
+          onProvisioned: () {
+            setState(() => _initialShellIndex = _homeTabIndex);
+          },
+        );
+      }
+      return ModeIntroScreen(onFinished: _onIntroFinished);
+    }
+    if (!_controller.isTenantReady) {
+      return TenantSetupScreen(
+        onProvisioned: () {
+          setState(() => _initialShellIndex = _homeTabIndex);
+        },
+      );
+    }
+    if (_controller.isManager &&
+        (_controller.mustCompleteOnboardingPayment ||
+            _controller.subscriptionState != 'paid')) {
+      return SubscriptionScreen(
+        onFinished: () {
+          setState(() => _initialShellIndex = _homeTabIndex);
+        },
+      );
+    }
+    if (_controller.pendingOnboardingLanding) {
+      _initialShellIndex = _homeTabIndex;
+    }
+    void mounted() {
+      if (_controller.pendingOnboardingLanding) {
+        _controller.consumeOnboardingLanding();
+      }
+    }
+
+    return MainShell(initialIndex: _initialShellIndex, onMounted: mounted);
+  }
+
+  static const int _homeTabIndex = 2;
+}
+
+enum _AppTab { orders, menu, home, settings }
+
+const _terminalTabOrder = <_AppTab>[
+  _AppTab.orders,
+  _AppTab.menu,
+  _AppTab.home,
+  _AppTab.settings,
+];
+
+class MainShell extends StatefulWidget {
+  const MainShell({required this.initialIndex, this.onMounted, super.key});
+
+  final int initialIndex;
+  final VoidCallback? onMounted;
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  late _AppTab _selected;
+  String? _lastShownNotificationKey;
+  String? _pendingNotificationToastKey;
+  Timer? _notificationToastDebounce;
+  int? _lastShownAppUpdateVersionCode;
+  bool _appUpdateDialogShowing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final vi = widget.initialIndex.clamp(0, _terminalTabOrder.length - 1);
+    _selected = _terminalTabOrder[vi];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppScope.of(context).systemNotifications.requestNotificationAccess();
+      widget.onMounted?.call();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant MainShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialIndex != widget.initialIndex) {
+      final vi = widget.initialIndex.clamp(0, _terminalTabOrder.length - 1);
+      _selected = _terminalTabOrder[vi];
+    }
+  }
+
+  @override
+  void dispose() {
+    _notificationToastDebounce?.cancel();
+    super.dispose();
+  }
+
+  _Destination _destinationFor(_AppTab tab) {
+    return switch (tab) {
+      _AppTab.orders => _Destination(
+        'Orders',
+        'অর্ডার',
+        Icons.receipt_long_outlined,
+        Icons.receipt_long,
+      ),
+      _AppTab.menu => _Destination(
+        'Menu',
+        'মেনু',
+        Icons.restaurant_menu_outlined,
+        Icons.restaurant_menu,
+      ),
+      _AppTab.home => _Destination(
+        'Home',
+        'হোম',
+        Icons.home_outlined,
+        Icons.home_rounded,
+      ),
+      _AppTab.settings => _Destination(
+        'More',
+        'আরও',
+        Icons.settings_outlined,
+        Icons.settings_rounded,
+      ),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final tabOrder = _terminalTabOrder;
+    if (!tabOrder.contains(_selected)) {
+      _selected = _AppTab.home;
+    }
+    _maybeShowNotification(app);
+    _maybeShowAppUpdatePrompt(app);
+
+    void goToOrders() => _selectTab(_AppTab.orders);
+    void goToMenu() => _selectTab(_AppTab.menu);
+    final pageBuilders = <WidgetBuilder>[
+      (_) => OrdersScreen(onNavigateToTarget: _navigateNotificationTarget),
+      (_) => MenuManagementScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+      (_) => TerminalHomeScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToMenu: goToMenu,
+        onNavigateToSettings: () => _selectTab(_AppTab.settings),
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+      (_) => SettingsScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+    ];
+    final visualIndex = tabOrder
+        .indexOf(_selected)
+        .clamp(0, tabOrder.length - 1);
+    final body = _LazyIndexedStack(index: visualIndex, builders: pageBuilders);
+    final destinations = tabOrder.map(_destinationFor).toList(growable: false);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useRail = constraints.maxWidth >= 760;
+        if (!useRail) {
+          return Scaffold(
+            backgroundColor: PosColors.background,
+            body: body,
+            bottomNavigationBar: _FloatingBottomNav(
+              destinations: destinations,
+              selectedIndex: visualIndex,
+              onChanged: _setIndex,
+            ),
+          );
+        }
+
+        final extended = constraints.maxWidth >= 1050;
+        return Scaffold(
+          body: Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: PosColors.surface,
+                  border: Border(right: BorderSide(color: PosColors.line)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 8,
+                      offset: Offset(2, 0),
+                    ),
+                  ],
+                ),
+                child: NavigationRail(
+                  selectedIndex: visualIndex,
+                  onDestinationSelected: _setIndex,
+                  extended: extended,
+                  minExtendedWidth: 232,
+                  groupAlignment: -0.86,
+                  leading: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 22, 14, 28),
+                    child: _RailLogo(extended: extended),
+                  ),
+                  trailing: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 18, 12, 22),
+                    child: _RailFooter(extended: extended),
+                  ),
+                  destinations: destinations
+                      .map((destination) {
+                        return NavigationRailDestination(
+                          icon: Icon(destination.icon),
+                          selectedIcon: Icon(destination.selectedIcon),
+                          label: Text(
+                            app.strings.isBn
+                                ? destination.bnLabel
+                                : destination.label,
+                          ),
+                        );
+                      })
+                      .toList(growable: false),
+                ),
+              ),
+              Expanded(child: body),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _setIndex(int vi) {
+    if (vi >= 0 && vi < _terminalTabOrder.length) {
+      setState(() => _selected = _terminalTabOrder[vi]);
+    }
+  }
+
+  void _selectTab(_AppTab tab) {
+    final vi = _terminalTabOrder.indexOf(tab);
+    if (vi >= 0) _setIndex(vi);
+  }
+
+  void _navigateNotificationTarget(PosNotificationTarget target) {
+    switch (target) {
+      case PosNotificationTarget.orders:
+        _selectTab(_AppTab.orders);
+        return;
+      case PosNotificationTarget.inventory:
+        _selectTab(_AppTab.home);
+        return;
+      case PosNotificationTarget.menu:
+        _selectTab(_AppTab.menu);
+        return;
+      case PosNotificationTarget.receiptPrinter:
+      case PosNotificationTarget.settings:
+        _selectTab(_AppTab.settings);
+        return;
+      case PosNotificationTarget.none:
+        return;
+    }
+  }
+
+  void _maybeShowNotification(PosAppController app) {
+    final unread = app.notifications
+        .where((notification) => !notification.isRead)
+        .toList(growable: false);
+    if (unread.isEmpty) return;
+    final latest = unread.first;
+    final alertKey = unread.length > 1
+        ? 'bulk:${unread.length}:${latest.id}'
+        : latest.orderId != null
+        ? '${latest.orderId}:${latest.type.name}'
+        : latest.id;
+    if (alertKey == _lastShownNotificationKey ||
+        alertKey == _pendingNotificationToastKey) {
+      return;
+    }
+
+    _pendingNotificationToastKey = alertKey;
+    _notificationToastDebounce?.cancel();
+    _notificationToastDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      _showPendingNotificationToast();
+    });
+  }
+
+  void _showPendingNotificationToast() {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final unread = app.notifications
+        .where((notification) => !notification.isRead)
+        .toList(growable: false);
+    if (unread.isEmpty) {
+      _pendingNotificationToastKey = null;
+      return;
+    }
+    final latest = unread.first;
+    final alertKey = unread.length > 1
+        ? 'bulk:${unread.length}:${latest.id}'
+        : latest.orderId != null
+        ? '${latest.orderId}:${latest.type.name}'
+        : latest.id;
+    if (alertKey == _lastShownNotificationKey) {
+      _pendingNotificationToastKey = null;
+      return;
+    }
+
+    _lastShownNotificationKey = alertKey;
+    _pendingNotificationToastKey = null;
+    showTopNotificationToast(
+      context,
+      title: unread.length > 1
+          ? text.notificationSummaryTitle(unread.length)
+          : latest.title,
+      body: unread.length > 1 ? text.notificationSummaryBody : latest.body,
+      onOpen: () {
+        if (unread.length > 1) {
+          showNotificationCenter(
+            context,
+            onNavigateToOrders: () => _selectTab(_AppTab.orders),
+            onNavigateToTarget: _navigateNotificationTarget,
+          );
+        } else {
+          app.markNotificationRead(latest.id);
+          _navigateNotificationTarget(latest.target);
+        }
+      },
+    );
+  }
+
+  void _maybeShowAppUpdatePrompt(PosAppController app) {
+    final update = app.pendingAppUpdate;
+    if (update == null || app.appUpdateBusy) return;
+    if (_appUpdateDialogShowing) return;
+    if (!update.required &&
+        _lastShownAppUpdateVersionCode == update.versionCode) {
+      return;
+    }
+    if (!update.required) {
+      _lastShownAppUpdateVersionCode = update.versionCode;
+    }
+    _appUpdateDialogShowing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || app.pendingAppUpdate?.versionCode != update.versionCode) {
+        _appUpdateDialogShowing = false;
+        return;
+      }
+      try {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: !update.required,
+          builder: (dialogContext) => PopScope(
+            canPop: !update.required,
+            child: _AppUpdateDialog(update: update),
+          ),
+        );
+      } finally {
+        if (mounted) {
+          _appUpdateDialogShowing = false;
+        }
+      }
+    });
+  }
+}
+
+class _AppUpdateDialog extends StatefulWidget {
+  const _AppUpdateDialog({required this.update});
+
+  final AppUpdateInfo update;
+
+  @override
+  State<_AppUpdateDialog> createState() => _AppUpdateDialogState();
+}
+
+class _AppUpdateDialogState extends State<_AppUpdateDialog> {
+  bool _busy = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final releaseNotes = widget.update.releaseNotes.trim();
+    final status = app.appUpdateStatus.trim();
+    final error = _error ?? app.appUpdateError;
+
+    return AlertDialog(
+      backgroundColor: PosColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        side: BorderSide(color: PosColors.line),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(22, 20, 22, 8),
+      contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      title: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: PosColors.primarySoft,
+              borderRadius: BorderRadius.circular(PosRadii.sm),
+              border: Border.all(color: PosColors.line),
+            ),
+            child: const Icon(
+              Icons.system_update_alt_rounded,
+              color: PosColors.primaryDark,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TfText(
+              text.appUpdateAvailableTitle,
+              style: const TextStyle(
+                color: PosColors.slate,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TfText(
+            text.appUpdateAvailableMessage(widget.update.versionName),
+            style: const TextStyle(
+              color: PosColors.slate,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+          if (widget.update.required) ...[
+            const SizedBox(height: 10),
+            _UpdateBadge(text.appUpdateRequired),
+          ],
+          if (releaseNotes.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            TfText(
+              text.appUpdateReleaseNotes,
+              style: const TextStyle(
+                color: PosColors.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 5),
+            TfText(
+              releaseNotes,
+              style: const TextStyle(
+                color: PosColors.slate,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          TfText(
+            text.appUpdateAndroidNotice,
+            style: const TextStyle(
+              color: PosColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+          if (status.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            TfText(
+              status,
+              style: const TextStyle(
+                color: PosColors.primaryDark,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+          if (error != null && error.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            TfText(
+              error,
+              style: const TextStyle(
+                color: PosColors.danger,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        if (!widget.update.required)
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () async {
+                    await app.dismissAppUpdate(widget.update);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+            child: Text(text.later),
+          ),
+        FilledButton.icon(
+          onPressed: _busy
+              ? null
+              : () async {
+                  setState(() {
+                    _busy = true;
+                    _error = null;
+                  });
+                  await app.startAppUpdate(widget.update);
+                  if (!context.mounted) return;
+                  if (app.appUpdateError != null) {
+                    setState(() {
+                      _busy = false;
+                      _error = app.appUpdateError;
+                    });
+                    return;
+                  }
+                  Navigator.of(context).pop();
+                },
+          icon: _busy
+              ? const SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download_for_offline_outlined, size: 18),
+          label: Text(text.updateNow),
+        ),
+      ],
+    );
+  }
+}
+
+class _UpdateBadge extends StatelessWidget {
+  const _UpdateBadge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: PosColors.primarySoft,
+        borderRadius: BorderRadius.circular(PosRadii.xs),
+        border: Border.all(color: PosColors.line),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: PosColors.primaryDark,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+class _Destination {
+  _Destination(this.label, this.bnLabel, this.icon, this.selectedIcon);
+
+  final String label;
+  final String bnLabel;
+  final IconData icon;
+  final IconData selectedIcon;
+}
+
+class _RailLogo extends StatelessWidget {
+  const _RailLogo({required this.extended});
+
+  final bool extended;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final mark = Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        gradient: PosGradients.brand,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        boxShadow: PosShadows.glow,
+      ),
+      child: const Icon(Icons.point_of_sale_rounded, color: PosColors.slate),
+    );
+    if (!extended) return mark;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        mark,
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              text.appTitle,
+              style: const TextStyle(
+                color: PosColors.slate,
+                fontWeight: FontWeight.w500,
+                fontSize: 16.5,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(height: 2),
+            const Text(
+              'Terminal',
+              style: TextStyle(
+                color: PosColors.muted,
+                fontWeight: FontWeight.w500,
+                fontSize: 11,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _FloatingBottomNav extends StatelessWidget {
+  const _FloatingBottomNav({
+    required this.destinations,
+    required this.selectedIndex,
+    required this.onChanged,
+  });
+
+  final List<_Destination> destinations;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TfBottomNav(
+      activeIndex: selectedIndex,
+      onChanged: onChanged,
+      items: destinations
+          .map(
+            (destination) => TfBottomNavItem(
+              icon: destination.icon,
+              selectedIcon: destination.selectedIcon,
+              label: destination.label,
+              labelBn: destination.bnLabel,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+class _RailFooter extends StatelessWidget {
+  const _RailFooter({required this.extended});
+
+  final bool extended;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    if (!extended) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: PosColors.primarySoft,
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+          border: Border.all(color: PosColors.line),
+        ),
+        child: const Icon(
+          Icons.sync_rounded,
+          color: PosColors.primary,
+          size: 20,
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: PosColors.primarySoft,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.sync_rounded, color: PosColors.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  app.syncState.cloudConnected ? 'Synced' : 'Offline ready',
+                  style: const TextStyle(
+                    color: PosColors.primaryDark,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  app.outletName.trim().isEmpty
+                      ? 'Terminal POS'
+                      : app.outletName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: PosColors.muted,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LazyIndexedStack extends StatefulWidget {
+  const _LazyIndexedStack({required this.index, required this.builders});
+
+  final int index;
+  final List<WidgetBuilder> builders;
+
+  @override
+  State<_LazyIndexedStack> createState() => _LazyIndexedStackState();
+}
+
+class _LazyIndexedStackState extends State<_LazyIndexedStack> {
+  final Set<int> _visited = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _visited.add(widget.index);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LazyIndexedStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _visited.add(widget.index);
+    if (widget.builders.length != oldWidget.builders.length) {
+      _visited.removeWhere((i) => i >= widget.builders.length);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IndexedStack(
+      index: widget.index,
+      sizing: StackFit.expand,
+      children: [
+        for (var i = 0; i < widget.builders.length; i++)
+          _visited.contains(i)
+              ? widget.builders[i](context)
+              : const SizedBox.shrink(),
+      ],
+    );
+  }
+}

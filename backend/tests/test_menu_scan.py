@@ -1,13 +1,16 @@
 import json
 import logging
+import uuid
 
 import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from auth import get_current_device_payload
-from database import get_db
+from database import AsyncSessionLocal, create_tables, get_db
 from main import app
+from models import AdminAccount
 from routers import menu
 from schemas import MenuScanCandidate
 from services import menu_scan
@@ -329,6 +332,91 @@ async def test_menu_scan_route_requires_auth():
         )
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("stored_role", ["Manager ", "owner"])
+async def test_menu_scan_route_accepts_manager_access_variants(
+    monkeypatch,
+    stored_role,
+):
+    await create_tables()
+    suffix = uuid.uuid4()
+    server_id = f"scan-role-{suffix}"
+    email = f"scan-role-{suffix}@example.com"
+
+    async def fake_ocr(pages):
+        assert pages == [(b"image", "image/png")]
+        return ["Tea 50"]
+
+    async def fake_parse(page_texts):
+        assert page_texts == ["Tea 50"]
+        return menu_scan.MenuScanParseResult(
+            items=[
+                MenuScanCandidate(
+                    nameEn="Tea",
+                    nameBn="চা",
+                    descriptionEn="Fresh milk tea.",
+                    descriptionBn="তাজা দুধ চা।",
+                    categoryEn="Drinks",
+                    categoryBn="ড্রিংকস",
+                    price=50,
+                    isAvailable=True,
+                )
+            ],
+            provider="test",
+            warnings=[],
+        )
+
+    monkeypatch.setattr(menu, "extract_menu_page_texts", fake_ocr)
+    monkeypatch.setattr(menu, "parse_menu_text", fake_parse)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        boot = await client.post(
+            "/tenants/bootstrap",
+            json={
+                "serverId": server_id,
+                "restaurantName": "Scan Role",
+                "tableCount": 4,
+            },
+        )
+        outlet_id = boot.json()["data"]["outletId"]
+        await client.post(
+            "/admin/create",
+            json={
+                "outletId": outlet_id,
+                "email": email,
+                "username": email,
+                "password": "password",
+                "role": "manager",
+            },
+        )
+        async with AsyncSessionLocal() as db:
+            account = (
+                await db.execute(
+                    select(AdminAccount).where(AdminAccount.email == email)
+                )
+            ).scalar_one()
+            account.role = stored_role
+            await db.commit()
+        login = await client.post(
+            "/admin/login",
+            json={
+                "serverId": server_id,
+                "usernameOrEmail": email,
+                "password": "password",
+            },
+        )
+        token = login.json()["data"]["deviceToken"]
+        response = await client.post(
+            f"/outlets/{outlet_id}/menu/scan",
+            headers={"Authorization": f"Bearer {token}"},
+            files=[("files", ("menu.png", b"image", "image/png"))],
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["items"][0]["nameEn"] == "Tea"
 
 
 @pytest.mark.asyncio

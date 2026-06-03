@@ -25,6 +25,9 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Stock in'), findsOneWidget);
     expect(find.text('Scan a receipt or add items manually.'), findsOneWidget);
+    expect(find.text('Scan supplier bill'), findsNothing);
+    expect(find.byIcon(Icons.photo_camera_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
 
     controller.dispose();
   });

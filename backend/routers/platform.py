@@ -58,9 +58,12 @@ from subscription_service import (
     subscription_to_dict,
 )
 from services.app_update import (
+    apk_filename,
+    app_update_event_type,
     clear_app_update,
     extract_apk_version,
     get_app_update,
+    normalize_app_update_channel,
     promote_apk,
     save_apk_upload,
     set_app_update,
@@ -1226,6 +1229,7 @@ async def outlet_customer_info(
             "customerMenuUrl": _customer_menu_url(outlet),
             "publicSlug": outlet.public_slug,
             "bannerUrl": outlet.banner_url,
+            "logoUrl": outlet.logo_url,
             "videoUrl": outlet.video_url,
             "galleryImageCount": len(outlet.gallery_images or []),
             "menuItemCount": menu_count,
@@ -1430,31 +1434,35 @@ async def update_system_config(
 
 @router.get("/app-update")
 async def current_app_update(
+    app: str = Query("admin"),
     admin: PlatformAdmin = Depends(_require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ):
     _ = admin
-    return ok(await get_app_update(db))
+    return ok(await get_app_update(db, app=app))
 
 
 @router.post("/app-update")
 async def publish_app_update(
     body: PlatformAppUpdateRequest,
+    app: str = Query("admin"),
     admin: PlatformAdmin = Depends(_require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ):
     _ = admin
-    payload = await set_app_update(db, body)
+    channel = normalize_app_update_channel(app)
+    payload = await set_app_update(db, body, app=channel)
     await db.commit()
 
+    event_type = app_update_event_type(channel, enabled=True)
     outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
     for outlet_id in outlet_ids:
         await manager.broadcast(
             outlet_id,
-            {"type": "app_update_available", "data": payload},
+            {"type": event_type, "data": payload},
         )
 
-    return ok({**payload, "notifiedOutlets": len(outlet_ids)})
+    return ok({**payload, "app": channel, "notifiedOutlets": len(outlet_ids)})
 
 
 @router.post("/app-update/upload")
@@ -1464,6 +1472,7 @@ async def upload_app_update(
     versionCode: int | None = Form(None),
     releaseNotes: str | None = Form(None),
     required: bool = Form(True),
+    app: str = Query("admin"),
     admin: PlatformAdmin = Depends(_require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1473,7 +1482,8 @@ async def upload_app_update(
     (manual form fields are a fallback). Publish is rejected unless the new
     versionCode is higher than the currently-published one."""
     _ = admin
-    tmp = await save_apk_upload(file)
+    channel = normalize_app_update_channel(app)
+    tmp = await save_apk_upload(file, app=channel)
     try:
         validate_apk_file(tmp)
         detected_name, detected_code = extract_apk_version(tmp)
@@ -1487,7 +1497,7 @@ async def upload_app_update(
                     "Enter the version name and version code, then upload again."
                 ),
             )
-        current = await get_app_update(db)
+        current = await get_app_update(db, app=channel)
         current_code = int(current.get("versionCode") or 0) if current.get("enabled") else 0
         if final_code <= current_code:
             raise HTTPException(
@@ -1497,13 +1507,13 @@ async def upload_app_update(
                     f"currently published version ({current_code})."
                 ),
             )
-        promote_apk(tmp)
+        promote_apk(tmp, app=channel)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
 
     base = settings.BASE_URL.rstrip("/")
-    apk_url = f"{base}/app-download/app-release.apk?v={final_code}"
+    apk_url = f"{base}/app-download/{apk_filename(channel)}?v={final_code}"
     payload = await set_app_update(
         db,
         PlatformAppUpdateRequest(
@@ -1514,19 +1524,22 @@ async def upload_app_update(
             required=required,
             enabled=True,
         ),
+        app=channel,
     )
     await db.commit()
 
+    event_type = app_update_event_type(channel, enabled=True)
     outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
     for outlet_id in outlet_ids:
         await manager.broadcast(
             outlet_id,
-            {"type": "app_update_available", "data": payload},
+            {"type": event_type, "data": payload},
         )
 
     return ok(
         {
             **payload,
+            "app": channel,
             "notifiedOutlets": len(outlet_ids),
             "autoDetectedVersion": detected_code is not None,
         }
@@ -1535,21 +1548,24 @@ async def upload_app_update(
 
 @router.delete("/app-update")
 async def disable_app_update(
+    app: str = Query("admin"),
     admin: PlatformAdmin = Depends(_require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ):
     _ = admin
-    payload = await clear_app_update(db)
+    channel = normalize_app_update_channel(app)
+    payload = await clear_app_update(db, app=channel)
     await db.commit()
 
+    event_type = app_update_event_type(channel, enabled=False)
     outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
     for outlet_id in outlet_ids:
         await manager.broadcast(
             outlet_id,
-            {"type": "app_update_disabled", "data": payload},
+            {"type": event_type, "data": payload},
         )
 
-    return ok({**payload, "notifiedOutlets": len(outlet_ids)})
+    return ok({**payload, "app": channel, "notifiedOutlets": len(outlet_ids)})
 
 
 @router.get("/blocking-notice")

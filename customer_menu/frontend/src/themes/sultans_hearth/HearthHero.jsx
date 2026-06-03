@@ -165,6 +165,27 @@ export default function HearthHero({ info, onSeeMenu }) {
         {t('langToggle', lang)}
       </a>
 
+      {info?.logoUrl && (
+        <img
+          src={info.logoUrl}
+          alt=""
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 16px)',
+            left: 16,
+            zIndex: 4,
+            width: 58,
+            height: 58,
+            objectFit: 'cover',
+            borderRadius: 16,
+            border: `1px solid ${T.line}`,
+            background: 'rgba(26,20,16,.55)',
+            boxShadow: '0 8px 28px rgba(0,0,0,.36)',
+          }}
+        />
+      )}
+
       {/* Content */}
       <div style={{
         position: 'absolute', inset: 0, zIndex: 3,

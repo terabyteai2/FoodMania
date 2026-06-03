@@ -106,6 +106,11 @@ const int kOrdersPageSize = 100;
 /// without bound over a long-running app session.
 const int kAlertSetCap = 2000;
 
+/// Accepted orders should not sit in the active queue forever. With no separate
+/// acceptedAt column in the local/remote order schema, updatedAt is the
+/// accepted-since signal because status transitions stamp it.
+const Duration kAcceptedOrderAutoServeAfter = Duration(minutes: 30);
+
 class PosAppController extends ChangeNotifier {
   PosAppController({
     LocalDatabaseService? database,
@@ -189,8 +194,10 @@ class PosAppController extends ChangeNotifier {
   );
   Timer? _databaseChangeDebounce;
   Timer? _adminBlockingNoticePollTimer;
+  Timer? _autoServeAcceptedOrdersTimer;
   bool _handlingDatabaseChange = false;
   bool _databaseChangePending = false;
+  bool _autoServingAcceptedOrders = false;
   AudioPlayer? _notificationPlayer;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['openid', 'email', 'profile'],
@@ -541,6 +548,8 @@ class PosAppController extends ChangeNotifier {
         ..clear()
         ..addAll(orders.map((order) => order.id));
       _seedOrderAlertState();
+      _startAcceptedOrderAutoServeTimer();
+      unawaited(_autoServeExpiredAcceptedOrders());
       if (isCloudReady && cloudConfig.canSync) {
         unawaited(syncService.syncNow());
       }
@@ -1043,6 +1052,7 @@ class PosAppController extends ChangeNotifier {
           previousOrderIds: previousOrderIds,
           previousStatusById: previousStatusById,
         );
+        unawaited(_autoServeExpiredAcceptedOrders());
       } while (_databaseChangePending);
     } finally {
       _handlingDatabaseChange = false;
@@ -2493,9 +2503,6 @@ class PosAppController extends ChangeNotifier {
   Future<MenuScanImportResult> scanAndImportMenu(
     List<MenuScanPageUpload> pages,
   ) async {
-    if (!isManager) {
-      throw Exception('Only managers can scan menus.');
-    }
     if (!cloudConfig.canSync) {
       throw Exception('Menu scan needs an online cloud connection.');
     }
@@ -3018,6 +3025,35 @@ class PosAppController extends ChangeNotifier {
     unawaited(syncService.syncNow());
   }
 
+  void _startAcceptedOrderAutoServeTimer() {
+    _autoServeAcceptedOrdersTimer?.cancel();
+    _autoServeAcceptedOrdersTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => unawaited(_autoServeExpiredAcceptedOrders()),
+    );
+  }
+
+  Future<void> _autoServeExpiredAcceptedOrders() async {
+    if (_autoServingAcceptedOrders) return;
+    _autoServingAcceptedOrders = true;
+    try {
+      final cutoff = DateTime.now().subtract(kAcceptedOrderAutoServeAfter);
+      final due = await database.getAcceptedOrdersOlderThan(cutoff);
+      if (due.isEmpty) return;
+      for (final order in due) {
+        await database.updateOrderStatus(order.id, OrderStatus.served);
+      }
+      debugPrint('[QB-ORDERS] auto-served ${due.length} accepted order(s)');
+      unawaited(syncService.syncNow());
+    } catch (error, stack) {
+      debugPrint(
+        '[QB-ORDERS] auto-serve accepted orders failed: $error\n$stack',
+      );
+    } finally {
+      _autoServingAcceptedOrders = false;
+    }
+  }
+
   Future<void> updateOrderDetails(
     String id, {
     required OrderServiceType serviceType,
@@ -3438,6 +3474,10 @@ class PosAppController extends ChangeNotifier {
     String? actionTarget,
     bool playSound = true,
   }) async {
+    if (type == PosNotificationType.printFailed) {
+      debugPrint('[QB-NOTIF] printer failure notification suppressed');
+      return;
+    }
     final isPrinterAlert =
         type == PosNotificationType.printSuccess ||
         type == PosNotificationType.printFailed;
@@ -3912,6 +3952,7 @@ class PosAppController extends ChangeNotifier {
   void dispose() {
     _databaseChangeDebounce?.cancel();
     _adminBlockingNoticePollTimer?.cancel();
+    _autoServeAcceptedOrdersTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }

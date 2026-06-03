@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import SystemConfig
 from schemas import PlatformAppUpdateRequest
 
-APP_UPDATE_CONFIG_KEY = "admin_app_update"
+APP_UPDATE_CONFIG_KEYS = {
+    "admin": "admin_app_update",
+    "terminal": "terminal_app_update",
+}
 
 
 def disabled_app_update() -> dict:
@@ -54,36 +57,66 @@ def app_update_from_json(raw: str | None) -> dict:
     return data
 
 
-async def get_app_update(db: AsyncSession) -> dict:
+def normalize_app_update_channel(app: str | None = None) -> str:
+    channel = (app or "admin").strip().lower()
+    if channel not in APP_UPDATE_CONFIG_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="app must be 'admin' or 'terminal'.",
+        )
+    return channel
+
+
+def app_update_event_type(app: str | None, enabled: bool) -> str:
+    channel = normalize_app_update_channel(app)
+    if channel == "terminal":
+        return "terminal_app_update_available" if enabled else "terminal_app_update_disabled"
+    return "app_update_available" if enabled else "app_update_disabled"
+
+
+async def get_app_update(db: AsyncSession, app: str | None = None) -> dict:
+    channel = normalize_app_update_channel(app)
     config = (
-        await db.execute(select(SystemConfig).where(SystemConfig.key == APP_UPDATE_CONFIG_KEY))
+        await db.execute(
+            select(SystemConfig).where(SystemConfig.key == APP_UPDATE_CONFIG_KEYS[channel])
+        )
     ).scalar_one_or_none()
     return app_update_from_json(config.value if config else None)
 
 
-async def set_app_update(db: AsyncSession, body: PlatformAppUpdateRequest) -> dict:
+async def set_app_update(
+    db: AsyncSession,
+    body: PlatformAppUpdateRequest,
+    app: str | None = None,
+) -> dict:
+    channel = normalize_app_update_channel(app)
     payload = _payload_from_request(body)
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     config = (
-        await db.execute(select(SystemConfig).where(SystemConfig.key == APP_UPDATE_CONFIG_KEY))
+        await db.execute(
+            select(SystemConfig).where(SystemConfig.key == APP_UPDATE_CONFIG_KEYS[channel])
+        )
     ).scalar_one_or_none()
     if config:
         config.value = raw
         config.updated_at = datetime.now(timezone.utc)
     else:
-        db.add(SystemConfig(key=APP_UPDATE_CONFIG_KEY, value=raw))
+        db.add(SystemConfig(key=APP_UPDATE_CONFIG_KEYS[channel], value=raw))
     return payload
 
 
-async def clear_app_update(db: AsyncSession) -> dict:
+async def clear_app_update(db: AsyncSession, app: str | None = None) -> dict:
+    channel = normalize_app_update_channel(app)
     config = (
-        await db.execute(select(SystemConfig).where(SystemConfig.key == APP_UPDATE_CONFIG_KEY))
+        await db.execute(
+            select(SystemConfig).where(SystemConfig.key == APP_UPDATE_CONFIG_KEYS[channel])
+        )
     ).scalar_one_or_none()
     if config:
         config.value = ""
         config.updated_at = datetime.now(timezone.utc)
     else:
-        db.add(SystemConfig(key=APP_UPDATE_CONFIG_KEY, value=""))
+        db.add(SystemConfig(key=APP_UPDATE_CONFIG_KEYS[channel], value=""))
     return disabled_app_update()
 
 
@@ -126,27 +159,36 @@ def _coerce_version_code(value: object) -> int:
 
 
 # ── APK storage (in-app update) ────────────────────────────────────────────────
-# The released APK is kept at backend/In_App_Update_Apk_File/app-release.apk and
+# The released APK is kept at backend/In_App_Update_Apk_File/*.apk and
 # served (unauthenticated) by routers/app_download.py.
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 APK_DIR = _BACKEND_ROOT / "In_App_Update_Apk_File"
-APK_FILENAME = "app-release.apk"
+APK_FILENAMES = {
+    "admin": "app-release.apk",
+    "terminal": "app-terminal-release.apk",
+}
 APK_MAX_BYTES = 300 * 1024 * 1024  # 300 MB safety cap
 APK_MANIFEST_NAME = "AndroidManifest.xml"
 
 
-def apk_path() -> Path:
-    return APK_DIR / APK_FILENAME
+def apk_filename(app: str | None = None) -> str:
+    channel = normalize_app_update_channel(app)
+    return APK_FILENAMES[channel]
 
 
-async def save_apk_upload(upload) -> Path:
+def apk_path(app: str | None = None) -> Path:
+    return APK_DIR / apk_filename(app)
+
+
+async def save_apk_upload(upload, app: str | None = None) -> Path:
     """Stream an uploaded APK to a temp file beside the target and return its path.
 
     The caller validates the version, then calls promote_apk() to move it into
     place — so an invalid upload never clobbers the currently-published APK.
     """
+    filename = apk_filename(app)
     APK_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = APK_DIR / f"{APK_FILENAME}.uploading"
+    tmp = APK_DIR / f"{filename}.uploading"
     total = 0
     try:
         with open(tmp, "wb") as dst:
@@ -169,8 +211,8 @@ async def save_apk_upload(upload) -> Path:
     return tmp
 
 
-def promote_apk(tmp: Path) -> None:
-    os.replace(tmp, apk_path())
+def promote_apk(tmp: Path, app: str | None = None) -> None:
+    os.replace(tmp, apk_path(app))
 
 
 def validate_apk_file(path: Path) -> None:
