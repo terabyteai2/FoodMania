@@ -96,19 +96,47 @@ cat /tmp/rastarant-env-merge.txt >> "${ENV_FILE}"
 rm -f /tmp/rastarant-env-merge.txt
 chmod 600 "${ENV_FILE}"
 systemctl restart rastarant
-sleep 8
+for i in {1..60}; do
+  if curl -fsS --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    echo "  ✓ local /health OK"
+    exit 0
+  fi
+  sleep 2
+done
+echo "  ✗ local /health did not recover after restart" >&2
+systemctl --no-pager --full status rastarant >&2 || true
+journalctl -u rastarant -n 80 --no-pager >&2 || true
+exit 1
 REMOTE
 
 rm -f "${BLOCK_FILE}"
 
 say "Health check"
-curl -fsS "https://quickbytes.buzz/health" | python3 -c "
+HEALTH_JSON="$(mktemp)"
+health_ok=0
+for i in {1..60}; do
+  if curl -fsS --max-time 5 "https://quickbytes.buzz/health" -o "${HEALTH_JSON}" 2>/dev/null; then
+    health_ok=1
+    break
+  fi
+  sleep 2
+done
+if [[ "${health_ok}" != "1" ]]; then
+  rm -f "${HEALTH_JSON}"
+  die "Health check failed at https://quickbytes.buzz/health"
+fi
+python3 - "${HEALTH_JSON}" <<'PY'
 import json,sys
-d=json.load(sys.stdin).get('data',{})
+path=sys.argv[1]
+try:
+    d=json.load(open(path)).get('data',{})
+except Exception as exc:
+    raise SystemExit(f"Health response was not JSON: {exc}")
 print('  phoneOtpMode:', d.get('phoneOtpMode'))
 print('  onecodesoftConfigured:', d.get('onecodesoftConfigured'))
 print('  smsProvider:', d.get('smsProvider'))
 print('  demoManagerLoginEnabled:', d.get('demoManagerLoginEnabled'))
-"
+PY
+rm -f "${HEALTH_JSON}"
 
 ok "Backend env synced and rastarant restarted"

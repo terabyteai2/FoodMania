@@ -2,8 +2,12 @@
 // backend/routers/menu.py and customer_menu_themes.dart in the admin app.
 
 import React, { createContext, useContext, useMemo } from 'react'
-import sultansHearthOverrides from './sultans_hearth/index.jsx'
-import { brickOverrides, lanternOverrides, marbleOverrides } from './modern_templates/index.jsx'
+import {
+  sultansHearthOverrides,
+  brickOverrides,
+  lanternOverrides,
+  marbleOverrides,
+} from './menu_templates/index.jsx'
 
 const SULTANS = {
   slug: 'sultans_hearth',
