@@ -83,7 +83,24 @@ class _ImagePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final asset = menuIconKeyToAsset(iconKey);
     if (asset != null) {
-      return Image.asset(asset, fit: BoxFit.cover);
+      final dpr = MediaQuery.devicePixelRatioOf(context);
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final maxSide = [
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
+          ].reduce((a, b) => a > b ? a : b);
+          // Decode placeholder PNGs at the displayed size so they don't sit in
+          // the image cache at full resolution.
+          final cachePx = (maxSide * dpr).round().clamp(64, 512);
+          return Image.asset(
+            asset,
+            fit: BoxFit.cover,
+            cacheWidth: cachePx,
+            cacheHeight: cachePx,
+          );
+        },
+      );
     }
     final style = menuIconStyleFor(iconKey);
     return Container(

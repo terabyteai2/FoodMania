@@ -352,7 +352,14 @@ class SyncService {
   Future<int> _pullCloudChanges() async {
     final since = _lastCloudPullAt;
     final menuPayloads = await _cloudApi.pullMenu(since: since);
-    final orderPayloads = await _cloudApi.pullOrders(since: since);
+    // On the initial (no-cursor) pull, fetch only the most recent slice so a
+    // memory-constrained terminal never loads the full order history. Mirrors
+    // kOrdersMaxInMemory (500) in app_controller.dart. Incremental pulls (with
+    // `since`) stay unbounded but only return small deltas.
+    final orderPayloads = await _cloudApi.pullOrders(
+      since: since,
+      limit: since == null ? 500 : null,
+    );
     var imported = 0;
 
     for (final payload in menuPayloads) {

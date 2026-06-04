@@ -9,6 +9,11 @@ import 'src/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // POS terminals run on ~2GB devices, so keep the decoded-image cache well
+  // below Flutter's 100MB / 1000-image default to avoid memory pressure.
+  PaintingBinding.instance.imageCache
+    ..maximumSizeBytes = 32 << 20 // 32 MB
+    ..maximumSize = 100;
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;

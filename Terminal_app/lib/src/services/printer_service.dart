@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/localization/app_strings.dart';
+import '../core/utils/bounded_string_set.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
 import '../models/order_service_type.dart';
@@ -225,7 +226,9 @@ class PrinterService {
     connected: false,
     busy: false,
   );
-  final Set<String> _printedOrderIds = <String>{};
+  // Bounded so an always-on terminal that prints thousands of tickets never
+  // grows this set (and its persisted copy) without limit.
+  final BoundedStringSet _printedOrderIds = BoundedStringSet(cap: 2000);
 
   PrinterRuntimeState get state => _state;
   Stream<PrinterRuntimeState> get stateStream => _stateController.stream;

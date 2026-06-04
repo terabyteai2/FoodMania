@@ -1681,13 +1681,18 @@ class CloudApiService {
     return _extractList(json);
   }
 
-  Future<List<Map<String, Object?>>> pullOrders({DateTime? since}) async {
+  Future<List<Map<String, Object?>>> pullOrders({
+    DateTime? since,
+    int? limit,
+  }) async {
     final config = _requireServerConfig();
+    final query = <String, String>{
+      if (since != null) 'since': since.toUtc().toIso8601String(),
+      if (limit != null) 'limit': '$limit',
+    };
     final uri = _uri(
       '/outlets/${config.outletId}/orders',
-      queryParameters: since == null
-          ? null
-          : {'since': since.toUtc().toIso8601String()},
+      queryParameters: query.isEmpty ? null : query,
     );
     if (uri == null) return [];
     final json = await _sendJson('GET', uri);

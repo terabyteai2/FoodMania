@@ -102,6 +102,11 @@ const int kOrdersInitialPage = 200;
 /// each time the orders screen reaches the end of the scroll extent.
 const int kOrdersPageSize = 100;
 
+/// Hard ceiling on how many orders are held in memory at once. Older orders
+/// stay in the local DB and can still be reached via search/reports, but the
+/// resident list is capped so a long shift on a 2GB terminal never balloons.
+const int kOrdersMaxInMemory = 500;
+
 /// Hard cap on the per-restaurant alert-tracking sets so they cannot grow
 /// without bound over a long-running app session.
 const int kAlertSetCap = 2000;
@@ -884,6 +889,12 @@ class PosAppController extends ChangeNotifier {
   /// Idempotent while a load is in flight or after the tail has been reached.
   Future<void> loadMoreOrders() async {
     if (!_hasMoreOrders || _loadingMoreOrders) return;
+    if (orders.length >= kOrdersMaxInMemory) {
+      // Resident list is full; stop paging so memory stays bounded.
+      _hasMoreOrders = false;
+      notifyListeners();
+      return;
+    }
     _loadingMoreOrders = true;
     notifyListeners();
     try {

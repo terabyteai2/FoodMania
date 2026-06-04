@@ -331,7 +331,10 @@ class LocalDatabaseService {
     return OrderModel.fromMap(rows.first, items: items);
   }
 
-  Future<List<OrderModel>> getAcceptedOrdersOlderThan(DateTime cutoff) async {
+  Future<List<OrderModel>> getAcceptedOrdersOlderThan(
+    DateTime cutoff, {
+    int limit = 200,
+  }) async {
     final db = await _db;
     final rows = await db.query(
       'orders',
@@ -343,6 +346,7 @@ class LocalDatabaseService {
         cutoff.toIso8601String(),
       ],
       orderBy: 'updatedAt ASC',
+      limit: limit,
     );
     if (rows.isEmpty) return const <OrderModel>[];
     final orderIds = <String>[for (final row in rows) row['id'] as String];

@@ -68,6 +68,15 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            // Shrink + obfuscate to keep the dex/method footprint small. Keep
+            // rules live in proguard-rules.pro (Sunmi/Facebook/printer plugins
+            // use reflection/AIDL).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

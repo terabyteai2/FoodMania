@@ -119,6 +119,7 @@ def _parse_since(value: str) -> datetime:
 async def pull_orders(
     outlet_id: str,
     since: str | None = None,
+    limit: int | None = None,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -127,6 +128,10 @@ async def pull_orders(
     if since:
         dt = _parse_since(since)
         query = query.where(Order.updated_at > dt)
+    # Clients pass `limit` on the initial (no-`since`) pull so memory-constrained
+    # devices only load the most recent slice of history instead of every order.
+    if limit and limit > 0:
+        query = query.limit(limit)
     orders = (await db.execute(query)).scalars().all()
     return ok([_order_to_dict(o) for o in orders])
 

@@ -53,9 +53,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/icons/Admin_res.png
+    # Admin_res.png (1.3MB, 1254x1254) was bundled but never referenced in code.
     - assets/brand/
-    - assets/brand/splash.jpeg
     - assets/sounds/
     - assets/menu_placeholders/
 

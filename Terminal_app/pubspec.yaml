@@ -47,8 +47,9 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/icons/Admin_res.png
-    - assets/brand/
+    # Only splash.jpeg from brand/ is used by the terminal; Admin_res.png and
+    # the other brand images (bkash/terabyte_ai) are unused here and were
+    # bloating the bundle.
     - assets/brand/splash.jpeg
     - assets/sounds/
     - assets/menu_placeholders/

@@ -63,6 +63,15 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            // Shrink + obfuscate to keep the dex/method footprint small on
+            // memory-constrained POS terminals. Keep rules live in
+            // proguard-rules.pro (Sunmi printer SDK uses reflection/AIDL).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
