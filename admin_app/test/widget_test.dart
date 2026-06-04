@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
 
@@ -11,5 +13,15 @@ void main() {
       PosColors.primaryDark.toARGB32(),
     );
     expect(theme.useMaterial3, isTrue);
+  });
+
+  test('mobile shell keeps the real bottom navigation', () {
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(app, contains('bottomNavigationBar: _FloatingBottomNav'));
+    expect(
+      app,
+      contains('enum _AppTab { orders, menu, home, stock, settings }'),
+    );
   });
 }

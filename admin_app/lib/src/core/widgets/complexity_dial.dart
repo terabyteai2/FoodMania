@@ -38,39 +38,74 @@ class HeaderComplexityDial extends StatelessWidget {
         ];
       },
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 142),
+        constraints: const BoxConstraints(minWidth: 84, maxWidth: 90),
         child: Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp2),
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: PosColors.surface,
-            borderRadius: BorderRadius.circular(PosRadii.sm),
-            border: Border.all(color: PosColors.line, width: 0.5),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: PosColors.line, width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: TfText(
-                  selectedTier.displayNameFor(isBn: isBn),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: PosColors.primaryDark,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              Icon(
+                _tierIcon(selectedTier),
+                color: PosColors.primaryDark,
+                size: 20,
               ),
-              const SizedBox(width: PosSpacing.sp1),
+              const SizedBox(width: 6),
+              _HeatCircle(tier: selectedTier),
+              const SizedBox(width: 4),
               const Icon(
-                Icons.keyboard_arrow_down_rounded,
+                Icons.arrow_drop_down_rounded,
                 color: PosColors.muted,
-                size: 16,
+                size: 18,
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  IconData _tierIcon(BusinessTier tier) {
+    return switch (tier) {
+      BusinessTier.simple => Icons.storefront_outlined,
+      BusinessTier.standard => Icons.local_cafe_outlined,
+      BusinessTier.advanced => Icons.restaurant_outlined,
+      BusinessTier.enterprise => Icons.account_tree_outlined,
+    };
+  }
+}
+
+class _HeatCircle extends StatelessWidget {
+  const _HeatCircle({required this.tier});
+
+  final BusinessTier tier;
+
+  @override
+  Widget build(BuildContext context) {
+    final heat = switch (tier) {
+      BusinessTier.simple => PosColors.success,
+      BusinessTier.standard => PosColors.primary,
+      BusinessTier.advanced => PosColors.warning,
+      BusinessTier.enterprise => PosColors.urgent,
+    };
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: heat.withValues(alpha: 0.16),
+        border: Border.all(color: PosColors.lineStrong, width: 1),
+      ),
+      alignment: Alignment.center,
+      child: Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(color: heat, shape: BoxShape.circle),
       ),
     );
   }

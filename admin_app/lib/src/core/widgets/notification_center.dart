@@ -1082,15 +1082,15 @@ class HeaderNotificationBell extends StatelessWidget {
     final app = AppScope.of(context);
     final unread = app.unreadNotificationCount;
     return SizedBox(
-      height: 44,
-      width: 44,
+      height: 52,
+      width: 52,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
           Material(
             color: PosColors.surface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: () => showNotificationCenter(
@@ -1100,37 +1100,37 @@ class HeaderNotificationBell extends StatelessWidget {
               ),
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: PosColors.line, width: 0.5),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: PosColors.line, width: 1),
                 ),
                 child: Icon(
                   unread > 0
                       ? Icons.notifications_active_rounded
                       : Icons.notifications_none_rounded,
                   color: unread > 0 ? PosColors.primary : PosColors.slate,
-                  size: 25,
+                  size: 29,
                 ),
               ),
             ),
           ),
           if (unread > 0)
             Positioned(
-              right: -2,
-              top: -2,
+              right: -5,
+              top: -5,
               child: Container(
-                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: PosColors.danger,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: PosColors.surface, width: 1),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: PosColors.surface, width: 2),
                 ),
                 child: Text(
                   unread > 9 ? '9+' : '$unread',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),

@@ -258,6 +258,7 @@ class PosAppController extends ChangeNotifier {
   String notificationSoundPath = '';
   bool varianceTrackingEnabled = false;
   List<MenuItem> menuItems = [];
+  List<String> quickSellMenuItemIds = [];
   List<OrderModel> orders = [];
   bool _hasMoreOrders = false;
   bool _loadingMoreOrders = false;
@@ -417,6 +418,8 @@ class PosAppController extends ChangeNotifier {
       businessTier = BusinessTier.fromString(
         preferences.getString(_businessTierKey),
       );
+      quickSellMenuItemIds =
+          preferences.getStringList(_quickSellMenuItemIdsKey) ?? const [];
       final storedRestaurantName =
           preferences.getString(_restaurantNameKey) ?? '';
       final storedOutletName = preferences.getString(_outletNameKey) ?? '';
@@ -3166,6 +3169,20 @@ class PosAppController extends ChangeNotifier {
     await preferences.setString(_businessTierKey, tier.key);
   }
 
+  Future<void> updateQuickSellMenuItemIds(List<String> ids) async {
+    final cleaned = <String>[];
+    for (final id in ids) {
+      final clean = id.trim();
+      if (clean.isNotEmpty && !cleaned.contains(clean)) cleaned.add(clean);
+      if (cleaned.length >= 12) break;
+    }
+    if (listEquals(quickSellMenuItemIds, cleaned)) return;
+    quickSellMenuItemIds = cleaned;
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(_quickSellMenuItemIdsKey, cleaned);
+  }
+
   Future<void> updateTableCount(int count) async {
     final clamped = count.clamp(0, 200);
     if (serverConfig.tableCount == clamped) return;
@@ -4198,6 +4215,8 @@ class PosAppController extends ChangeNotifier {
   static final String _autoSyncIntervalKey = 'local_pos_auto_sync_interval';
   static final String _uiScaleKey = 'local_pos_ui_scale';
   static final String _businessTierKey = 'local_pos_business_tier';
+  static final String _quickSellMenuItemIdsKey =
+      'local_pos_quick_sell_menu_item_ids';
   static final String _languageKey = 'local_pos_language';
   static final String _languagePreferenceSetKey =
       'local_pos_language_preference_set';

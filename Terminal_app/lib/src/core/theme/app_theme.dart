@@ -81,6 +81,9 @@ class PosColors {
   static const Color accentWash = primaryWash;
   static const Color slate = primaryDark; // ink alias
   static const Color slateSoft = inkSoft;
+  static const Color text = primaryDark;
+  static const Color textSec = muted;
+  static const Color textTer = mutedSoft;
   static const Color primaryGlow = primary;
   static const Color surfaceWarm = background;
   static const Color surfaceTinted = surface;

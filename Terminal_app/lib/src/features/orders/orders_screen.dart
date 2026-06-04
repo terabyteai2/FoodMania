@@ -661,10 +661,6 @@ class _TopBar extends StatelessWidget {
         subtitle: subtitle,
         trailing: [
           if (!quietEmpty) HeaderModeButton(),
-          HeaderNotificationBell(
-            onNavigateToOrders: () {},
-            onNavigateToTarget: onNavigateToTarget,
-          ),
           if (!quietEmpty)
             TfIconButton(
               icon: Icons.tune_rounded,
@@ -672,6 +668,10 @@ class _TopBar extends StatelessWidget {
               dark: filtersActive,
               onPressed: onFilterPressed,
             ),
+          HeaderNotificationBell(
+            onNavigateToOrders: () {},
+            onNavigateToTarget: onNavigateToTarget,
+          ),
         ],
       ),
     );

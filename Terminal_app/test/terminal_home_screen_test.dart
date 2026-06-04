@@ -37,7 +37,14 @@ MenuItem _menuItem() {
 }
 
 void main() {
-  testWidgets('terminal home renders cafe manager dashboard', (tester) async {
+  testWidgets('terminal home renders terminal-specific dashboard variant', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = PosAppController()
       ..language = AppLanguage.en
       ..businessTier = BusinessTier.standard
@@ -50,15 +57,26 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Top sellers · tap to add'), findsOneWidget);
-    expect(find.text('Floor'), findsOneWidget);
-    expect(find.text('Quick actions'), findsOneWidget);
-    expect(find.text('Milk Tea'), findsOneWidget);
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.textContaining('Cha Ghor'), findsWidgets);
+    expect(find.text('TODAY SALES'), findsOneWidget);
+    expect(find.text('ORDERS'), findsOneWidget);
+    expect(find.text('QUICK ACTIONS'), findsOneWidget);
+    expect(find.text('New order'), findsOneWidget);
+    expect(find.text('Top sellers · tap to add'), findsNothing);
+    expect(find.text('Floor'), findsNothing);
 
     controller.dispose();
   });
 
-  testWidgets('terminal enterprise home suppresses ring-up', (tester) async {
+  testWidgets('terminal home keeps terminal content for enterprise tier', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = PosAppController()
       ..language = AppLanguage.en
       ..businessTier = BusinessTier.enterprise
@@ -71,7 +89,11 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('FLEET REVENUE · TODAY'), findsOneWidget);
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.text('TODAY SALES'), findsOneWidget);
+    expect(find.text('ORDERS'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsNothing);
+    expect(find.text('FLEET REVENUE · TODAY'), findsNothing);
     expect(find.text('Top sellers · tap to add'), findsNothing);
     expect(find.text('Search item or scan code'), findsNothing);
 

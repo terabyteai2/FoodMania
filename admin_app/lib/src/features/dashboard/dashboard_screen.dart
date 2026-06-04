@@ -8,6 +8,7 @@ import '../../core/enums/business_tier.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/hourly_bars_chart.dart';
+import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/dashboard_summary.dart';
@@ -448,11 +449,7 @@ class _SecHead extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                size: 14,
-                color: PosColors.muted,
-              ),
+              const Icon(Icons.chevron_right, size: 14, color: PosColors.muted),
             ],
           ),
       ],
@@ -778,11 +775,7 @@ class _QuickActions extends StatelessWidget {
 }
 
 class _QAction {
-  const _QAction({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const _QAction({required this.icon, required this.label, this.onTap});
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
@@ -951,6 +944,7 @@ class _DashT1CounterState extends State<_DashT1Counter>
     return _manageScaffold(
       app: app,
       bottomNavigationBar: _cartTray(),
+      onCreateOrder: () => openNewOrderForm(context),
       onRefresh: () => app.refreshDashboardSummary(),
       children: [
         _manageTopBar(
@@ -960,11 +954,18 @@ class _DashT1CounterState extends State<_DashT1Counter>
           chrome: chrome,
           mode: widget.mode,
           onModeChanged: widget.onModeChanged,
+          onNavigateToOrders: () => widget.onNavigate(_ordersTab),
+          onNavigateToTarget: widget.onNavigateToTarget,
         ),
         ..._ringupSections(
-          tier: BusinessTier.simple,
-          onNavigate: widget.onNavigate,
-          recent: _recentNames(app, chrome.summary),
+          onEdit: () =>
+              unawaited(_openQuickSellEditor(context, app, chrome.summary)),
+        ),
+        _totalsAndPeak(
+          summary: chrome.summary,
+          amount: chrome.drawerValue,
+          orders: chrome.summary?.moneyFirst.kpis.orders ?? 0,
+          top: _topMoverLabel(chrome.summary),
         ),
         _section(
           top: 22,
@@ -983,12 +984,9 @@ class _DashT1CounterState extends State<_DashT1Counter>
             ],
           ),
         ),
-        _todayAndClose(
+        _closeSection(
           title: 'Close counter',
           kicker: 'End of day',
-          amount: chrome.drawerValue,
-          orders: chrome.summary?.moneyFirst.kpis.orders ?? 0,
-          top: _topMoverLabel(chrome.summary),
           warn: chrome.openCount > 0
               ? '$chrome.openCount tickets still open - settle before close'
               : null,
@@ -997,28 +995,19 @@ class _DashT1CounterState extends State<_DashT1Counter>
     );
   }
 
-  List<Widget> _ringupSections({
-    required BusinessTier tier,
-    required ValueChanged<int> onNavigate,
-    required List<String> recent,
-  }) {
-    final topItems = _topSellerItems(app, app.dashboardSummary as DashboardSummary?);
+  List<Widget> _ringupSections({required VoidCallback onEdit}) {
+    final topItems = _topSellerItems(
+      app,
+      app.dashboardSummary as DashboardSummary?,
+    );
     return [
       _section(
-        top: 10,
-        child: TfRingupSearch(
-          placeholder: 'Search item or scan code',
-          recent: recent,
-          onRecentTap: (name) => unawaited(_incrementByName(name)),
-        ),
-      ),
-      _section(
-        top: 14,
+        top: 12,
         child: _TopSellerGrid(
           items: topItems,
           qtyByItemId: _cartQtyByItemId,
           onTap: (item) => unawaited(_increment(item)),
-          onEdit: () => onNavigate(1),
+          onEdit: onEdit,
         ),
       ),
     ];
@@ -1057,6 +1046,7 @@ class _DashT2StandardState extends State<_DashT2Standard>
     return _manageScaffold(
       app: app,
       bottomNavigationBar: _cartTray(),
+      onCreateOrder: () => openNewOrderForm(context),
       onRefresh: () => app.refreshDashboardSummary(),
       children: [
         _manageTopBar(
@@ -1066,6 +1056,8 @@ class _DashT2StandardState extends State<_DashT2Standard>
           chrome: chrome,
           mode: widget.mode,
           onModeChanged: widget.onModeChanged,
+          onNavigateToOrders: () => widget.onNavigate(_ordersTab),
+          onNavigateToTarget: widget.onNavigateToTarget,
         ),
         ..._ringupBlocks(
           app: app,
@@ -1073,17 +1065,20 @@ class _DashT2StandardState extends State<_DashT2Standard>
           qtyByItemId: _cartQtyByItemId,
           onItemTap: (item) => unawaited(_increment(item)),
           onRecentTap: (name) => unawaited(_incrementByName(name)),
-          onEdit: () => widget.onNavigate(1),
+          onEdit: () => unawaited(_openQuickSellEditor(context, app, summary)),
+        ),
+        _totalsAndPeak(
+          summary: summary,
+          amount: chrome.drawerValue,
+          orders: summary?.moneyFirst.kpis.orders ?? 0,
+          top: _topMoverLabel(summary),
         ),
         _floorSection(summary, targetTables: 6, cols: 3),
         if (alerts.isNotEmpty)
           _needsYouSection(alerts, widget.onNavigate, count: alerts.length),
-        _todayAndClose(
+        _closeSection(
           title: 'Close day',
           kicker: 'End of day',
-          amount: chrome.drawerValue,
-          orders: summary?.moneyFirst.kpis.orders ?? 0,
-          top: _topMoverLabel(summary),
           warn: chrome.openCount > 0
               ? '$chrome.openCount orders still open - settle before closing'
               : null,
@@ -1125,6 +1120,7 @@ class _DashT3FullState extends State<_DashT3Full>
     return _manageScaffold(
       app: app,
       bottomNavigationBar: _cartTray(),
+      onCreateOrder: () => openNewOrderForm(context),
       onRefresh: () => app.refreshDashboardSummary(),
       children: [
         _manageTopBar(
@@ -1134,6 +1130,8 @@ class _DashT3FullState extends State<_DashT3Full>
           chrome: chrome,
           mode: widget.mode,
           onModeChanged: widget.onModeChanged,
+          onNavigateToOrders: () => widget.onNavigate(_ordersTab),
+          onNavigateToTarget: widget.onNavigateToTarget,
         ),
         ..._ringupBlocks(
           app: app,
@@ -1141,7 +1139,35 @@ class _DashT3FullState extends State<_DashT3Full>
           qtyByItemId: _cartQtyByItemId,
           onItemTap: (item) => unawaited(_increment(item)),
           onRecentTap: (name) => unawaited(_incrementByName(name)),
-          onEdit: () => widget.onNavigate(1),
+          onEdit: () => unawaited(_openQuickSellEditor(context, app, summary)),
+        ),
+        _totalsAndPeak(
+          summary: summary,
+          amount: chrome.drawerValue,
+          orders: summary?.moneyFirst.kpis.orders ?? 0,
+          top: _topMoverLabel(summary),
+        ),
+        _section(
+          top: 14,
+          child: _KpiStrip(
+            stats: [
+              _KpiStat(
+                'Pending orders',
+                '${summary?.moneyFirst.kpis.openOrders ?? 0}',
+              ),
+              _KpiStat(
+                'Booked tables',
+                '${summary?.rightNow.tablesSeated ?? 0}',
+              ),
+              _KpiStat(
+                'Late orders',
+                '${summary?.rightNow.lateOrders ?? 0}',
+                color: (summary?.rightNow.lateOrders ?? 0) > 0
+                    ? PosColors.urgent
+                    : null,
+              ),
+            ],
+          ),
         ),
         _floorSection(summary, targetTables: 12, cols: 4),
         if (alerts.isNotEmpty)
@@ -1172,12 +1198,9 @@ class _DashT3FullState extends State<_DashT3Full>
             ],
           ),
         ),
-        _todayAndClose(
+        _closeSection(
           title: 'Hand over to night shift',
           kicker: 'Shift handover',
-          amount: chrome.drawerValue,
-          orders: summary?.moneyFirst.kpis.orders ?? 0,
-          top: _topMoverLabel(summary),
           warn: chrome.openCount > 0
               ? '$chrome.openCount open orders will carry over'
               : null,
@@ -1227,11 +1250,17 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
     final goalTarget = goal?.targetBdt ?? 0;
     final goalRemaining = goal?.remainingBdt ?? 0;
     final goalPct = goal?.progressPct ?? 0;
-    final deltaValue = _bdt((fleetKpis?.revBdt ?? earned) * ((fleetKpis?.deltaPct ?? 0) / 100));
+    final deltaValue = _bdt(
+      (fleetKpis?.revBdt ?? earned) * ((fleetKpis?.deltaPct ?? 0) / 100),
+    );
     final now = DateTime.now();
 
     return _manageScaffold(
       app: app,
+      onCreateOrder:
+          (app.menuItems as List<MenuItem>).any((item) => item.isAvailable)
+          ? () => openNewOrderForm(context)
+          : null,
       onRefresh: () => app.refreshDashboardSummary(),
       children: [
         _manageTopBar(
@@ -1241,6 +1270,8 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
           chrome: chrome,
           mode: widget.mode,
           onModeChanged: widget.onModeChanged,
+          onNavigateToOrders: () => widget.onNavigate(_ordersTab),
+          onNavigateToTarget: widget.onNavigateToTarget,
         ),
         _section(
           top: 10,
@@ -1251,7 +1282,8 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
                 onChanged: (value) => setState(() => _period = value),
               ),
               TfPeriodSubtitle(
-                range: '${DateFormat('EEE · d MMM').format(now)} · 9 AM - ${DateFormat('h:mm a').format(now)}',
+                range:
+                    '${DateFormat('EEE · d MMM').format(now)} · 9 AM - ${DateFormat('h:mm a').format(now)}',
                 compare: 'prev ${DateFormat('EEE').format(now)}',
               ),
             ],
@@ -1265,7 +1297,11 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
             bn: 'আজকের সব আউটলেটের আয়',
             sub: goalRemaining > 0
                 ? '${_bdt(goalRemaining)} to goal · pace +${(fleetKpis?.deltaPct ?? 0).round()}%'
-                : tfPick(context, en: 'Across all outlets', bn: 'সব আউটলেট মিলিয়ে'),
+                : tfPick(
+                    context,
+                    en: 'Across all outlets',
+                    bn: 'সব আউটলেট মিলিয়ে',
+                  ),
             pct: goalPct,
             goal: _bdt(goalTarget),
           ),
@@ -1276,14 +1312,18 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
             value: deltaValue,
             pct: '${(fleetKpis?.deltaPct ?? 0).round()}%',
             down: fleetKpis?.deltaUp == false,
-            note: '${fleetKpis?.onGoalCount ?? 0} of ${fleetKpis?.outletCount ?? 0} outlets ahead of pace',
+            note:
+                '${fleetKpis?.onGoalCount ?? 0} of ${fleetKpis?.outletCount ?? 0} outlets ahead of pace',
           ),
         ),
         _section(
           top: 14,
           child: _KpiStrip(
             stats: [
-              _KpiStat(text.isBn ? 'অতিথি' : 'Covers', '${fleetKpis?.covers ?? 0}'),
+              _KpiStat(
+                text.isBn ? 'অতিথি' : 'Covers',
+                '${fleetKpis?.covers ?? 0}',
+              ),
               _KpiStat(
                 text.isBn ? 'গড় বিল' : 'Avg ticket',
                 '৳${moneyFmt.format(fleetKpis?.avgTicketBdt ?? 0)}',
@@ -1291,7 +1331,9 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
               _KpiStat(
                 text.isBn ? 'সব আউটলেটে দেরি' : 'Fleet late',
                 '${fleetKpis?.fleetLatePct ?? 0}%',
-                color: (fleetKpis?.fleetLatePct ?? 0) > 0 ? PosColors.urgent : null,
+                color: (fleetKpis?.fleetLatePct ?? 0) > 0
+                    ? PosColors.urgent
+                    : null,
               ),
             ],
           ),
@@ -1302,13 +1344,19 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SecHead(en: 'Needs you', bn: 'নজর দিন', count: fleet!.alerts.length),
+                _SecHead(
+                  en: 'Needs you',
+                  bn: 'নজর দিন',
+                  count: fleet!.alerts.length,
+                ),
                 for (final a in fleet.alerts)
                   _AlertRow(
                     tag: a.kind.toUpperCase(),
                     tone: a.kind == 'low'
                         ? _AlertTone.low
-                        : (a.kind == 'danger' ? _AlertTone.danger : _AlertTone.late),
+                        : (a.kind == 'danger'
+                              ? _AlertTone.danger
+                              : _AlertTone.late),
                     title: a.title,
                     sub: a.body,
                     cta: tfPick(context, en: 'View', bn: 'দেখুন'),
@@ -1322,10 +1370,16 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SecHead(en: 'Outlets · today', bn: 'আউটলেট', action: 'Ranked'),
+              const _SecHead(
+                en: 'Outlets · today',
+                bn: 'আউটলেট',
+                action: 'Ranked',
+              ),
               for (final outlet in fleet?.outlets ?? const <FleetOutlet>[])
                 _OutletCard(
-                  name: outlet.name.isEmpty ? 'Outlet ${outlet.rank}' : outlet.name,
+                  name: outlet.name.isEmpty
+                      ? 'Outlet ${outlet.rank}'
+                      : outlet.name,
                   area: outlet.area,
                   rev: _bdt(outlet.revBdt),
                   deltaUp: outlet.deltaUp,
@@ -1352,7 +1406,8 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
                 _FleetNote(
                   title:
                       'Peak ${fleet!.staffingSuggestion.peakLabel} · add cover at ${fleet.staffingSuggestion.outletName}',
-                  body: 'Revenue-by-hour suggests watching the next service peak.',
+                  body:
+                      'Revenue-by-hour suggests watching the next service peak.',
                 ),
               ],
             ),
@@ -1365,7 +1420,11 @@ class _DashT4FleetState extends State<_DashT4Fleet> {
               en: 'Fleet day-end · ${fleetKpis?.outletCount ?? 0} outlets',
               bn: 'ফ্লিট দিন শেষ',
             ),
-            kicker: tfPick(context, en: 'Roll up the group', bn: 'সমগ্র হিসাব প্রস্তুত করুন'),
+            kicker: tfPick(
+              context,
+              en: 'Roll up the group',
+              bn: 'সমগ্র হিসাব প্রস্তুত করুন',
+            ),
             warn: fleet?.openOutlets.isNotEmpty == true
                 ? '${fleet!.openOutlets.length} outlets still open'
                 : null,
@@ -1420,10 +1479,17 @@ Widget _manageScaffold({
   required Future<void> Function() onRefresh,
   required List<Widget> children,
   Widget? bottomNavigationBar,
+  VoidCallback? onCreateOrder,
 }) {
+  final canCreateOrder =
+      onCreateOrder != null &&
+      (app.menuItems as List<MenuItem>).any((item) => item.isAvailable);
   return Scaffold(
     backgroundColor: PosColors.background,
     bottomNavigationBar: bottomNavigationBar,
+    floatingActionButton: canCreateOrder
+        ? TfFab(tooltip: 'New order', onPressed: onCreateOrder)
+        : null,
     body: SafeArea(
       child: RefreshIndicator(
         color: PosColors.primaryDark,
@@ -1446,22 +1512,37 @@ Widget _manageTopBar(
   required _ManageChrome chrome,
   required _DashMode mode,
   required ValueChanged<_DashMode> onModeChanged,
+  required VoidCallback onNavigateToOrders,
+  required ValueChanged<PosNotificationTarget>? onNavigateToTarget,
 }) {
-  final now = DateTime.now();
+  final subtitle = _outletTitle(
+    app,
+    enterprise: tier == BusinessTier.enterprise,
+  );
+  final actions = <Widget>[
+    const HeaderModeButton(),
+    HeaderNotificationBell(
+      onNavigateToOrders: onNavigateToOrders,
+      onNavigateToTarget: onNavigateToTarget,
+    ),
+  ];
+  final roleToggle = app.isManager && tier != BusinessTier.simple
+      ? TfCompactRoleToggle(
+          key: const ValueKey('dashboard-view-dropdown'),
+          role: mode == _DashMode.manage ? 'manager' : 'owner',
+          onChanged: (role) => onModeChanged(
+            role == 'owner' ? _DashMode.review : _DashMode.manage,
+          ),
+        )
+      : null;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      TfDashTopBar(
-        outlet: _outletTitle(app, enterprise: tier == BusinessTier.enterprise),
-        mode: chrome.modeLabel,
-        time: '${DateFormat('h:mm a').format(now)} · ${DateFormat('EEE d MMM').format(now)}',
-        role: app.isManager && tier != BusinessTier.simple
-            ? (mode == _DashMode.manage ? 'manager' : 'owner')
-            : null,
-        onRoleChange: (role) =>
-            onModeChanged(role == 'owner' ? _DashMode.review : _DashMode.manage),
-        drawer: chrome.drawerValue,
-        drawerLabel: chrome.drawerLabel,
+      TfUnifiedTopNav(
+        title: tfPick(context, en: 'Dashboard', bn: 'ড্যাশবোর্ড'),
+        subtitle: subtitle,
+        trailing: actions,
+        below: roleToggle,
       ),
       TfOpenTicketsBar(
         count: chrome.openCount,
@@ -1473,7 +1554,8 @@ Widget _manageTopBar(
 }
 
 String _outletTitle(dynamic app, {bool enterprise = false}) {
-  final restaurant = (app.serverConfig?.restaurantName as String?)?.trim() ?? '';
+  final restaurant =
+      (app.serverConfig?.restaurantName as String?)?.trim() ?? '';
   final outlet = (app.serverConfig?.outletName as String?)?.trim() ?? '';
   if (enterprise) {
     if (restaurant.isEmpty) return 'Fleet';
@@ -1486,10 +1568,7 @@ String _outletTitle(dynamic app, {bool enterprise = false}) {
 }
 
 Widget _section({required double top, required Widget child}) {
-  return Padding(
-    padding: EdgeInsets.fromLTRB(16, top, 16, 0),
-    child: child,
-  );
+  return Padding(padding: EdgeInsets.fromLTRB(16, top, 16, 0), child: child);
 }
 
 List<Widget> _ringupBlocks({
@@ -1502,15 +1581,7 @@ List<Widget> _ringupBlocks({
 }) {
   return [
     _section(
-      top: 10,
-      child: TfRingupSearch(
-        placeholder: 'Search item or scan code',
-        recent: _recentNames(app, summary),
-        onRecentTap: onRecentTap,
-      ),
-    ),
-    _section(
-      top: 14,
+      top: 12,
       child: _TopSellerGrid(
         items: _topSellerItems(app, summary),
         qtyByItemId: qtyByItemId,
@@ -1521,20 +1592,6 @@ List<Widget> _ringupBlocks({
   ];
 }
 
-List<String> _recentNames(dynamic app, DashboardSummary? summary) {
-  final fromMovers = (summary?.moneyFirst.topMovers ?? const <TopMover>[])
-      .map((mover) => mover.nameEn)
-      .where((name) => name.trim().isNotEmpty)
-      .take(3)
-      .toList();
-  if (fromMovers.isNotEmpty) return fromMovers;
-  return (app.menuItems as List<MenuItem>)
-      .where((item) => item.isAvailable)
-      .map((item) => item.name)
-      .take(3)
-      .toList(growable: false);
-}
-
 List<MenuItem> _topSellerItems(dynamic app, DashboardSummary? summary) {
   final available = (app.menuItems as List<MenuItem>)
       .where((item) => item.isAvailable)
@@ -1542,15 +1599,20 @@ List<MenuItem> _topSellerItems(dynamic app, DashboardSummary? summary) {
   if (available.isEmpty) return const [];
   final byId = {for (final item in available) item.id: item};
   final ordered = <MenuItem>[];
+  for (final id
+      in (app.quickSellMenuItemIds as List<String>?) ?? const <String>[]) {
+    final item = byId[id];
+    if (item != null && !ordered.contains(item)) ordered.add(item);
+  }
   for (final mover in summary?.moneyFirst.topMovers ?? const <TopMover>[]) {
     final item = byId[mover.menuItemId];
     if (item != null && !ordered.contains(item)) ordered.add(item);
   }
   for (final item in available) {
-    if (ordered.length >= 9) break;
+    if (ordered.length >= 12) break;
     if (!ordered.contains(item)) ordered.add(item);
   }
-  return ordered.take(9).toList(growable: false);
+  return ordered.take(12).toList(growable: false);
 }
 
 class _TopSellerGrid extends StatelessWidget {
@@ -1582,10 +1644,10 @@ class _TopSellerGrid extends StatelessWidget {
       );
     }
     return TfFohCounter(
-      title: 'Top sellers · tap to add',
+      title: 'Quick sell · tap to ring up',
       action: 'Edit',
       onAction: onEdit,
-      cols: 3,
+      cols: 4,
       tiles: [
         for (final item in items)
           TfFohTile(
@@ -1594,11 +1656,414 @@ class _TopSellerGrid extends StatelessWidget {
             price: _bdt(item.price),
             category: _tileCategory(item),
             glyph: _tileGlyph(item),
+            imageUrl: item.imageUrl,
+            iconKey: resolveMenuIconKey(
+              iconKey: item.extras.iconKey,
+              name: item.name,
+              category: item.category,
+            ),
             tint: _tileTint(item),
             qty: qtyByItemId[item.id] ?? 0,
             onTap: () => onTap(item),
           ),
       ],
+    );
+  }
+}
+
+Future<void> _openQuickSellEditor(
+  BuildContext context,
+  dynamic app,
+  DashboardSummary? summary,
+) async {
+  final stored =
+      (app.quickSellMenuItemIds as List<String>?) ?? const <String>[];
+  final initialIds = stored.isNotEmpty
+      ? stored
+      : _topSellerItems(app, summary).map((item) => item.id).toList();
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => _QuickSellEditorPage(initialIds: initialIds),
+    ),
+  );
+}
+
+class _QuickSellEditorPage extends StatefulWidget {
+  const _QuickSellEditorPage({required this.initialIds});
+
+  final List<String> initialIds;
+
+  @override
+  State<_QuickSellEditorPage> createState() => _QuickSellEditorPageState();
+}
+
+class _QuickSellEditorPageState extends State<_QuickSellEditorPage> {
+  late final List<String> _ids;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ids = [...widget.initialIds.take(12)];
+  }
+
+  void _toggle(MenuItem item) {
+    setState(() {
+      if (_ids.contains(item.id)) {
+        _ids.remove(item.id);
+      } else if (_ids.length < 12) {
+        _ids.add(item.id);
+      }
+    });
+  }
+
+  void _move(String id, int delta) {
+    final index = _ids.indexOf(id);
+    if (index < 0) return;
+    final next = (index + delta).clamp(0, _ids.length - 1);
+    if (next == index) return;
+    setState(() {
+      final moved = _ids.removeAt(index);
+      _ids.insert(next, moved);
+    });
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await AppScope.of(context).updateQuickSellMenuItemIds(_ids);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final items = app.menuItems
+        .where((item) => item.isAvailable)
+        .toList(growable: false);
+    final byId = {for (final item in items) item.id: item};
+    final selected = [
+      for (final id in _ids)
+        if (byId[id] != null) byId[id]!,
+    ];
+    final remaining = [
+      for (final item in items)
+        if (!_ids.contains(item.id)) item,
+    ];
+    final canAddMore = _ids.length < 12;
+
+    return Scaffold(
+      key: const ValueKey('quick-sell-editor-page'),
+      backgroundColor: PosColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            TfAppBar(
+              title: 'Edit quick sell',
+              subtitle: '${_ids.length}/12 local counter tiles',
+              leading: TfIconButton(
+                icon: TfNavIcon.back,
+                tooltip: 'Back',
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+                children: [
+                  _QuickSellEditorHeading(
+                    title: 'Selected tiles',
+                    trailing: selected.isEmpty
+                        ? 'Pick items below'
+                        : 'Drag by taps',
+                  ),
+                  const SizedBox(height: 8),
+                  if (selected.isEmpty)
+                    const _QuickSellEmpty()
+                  else
+                    for (final item in selected)
+                      _QuickSellSelectedRow(
+                        item: item,
+                        index: _ids.indexOf(item.id),
+                        total: selected.length,
+                        onMoveUp: () => _move(item.id, -1),
+                        onMoveDown: () => _move(item.id, 1),
+                        onRemove: () => _toggle(item),
+                      ),
+                  const SizedBox(height: 18),
+                  _QuickSellEditorHeading(
+                    title: 'Menu items',
+                    trailing: canAddMore ? 'Tap to add' : 'Limit reached',
+                  ),
+                  const SizedBox(height: 8),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 180,
+                          mainAxisExtent: 76,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                        ),
+                    itemCount: remaining.length,
+                    itemBuilder: (_, i) {
+                      final item = remaining[i];
+                      return _QuickSellChoiceTile(
+                        item: item,
+                        enabled: canAddMore,
+                        onTap: () => _toggle(item),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            TfStickyCTA(
+              child: TfButton(
+                label: 'Save quick sell',
+                icon: Icons.check_rounded,
+                busy: _saving,
+                size: TfButtonSize.lg,
+                onPressed: _saving ? null : _save,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickSellEditorHeading extends StatelessWidget {
+  const _QuickSellEditorHeading({required this.title, required this.trailing});
+
+  final String title;
+  final String trailing;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: PosColors.text,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      Text(
+        trailing,
+        style: const TextStyle(
+          color: PosColors.muted,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  );
+}
+
+class _QuickSellEmpty extends StatelessWidget {
+  const _QuickSellEmpty();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: PosColors.line, width: 0.5),
+    ),
+    child: const Text(
+      'No quick-sell items selected yet.',
+      style: TextStyle(color: PosColors.muted, fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
+class _QuickSellSelectedRow extends StatelessWidget {
+  const _QuickSellSelectedRow({
+    required this.item,
+    required this.index,
+    required this.total,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onRemove,
+  });
+
+  final MenuItem item;
+  final int index;
+  final int total;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: PosColors.line, width: 0.5),
+    ),
+    child: Row(
+      children: [
+        _QuickSellMenuImage(item: item, size: 42),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: PosColors.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _bdt(item.price),
+                style: const TextStyle(
+                  color: PosColors.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+        TfIconButton(
+          icon: Icons.keyboard_arrow_up_rounded,
+          tooltip: 'Move up',
+          onPressed: index <= 0 ? null : onMoveUp,
+        ),
+        TfIconButton(
+          icon: Icons.keyboard_arrow_down_rounded,
+          tooltip: 'Move down',
+          onPressed: index >= total - 1 ? null : onMoveDown,
+        ),
+        TfIconButton(
+          icon: Icons.close_rounded,
+          tooltip: 'Remove',
+          onPressed: onRemove,
+        ),
+      ],
+    ),
+  );
+}
+
+class _QuickSellChoiceTile extends StatelessWidget {
+  const _QuickSellChoiceTile({
+    required this.item,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final MenuItem item;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: enabled ? 1 : 0.45,
+    child: Material(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: PosColors.line, width: 0.5),
+          ),
+          child: Row(
+            children: [
+              _QuickSellMenuImage(item: item, size: 42),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: PosColors.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _bdt(item.price),
+                      style: const TextStyle(
+                        color: PosColors.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: const BoxDecoration(
+                  color: PosColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _QuickSellMenuImage extends StatelessWidget {
+  const _QuickSellMenuImage({required this.item, required this.size});
+
+  final MenuItem item;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final key = resolveMenuIconKey(
+      iconKey: item.extras.iconKey,
+      name: item.name,
+      category: item.category,
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: MenuImageView(
+          imageUrl: item.imageUrl,
+          iconKey: key,
+          fit: BoxFit.cover,
+        ),
+      ),
     );
   }
 }
@@ -1633,7 +2098,9 @@ IconData _tileGlyph(MenuItem item) {
   if (text.contains('dessert') || text.contains('sweet')) {
     return Icons.cake_outlined;
   }
-  if (text.contains('rice') || text.contains('biryani') || text.contains('tehari')) {
+  if (text.contains('rice') ||
+      text.contains('biryani') ||
+      text.contains('tehari')) {
     return Icons.rice_bowl_outlined;
   }
   if (text.contains('side') || text.contains('salad')) {
@@ -1644,7 +2111,9 @@ IconData _tileGlyph(MenuItem item) {
 
 Color _tileTint(MenuItem item) {
   final text = '${item.name} ${item.category}'.toLowerCase();
-  if (text.contains('drink') || text.contains('juice') || text.contains('salad')) {
+  if (text.contains('drink') ||
+      text.contains('juice') ||
+      text.contains('salad')) {
     return PosColors.success;
   }
   if (text.contains('bread') ||
@@ -1675,7 +2144,11 @@ Widget _floorSection(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SecHead(en: 'Floor', bn: 'টেবিল', action: '$busy of ${tables.length} busy'),
+        _SecHead(
+          en: 'Floor',
+          bn: 'টেবিল',
+          action: '$busy of ${tables.length} busy',
+        ),
         _FloorMap(tables: tables, cols: cols),
       ],
     ),
@@ -1685,8 +2158,11 @@ Widget _floorSection(
 List<FloorTable> _floorTables(DashboardSummary? summary, int targetTables) {
   final right = summary?.rightNow;
   final existing = right?.floorTables ?? const <FloorTable>[];
-  final count = [targetTables, right?.tablesTotal ?? 0, existing.length]
-      .reduce((a, b) => a > b ? a : b);
+  final count = [
+    targetTables,
+    right?.tablesTotal ?? 0,
+    existing.length,
+  ].reduce((a, b) => a > b ? a : b);
   final byNo = {for (final table in existing) table.tableNo: table};
   return List.generate(count, (index) {
     final no = '${index + 1}';
@@ -1763,7 +2239,9 @@ class _FloorTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                table.tableNo.startsWith('T') ? table.tableNo : 'T${table.tableNo}',
+                table.tableNo.startsWith('T')
+                    ? table.tableNo
+                    : 'T${table.tableNo}',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1781,7 +2259,9 @@ class _FloorTile extends StatelessWidget {
           Text(
             state == 'idle'
                 ? 'IDLE'
-                : (state == 'seated' ? '${table.covers} COVERS' : state.toUpperCase()),
+                : (state == 'seated'
+                      ? '${table.covers} COVERS'
+                      : state.toUpperCase()),
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w600,
@@ -1818,39 +2298,230 @@ Widget _needsYouSection(
             tag: alert.kind.toUpperCase(),
             tone: alert.kind == 'low'
                 ? _AlertTone.low
-                : (alert.kind == 'danger' ? _AlertTone.danger : _AlertTone.late),
+                : (alert.kind == 'danger'
+                      ? _AlertTone.danger
+                      : _AlertTone.late),
             title: alert.title,
             sub: alert.body,
             cta: alert.cta.isEmpty ? 'Check' : alert.cta,
-            onCta: () => onNavigate(
-              alert.kind == 'low' ? _stockTab : _ordersTab,
-            ),
+            onCta: () =>
+                onNavigate(alert.kind == 'low' ? _stockTab : _ordersTab),
           ),
       ],
     ),
   );
 }
 
-Widget _todayAndClose({
-  required String title,
-  required String kicker,
+Widget _totalsAndPeak({
+  required DashboardSummary? summary,
   required String amount,
   required int orders,
   required String? top,
-  String? warn,
 }) {
+  final hourly = summary?.review?.revenueByHour;
   return Column(
     children: [
       _section(
         top: 18,
-        child: TfCollapsedSummary(cash: amount, orders: orders, top: top),
+        child: _TotalsHeader(cash: amount, orders: orders, sub: top),
       ),
       _section(
-        top: 10,
-        child: _CloseCard(title: title, kicker: kicker, warn: warn),
+        top: 14,
+        child: hourly?.hasData == true
+            ? _HourlyCard(
+                data: hourly!,
+                title: 'Peak hours',
+                titleBn: 'ব্যস্ত সময়',
+              )
+            : const _StaticPeakHoursCard(),
       ),
     ],
   );
+}
+
+Widget _closeSection({
+  required String title,
+  required String kicker,
+  String? warn,
+}) {
+  return _section(
+    top: 14,
+    child: _CloseCard(title: title, kicker: kicker, warn: warn),
+  );
+}
+
+class _TotalsHeader extends StatelessWidget {
+  const _TotalsHeader({required this.cash, required this.orders, this.sub});
+
+  final String cash;
+  final int orders;
+  final String? sub;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: PosColors.surface,
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      border: Border.all(color: PosColors.line, width: 0.5),
+      boxShadow: PosShadows.soft,
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: SizedBox(
+      height: 132,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 115,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _MicroLabel('Total cash'),
+                  const SizedBox(height: 8),
+                  Text(
+                    cash,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w700,
+                      color: PosColors.primaryDark,
+                      height: 1,
+                      letterSpacing: -0.9,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (sub != null && sub!.isNotEmpty) ...[
+                    const SizedBox(height: 7),
+                    Text(
+                      sub!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: PosColors.muted,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Container(width: 0.5, color: PosColors.line),
+          Expanded(
+            flex: 100,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _MicroLabel('Total orders'),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$orders',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w700,
+                      color: PosColors.primaryDark,
+                      height: 1,
+                      letterSpacing: -0.9,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _StaticPeakHoursCard extends StatelessWidget {
+  const _StaticPeakHoursCard();
+
+  @override
+  Widget build(BuildContext context) {
+    const values = [0.18, 0.32, 0.46, 0.78, 0.95, 0.58];
+    const labels = ['11A', '1P', '3P', '5P', '7P', '9P'];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line, width: 0.5),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: const [
+              Expanded(child: _MicroLabel('Peak hours')),
+              Text(
+                'Busiest 5-7 PM',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.muted,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 72,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (var i = 0; i < values.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: FractionallySizedBox(
+                              heightFactor: values[i],
+                              widthFactor: 1,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: i == 4
+                                      ? PosColors.primaryDark
+                                      : PosColors.surfaceSunk,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          labels[i],
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: PosColors.mutedSoft,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 String? _topMoverLabel(DashboardSummary? summary) {
@@ -1913,7 +2584,9 @@ class _OpenTicketRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         border: divider
-            ? const Border(bottom: BorderSide(color: PosColors.line, width: 0.5))
+            ? const Border(
+                bottom: BorderSide(color: PosColors.line, width: 0.5),
+              )
             : null,
       ),
       child: Row(

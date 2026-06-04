@@ -64,7 +64,18 @@ class TerminalHomeScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    _TerminalPulseBar(
+                      pending: pending,
+                      accepted: accepted,
+                      pendingSync: app.syncState.pendingCount,
+                    ),
+                    const SizedBox(height: 12),
+                    _TerminalTotalsHeader(
+                      sales: _money(metrics.totalSales, text.isBn),
+                      orders: _digits(metrics.todayOrders, text.isBn),
+                      note: syncLabel,
+                    ),
+                    const SizedBox(height: 12),
                     _StatusStrip(
                       printerReady: printerReady,
                       syncLabel: syncLabel,
@@ -217,6 +228,169 @@ class _StatusStrip extends StatelessWidget {
       ],
     );
   }
+}
+
+class _TerminalPulseBar extends StatelessWidget {
+  const _TerminalPulseBar({
+    required this.pending,
+    required this.accepted,
+    required this.pendingSync,
+  });
+
+  final int pending;
+  final int accepted;
+  final int pendingSync;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = AppScope.of(context).strings.isBn;
+    final open = pending + accepted;
+    final syncTail = pendingSync > 0
+        ? (isBn ? ' · সিঙ্ক বাকি $pendingSync' : ' · $pendingSync sync pending')
+        : '';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: PosColors.primaryDark,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: TfText(
+              isBn
+                  ? '$open খোলা · $pending পেন্ডিং$syncTail'
+                  : '$open open · $pending pending$syncTail',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: PosColors.primaryDark,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TerminalTotalsHeader extends StatelessWidget {
+  const _TerminalTotalsHeader({
+    required this.sales,
+    required this.orders,
+    required this.note,
+  });
+
+  final String sales;
+  final String orders;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = AppScope.of(context).strings.isBn;
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line, width: 0.5),
+        boxShadow: PosShadows.soft,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              flex: 115,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TerminalMicroLabel(isBn ? 'আজকের বিক্রি' : 'Today sales'),
+                    const SizedBox(height: 8),
+                    TfText(
+                      sales,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: PosColors.primaryDark,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    TfText(
+                      note,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: PosColors.muted,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(width: 0.5, color: PosColors.line),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TerminalMicroLabel(isBn ? 'অর্ডার' : 'Orders'),
+                    const SizedBox(height: 8),
+                    TfText(
+                      orders,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: PosColors.primaryDark,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TerminalMicroLabel extends StatelessWidget {
+  const _TerminalMicroLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => TfText(
+    label.toUpperCase(),
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: const TextStyle(
+      color: PosColors.mutedSoft,
+      fontSize: 10,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.6,
+    ),
+  );
 }
 
 class _StatusPill extends StatelessWidget {

@@ -18,7 +18,10 @@ void main() {
       ),
     );
 
-    expect(find.text('Cafe'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('complexity-dial-dropdown')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('complexity-dial-dropdown')));
     await tester.pumpAndSettle();
 

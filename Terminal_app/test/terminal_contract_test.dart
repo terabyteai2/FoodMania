@@ -18,6 +18,7 @@ void main() {
     final app = _read('lib/src/app.dart');
 
     expect(app, contains('enum _AppTab { orders, menu, home, settings }'));
+    expect(app, contains('bottomNavigationBar: _FloatingBottomNav'));
     expect(app, contains("'Orders'"));
     expect(app, contains("'Menu'"));
     expect(app, contains("'Home'"));

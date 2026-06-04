@@ -277,50 +277,96 @@ class TfAppBar extends StatelessWidget {
         ? subtitleBn!
         : subtitle;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (leading != null) ...[leading!, const SizedBox(width: 12)],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(
-                  t,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: tfFontFamily(context),
-                    color: PosColors.slate,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                    height: 1.1,
-                    letterSpacing: 0,
-                  ),
-                ),
-                if (s != null && s.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  TfText(
-                    s,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: tfFontFamily(context),
-                      color: PosColors.muted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ],
+    return TfUnifiedTopNav(
+      title: t,
+      subtitle: s,
+      leading: leading,
+      trailing: trailing,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfUnifiedTopNav — Common app chrome from the dashboard design canvas.
+// ---------------------------------------------------------------------------
+class TfUnifiedTopNav extends StatelessWidget {
+  const TfUnifiedTopNav({
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.trailing = const [],
+    this.below,
+    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 10),
+    super.key,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final List<Widget> trailing;
+  final Widget? below;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TfText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontFamily: tfFontFamily(context),
+            color: PosColors.text,
+            fontSize: 29,
+            fontWeight: FontWeight.w700,
+            height: 1.08,
+            letterSpacing: 0,
+          ),
+        ),
+        if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+          const SizedBox(height: 4),
+          TfText(
+            subtitle!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: tfFontFamily(context),
+              color: PosColors.textSec,
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
+              height: 1.2,
+              letterSpacing: 0,
             ),
           ),
-          if (trailing.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Wrap(spacing: 8, children: trailing),
-          ],
+        ],
+      ],
+    );
+
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (leading != null) ...[leading!, const SizedBox(width: 12)],
+              Expanded(child: titleBlock),
+              if (trailing.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 7,
+                  runSpacing: 8,
+                  children: trailing,
+                ),
+              ],
+            ],
+          ),
+          if (below != null) ...[const SizedBox(height: 12), below!],
         ],
       ),
     );
@@ -757,7 +803,7 @@ class TfFab extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
-            child: Icon(icon, color: PosColors.primaryDark),
+            child: Icon(icon, color: Colors.white),
           ),
         ),
       ),

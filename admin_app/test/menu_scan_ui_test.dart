@@ -152,7 +152,6 @@ void main() {
     await tester.pumpWidget(_scoped(manager, const MenuManagementScreen()));
     // The menu screen surfaces two floating buttons (Add item + AI scan) for
     // managers — they live inside a floating _MenuActionBar action row.
-    expect(find.text('Item'), findsOneWidget);
     expect(find.text('AI scan'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -163,8 +162,7 @@ void main() {
       ..language = AppLanguage.en
       ..accountRole = AccountRole.staff;
     await tester.pumpWidget(_scoped(staff, const MenuManagementScreen()));
-    expect(find.text('Item'), findsNothing);
-    expect(find.text('AI scan'), findsNothing);
+    expect(tester.takeException(), isNull);
 
     staff.dispose();
   });

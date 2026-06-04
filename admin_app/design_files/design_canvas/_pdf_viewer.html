@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { margin: 0; background: #333; display: flex; gap: 10px; padding: 10px; flex-wrap: wrap; }
+  canvas { background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+</style>
+</head>
+<body>
+<div id="out1"></div>
+<div id="out2"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+async function renderPDF(url, container) {
+  try {
+    const pdf = await pdfjsLib.getDocument(url).promise;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vp = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width;
+      canvas.height = vp.height;
+      container.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch(e) { container.textContent = 'Error: ' + e.message; }
+}
+
+renderPDF('uploads/design_rules.pdf', document.getElementById('out1'));
+renderPDF('uploads/dashboard_owner_review.pdf', document.getElementById('out2'));
+</script>
+</body>
+</html>

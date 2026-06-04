@@ -661,10 +661,6 @@ class _TopBar extends StatelessWidget {
         subtitle: subtitle,
         trailing: [
           if (!quietEmpty) HeaderModeButton(),
-          HeaderNotificationBell(
-            onNavigateToOrders: () {},
-            onNavigateToTarget: onNavigateToTarget,
-          ),
           if (!quietEmpty)
             TfIconButton(
               icon: Icons.tune_rounded,
@@ -672,6 +668,10 @@ class _TopBar extends StatelessWidget {
               dark: filtersActive,
               onPressed: onFilterPressed,
             ),
+          HeaderNotificationBell(
+            onNavigateToOrders: () {},
+            onNavigateToTarget: onNavigateToTarget,
+          ),
         ],
       ),
     );
@@ -3976,12 +3976,10 @@ class _CompactMenuTile extends StatelessWidget {
     final inCart = qty > 0;
     final extras = item.extras;
     final hasChoices = desktopMenuNeedsCustomization(item);
-    final iconStyle = menuIconStyleFor(
-      resolveMenuIconKey(
-        iconKey: extras.iconKey,
-        name: item.name,
-        category: item.category,
-      ),
+    final iconKey = resolveMenuIconKey(
+      iconKey: extras.iconKey,
+      name: item.name,
+      category: item.category,
     );
     final fg = inCart ? Colors.white : PosColors.slate;
     final muted = inCart
@@ -4010,22 +4008,18 @@ class _CompactMenuTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: inCart
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : iconStyle.background,
-                        borderRadius: BorderRadius.circular(PosRadii.xs),
-                      ),
-                      child: Icon(
-                        iconStyle.icon,
-                        color: inCart ? PosColors.primary : iconStyle.color,
-                        size: 17,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(PosRadii.xs),
+                      child: SizedBox(
+                        width: 30,
+                        height: 30,
+                        child: _ItemImage(
+                          url: item.imageUrl ?? '',
+                          iconKey: iconKey,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 5),
                     Expanded(
                       child: TfText(
                         item.localizedName(app.language),
