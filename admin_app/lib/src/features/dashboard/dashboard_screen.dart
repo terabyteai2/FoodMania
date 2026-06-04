@@ -853,6 +853,19 @@ mixin _ManageCartState<T extends StatefulWidget> on State<T> {
     if (_cartLines.isEmpty || _creatingOrder) return;
     setState(() => _creatingOrder = true);
     try {
+      final tier = TierScope.of(context);
+      final needsTableFirst =
+          tier == BusinessTier.standard || tier == BusinessTier.advanced;
+      if (needsTableFirst) {
+        await openNewOrderForm(
+          context,
+          initialCartLines: List<DesktopMenuLineSelection>.from(_cartLines),
+          onCreated: () {
+            if (mounted) setState(_cartLines.clear);
+          },
+        );
+        return;
+      }
       final order = await app.createManualOrder(
         requestedItems: [for (final line in _cartLines) line.toRequestItem()],
         serviceType: OrderServiceType.takeaway,

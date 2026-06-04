@@ -55,7 +55,11 @@ class MainActivity : FlutterActivity() {
     private val appUpdateChannelName = "com.terabyteai.foodmania/app_update"
     private val usbPrinterChannelName = "com.terabyteai.foodmania/usb_printer"
     private val builtInPrinterChannelName = "com.terabyteai.foodmania/built_in_printer"
+    private val browserChannelName = "com.terabyteai.foodmania/browser"
     private val facebookLoginChannelName = "com.terabyteai.foodmania/facebook_login"
+    private val facebookCallbackManager: CallbackManager = CallbackManager.Factory.create()
+    private var facebookCallbackRegistered = false
+    private var pendingFacebookLoginResult: MethodChannel.Result? = null
 
     companion object {
         private const val PENDING_CHANNEL_ID = "pos_pending_orders_v2"
@@ -85,9 +89,6 @@ class MainActivity : FlutterActivity() {
     )
 
     private var pendingUsbPrint: PendingUsbPrint? = null
-    private var pendingFacebookLoginResult: MethodChannel.Result? = null
-    private val facebookCallbackManager = CallbackManager.Factory.create()
-    private var facebookCallbackRegistered = false
     private var usbReceiverRegistered = false
     private var sunmiBinding = false
     private var sunmiBound = false
@@ -139,7 +140,7 @@ class MainActivity : FlutterActivity() {
                 "android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}"
         )
         ensureSunmiPrinterBound()
-        registerFacebookLoginChannel(flutterEngine)
+        registerBrowserChannel(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -355,6 +356,32 @@ class MainActivity : FlutterActivity() {
             },
         )
         facebookCallbackRegistered = true
+    }
+
+    private fun registerBrowserChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, browserChannelName)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "openUrl") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val url = call.argument<String>("url")?.trim()
+                if (url.isNullOrBlank()) {
+                    result.error("INVALID_ARGUMENT", "url is required", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val uri = Uri.parse(url)
+                    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                        addCategory(Intent.CATEGORY_BROWSABLE)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                    result.success(true)
+                } catch (error: Exception) {
+                    result.error("BROWSER_OPEN_FAILED", error.message, null)
+                }
+            }
     }
 
     private fun finishFacebookLogin(value: Map<String, String>) {

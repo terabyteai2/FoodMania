@@ -381,6 +381,36 @@ async def get_facebook_oauth_pages(
     }
 
 
+async def get_latest_facebook_oauth_pages(
+    db: AsyncSession,
+    *,
+    outlet_id: str,
+    account_id: str,
+) -> dict | None:
+    session = (
+        await db.execute(
+            select(ChatbotOAuthSession)
+            .where(
+                ChatbotOAuthSession.provider == FACEBOOK_PROVIDER,
+                ChatbotOAuthSession.outlet_id == outlet_id,
+                ChatbotOAuthSession.account_id == account_id,
+                ChatbotOAuthSession.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(ChatbotOAuthSession.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if session is None:
+        return None
+    return {
+        "sessionId": session.id,
+        "pages": [
+            {"pageId": page["pageId"], "pageName": page.get("pageName")}
+            for page in session.pages_json
+        ],
+    }
+
+
 async def complete_facebook_oauth_page_selection(
     db: AsyncSession,
     *,

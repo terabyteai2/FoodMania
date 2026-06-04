@@ -1,0 +1,51 @@
+  Future<void> _connectWithFacebook() async {
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final start = await app.startFacebookChatbotOAuth();
+    if (!mounted) return;
+    final url = start?.authorizationUrl.trim() ?? '';
+    if (url.isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: TfText(
+            app.facebookChatbotError ??
+                app.lastError ??
+                app.strings.facebookLoginFailed,
+          ),
+        ),
+      );
+      return;
+    }
+    final sessionId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => _FacebookOAuthWebViewPage(initialUrl: url),
+        fullscreenDialog: true,
+      ),
+    );
+    if (!mounted) return;
+    var connected = false;
+    if (sessionId != null && sessionId.trim().isNotEmpty) {
+      connected =
+          await Navigator.of(context).push<bool>(
+            MaterialPageRoute<bool>(
+              builder: (_) => _FacebookPageSelectionPage(sessionId: sessionId),
+              fullscreenDialog: true,
+            ),
+          ) ==
+          true;
+    }
+    if (connected) {
+      await app.loadFacebookChatbotConfig();
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: TfText(
+          connected
+              ? app.strings.facebookLoginComplete
+              : app.strings.facebookLoginFailed,
+        ),
+      ),
+    );
+  }
+

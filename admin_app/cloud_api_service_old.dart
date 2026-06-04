@@ -9,14 +9,12 @@ import '../core/constants/cloud_defaults.dart';
 import '../models/bkash_payment_session.dart';
 import '../models/payment_gateway_config.dart';
 import '../models/account_role.dart';
-import '../models/admin_blocking_notice.dart';
 import '../models/app_update_info.dart';
 import '../models/daily_report.dart';
 import '../models/dashboard_summary.dart';
 import '../models/facebook_chatbot_config.dart';
 import '../models/inventory_item.dart';
 import '../models/inventory_summary.dart';
-import '../models/inventory_supplier.dart';
 import '../models/menu_item.dart';
 import '../models/receipt_scan.dart';
 import '../models/stock_adjustment.dart';
@@ -186,7 +184,7 @@ class TenantBootstrapResult {
 
   static int _tableCount(Object? value) {
     final parsed = value is num ? value.toInt() : int.tryParse('$value');
-    return (parsed ?? 10).clamp(0, 200);
+    return (parsed ?? 10).clamp(1, 200);
   }
 }
 
@@ -639,14 +637,6 @@ class CloudApiService {
     return response;
   }
 
-  Future<AdminBlockingNotice> fetchAdminBlockingNotice() async {
-    final uri = _uri('/admin/blocking-notice');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return AdminBlockingNotice.fromJson(await _sendJson('GET', uri));
-  }
-
   Future<CloudRealtimeConfig?> loadRealtimeConfig() async {
     if (_realtimeConfig?.canConnect == true) return _realtimeConfig;
     if (!_cloudConfig.canConnect) return null;
@@ -676,7 +666,7 @@ class CloudApiService {
         if (managerName?.trim().isNotEmpty == true)
           'managerName': managerName!.trim(),
         'outletName': outletName,
-        'tableCount': tableCount.clamp(0, 200),
+        'tableCount': tableCount.clamp(1, 200),
         if (restaurantId?.trim().isNotEmpty == true)
           'restaurantId': restaurantId!.trim(),
         if (outletId?.trim().isNotEmpty == true) 'outletId': outletId!.trim(),
@@ -764,7 +754,7 @@ class CloudApiService {
         'restaurantName': restaurantName.trim(),
         if (managerName?.trim().isNotEmpty == true)
           'managerName': managerName!.trim(),
-        'tableCount': tableCount.clamp(0, 200),
+        'tableCount': tableCount.clamp(1, 200),
         if (outletName?.trim().isNotEmpty == true)
           'outletName': outletName!.trim(),
         if (serverId?.trim().isNotEmpty == true) 'serverId': serverId!.trim(),
@@ -819,7 +809,7 @@ class CloudApiService {
         'idToken': idToken,
         'role': role.value,
         'serverId': serverId,
-        if (tableCount != null) 'tableCount': tableCount.clamp(0, 200),
+        if (tableCount != null) 'tableCount': tableCount.clamp(1, 200),
         if (restaurantName?.trim().isNotEmpty == true)
           'restaurantName': restaurantName!.trim(),
         if (outletName?.trim().isNotEmpty == true)
@@ -1191,7 +1181,7 @@ class CloudApiService {
       'outletId': config.outletId,
       'restaurantName': config.restaurantName,
       'outletName': config.outletName,
-      'tableCount': config.tableCount.clamp(0, 200),
+      'tableCount': config.tableCount.clamp(1, 200),
     };
     final cleanFcmToken = fcmToken?.trim() ?? '';
     final cleanPushPlatform = pushPlatform?.trim() ?? '';
@@ -1429,30 +1419,6 @@ class CloudApiService {
     return [];
   }
 
-  Future<String> uploadOutletLogo(String dataUrl) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/logo');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson(
-      'POST',
-      uri,
-      body: {
-        'dataUrl': dataUrl,
-        'fileName': 'logo-${DateTime.now().millisecondsSinceEpoch}.jpg',
-      },
-    );
-    final data = response['data'] is Map
-        ? Map<String, Object?>.from(response['data'] as Map)
-        : response;
-    final url = data['logoUrl']?.toString().trim() ?? '';
-    if (url.isEmpty) {
-      throw CloudApiException('Logo upload did not return a public URL.');
-    }
-    return url;
-  }
-
   Future<void> updateOutletMedia({String? videoUrl}) async {
     final config = _requireServerConfig();
     final uri = _uri('/outlets/${config.outletId}/media');
@@ -1462,15 +1428,6 @@ class CloudApiService {
     await _sendJson('PATCH', uri, body: {'videoUrl': videoUrl});
   }
 
-  Future<void> updateOutletLogo(String? logoUrl) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/media');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    await _sendJson('PATCH', uri, body: {'logoUrl': logoUrl});
-  }
-
   Future<void> updateOutletMenuTheme(String slug) async {
     final config = _requireServerConfig();
     final uri = _uri('/outlets/${config.outletId}/media');
@@ -1478,15 +1435,6 @@ class CloudApiService {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
     await _sendJson('PATCH', uri, body: {'menuTheme': slug});
-  }
-
-  Future<void> updateOutletDeliveryCharge(double value) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/media');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    await _sendJson('PATCH', uri, body: {'deliveryCharge': value});
   }
 
   Future<String> uploadOutletVideo(List<int> bytes, String filename) async {
@@ -1552,15 +1500,6 @@ class CloudApiService {
       'subtotal': order.subtotal,
       'vatRatePercent': order.vatRatePercent,
       'vatAmount': order.vatAmount,
-      'deliveryCharge': order.deliveryCharge,
-      'shiftId': order.shiftId,
-      'discountLabel': order.discountLabel,
-      'discountAmount': order.discountAmount,
-      'serviceChargeRatePercent': order.serviceChargeRatePercent,
-      'serviceChargeAmount': order.serviceChargeAmount,
-      'billingSnapshot': order.billingSnapshot,
-      'kotBatches': order.kotBatches,
-      'settledAt': order.settledAt?.toUtc().toIso8601String(),
       'createdAt': order.createdAt.toUtc().toIso8601String(),
       'updatedAt': order.updatedAt.toUtc().toIso8601String(),
     };
@@ -1618,7 +1557,6 @@ class CloudApiService {
         'totalAmount': order.total,
         'vatRatePercent': order.vatRatePercent,
         'vatAmount': order.vatAmount,
-        'deliveryCharge': order.deliveryCharge,
         'updatedAt': order.updatedAt.toUtc().toIso8601String(),
       },
       idempotencyKey: 'order-items-${order.id}-${order.version}',
@@ -1660,135 +1598,17 @@ class CloudApiService {
     return _extractList(json);
   }
 
-  Future<List<Map<String, Object?>>> pullOrders({
-    DateTime? since,
-    int? limit,
-  }) async {
+  Future<List<Map<String, Object?>>> pullOrders({DateTime? since}) async {
     final config = _requireServerConfig();
-    final query = <String, String>{
-      if (since != null) 'since': since.toUtc().toIso8601String(),
-      if (limit != null) 'limit': '$limit',
-    };
     final uri = _uri(
       '/outlets/${config.outletId}/orders',
-      queryParameters: query.isEmpty ? null : query,
+      queryParameters: since == null
+          ? null
+          : {'since': since.toUtc().toIso8601String()},
     );
     if (uri == null) return [];
     final json = await _sendJson('GET', uri);
     return _extractList(json);
-  }
-
-  Future<Map<String, Object?>> pushDesktopPosSettings(
-    Map<String, Object?> payload,
-  ) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/pos/settings');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return _sendJson('PATCH', uri, body: payload);
-  }
-
-  Future<Map<String, Object?>?> pullDesktopPosSettings() async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/pos/settings');
-    if (uri == null) return null;
-    final json = await _sendJson('GET', uri);
-    final data = json['data'];
-    return data is Map ? Map<String, Object?>.from(data) : null;
-  }
-
-  Future<Map<String, Object?>?> pullDesktopCurrentShift() async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/pos/shifts/current');
-    if (uri == null) return null;
-    final json = await _sendJson('GET', uri);
-    final data = json['data'];
-    return data is Map ? Map<String, Object?>.from(data) : null;
-  }
-
-  Future<Map<String, Object?>?> pullDesktopPosReport({int days = 1}) async {
-    final config = _requireServerConfig();
-    final uri = _uri(
-      '/outlets/${config.outletId}/pos/reports',
-      queryParameters: {'days': '$days'},
-    );
-    if (uri == null) return null;
-    final json = await _sendJson('GET', uri);
-    final data = json['data'];
-    return data is Map ? Map<String, Object?>.from(data) : null;
-  }
-
-  Future<Map<String, Object?>> pushDesktopPosShift(
-    String shiftId,
-    String action,
-    Map<String, Object?> payload,
-  ) async {
-    final config = _requireServerConfig();
-    final path = action == 'open'
-        ? '/outlets/${config.outletId}/pos/shifts/open'
-        : '/outlets/${config.outletId}/pos/shifts/$shiftId/close';
-    final uri = _uri(path);
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return _sendJson(
-      'POST',
-      uri,
-      body: payload,
-      idempotencyKey: 'pos-shift-$shiftId-$action',
-    );
-  }
-
-  Future<Map<String, Object?>> pushDesktopKot(
-    String orderId,
-    Map<String, Object?> payload,
-  ) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/pos/orders/$orderId/kot');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return _sendJson(
-      'POST',
-      uri,
-      body: payload,
-      idempotencyKey: 'pos-kot-${payload['batchId']}',
-    );
-  }
-
-  Future<Map<String, Object?>> pushDesktopSettlement(
-    String orderId,
-    Map<String, Object?> payload,
-  ) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/pos/orders/$orderId/settle');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return _sendJson(
-      'POST',
-      uri,
-      body: payload,
-      idempotencyKey: 'pos-settle-$orderId',
-    );
-  }
-
-  Future<Map<String, Object?>> pushDesktopAudit(
-    String orderId,
-    Map<String, Object?> payload,
-  ) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/pos/orders/$orderId/audit');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return _sendJson(
-      'POST',
-      uri,
-      body: payload,
-      idempotencyKey: 'pos-audit-${payload['eventId']}',
-    );
   }
 
   Future<Map<String, Object?>> pullInventory({DateTime? since}) async {
@@ -1844,50 +1664,6 @@ class CloudApiService {
       body: adjustment.toMap(),
       idempotencyKey: 'inventory-adj-${adjustment.id}',
     );
-  }
-
-  Future<void> pushInventoryAdjustments(
-    List<StockAdjustment> adjustments,
-  ) async {
-    if (adjustments.isEmpty) return;
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/inventory/adjustments/batch');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    await _sendJson(
-      'POST',
-      uri,
-      body: {'adjustments': adjustments.map((row) => row.toMap()).toList()},
-      idempotencyKey:
-          'inventory-adj-batch-${adjustments.map((row) => row.id).join("-")}',
-    );
-  }
-
-  Future<List<InventorySupplier>> fetchInventorySuppliers() async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/inventory/suppliers');
-    if (uri == null) return const [];
-    final json = await _sendJson('GET', uri);
-    return _extractList(
-      json,
-    ).map(InventorySupplier.fromMap).toList(growable: false);
-  }
-
-  Future<InventorySupplier> saveInventorySupplier(
-    InventorySupplier supplier,
-  ) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/inventory/suppliers');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final json = await _sendJson('POST', uri, body: supplier.toJson());
-    final data = json['data'];
-    if (data is! Map) {
-      throw CloudApiException('Supplier response was malformed.');
-    }
-    return InventorySupplier.fromMap(Map<String, Object?>.from(data));
   }
 
   Future<DashboardSummary> fetchDashboardSummary({DateTime? asOf}) async {

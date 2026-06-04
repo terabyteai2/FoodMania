@@ -28,6 +28,7 @@ Future<void> openNewOrderForm(
   VoidCallback? onCreated,
   String? initialMenuItemId,
   Map<String, int>? initialMenuItemQuantities,
+  List<DesktopMenuLineSelection>? initialCartLines,
   bool startAtReview = false,
 }) async {
   final app = AppScope.of(context);
@@ -53,6 +54,7 @@ Future<void> openNewOrderForm(
         counterMode: counterMode,
         initialMenuItemId: initialMenuItemId,
         initialMenuItemQuantities: initialMenuItemQuantities,
+        initialCartLines: initialCartLines,
         startAtReview: startAtReview,
         onCreateOrder: (result) async {
           final order = await app.createManualOrder(
@@ -2370,6 +2372,7 @@ class _NewOrderPage extends StatefulWidget {
     this.counterMode = false,
     this.initialMenuItemId,
     this.initialMenuItemQuantities,
+    this.initialCartLines,
     this.startAtReview = false,
   });
 
@@ -2381,6 +2384,7 @@ class _NewOrderPage extends StatefulWidget {
   final bool counterMode;
   final String? initialMenuItemId;
   final Map<String, int>? initialMenuItemQuantities;
+  final List<DesktopMenuLineSelection>? initialCartLines;
   final bool startAtReview;
 
   @override
@@ -2409,6 +2413,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   @override
   void initState() {
     super.initState();
+    _cartLines.addAll(widget.initialCartLines ?? const []);
     final validIds = widget.menuItems.map((item) => item.id).toSet();
     final initialQuantities = widget.initialMenuItemQuantities ?? const {};
     for (final entry in initialQuantities.entries) {
@@ -4011,25 +4016,25 @@ class _CompactMenuTile extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(PosRadii.xs),
                       child: SizedBox(
-                        width: 30,
-                        height: 30,
+                        width: 44,
+                        height: 44,
                         child: _ItemImage(
                           url: item.imageUrl ?? '',
                           iconKey: iconKey,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
                     Expanded(
                       child: TfText(
                         item.localizedName(app.language),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           color: fg,
-                          height: 1.15,
+                          height: 1.1,
                         ),
                       ),
                     ),
@@ -4043,7 +4048,7 @@ class _CompactMenuTile extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w500,
                                 color: muted,
                               ),
@@ -4053,7 +4058,7 @@ class _CompactMenuTile extends StatelessWidget {
                             const SizedBox(width: 3),
                             Icon(
                               Icons.tune_rounded,
-                              size: 11,
+                              size: 10,
                               color: PosColors.muted,
                             ),
                           ],
@@ -4206,7 +4211,7 @@ class _MenuTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
-                      fontSize: 13,
+                      fontSize: 11.5,
                       color: Colors.white,
                       height: 1.2,
                     ),
@@ -4220,7 +4225,7 @@ class _MenuTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
-                            fontSize: 13,
+                            fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.85),
                           ),
                         ),
@@ -4229,7 +4234,7 @@ class _MenuTile extends StatelessWidget {
                         const SizedBox(width: 4),
                         Icon(
                           Icons.tune_rounded,
-                          size: 13,
+                          size: 12,
                           color: Colors.white.withValues(alpha: 0.7),
                         ),
                       ],

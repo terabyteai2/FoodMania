@@ -24,6 +24,7 @@ from services.facebook_chatbot import (
     complete_facebook_oauth,
     create_facebook_oauth_url,
     get_facebook_config,
+    get_latest_facebook_oauth_pages,
     get_facebook_oauth_pages,
     handle_facebook_webhook,
     save_facebook_config,
@@ -145,6 +146,23 @@ async def get_facebook_chatbot_oauth_pages(
             db, session_id=session_id, outlet_id=account.outlet_id, account_id=account.id
         )
     )
+
+
+@router.get("/admin/chatbot/facebook/oauth/latest-pages")
+async def get_latest_facebook_chatbot_oauth_pages(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    data = await get_latest_facebook_oauth_pages(
+        db, outlet_id=account.outlet_id, account_id=account.id
+    )
+    if data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Facebook Login is not complete yet.",
+        )
+    return ok(data)
 
 
 @router.post("/admin/chatbot/facebook/oauth/native")

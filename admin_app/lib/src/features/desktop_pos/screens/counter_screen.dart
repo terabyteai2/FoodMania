@@ -298,7 +298,7 @@ class _CounterScreenState extends State<CounterScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DesktopMenuThumb(item: item, size: 40, radius: Pc.rSm),
+                      DesktopMenuThumb(item: item, size: 54, radius: Pc.rSm),
                       const Spacer(),
                       if (hasChoices)
                         Container(
@@ -331,7 +331,7 @@ class _CounterScreenState extends State<CounterScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: Pc.text,
                         ),
@@ -339,7 +339,7 @@ class _CounterScreenState extends State<CounterScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Text(pcMoney(item.price), style: Pc.num(14)),
+                          Text(pcMoney(item.price), style: Pc.num(12.5)),
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -347,7 +347,7 @@ class _CounterScreenState extends State<CounterScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Pc.mono(
-                                10,
+                                9,
                                 weight: FontWeight.w600,
                                 color: Pc.textTer,
                               ),

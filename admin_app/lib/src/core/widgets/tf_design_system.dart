@@ -2264,7 +2264,7 @@ class TfFohTile extends StatelessWidget {
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 102),
-          padding: const EdgeInsets.fromLTRB(10, 9, 9, 9),
+          padding: const EdgeInsets.fromLTRB(10, 8, 9, 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
@@ -2306,8 +2306,8 @@ class TfFohTile extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(7),
                   child: SizedBox(
-                    width: 26,
-                    height: 26,
+                    width: 44,
+                    height: 44,
                     child:
                         (imageUrl ?? '').trim().isNotEmpty ||
                             (iconKey ?? '').trim().isNotEmpty
@@ -2318,14 +2318,14 @@ class TfFohTile extends StatelessWidget {
                           )
                         : Icon(
                             glyph ?? Icons.restaurant_outlined,
-                            size: 18,
+                            size: 24,
                             color: PosColors.textSec,
                           ),
                   ),
                 ),
               ),
               Positioned(
-                top: 34,
+                top: 52,
                 left: 0,
                 right: 0,
                 child: Text(
@@ -2333,8 +2333,8 @@ class TfFohTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
                     color: PosColors.text,
                     letterSpacing: 0,
                     height: 1.1,
@@ -2350,7 +2350,7 @@ class TfFohTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 16.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
                     color: PosColors.text,
                     letterSpacing: 0,

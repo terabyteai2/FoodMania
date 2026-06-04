@@ -116,6 +116,22 @@ const int kAlertSetCap = 2000;
 /// accepted-since signal because status transitions stamp it.
 const Duration kAcceptedOrderAutoServeAfter = Duration(minutes: 30);
 
+class _QueuedPosNotification {
+  const _QueuedPosNotification({
+    required this.type,
+    required this.title,
+    required this.body,
+    this.orderId,
+    this.actionTarget,
+  });
+
+  final PosNotificationType type;
+  final String title;
+  final String body;
+  final String? orderId;
+  final String? actionTarget;
+}
+
 class PosAppController extends ChangeNotifier {
   PosAppController({
     LocalDatabaseService? database,
@@ -197,6 +213,8 @@ class PosAppController extends ChangeNotifier {
   final BoundedStringSet _alertedPrintFailureReasons = BoundedStringSet(
     cap: kAlertSetCap,
   );
+  bool? _lastInternetOnline;
+  bool _coalesceNextOrderAlertBatch = false;
   Timer? _databaseChangeDebounce;
   Timer? _adminBlockingNoticePollTimer;
   Timer? _autoServeAcceptedOrdersTimer;
@@ -367,6 +385,10 @@ class PosAppController extends ChangeNotifier {
     unawaited(refreshAdminBlockingNotice());
     if (!isCloudReady || !cloudConfig.canSync) return;
     final hasInternet = await connectivityService.hasInternetAccess();
+    if (_lastInternetOnline == false && hasInternet) {
+      _coalesceNextOrderAlertBatch = true;
+    }
+    _lastInternetOnline = hasInternet;
     if (hasInternet) {
       if (_appUpdateWaitingForPermission != null) {
         unawaited(_resumeAppUpdateAfterPermission());
@@ -533,8 +555,23 @@ class PosAppController extends ChangeNotifier {
       );
       _subscriptions.add(
         syncService.stateStream.listen((state) {
+          if (state.isSyncing && _lastInternetOnline == false) {
+            _coalesceNextOrderAlertBatch = true;
+          }
+          final error = state.lastError?.toLowerCase() ?? '';
+          if (error.contains('internet unavailable')) {
+            _lastInternetOnline = false;
+          }
           syncState = state;
           notifyListeners();
+        }),
+      );
+      _subscriptions.add(
+        connectivityService.onlineStream.listen((online) {
+          if (_lastInternetOnline == false && online) {
+            _coalesceNextOrderAlertBatch = true;
+          }
+          _lastInternetOnline = online;
         }),
       );
 
@@ -543,6 +580,7 @@ class PosAppController extends ChangeNotifier {
       // inventory, etc. — using outletId as the file scope keeps them
       // physically separated on disk.
       await database.initialize(tenantKey: serverConfig.outletId);
+      _lastInternetOnline = await connectivityService.hasInternetAccess();
       await syncService.initialize(
         cloudConfig: cloudConfig,
         serverConfig: serverConfig,
@@ -559,6 +597,7 @@ class PosAppController extends ChangeNotifier {
       _startAcceptedOrderAutoServeTimer();
       unawaited(_autoServeExpiredAcceptedOrders());
       if (isCloudReady && cloudConfig.canSync) {
+        _coalesceNextOrderAlertBatch = true;
         unawaited(syncService.syncNow());
       }
       if (isLoggedIn && cloudConfig.hasDeviceToken) {
@@ -1193,29 +1232,6 @@ class PosAppController extends ChangeNotifier {
       return await cloudApiService.fetchFacebookChatbotOAuthPages(
         sessionId: sessionId,
       );
-    } catch (error) {
-      facebookChatbotError = _userVisibleError(error);
-      return null;
-    } finally {
-      facebookChatbotLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<String?> completeFacebookChatbotNativeOAuth(
-    String userAccessToken,
-  ) async {
-    try {
-      facebookChatbotLoading = true;
-      facebookChatbotError = null;
-      notifyListeners();
-      cloudApiService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      final sessionId = await cloudApiService
-          .completeFacebookChatbotNativeOAuth(userAccessToken: userAccessToken);
-      return sessionId.isEmpty ? null : sessionId;
     } catch (error) {
       facebookChatbotError = _userVisibleError(error);
       return null;
@@ -3858,6 +3874,8 @@ class PosAppController extends ChangeNotifier {
   }) async {
     final sorted = List<OrderModel>.from(orders)
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final orderNotifications = <_QueuedPosNotification>[];
+    final acceptedOrdersToPrint = <OrderModel>[];
 
     for (final order in sorted) {
       final id = order.id;
@@ -3876,12 +3894,14 @@ class PosAppController extends ChangeNotifier {
             (previousStatus != null && previousStatus != OrderStatus.pending);
         if (becamePending && !_alertedPendingOrderIds.contains(id)) {
           _alertedPendingOrderIds.add(id);
-          await addNotification(
-            type: PosNotificationType.pendingOrder,
-            title: strings.isBn ? 'নতুন পেন্ডিং অর্ডার' : 'New pending order',
-            body: _localizedNotificationOrderBody(order),
-            orderId: id,
-            actionTarget: 'pending_orders',
+          orderNotifications.add(
+            _QueuedPosNotification(
+              type: PosNotificationType.pendingOrder,
+              title: strings.isBn ? 'নতুন পেন্ডিং অর্ডার' : 'New pending order',
+              body: _localizedNotificationOrderBody(order),
+              orderId: id,
+              actionTarget: 'pending_orders',
+            ),
           );
         }
       }
@@ -3905,12 +3925,16 @@ class PosAppController extends ChangeNotifier {
                 previousStatus != OrderStatus.served);
         if (becameAccepted && !alreadyHandled) {
           _alertedAcceptedOrderIds.add(id);
-          await addNotification(
-            type: PosNotificationType.acceptedOrder,
-            title: strings.isBn ? 'অর্ডার অ্যাকসেপ্ট হয়েছে' : 'Order accepted',
-            body: _localizedNotificationOrderBody(order),
-            orderId: id,
-            actionTarget: 'orders',
+          orderNotifications.add(
+            _QueuedPosNotification(
+              type: PosNotificationType.acceptedOrder,
+              title: strings.isBn
+                  ? 'অর্ডার অ্যাকসেপ্ট হয়েছে'
+                  : 'Order accepted',
+              body: _localizedNotificationOrderBody(order),
+              orderId: id,
+              actionTarget: 'orders',
+            ),
           );
         }
       }
@@ -3923,9 +3947,85 @@ class PosAppController extends ChangeNotifier {
       // [printerService.hasPrintedOrder] gives a second-layer dedup inside
       // [_printAcceptedOrderIfNeeded] for the same-tick case.
       if (orderPrinterSideEffectsEnabled && isAcceptedNow && !alreadyHandled) {
-        await _printAcceptedOrderIfNeeded(order);
+        acceptedOrdersToPrint.add(order);
       }
     }
+
+    await _flushOrderAlertNotifications(orderNotifications);
+    for (final order in acceptedOrdersToPrint) {
+      await _printAcceptedOrderIfNeeded(order);
+    }
+  }
+
+  Future<void> _flushOrderAlertNotifications(
+    List<_QueuedPosNotification> queued,
+  ) async {
+    if (queued.isEmpty) {
+      _coalesceNextOrderAlertBatch = false;
+      return;
+    }
+    final coalesce = _coalesceNextOrderAlertBatch && queued.length > 1;
+    _coalesceNextOrderAlertBatch = false;
+
+    if (!coalesce) {
+      for (final notification in queued) {
+        await addNotification(
+          type: notification.type,
+          title: notification.title,
+          body: notification.body,
+          orderId: notification.orderId,
+          actionTarget: notification.actionTarget,
+        );
+      }
+      return;
+    }
+
+    final now = DateTime.now();
+    for (final item in queued) {
+      await database.upsertNotification(
+        PosNotification(
+          id: _uuid.v4(),
+          type: item.type,
+          title: item.title,
+          body: item.body,
+          orderId: item.orderId,
+          actionTarget: item.actionTarget,
+          createdAt: now,
+        ),
+      );
+    }
+    notifications = await database.getNotifications();
+
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final inForeground =
+        lifecycle == AppLifecycleState.resumed && isAppForeground;
+    final soundOn = notificationSoundEnabled;
+    final title = strings.notificationSummaryTitle(queued.length);
+    final body = strings.notificationSummaryBody;
+    debugPrint(
+      '[QB-NOTIF] coalesced order alerts count=${queued.length} '
+      'foreground=$inForeground sound=$soundOn',
+    );
+
+    if (inForeground) {
+      if (soundOn) {
+        unawaited(
+          playNotificationSound(type: PosNotificationType.pendingOrder),
+        );
+      }
+    } else {
+      unawaited(
+        systemNotifications.show(
+          id: 991001,
+          title: title,
+          body: body,
+          payload: 'orders',
+          type: PosNotificationType.pendingOrder,
+          playSound: soundOn,
+        ),
+      );
+    }
+    notifyListeners();
   }
 
   Future<void> _printAcceptedOrderIfNeeded(OrderModel order) async {
