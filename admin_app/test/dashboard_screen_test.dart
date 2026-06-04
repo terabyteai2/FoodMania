@@ -5,7 +5,6 @@ import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/core/enums/business_tier.dart';
 import 'package:local_pos/src/core/localization/app_strings.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
-import 'package:local_pos/src/core/widgets/menu_image_view.dart';
 import 'package:local_pos/src/features/dashboard/dashboard_screen.dart';
 import 'package:local_pos/src/models/menu_item.dart';
 import 'package:local_pos/src/models/account_role.dart';
@@ -117,31 +116,37 @@ class _OrderFlowController extends PosAppController {
 }
 
 void main() {
-  testWidgets('dashboard manager FAB opens the new order flow', (tester) async {
+  testWidgets('standard manage dashboard uses inline ring-up tray', (tester) async {
     final controller = _OrderFlowController()
       ..language = AppLanguage.en
+      ..businessTier = BusinessTier.standard
       ..menuItems = [_menuItem()];
 
     await tester.pumpWidget(
       _scoped(controller, DashboardScreen(onNavigate: (_) {})),
     );
 
-    expect(find.byTooltip('New order'), findsOneWidget);
+    expect(find.byTooltip('New order'), findsNothing);
+    expect(find.text('Top sellers · tap to add'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ring-it-up-Burger')), findsOneWidget);
 
-    await tester.tap(find.byTooltip('New order'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ring-it-up-Burger')));
+    await tester.pump();
 
-    expect(find.text("Where's this order for?"), findsOneWidget);
+    expect(find.byKey(const ValueKey('ring-it-up-cart')), findsOneWidget);
+    expect(find.text('Create order'), findsOneWidget);
+    expect(find.text('1 ITEMS IN ORDER'), findsOneWidget);
 
     controller.dispose();
   });
 
-  testWidgets('new order final step keeps bill details visible', (
+  testWidgets('inline create order keeps bill details visible', (
     tester,
   ) async {
     final item = _menuItem();
     final controller = _OrderFlowController()
       ..language = AppLanguage.en
+      ..businessTier = BusinessTier.standard
       ..menuItems = [item]
       ..printerState = PrinterRuntimeState(
         autoPrintEnabled: false,
@@ -155,16 +160,8 @@ void main() {
       _scoped(controller, DashboardScreen(onNavigate: (_) {})),
     );
 
-    await tester.tap(find.byTooltip('New order'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Parcel').first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Burger'));
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(find.text('Review'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ring-it-up-Burger')));
+    await tester.pump();
     await tester.tap(find.text('Create order'));
     for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 250));
@@ -184,49 +181,26 @@ void main() {
   });
 
   testWidgets(
-    'new order add items defaults to compact grid and toggles layout',
+    'manage ring-up grid is three-column and text first',
     (tester) async {
       final controller = PosAppController()
         ..language = AppLanguage.en
+        ..businessTier = BusinessTier.standard
         ..menuItems = [_menuItem()];
 
       await tester.pumpWidget(
         _scoped(controller, DashboardScreen(onNavigate: (_) {})),
       );
 
-      await tester.tap(find.byTooltip('New order'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Parcel').first);
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-
-      final compact = tester.widget<GridView>(find.byType(GridView));
-      final compactDelegate = compact.gridDelegate;
-      expect(compactDelegate, isA<SliverGridDelegateWithFixedCrossAxisCount>());
-      expect(
-        (compactDelegate as SliverGridDelegateWithFixedCrossAxisCount)
-            .crossAxisCount,
-        4,
-      );
-
-      await tester.tap(find.byTooltip('Large tiles'));
-      await tester.pumpAndSettle();
-
-      final large = tester.widget<GridView>(find.byType(GridView));
-      expect(
-        large.gridDelegate,
-        isA<SliverGridDelegateWithMaxCrossAxisExtent>(),
-      );
-
-      await tester.tap(find.byTooltip('Compact grid'));
-      await tester.pumpAndSettle();
-
-      final compactAgain = tester.widget<GridView>(find.byType(GridView));
-      expect(
-        compactAgain.gridDelegate,
-        isA<SliverGridDelegateWithFixedCrossAxisCount>(),
-      );
+      final threeColumnGrids = find.byWidgetPredicate((widget) {
+        if (widget is! GridView) return false;
+        final delegate = widget.gridDelegate;
+        return delegate is SliverGridDelegateWithFixedCrossAxisCount &&
+            delegate.crossAxisCount == 3;
+      }).evaluate();
+      expect(threeColumnGrids, isNotEmpty);
+      expect(find.byKey(const ValueKey('ring-it-up-Burger')), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
 
       controller.dispose();
     },
@@ -253,17 +227,15 @@ void main() {
     );
 
     expect(find.text('Helium'), findsOneWidget);
-    expect(find.text('FoodCart'), findsOneWidget);
-    expect(find.text('FOODCART'), findsNothing);
+    expect(find.text('FOOD CART'), findsOneWidget);
     expect(find.text('EN'), findsNothing);
-    expect(find.byType(MenuImageView), findsOneWidget);
+    expect(find.text('Top sellers · tap to add'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('ring-it-up-Burger')));
     await tester.pump();
 
     expect(find.byKey(const ValueKey('ring-it-up-cart')), findsOneWidget);
     expect(find.text('Create order'), findsOneWidget);
-    expect(find.text('1 ITEMS · CURRENT ORDER'), findsOneWidget);
-    expect(find.text('Burger ×1'), findsOneWidget);
+    expect(find.text('1 ITEMS IN ORDER'), findsOneWidget);
     expect(find.text('Review order'), findsNothing);
     expect(tester.takeException(), isNull);
 
@@ -325,7 +297,7 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('standard dashboard renders real floor states and FOH counter', (
+  testWidgets('standard dashboard renders cafe manage layout and floor states', (
     tester,
   ) async {
     final controller = PosAppController()
@@ -349,20 +321,28 @@ void main() {
       _scoped(controller, DashboardScreen(onNavigate: (_) {})),
     );
 
-    expect(find.text('FOH counter'), findsOneWidget);
-    expect(find.byKey(const ValueKey('foh-counter-Burger')), findsOneWidget);
+    expect(find.text('Top sellers · tap to add'), findsOneWidget);
+    expect(find.text('FOH counter'), findsNothing);
+    expect(find.byKey(const ValueKey('ring-it-up-Burger')), findsOneWidget);
+    expect(find.textContaining('open'), findsWidgets);
     expect(find.text('BILL'), findsOneWidget);
-    expect(find.text('IDLE'), findsOneWidget);
+    expect(find.text('IDLE'), findsWidgets);
 
     controller.dispose();
   });
 
-  testWidgets('restaurant mode selection renders the advanced dashboard', (
+  testWidgets('restaurant mode renders the advanced dashboard', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(360, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = PosAppController()
       ..language = AppLanguage.en
-      ..businessTier = BusinessTier.standard
+      ..businessTier = BusinessTier.advanced
+      ..menuItems = [_menuItem()]
       ..dashboardSummary = DashboardSummary.fromJson({
         'asOf': '2026-06-01T00:00:00Z',
         'moneyFirst': {},
@@ -373,14 +353,10 @@ void main() {
       _scoped(controller, DashboardScreen(onNavigate: (_) {})),
     );
 
-    await tester.tap(find.byKey(const ValueKey('complexity-dial-dropdown')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('complexity-dial-advanced')));
-    await tester.pumpAndSettle();
-
     expect(controller.businessTier, BusinessTier.advanced);
-    expect(find.text('Restaurant'), findsOneWidget);
-    expect(find.text('Right now'), findsOneWidget);
+    expect(find.text('RESTAURANT'), findsOneWidget);
+    expect(find.text('Top sellers · tap to add'), findsOneWidget);
+    expect(find.text('Floor'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     controller.dispose();
@@ -406,20 +382,7 @@ void main() {
         ),
       );
 
-      expect(
-        find.byKey(const ValueKey('complexity-dial-dropdown')),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-      await tester.tap(find.byKey(const ValueKey('complexity-dial-dropdown')));
-      await tester.pumpAndSettle();
-
-      for (final tier in BusinessTier.values) {
-        expect(
-          find.byKey(ValueKey('complexity-dial-${tier.key}')),
-          findsOneWidget,
-        );
-      }
+      expect(find.text('RESTAURANT'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       controller.dispose();
@@ -427,7 +390,7 @@ void main() {
   );
 
   testWidgets(
-    'restaurant dashboard lays out order channels in the scroll view',
+    'restaurant dashboard renders quick actions in the scroll view',
     (tester) async {
       tester.view.physicalSize = const Size(360, 780);
       tester.view.devicePixelRatio = 1;
@@ -437,25 +400,10 @@ void main() {
       final controller = PosAppController()
         ..language = AppLanguage.en
         ..businessTier = BusinessTier.advanced
+        ..menuItems = [_menuItem()]
         ..dashboardSummary = DashboardSummary.fromJson({
           'asOf': '2026-06-01T00:00:00Z',
-          'moneyFirst': {
-            'serviceMix': [
-              {
-                'key': 'dine_in',
-                'label': 'Dine-in',
-                'valueBdt': 438,
-                'pct': 33,
-              },
-              {
-                'key': 'takeaway',
-                'label': 'Takeaway',
-                'valueBdt': 880,
-                'pct': 67,
-              },
-              {'key': 'delivery', 'label': 'Delivery', 'valueBdt': 0, 'pct': 0},
-            ],
-          },
+          'moneyFirst': {},
           'rightNow': {},
         });
 
@@ -463,15 +411,16 @@ void main() {
         _scoped(controller, DashboardScreen(onNavigate: (_) {})),
       );
       await tester.scrollUntilVisible(
-        find.text('Order channels'),
+        find.text('Print KOT'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Dine-in'), findsOneWidget);
-      expect(find.text('Takeaway'), findsOneWidget);
-      expect(find.text('Delivery'), findsOneWidget);
+      expect(find.text('Print KOT'), findsOneWidget);
+      expect(find.text('Print bill'), findsOneWidget);
+      expect(find.text('Call waiter'), findsOneWidget);
+      expect(find.byTooltip('New order'), findsNothing);
       expect(tester.takeException(), isNull);
 
       controller.dispose();
@@ -566,15 +515,16 @@ void main() {
     );
 
     expect(find.text('75% of goal'), findsOneWidget);
-    expect(find.text('Fleet alerts'), findsOneWidget);
+    expect(find.text('Needs you'), findsOneWidget);
     expect(find.text('Main is full'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Benchmarks'),
+      find.text('Staffing'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Benchmarks'), findsOneWidget);
-    expect(find.textContaining('Staffing suggestion'), findsOneWidget);
+    expect(find.text('Staffing'), findsOneWidget);
+    expect(find.textContaining('Peak 8:00 PM'), findsOneWidget);
+    expect(find.text('Top sellers · tap to add'), findsNothing);
 
     controller.dispose();
   });

@@ -1859,7 +1859,11 @@ class TfDashTopBar extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           if (role != null)
-            TfCompactRoleToggle(role: role!, onChanged: onRoleChange!),
+            TfCompactRoleToggle(
+              key: const ValueKey('dashboard-view-dropdown'),
+              role: role!,
+              onChanged: onRoleChange!,
+            ),
           if (drawer != null) ...[
             const SizedBox(width: 10),
             Column(
@@ -2058,6 +2062,126 @@ class TfPeriodSubtitle extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// TfRingupSearch — Large search well + recent chips for manage-mode counters.
+// ---------------------------------------------------------------------------
+class TfRingupSearch extends StatelessWidget {
+  const TfRingupSearch({
+    required this.placeholder,
+    this.recent = const [],
+    this.onTap,
+    this.onRecentTap,
+    super.key,
+  });
+
+  final String placeholder;
+  final List<String> recent;
+  final VoidCallback? onTap;
+  final ValueChanged<String>? onRecentTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              height: 58,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: PosColors.line, width: 1),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    TfNavIcon.search,
+                    size: 24,
+                    color: PosColors.textTer,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      placeholder,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: PosColors.textTer,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    height: 30,
+                    padding: const EdgeInsets.symmetric(horizontal: 9),
+                    decoration: BoxDecoration(
+                      color: PosColors.surfaceSunk,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: PosColors.line, width: 1),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      '⌘K',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.textSec,
+                        fontFamily: tfEnglishFontFamily,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (recent.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const TfMicroLabel('Recent'),
+              for (final item in recent.take(3))
+                GestureDetector(
+                  onTap: onRecentTap == null ? null : () => onRecentTap!(item),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: PosColors.line, width: 1),
+                    ),
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.text,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // TfFohTile — Text-first ring-up tiles.
 // ---------------------------------------------------------------------------
 class TfFohTile extends StatelessWidget {
@@ -2090,7 +2214,7 @@ class TfFohTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 96),
+          constraints: const BoxConstraints(minHeight: 112),
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
@@ -2230,15 +2354,20 @@ class TfFohCounter extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                color: PosColors.text,
-                letterSpacing: -0.1,
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.text,
+                  letterSpacing: -0.1,
+                ),
               ),
             ),
+            const SizedBox(width: 10),
             InkWell(
               onTap: onAction,
               child: Container(
@@ -2277,7 +2406,7 @@ class TfFohCounter extends StatelessWidget {
             crossAxisCount: cols,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            mainAxisExtent: 96,
+            mainAxisExtent: 112,
           ),
           itemCount: tiles.length,
           itemBuilder: (context, index) => tiles[index],
@@ -2295,6 +2424,7 @@ class TfCreateOrderTray extends StatelessWidget {
     required this.count,
     required this.total,
     this.label = 'Create order',
+    this.busy = false,
     this.onTap,
     super.key,
   });
@@ -2302,6 +2432,7 @@ class TfCreateOrderTray extends StatelessWidget {
   final int count;
   final String total;
   final String label;
+  final bool busy;
   final VoidCallback? onTap;
 
   @override
@@ -2323,7 +2454,7 @@ class TfCreateOrderTray extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             GestureDetector(
-              onTap: onTap,
+              onTap: busy ? null : onTap,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                 decoration: BoxDecoration(
@@ -2334,14 +2465,24 @@ class TfCreateOrderTray extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                    if (busy)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
                     const SizedBox(width: 10),
                     Text(
                       total,
@@ -2591,8 +2732,11 @@ class _LineChartPainter extends CustomPainter {
       final path = Path();
       for (int i = 0; i < yesterday!.length; i++) {
         final pos = getPos(i, yesterday![i], yesterday!.length);
-        if (i == 0) path.moveTo(pos.dx, pos.dy);
-        else path.lineTo(pos.dx, pos.dy);
+        if (i == 0) {
+          path.moveTo(pos.dx, pos.dy);
+        } else {
+          path.lineTo(pos.dx, pos.dy);
+        }
       }
       
       // Dashed effect implementation
@@ -2620,8 +2764,11 @@ class _LineChartPainter extends CustomPainter {
       final path = Path();
       for (int i = 0; i < today.length; i++) {
         final pos = getPos(i, today[i], today.length);
-        if (i == 0) path.moveTo(pos.dx, pos.dy);
-        else path.lineTo(pos.dx, pos.dy);
+        if (i == 0) {
+          path.moveTo(pos.dx, pos.dy);
+        } else {
+          path.lineTo(pos.dx, pos.dy);
+        }
       }
       canvas.drawPath(path, todayPaint);
 
@@ -2676,8 +2823,11 @@ class _LineChartPainter extends CustomPainter {
     );
     tp.layout();
     double dx = offset.dx;
-    if (align == TextAlign.center) dx -= tp.width / 2;
-    else if (align == TextAlign.end) dx -= tp.width;
+    if (align == TextAlign.center) {
+      dx -= tp.width / 2;
+    } else if (align == TextAlign.end) {
+      dx -= tp.width;
+    }
     tp.paint(canvas, Offset(dx, offset.dy - tp.height / 2));
   }
 
