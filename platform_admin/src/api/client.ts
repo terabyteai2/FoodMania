@@ -337,6 +337,17 @@ export type PlatformHealth = {
   checkedAt: string;
 };
 
+// ── Account search types ──────────────────────────────────────────────────────
+
+export type AccountSearchResult = {
+  id: string;
+  outletId: string;
+  outletName: string;
+  restaurantName: string;
+  phone: string;
+  displayName: string | null;
+};
+
 // ── Outlet activity types ─────────────────────────────────────────────────────
 
 export type OutletActivity = {

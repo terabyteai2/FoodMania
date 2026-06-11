@@ -11,6 +11,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import SystemHealthPage from "./pages/SystemHealthPage";
 import SystemConfigPage from "./pages/SystemConfigPage";
 import PlatformAdminsPage from "./pages/PlatformAdminsPage";
+import MessagesPage from "./pages/MessagesPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!getToken()) {
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="health" element={<SystemHealthPage />} />
         <Route path="config" element={<SystemConfigPage />} />
         <Route path="admins" element={<PlatformAdminsPage />} />
+        <Route path="messages" element={<MessagesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

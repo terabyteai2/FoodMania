@@ -11,6 +11,7 @@ const nav = [
   { to: "/health", label: "System Health", icon: "❤" },
   { to: "/config", label: "System Config", icon: "⚙" },
   { to: "/admins", label: "Admins", icon: "👤" },
+  { to: "/messages", label: "Messages", icon: "✉" },
 ];
 
 const SEV_COLOR: Record<string, string> = {
