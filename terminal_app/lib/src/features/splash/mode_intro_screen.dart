@@ -10,6 +10,7 @@ import '../../core/widgets/tf_design_system.dart';
 
 /// Extracts a 6-digit OTP from SMS text or platform autofill payloads.
 final RegExp _otpSixDigits = RegExp(r'\d{6}');
+final _keyboardChannel = MethodChannel('com.terabyteai.foodmania/keyboard');
 
 class ModeIntroScreen extends StatefulWidget {
   const ModeIntroScreen({required this.onFinished, super.key});
@@ -22,6 +23,7 @@ class ModeIntroScreen extends StatefulWidget {
 
 class _ModeIntroScreenState extends State<ModeIntroScreen> {
   final _phoneController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
   final _otpFocusNode = FocusNode();
 
   bool _busy = false;
@@ -38,14 +40,23 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppScope.of(context).refreshCloudCapabilities();
+      _phoneFocusNode.requestFocus();
+      _forceShowKeyboard();
     });
   }
 
   @override
   void dispose() {
+    _phoneFocusNode.dispose();
     _otpFocusNode.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  void _forceShowKeyboard() {
+    try {
+      _keyboardChannel.invokeMethod<void>('forceShow');
+    } catch (_) {}
   }
 
   void _scheduleAutoVerify() {
@@ -251,6 +262,8 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
                       if (!_otpSent) ...[
                         TextField(
                           controller: _phoneController,
+                          focusNode: _phoneFocusNode,
+                          autofocus: true,
                           keyboardType: TextInputType.phone,
                           textInputAction: TextInputAction.done,
                           autofillHints: const [AutofillHints.telephoneNumber],

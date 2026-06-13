@@ -37,6 +37,7 @@ import com.sunmi.peripheral.printer.SunmiPrinterService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.view.inputmethod.InputMethodManager
 import java.io.File
 import java.io.FileInputStream
 import java.lang.reflect.Modifier
@@ -286,6 +287,20 @@ class MainActivity : FlutterActivity() {
                     "clearDiagnostics" -> {
                         clearPrinterDiagnostics()
                         printerLog("Diagnostics cleared")
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.terabyteai.foodmania/keyboard")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "forceShow" -> {
+                        val view = currentFocus
+                        if (view != null) {
+                            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                            imm.showSoftInput(view, InputMethodManager.SHOW_FORCED)
+                        }
                         result.success(true)
                     }
                     else -> result.notImplemented()
