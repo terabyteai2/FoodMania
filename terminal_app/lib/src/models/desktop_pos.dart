@@ -258,6 +258,10 @@ class PosReportSnapshot {
     this.coversByHour = const {},
     this.auditCounts = const {},
     this.priorSameWeekdayHourlyAverage = const {},
+    this.discounts = 0,
+    this.vatIncluded = 0,
+    this.deliveryFees = 0,
+    this.serviceSplit = const {},
   });
 
   final double sales;
@@ -270,6 +274,10 @@ class PosReportSnapshot {
   final Map<int, int> coversByHour;
   final Map<String, int> auditCounts;
   final Map<int, double> priorSameWeekdayHourlyAverage;
+  final double discounts;
+  final double vatIncluded;
+  final double deliveryFees;
+  final Map<String, double> serviceSplit;
 
   Map<String, Object?> toJson() => {
     'sales': sales,
@@ -289,6 +297,10 @@ class PosReportSnapshot {
     },
     'items': items,
     'staff': staff,
+    'discounts': discounts,
+    'vatIncluded': vatIncluded,
+    'deliveryFees': deliveryFees,
+    'serviceSplit': serviceSplit,
   };
 
   factory PosReportSnapshot.fromJson(Map<String, Object?> json) =>
@@ -305,6 +317,10 @@ class PosReportSnapshot {
         ),
         items: _mapList(json['items'], (item) => item),
         staff: _mapList(json['staff'], (item) => item),
+        discounts: _double(json['discounts']),
+        vatIncluded: _double(json['vatIncluded']),
+        deliveryFees: _double(json['deliveryFees']),
+        serviceSplit: _stringDoubleMap(json['serviceSplit']),
       );
 }
 

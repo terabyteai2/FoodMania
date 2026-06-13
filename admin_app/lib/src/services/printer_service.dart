@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/localization/app_strings.dart';
 import '../core/utils/bounded_string_set.dart';
+import '../models/desktop_pos.dart';
 import '../models/order_item.dart';
 import '../models/order_model.dart';
 import '../models/order_service_type.dart';
@@ -151,6 +152,7 @@ class _ReceiptLabels {
   String get defaultRestaurantName => _bn ? 'রেস্টুরেন্ট' : 'Restaurant';
 
   String get _locale => _bn ? 'bn_BD' : 'en_US';
+  String pick(String en, String bn) => _bn ? bn : en;
   String qtyText(int qty) => '${digits('$qty')}x';
   String itemName(OrderItem item) {
     final value = item.localizedName(language);
@@ -159,12 +161,10 @@ class _ReceiptLabels {
 
   String money(num amount) {
     final rounded = amount.roundToDouble();
-    final value = (amount - rounded).abs() < 0.005
-        ? rounded.toInt().toString()
-        : NumberFormat.decimalPatternDigits(
-            locale: _locale,
-            decimalDigits: 2,
-          ).format(amount);
+    final value = NumberFormat.decimalPatternDigits(
+      locale: _locale,
+      decimalDigits: (amount - rounded).abs() < 0.005 ? 0 : 2,
+    ).format(amount);
     return digits('$value/-');
   }
 
@@ -247,6 +247,19 @@ class PrinterService {
   static const String _windowsQueueKey = 'printer_windows_queue';
   static const String _windowsPaperWidthKey = 'printer_windows_paper_width_mm';
   static const int _ticketWidth = 32;
+  // Print-speed target: 90 mm/sec (GS ( E density/speed command).
+  static const int debugTargetPrintSpeedMmPerSecond = 90;
+  static const List<int> _targetPrintSpeed90MmPerSecond = [
+    0x1D,
+    0x28,
+    0x45,
+    0x04,
+    0x00,
+    0x05,
+    0x05,
+    debugTargetPrintSpeedMmPerSecond,
+    0x00,
+  ];
 
   final StreamController<PrinterRuntimeState> _stateController =
       StreamController<PrinterRuntimeState>.broadcast();
@@ -495,13 +508,16 @@ class PrinterService {
     OrderModel order, {
     String? restaurantName,
     String? outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     bool isManagerCopy = false,
   }) async {
     return printSystemPdfFallback(
       order,
       restaurantName: restaurantName,
-      outletName: outletName,
+      restaurantAddress: restaurantAddress,
+      restaurantPhone: restaurantPhone,
       language: language,
       isManagerCopy: isManagerCopy,
     );
@@ -511,6 +527,8 @@ class PrinterService {
     OrderModel order, {
     String? restaurantName,
     String? outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     bool isManagerCopy = false,
   }) async {
@@ -536,7 +554,8 @@ class PrinterService {
         labels: _ReceiptLabels(language),
         isManagerCopy: isManagerCopy,
         restaurantName: restaurantName ?? 'HYBRID POS',
-        outletName: outletName ?? '',
+        restaurantAddress: restaurantAddress,
+        restaurantPhone: restaurantPhone,
       );
       final bitmap = img.decodePng(pngBytes);
       if (bitmap == null) {
@@ -560,6 +579,79 @@ class PrinterService {
       final ok = await Printing.directPrintPdf(
         printer: printer,
         name: 'Receipt ${order.displaySequence}',
+        format: pageFormat,
+        usePrinterSettings: true,
+        onLayout: (_) => document.save(),
+      );
+      _emit(
+        _state.copyWith(
+          activeTransport: ok
+              ? PrinterTransport.windowsUsb
+              : PrinterTransport.none,
+          connected: ok,
+          clearLastError: ok,
+        ),
+      );
+      return ok;
+    } catch (error) {
+      _emit(
+        _state.copyWith(lastError: _friendlyError(error), connected: false),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> printSystemKotPdfFallback(
+    OrderModel order, {
+    String? restaurantName,
+    AppLanguage language = AppLanguage.en,
+    String? serverName,
+  }) async {
+    if (!_hasSelectedSystemPrinter) return false;
+    final selected = _state.selectedWindowsQueueName?.trim() ?? '';
+    if (selected.isEmpty) return false;
+    try {
+      final printers = await Printing.listPrinters();
+      Printer? printer;
+      for (final item in printers) {
+        if (item.name == selected) {
+          printer = item;
+          break;
+        }
+      }
+      if (printer == null) {
+        throw PrinterException(
+          'The selected USB/system printer is unavailable.',
+        );
+      }
+      final pngBytes = await _buildKotBitmapPng(
+        order,
+        labels: _ReceiptLabels(language),
+        restaurantName: restaurantName ?? 'HYBRID POS',
+        serverName: serverName,
+      );
+      final bitmap = img.decodePng(pngBytes);
+      if (bitmap == null) {
+        throw PrinterException('Could not decode rendered KOT bitmap.');
+      }
+      final document = pw.Document();
+      final width = _state.windowsPaperWidthMm.toDouble();
+      final receiptHeight = width * bitmap.height / bitmap.width;
+      final pageFormat = PdfPageFormat(
+        width * PdfPageFormat.mm,
+        receiptHeight * PdfPageFormat.mm,
+      );
+      document.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: pw.EdgeInsets.zero,
+          build: (_) =>
+              pw.Image(pw.MemoryImage(pngBytes), fit: pw.BoxFit.fitWidth),
+        ),
+      );
+      final ok = await Printing.directPrintPdf(
+        printer: printer,
+        name: 'KOT ${order.displaySequence}',
         format: pageFormat,
         usePrinterSettings: true,
         onLayout: (_) => document.save(),
@@ -697,6 +789,8 @@ class PrinterService {
   Future<bool> testPrint({
     required String restaurantName,
     required String outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
   }) async {
     final attemptId = _nextPrinterAttempt('test-print');
     return _withBusyBool(() async {
@@ -747,7 +841,8 @@ class PrinterService {
         restaurantName: restaurantName.trim().isEmpty
             ? 'HYBRID POS'
             : restaurantName,
-        outletName: outletName,
+        restaurantAddress: restaurantAddress,
+        restaurantPhone: restaurantPhone,
       );
       _logPrinterDiag(attemptId, 'testPrint bytes=${bytes.length}');
       var ok = await _writeBytes(bytes, diagId: attemptId);
@@ -756,7 +851,8 @@ class PrinterService {
         ok = await printSystemPdfFallback(
           testOrder,
           restaurantName: restaurantName,
-          outletName: outletName,
+          restaurantAddress: restaurantAddress,
+          restaurantPhone: restaurantPhone,
           language: AppLanguage.en,
           isManagerCopy: true,
         );
@@ -778,9 +874,12 @@ class PrinterService {
     OrderModel order, {
     required String restaurantName,
     required String outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     bool markAsPrinted = true,
     String? orderDetailsUrl,
+    String? serverName,
   }) async {
     final attemptId = _nextPrinterAttempt('print-kot-${order.id}');
     return _withBusyBool(() async {
@@ -789,40 +888,37 @@ class PrinterService {
       final generator = Generator(_paperSize, profile);
       final labels = _ReceiptLabels(language);
 
-      final managerCopyBytes = await _buildBitmapCopyBytes(
+      final kotBytes = await _buildKotBitmapBytes(
         generator,
         order,
         labels: labels,
-        isManagerCopy: true,
         restaurantName: restaurantName,
-        outletName: outletName,
-        orderDetailsUrl: orderDetailsUrl,
+        restaurantAddress: restaurantAddress,
+        restaurantPhone: restaurantPhone,
+        serverName: serverName,
       );
       _logPrinterDiag(
         attemptId,
-        'printOrderTicket managerBytes=${managerCopyBytes.length}',
+        'printOrderTicket kotBytes=${kotBytes.length}',
       );
-      var okManager = await _writeBytes(managerCopyBytes, diagId: attemptId);
-      if (!okManager && _hasSelectedSystemPrinter) {
-        _logPrinterDiag(attemptId, 'trying system PDF fallback manager copy');
-        okManager = await printSystemPdfFallback(
+      var okKot = await _writeBytes(kotBytes, diagId: attemptId);
+      if (!okKot && _hasSelectedSystemPrinter) {
+        _logPrinterDiag(attemptId, 'trying system PDF fallback KOT');
+        okKot = await printSystemKotPdfFallback(
           order,
           restaurantName: restaurantName,
-          outletName: outletName,
           language: language,
-          isManagerCopy: true,
+          serverName: serverName,
         );
       }
       _debugPrintWriteResult(
         order,
-        copyKind: 'manager',
-        byteCount: managerCopyBytes.length,
-        ok: okManager,
+        copyKind: 'kot',
+        byteCount: kotBytes.length,
+        ok: okKot,
       );
-      if (!okManager) {
-        throw PrinterException(
-          'Printing manager copy of ${order.orderNo} failed.',
-        );
+      if (!okKot) {
+        throw PrinterException('Printing KOT of ${order.orderNo} failed.');
       }
 
       if (markAsPrinted) {
@@ -844,6 +940,8 @@ class PrinterService {
     OrderModel order, {
     required String restaurantName,
     required String outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     String? orderDetailsUrl,
   }) async {
@@ -859,7 +957,8 @@ class PrinterService {
         labels: labels,
         isManagerCopy: false,
         restaurantName: restaurantName,
-        outletName: outletName,
+        restaurantAddress: restaurantAddress,
+        restaurantPhone: restaurantPhone,
         orderDetailsUrl: orderDetailsUrl,
       );
       _logPrinterDiag(
@@ -872,7 +971,8 @@ class PrinterService {
         ok = await printSystemPdfFallback(
           order,
           restaurantName: restaurantName,
-          outletName: outletName,
+          restaurantAddress: restaurantAddress,
+          restaurantPhone: restaurantPhone,
           language: language,
         );
       }
@@ -899,6 +999,216 @@ class PrinterService {
     }, diagId: attemptId);
   }
 
+  Future<bool> printDeliveryDispatchCopy(
+    OrderModel order, {
+    required String restaurantName,
+    required String outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    AppLanguage language = AppLanguage.en,
+    String? driverNote,
+  }) async {
+    final attemptId = _nextPrinterAttempt('print-dispatch-${order.id}');
+    return _withBusyBool(() async {
+      await _ensureAnyPrinterReady(diagId: attemptId);
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(_paperSize, profile);
+      final labels = _ReceiptLabels(language);
+      final data = _buildDispatchTicketData(
+        order,
+        labels: labels,
+        driverNote: driverNote,
+      );
+      final bytes = await _buildUtilityBitmapBytes(generator, data);
+      var ok = await _writeBytes(bytes, diagId: attemptId);
+      if (!ok && _hasSelectedSystemPrinter) {
+        ok = await _printSystemUtilityPdfFallback(
+          data,
+          name: 'Dispatch ${order.displaySequence}',
+        );
+      }
+      if (!ok) {
+        throw PrinterException(
+          'Printing dispatch copy of ${order.orderNo} failed.',
+        );
+      }
+      _emit(
+        _state.copyWith(
+          lastPrintedOrderNo: order.orderNo,
+          lastPrintedAt: DateTime.now(),
+          clearLastError: true,
+        ),
+      );
+      _logPrinterEnd(attemptId, 'print-dispatch-ok');
+      return true;
+    }, diagId: attemptId);
+  }
+
+  Future<bool> printVoidWasteTicket(
+    OrderModel order, {
+    required String action,
+    required String reason,
+    required String restaurantName,
+    required String outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    AppLanguage language = AppLanguage.en,
+    String? cashierName,
+    double? value,
+  }) async {
+    final attemptId = _nextPrinterAttempt('print-void-${order.id}');
+    return _withBusyBool(() async {
+      await _ensureAnyPrinterReady(diagId: attemptId);
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(_paperSize, profile);
+      final labels = _ReceiptLabels(language);
+      final data = _buildVoidWasteTicketData(
+        order,
+        labels: labels,
+        action: action,
+        reason: reason,
+        cashierName: cashierName,
+        value: value,
+      );
+      final bytes = await _buildUtilityBitmapBytes(generator, data);
+      var ok = await _writeBytes(bytes, diagId: attemptId);
+      if (!ok && _hasSelectedSystemPrinter) {
+        ok = await _printSystemUtilityPdfFallback(
+          data,
+          name: 'Void ${order.displaySequence}',
+        );
+      }
+      if (!ok) {
+        throw PrinterException(
+          'Printing void/waste ticket of ${order.orderNo} failed.',
+        );
+      }
+      _emit(
+        _state.copyWith(
+          lastPrintedOrderNo: order.orderNo,
+          lastPrintedAt: DateTime.now(),
+          clearLastError: true,
+        ),
+      );
+      _logPrinterEnd(attemptId, 'print-void-ok');
+      return true;
+    }, diagId: attemptId);
+  }
+
+  Future<bool> printEndOfDayReport({
+    required PosReportSnapshot report,
+    PosShift? shift,
+    required String restaurantName,
+    required String outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    AppLanguage language = AppLanguage.en,
+    String? managerName,
+  }) async {
+    final attemptId = _nextPrinterAttempt('print-end-of-day');
+    return _withBusyBool(() async {
+      await _ensureAnyPrinterReady(diagId: attemptId);
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(_paperSize, profile);
+      final labels = _ReceiptLabels(language);
+      final data = _buildEndOfDayTicketData(
+        report: report,
+        shift: shift,
+        labels: labels,
+        restaurantName: restaurantName,
+        outletName: outletName,
+        managerName: managerName,
+      );
+      final bytes = await _buildUtilityBitmapBytes(generator, data);
+      var ok = await _writeBytes(bytes, diagId: attemptId);
+      if (!ok && _hasSelectedSystemPrinter) {
+        ok = await _printSystemUtilityPdfFallback(
+          data,
+          name: labels.pick('End of day report', 'দিন শেষ রিপোর্ট'),
+        );
+      }
+      if (!ok) {
+        throw PrinterException('Printing end of day report failed.');
+      }
+      _emit(
+        _state.copyWith(
+          lastPrintedOrderNo: labels.pick('End of day', 'দিন শেষ'),
+          lastPrintedAt: DateTime.now(),
+          clearLastError: true,
+        ),
+      );
+      _logPrinterEnd(attemptId, 'print-end-of-day-ok');
+      return true;
+    }, diagId: attemptId);
+  }
+
+  Future<Uint8List> _buildKotBitmapPng(
+    OrderModel order, {
+    required _ReceiptLabels labels,
+    required String restaurantName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    String? serverName,
+  }) async {
+    final cleanRestaurant = restaurantName.trim();
+    final resolvedRestaurant = cleanRestaurant.isEmpty
+        ? labels.defaultRestaurantName
+        : cleanRestaurant;
+    final data = _buildKotTicketData(
+      order,
+      labels: labels,
+      restaurantName: resolvedRestaurant,
+      restaurantSubtitle: _restaurantSubtitle(
+        labels: labels,
+        address: restaurantAddress,
+        phone: restaurantPhone,
+      ),
+      serverName: serverName,
+    );
+    return TicketBitmapRenderer.renderKot(data);
+  }
+
+  Future<List<int>> _buildKotBitmapBytes(
+    Generator generator,
+    OrderModel order, {
+    required _ReceiptLabels labels,
+    required String restaurantName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    String? serverName,
+  }) async {
+    final pngBytes = await _buildKotBitmapPng(
+      order,
+      labels: labels,
+      restaurantName: restaurantName,
+      restaurantAddress: restaurantAddress,
+      restaurantPhone: restaurantPhone,
+      serverName: serverName,
+    );
+    final decoded = img.decodePng(pngBytes);
+    if (decoded == null) {
+      throw PrinterException('Could not decode rendered KOT bitmap.');
+    }
+    _debugPrintBitmapResult(
+      order,
+      copyKind: 'kot',
+      pngByteCount: pngBytes.length,
+      width: decoded.width,
+      height: decoded.height,
+    );
+    final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
+        ? img.copyResize(decoded, width: 576)
+        : decoded;
+    final grayscale = img.grayscale(raster);
+    final bytes = <int>[
+      ...generator.reset(),
+      ..._targetPrintSpeed90MmPerSecond,
+      ...generator.imageRaster(grayscale, align: PosAlign.center),
+    ];
+    _debugPrintRasterResult(order, copyKind: 'kot', byteCount: bytes.length);
+    return bytes;
+  }
+
   /// Build one printable copy entirely as a bitmap and wrap it in ESC/POS
   /// reset / feed / cut commands. The bitmap path keeps the on-paper layout
   /// pixel-identical to the in-app preview regardless of printer firmware
@@ -908,12 +1218,16 @@ class PrinterService {
     required _ReceiptLabels labels,
     required bool isManagerCopy,
     required String restaurantName,
-    String outletName = '',
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     String? orderDetailsUrl,
   }) async {
-    final tableRaw = order.tableNo ?? labels.takeaway;
+    final tableRaw = order.serviceType == OrderServiceType.delivery
+        ? ''
+        : order.tableNo ?? labels.takeaway;
     final dateText = labels.formatDate(order.createdAt);
     final effectiveTotal = _orderTotalFor(order);
+    final isDelivery = order.serviceType == OrderServiceType.delivery;
 
     final items = <TicketLineItem>[
       for (var i = 0; i < order.items.length; i++)
@@ -940,6 +1254,11 @@ class PrinterService {
     final data = TicketCopyData(
       restaurantName: resolvedRestaurant,
       outletName: null,
+      restaurantSubtitle: _restaurantSubtitle(
+        labels: labels,
+        address: restaurantAddress,
+        phone: restaurantPhone,
+      ),
       orderNumberDisplay: labels.orderNo(order.displaySequence),
       orderTypeLabel: _orderTypeLabel(order, labels),
       copyLabel: isManagerCopy ? labels.managerCopy : labels.customerCopy,
@@ -960,6 +1279,17 @@ class PrinterService {
       deliveryAddressLabel: labels.addressLabel,
       mobileNumber: order.mobileNumber,
       mobileNumberLabel: labels.phoneLabel,
+      summaryRows: _receiptSummaryRows(order, labels: labels),
+      paymentLine: _paymentLine(order, labels),
+      qrCaption: isDelivery
+          ? labels.pick('Track your delivery', 'ডেলিভারি ট্র্যাক করুন')
+          : labels.pick(
+              'Scan to track / rate us',
+              'ট্র্যাক / রেট করতে স্ক্যান করুন',
+            ),
+      footerText: isDelivery
+          ? null
+          : labels.pick('Thank you for dining!', 'ধন্যবাদ!'),
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);
@@ -972,7 +1302,8 @@ class PrinterService {
     required _ReceiptLabels labels,
     required bool isManagerCopy,
     required String restaurantName,
-    String outletName = '',
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     String? orderDetailsUrl,
   }) async {
     final pngBytes = await _buildBitmapCopyPng(
@@ -980,7 +1311,8 @@ class PrinterService {
       labels: labels,
       isManagerCopy: isManagerCopy,
       restaurantName: restaurantName,
-      outletName: outletName,
+      restaurantAddress: restaurantAddress,
+      restaurantPhone: restaurantPhone,
       orderDetailsUrl: orderDetailsUrl,
     );
     final decoded = img.decodePng(pngBytes);
@@ -1007,6 +1339,7 @@ class PrinterService {
     // size byte and render a huge QR regardless of [QRSize.size1].
     final bytes = <int>[
       ...generator.reset(),
+      ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
     ];
     _debugPrintRasterResult(
@@ -1015,6 +1348,355 @@ class PrinterService {
       byteCount: bytes.length,
     );
     return bytes;
+  }
+
+  Future<List<int>> _buildUtilityBitmapBytes(
+    Generator generator,
+    UtilityTicketData data,
+  ) async {
+    final pngBytes = await TicketBitmapRenderer.renderUtility(data);
+    final decoded = img.decodePng(pngBytes);
+    if (decoded == null) {
+      throw PrinterException('Could not decode rendered utility ticket.');
+    }
+    final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
+        ? img.copyResize(decoded, width: 576)
+        : decoded;
+    final grayscale = img.grayscale(raster);
+    return <int>[
+      ...generator.reset(),
+      ..._targetPrintSpeed90MmPerSecond,
+      ...generator.imageRaster(grayscale, align: PosAlign.center),
+    ];
+  }
+
+  Future<bool> _printSystemUtilityPdfFallback(
+    UtilityTicketData data, {
+    required String name,
+  }) async {
+    if (!_hasSelectedSystemPrinter) return false;
+    final selected = _state.selectedWindowsQueueName?.trim() ?? '';
+    if (selected.isEmpty) return false;
+    try {
+      final printers = await Printing.listPrinters();
+      Printer? printer;
+      for (final item in printers) {
+        if (item.name == selected) {
+          printer = item;
+          break;
+        }
+      }
+      if (printer == null) {
+        throw PrinterException(
+          'The selected USB/system printer is unavailable.',
+        );
+      }
+      final pngBytes = await TicketBitmapRenderer.renderUtility(data);
+      final bitmap = img.decodePng(pngBytes);
+      if (bitmap == null) {
+        throw PrinterException('Could not decode rendered utility ticket.');
+      }
+      final document = pw.Document();
+      final width = _state.windowsPaperWidthMm.toDouble();
+      final receiptHeight = width * bitmap.height / bitmap.width;
+      final pageFormat = PdfPageFormat(
+        width * PdfPageFormat.mm,
+        receiptHeight * PdfPageFormat.mm,
+      );
+      document.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: pw.EdgeInsets.zero,
+          build: (_) =>
+              pw.Image(pw.MemoryImage(pngBytes), fit: pw.BoxFit.fitWidth),
+        ),
+      );
+      final ok = await Printing.directPrintPdf(
+        printer: printer,
+        name: name,
+        format: pageFormat,
+        usePrinterSettings: true,
+        onLayout: (_) => document.save(),
+      );
+      _emit(
+        _state.copyWith(
+          activeTransport: ok
+              ? PrinterTransport.windowsUsb
+              : PrinterTransport.none,
+          connected: ok,
+          clearLastError: ok,
+        ),
+      );
+      return ok;
+    } catch (error) {
+      _emit(
+        _state.copyWith(lastError: _friendlyError(error), connected: false),
+      );
+      return false;
+    }
+  }
+
+  List<TicketSummaryRow> _receiptSummaryRows(
+    OrderModel order, {
+    required _ReceiptLabels labels,
+  }) {
+    final subtotal = _orderSubtotalFor(order);
+    final discount = order.discountAmount.abs();
+    final service = order.serviceChargeAmount;
+    final delivery = order.deliveryCharge;
+    final total = _orderTotalFor(order);
+    final rows = <TicketSummaryRow>[
+      TicketSummaryRow(
+        label: labels.pick('Subtotal', 'সাবটোটাল'),
+        value: labels.money(subtotal),
+      ),
+    ];
+    if (discount > 0) {
+      rows.add(
+        TicketSummaryRow(
+          label: labels.pick('Discount', 'ডিসকাউন্ট'),
+          value: '-${labels.money(discount)}',
+        ),
+      );
+    }
+    if (service > 0) {
+      rows.add(
+        TicketSummaryRow(
+          label: labels.pick('Service charge', 'সার্ভিস চার্জ'),
+          value: labels.money(service),
+        ),
+      );
+    }
+    if (delivery > 0) {
+      rows.add(
+        TicketSummaryRow(
+          label: labels.pick('Delivery fee', 'ডেলিভারি ফি'),
+          value: labels.money(delivery),
+        ),
+      );
+    }
+    rows
+      ..add(
+        TicketSummaryRow(
+          label: labels.total,
+          value: labels.money(total),
+          emphasis: true,
+        ),
+      )
+      ..add(
+        TicketSummaryRow(
+          label: _vatIncludedLabel(order, labels),
+          value: labels.money(_includedVatFor(order, total)),
+        ),
+      );
+    return rows;
+  }
+
+  UtilityTicketData _buildDispatchTicketData(
+    OrderModel order, {
+    required _ReceiptLabels labels,
+    String? driverNote,
+  }) {
+    final customer = order.customerName?.trim();
+    final phone = order.mobileNumber?.trim();
+    final address = order.deliveryAddress?.trim();
+    final note = driverNote?.trim();
+    return UtilityTicketData(
+      title: labels.pick('DELIVERY COPY', 'ডেলিভারি কপি'),
+      warning: labels.pick(
+        'DO NOT SHOW TO CUSTOMER',
+        'কাস্টমারকে দেখাবেন না',
+      ),
+      headerRows: [
+        TicketSummaryRow(
+          label: labels.pick('Order #', 'অর্ডার #'),
+          value: labels.orderNo(order.displaySequence),
+          emphasis: true,
+        ),
+        TicketSummaryRow(
+          label: labels.pick('Token', 'টোকেন'),
+          value: _tokenFor(order, labels),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('Placed', 'সময়'),
+          value: labels.digits(
+            DateFormat('HH:mm').format(order.createdAt.toLocal()),
+          ),
+        ),
+      ],
+      sections: [
+        UtilityTicketSection(
+          title: labels.pick('CUSTOMER', 'কাস্টমার'),
+          lines: [if (customer != null && customer.isNotEmpty) customer],
+        ),
+        UtilityTicketSection(
+          title: labels.pick('PHONE (CALL IF LOST)', 'ফোন'),
+          lines: [if (phone != null && phone.isNotEmpty) labels.digits(phone)],
+        ),
+        UtilityTicketSection(
+          title: labels.pick('ADDRESS', 'ঠিকানা'),
+          lines: [if (address != null && address.isNotEmpty) address],
+        ),
+        UtilityTicketSection(
+          title: labels.pick('ITEMS TO DELIVER', 'ডেলিভারি আইটেম'),
+          lines: [
+            for (final item in order.items)
+              '[${labels.digits('${item.qty}')}] ${labels.itemName(item)}',
+          ],
+        ),
+        if (note != null && note.isNotEmpty)
+          UtilityTicketSection(
+            title: labels.pick('NOTES FOR DRIVER', 'ড্রাইভার নোট'),
+            lines: [note],
+          ),
+      ],
+      footerLines: [
+        labels.pick('Customer Signature:', 'কাস্টমার সিগনেচার:'),
+        '',
+        '____________________________',
+      ],
+    );
+  }
+
+  UtilityTicketData _buildVoidWasteTicketData(
+    OrderModel order, {
+    required _ReceiptLabels labels,
+    required String action,
+    required String reason,
+    String? cashierName,
+    double? value,
+  }) {
+    final total = value ?? _orderSubtotalFor(order);
+    return UtilityTicketData(
+      title: labels.pick('VOID / WASTE TICKET', 'ভয়েড / ওয়েস্ট টিকেট'),
+      headerRows: [
+        TicketSummaryRow(
+          label: labels.pick('Time', 'সময়'),
+          value: labels.digits(DateFormat('HH:mm').format(DateTime.now())),
+        ),
+        if (cashierName?.trim().isNotEmpty == true)
+          TicketSummaryRow(
+            label: labels.pick('Cashier', 'ক্যাশিয়ার'),
+            value: cashierName!.trim(),
+          ),
+        TicketSummaryRow(
+          label: labels.pick('Action', 'অ্যাকশন'),
+          value: action.toUpperCase(),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('Reason', 'কারণ'),
+          value: reason,
+        ),
+      ],
+      sections: [
+        UtilityTicketSection(
+          title: labels.pick('VOIDED ITEMS', 'ভয়েড আইটেম'),
+          lines: [
+            for (final item in order.items)
+              '[${labels.digits('${item.qty}')}] ${labels.itemName(item)}',
+          ],
+        ),
+      ],
+      totalRows: [
+        TicketSummaryRow(
+          label: labels.pick('Original order', 'মূল অর্ডার'),
+          value: labels.orderNo(order.displaySequence),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('Value', 'মূল্য'),
+          value: labels.money(total),
+          emphasis: true,
+        ),
+        TicketSummaryRow(
+          label: _vatIncludedLabel(order, labels),
+          value: labels.money(_includedVatFor(order, total)),
+        ),
+      ],
+    );
+  }
+
+  UtilityTicketData _buildEndOfDayTicketData({
+    required PosReportSnapshot report,
+    PosShift? shift,
+    required _ReceiptLabels labels,
+    required String restaurantName,
+    String outletName = '',
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    String? managerName,
+  }) {
+    final now = DateTime.now();
+    final grossSales = report.sales + report.discounts;
+    final cashSales = report.paymentSplit['cash'] ?? 0;
+    final shiftText = shift == null
+        ? labels.pick('Today', 'আজ')
+        : '${labels.digits(DateFormat('h:mm a').format(shift.openedAt.toLocal()))} - '
+              '${labels.digits(DateFormat('h:mm a').format((shift.closedAt ?? now).toLocal()))}';
+    return UtilityTicketData(
+      title: labels.pick('END OF DAY REPORT', 'দিন শেষ রিপোর্ট'),
+      subtitle: restaurantName.trim().isEmpty ? outletName : restaurantName,
+      headerRows: [
+        TicketSummaryRow(
+          label: labels.pick('Date', 'তারিখ'),
+          value: labels.digits(DateFormat('yyyy-MM-dd').format(now)),
+        ),
+        TicketSummaryRow(label: labels.pick('Shift', 'শিফট'), value: shiftText),
+        if (managerName?.trim().isNotEmpty == true)
+          TicketSummaryRow(
+            label: labels.pick('Manager', 'ম্যানেজার'),
+            value: managerName!.trim(),
+          ),
+      ],
+      totalRows: [
+        TicketSummaryRow(
+          label: labels.pick('GROSS SALES', 'গ্রস সেলস'),
+          value: labels.money(grossSales),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('DISCOUNTS', 'ডিসকাউন্ট'),
+          value: '-${labels.money(report.discounts)}',
+        ),
+        TicketSummaryRow(
+          label: labels.pick('NET SALES', 'নিট সেলস'),
+          value: labels.money(report.sales),
+          emphasis: true,
+        ),
+        TicketSummaryRow(
+          label: labels.pick('VAT Included', 'ভ্যাট অন্তর্ভুক্ত'),
+          value: labels.money(report.vatIncluded),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('DELIVERY FEES', 'ডেলিভারি ফি'),
+          value: labels.money(report.deliveryFees),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('TOTAL REVENUE', 'মোট রেভিনিউ'),
+          value: labels.money(report.sales + report.deliveryFees),
+          emphasis: true,
+        ),
+        TicketSummaryRow(
+          label: labels.pick('Cash', 'ক্যাশ'),
+          value: labels.money(cashSales),
+        ),
+        TicketSummaryRow(
+          label: labels.pick('TOTAL ORDERS', 'মোট অর্ডার'),
+          value: labels.digits('${report.orders}'),
+        ),
+      ],
+      sections: [
+        UtilityTicketSection(
+          title: labels.pick('SERVICE SPLIT', 'সার্ভিস বিভাজন'),
+          lines: [
+            '${labels.pick('Dine-in', 'ডাইন ইন')}: ${labels.digits('${report.serviceSplit['dine_in'] ?? 0}')}',
+            '${labels.pick('Parcel', 'পার্সেল')}: ${labels.digits('${report.serviceSplit['takeaway'] ?? 0}')}',
+            '${labels.pick('Delivery', 'ডেলিভারি')}: ${labels.digits('${report.serviceSplit['delivery'] ?? 0}')}',
+          ],
+        ),
+      ],
+      footerLines: [
+        '${labels.pick('Printed', 'প্রিন্ট')}: ${labels.digits(DateFormat('HH:mm:ss').format(now))}',
+      ],
+    );
   }
 
   Future<void> markOrderPrinted(OrderModel order) async {
@@ -1032,6 +1714,8 @@ class PrinterService {
     OrderModel order, {
     String? restaurantName,
     String? outletName,
+    String restaurantAddress = '',
+    String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
   }) async {
     final labels = _ReceiptLabels(language);
@@ -1042,6 +1726,8 @@ class PrinterService {
       labels: labels,
       isManagerCopy: true,
       restaurantName: restaurantName ?? 'HYBRID POS',
+      restaurantAddress: restaurantAddress,
+      restaurantPhone: restaurantPhone,
     );
     buffer.writeln();
     buffer.writeln(_separator('*'));
@@ -1053,6 +1739,8 @@ class PrinterService {
       labels: labels,
       isManagerCopy: false,
       restaurantName: restaurantName ?? 'HYBRID POS',
+      restaurantAddress: restaurantAddress,
+      restaurantPhone: restaurantPhone,
     );
     return buffer.toString();
   }
@@ -1063,16 +1751,39 @@ class PrinterService {
     required _ReceiptLabels labels,
     required bool isManagerCopy,
     required String restaurantName,
+    required String restaurantAddress,
+    required String restaurantPhone,
   }) {
-    final tableRaw = order.tableNo ?? labels.takeaway;
+    final tableRaw = order.serviceType == OrderServiceType.delivery
+        ? ''
+        : order.tableNo ?? labels.takeaway;
     buffer
       ..writeln(labels.orderNo(order.displaySequence))
       ..writeln('[${_orderTypeLabel(order, labels).toUpperCase()}]')
       ..writeln(labels.formatDate(order.createdAt))
       ..writeln(_separator('='))
-      ..writeln(_shortText(restaurantName, _ticketWidth))
-      ..writeln(labels.tableLabel(tableRaw))
-      ..writeln(_separator('-'));
+      ..writeln(_shortText(restaurantName, _ticketWidth));
+    final subtitle = _restaurantSubtitle(
+      labels: labels,
+      address: restaurantAddress,
+      phone: restaurantPhone,
+    );
+    if (subtitle != null) {
+      buffer.writeln(_shortText(subtitle, _ticketWidth));
+    }
+    if (tableRaw.trim().isNotEmpty) {
+      buffer.writeln(labels.tableLabel(tableRaw));
+    }
+    if (order.customerName?.trim().isNotEmpty == true) {
+      buffer.writeln('${labels.nameLabel}: ${order.customerName!.trim()}');
+    }
+    if (order.deliveryAddress?.trim().isNotEmpty == true) {
+      buffer.writeln('${labels.addressLabel}: ${order.deliveryAddress!.trim()}');
+    }
+    if (order.mobileNumber?.trim().isNotEmpty == true) {
+      buffer.writeln('${labels.phoneLabel}: ${order.mobileNumber!.trim()}');
+    }
+    buffer.writeln(_separator('-'));
     for (var i = 0; i < order.items.length; i++) {
       final item = order.items[i];
       buffer.writeln(
@@ -1082,10 +1793,149 @@ class PrinterService {
     }
     buffer
       ..writeln(_separator('-'))
-      ..writeln(
-        _twoCol(labels.totalVatIncluded, labels.money(_orderTotalFor(order))),
-      )
+      ..write(_previewSummary(order, labels))
+      ..writeln(_paymentLine(order, labels))
       ..writeln('SCAN FOR LIVE ORDER DETAILS');
+  }
+
+  String _previewSummary(OrderModel order, _ReceiptLabels labels) {
+    final buffer = StringBuffer();
+    for (final row in _receiptSummaryRows(order, labels: labels)) {
+      buffer.writeln(_twoCol(row.label, row.value));
+    }
+    return buffer.toString();
+  }
+
+  Future<String> previewKot(
+    OrderModel order, {
+    String? restaurantName,
+    String? serverName,
+    AppLanguage language = AppLanguage.en,
+  }) async {
+    final labels = _ReceiptLabels(language);
+    final cleanRestaurant = (restaurantName ?? 'HYBRID POS').trim();
+    final data = _buildKotTicketData(
+      order,
+      labels: labels,
+      restaurantName: cleanRestaurant.isEmpty
+          ? labels.defaultRestaurantName
+          : cleanRestaurant,
+      serverName: serverName,
+    );
+    final buffer = StringBuffer()
+      ..writeln('KITCHEN ORDER')
+      ..writeln('${data.serialLabel}: ${data.serialValue}')
+      ..writeln('${data.timeLabel}: ${data.timeValue}')
+      ..writeln('${data.typeLabel}: ${data.typeValue}');
+    if (data.tableLabel?.trim().isNotEmpty == true &&
+        data.tableValue?.trim().isNotEmpty == true) {
+      buffer.writeln('${data.tableLabel}: ${data.tableValue}');
+    }
+    buffer.writeln(data.itemsLabel);
+    for (final item in data.items) {
+      final mods = item.modifiers.trim();
+      buffer.writeln(
+        '${item.qtyText} x ${item.name}${mods.isEmpty ? '' : ' $mods'}',
+      );
+    }
+    final notedItems = data.items
+        .where((item) => item.note?.trim().isNotEmpty == true)
+        .toList(growable: false);
+    if (notedItems.isNotEmpty) {
+      buffer.writeln(data.noteLabel);
+      for (final item in notedItems) {
+        buffer.writeln(item.note!.trim());
+      }
+    }
+    final server = data.serverName?.trim();
+    if (server != null && server.isNotEmpty) {
+      buffer.writeln('${data.serverLabel}: $server');
+    }
+    return buffer.toString();
+  }
+
+  Future<String> previewDeliveryDispatchCopy(
+    OrderModel order, {
+    AppLanguage language = AppLanguage.en,
+    String? driverNote,
+  }) async {
+    final labels = _ReceiptLabels(language);
+    return _previewUtility(
+      _buildDispatchTicketData(order, labels: labels, driverNote: driverNote),
+    );
+  }
+
+  Future<String> previewVoidWasteTicket(
+    OrderModel order, {
+    required String action,
+    required String reason,
+    AppLanguage language = AppLanguage.en,
+    String? cashierName,
+    double? value,
+  }) async {
+    final labels = _ReceiptLabels(language);
+    return _previewUtility(
+      _buildVoidWasteTicketData(
+        order,
+        labels: labels,
+        action: action,
+        reason: reason,
+        cashierName: cashierName,
+        value: value,
+      ),
+    );
+  }
+
+  Future<String> previewEndOfDayReport({
+    required PosReportSnapshot report,
+    PosShift? shift,
+    AppLanguage language = AppLanguage.en,
+    String restaurantName = '',
+    String outletName = '',
+    String restaurantAddress = '',
+    String restaurantPhone = '',
+    String? managerName,
+  }) async {
+    final labels = _ReceiptLabels(language);
+    return _previewUtility(
+      _buildEndOfDayTicketData(
+        report: report,
+        shift: shift,
+        labels: labels,
+        restaurantName: restaurantName,
+        outletName: outletName,
+        restaurantAddress: restaurantAddress,
+        restaurantPhone: restaurantPhone,
+        managerName: managerName,
+      ),
+    );
+  }
+
+  String _previewUtility(UtilityTicketData data) {
+    final buffer = StringBuffer();
+    if (data.warning?.trim().isNotEmpty == true) {
+      buffer.writeln(data.warning!.trim());
+    }
+    buffer.writeln(data.title);
+    if (data.subtitle?.trim().isNotEmpty == true) {
+      buffer.writeln(data.subtitle!.trim());
+    }
+    for (final row in data.headerRows) {
+      buffer.writeln('${row.label}: ${row.value}');
+    }
+    for (final section in data.sections) {
+      buffer.writeln(section.title);
+      for (final line in section.lines) {
+        buffer.writeln(line);
+      }
+    }
+    for (final row in data.totalRows) {
+      buffer.writeln('${row.label}: ${row.value}');
+    }
+    for (final line in data.footerLines) {
+      buffer.writeln(line);
+    }
+    return buffer.toString();
   }
 
   double _lineTotalFor(OrderItem item) {
@@ -1094,17 +1944,63 @@ class PrinterService {
     return computed;
   }
 
+  double _orderSubtotalFor(OrderModel order) {
+    final itemTotal = order.items.fold<double>(
+      0,
+      (total, item) => total + _lineTotalFor(item),
+    );
+    if (order.subtotal > 0) return order.subtotal;
+    return itemTotal;
+  }
+
   double _orderTotalFor(OrderModel order) {
     final itemTotal = order.items.fold<double>(
       0,
       (total, item) => total + _lineTotalFor(item),
     );
-    if (itemTotal > 0) return itemTotal;
     if (order.total > 0) return order.total;
     if (order.subtotal > 0 || order.vatAmount > 0) {
-      return order.subtotal + order.vatAmount;
+      return order.subtotal +
+          order.vatAmount +
+          order.deliveryCharge +
+          order.serviceChargeAmount -
+          order.discountAmount;
     }
+    if (itemTotal > 0) return itemTotal;
     return 0;
+  }
+
+  double _includedVatFor(OrderModel order, double total) {
+    if (order.vatAmount > 0) return order.vatAmount;
+    final rate = order.vatRatePercent;
+    if (rate <= 0) return 0;
+    return total * rate / (100 + rate);
+  }
+
+  String _vatIncludedLabel(OrderModel order, _ReceiptLabels labels) {
+    final rate = order.vatRatePercent;
+    final rateText = rate <= 0
+        ? ''
+        : ' (${labels.digits(rate.toStringAsFixed(rate == rate.roundToDouble() ? 0 : 2))}%)';
+    return labels.pick('VAT$rateText Included', 'ভ্যাট$rateText অন্তর্ভুক্ত');
+  }
+
+  String _paymentLine(OrderModel order, _ReceiptLabels labels) {
+    final method = order.paymentMethod;
+    final label = method == null
+        ? labels.pick('Cash', 'ক্যাশ')
+        : labels.language == AppLanguage.bn
+              ? method.banglaLabel
+              : method.label;
+    return '${labels.pick('PAYMENT', 'পেমেন্ট')}: ${labels.digits(label.toUpperCase())}';
+  }
+
+  String _tokenFor(OrderModel order, _ReceiptLabels labels) {
+    final seq = order.sequenceNo > 0
+        ? order.sequenceNo
+        : order.orderNo.hashCode.abs();
+    final token = 2000 + (seq % 8000);
+    return labels.digits('$token');
   }
 
   String _orderTypeLabel(OrderModel order, _ReceiptLabels labels) {
@@ -1115,6 +2011,94 @@ class PrinterService {
         return labels._bn ? 'পার্সেল' : 'Takeaway';
       case OrderServiceType.dineIn:
         return labels._bn ? 'ডাইন ইন' : 'Dine in';
+    }
+  }
+
+  // Restaurant address/phone shown under the restaurant name on receipts/KOT.
+  String? _restaurantSubtitle({
+    required _ReceiptLabels labels,
+    required String address,
+    required String phone,
+  }) {
+    final parts = <String>[];
+    if (address.trim().isNotEmpty) parts.add(address.trim());
+    if (phone.trim().isNotEmpty) parts.add(phone.trim());
+    if (parts.isEmpty) return null;
+    return parts.join('  •  ');
+  }
+
+  KotTicketData _buildKotTicketData(
+    OrderModel order, {
+    required _ReceiptLabels labels,
+    required String restaurantName,
+    String? restaurantSubtitle,
+    String? serverName,
+  }) {
+    final serviceType = order.serviceType ?? OrderServiceType.dineIn;
+    final table = order.tableNo?.trim();
+    return KotTicketData(
+      restaurantName: restaurantName,
+      restaurantSubtitle: restaurantSubtitle,
+      serialLabel: labels.pick('Serial #', 'সিরিয়াল #'),
+      serialValue: labels.orderNo(order.displaySequence),
+      timeLabel: labels.pick('Time', 'সময়'),
+      timeValue: labels.digits(_formatKotTime(order.createdAt)),
+      typeLabel: labels.pick('Type', 'ধরন'),
+      typeValue: _kotTypeLabel(serviceType, labels),
+      tableLabel:
+          serviceType == OrderServiceType.dineIn &&
+              table != null &&
+              table.isNotEmpty
+          ? labels.pick('Table', 'টেবিল')
+          : null,
+      tableValue:
+          serviceType == OrderServiceType.dineIn &&
+              table != null &&
+              table.isNotEmpty
+          ? table
+          : null,
+      items: [
+        for (final item in order.items) _kotLineItem(item, labels: labels),
+      ],
+      itemsLabel: labels.pick('Items', 'আইটেম'),
+      noteLabel: labels.pick('Note', 'নোট'),
+      serverLabel: labels.pick('Server', 'সার্ভার'),
+      serverName: serverName,
+    );
+  }
+
+  KotLineItem _kotLineItem(OrderItem item, {required _ReceiptLabels labels}) {
+    final split = _splitKotModifiers(labels.itemName(item));
+    return KotLineItem(
+      qtyText: labels.digits('${item.qty}'),
+      name: split.$1,
+      modifiers: split.$2,
+      note: item.note,
+    );
+  }
+
+  (String, String) _splitKotModifiers(String rawName) {
+    final name = rawName.trim();
+    final match = RegExp(r'^(.*?)\s+(\([^)]+\))$').firstMatch(name);
+    if (match == null) return (name, '');
+    final base = match.group(1)?.trim() ?? name;
+    final modifiers = match.group(2)?.trim() ?? '';
+    if (base.isEmpty || modifiers.isEmpty) return (name, '');
+    return (base, modifiers);
+  }
+
+  String _formatKotTime(DateTime dateTime) {
+    return DateFormat('h:mm a').format(dateTime.toLocal());
+  }
+
+  String _kotTypeLabel(OrderServiceType serviceType, _ReceiptLabels labels) {
+    switch (serviceType) {
+      case OrderServiceType.dineIn:
+        return labels.pick('Dine-in', 'ডাইন ইন');
+      case OrderServiceType.takeaway:
+        return labels.pick('Parcel', 'পার্সেল');
+      case OrderServiceType.delivery:
+        return labels.pick('Delivery', 'ডেলিভারি');
     }
   }
 

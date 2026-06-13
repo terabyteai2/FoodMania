@@ -20,10 +20,23 @@ class TicketLineItem {
   final String lineTotalText;
 }
 
+class TicketSummaryRow {
+  const TicketSummaryRow({
+    required this.label,
+    required this.value,
+    this.emphasis = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasis;
+}
+
 class TicketCopyData {
   const TicketCopyData({
     required this.restaurantName,
     required this.outletName,
+    this.restaurantSubtitle,
     required this.orderNumberDisplay,
     required this.orderTypeLabel,
     required this.copyLabel,
@@ -44,10 +57,15 @@ class TicketCopyData {
     this.deliveryAddressLabel = 'Address',
     this.mobileNumber,
     this.mobileNumberLabel = 'Phone',
+    this.summaryRows = const [],
+    this.paymentLine,
+    this.qrCaption,
+    this.footerText,
   });
 
   final String restaurantName;
   final String? outletName;
+  final String? restaurantSubtitle;
   final String orderNumberDisplay;
   final String orderTypeLabel;
   final String copyLabel;
@@ -68,6 +86,10 @@ class TicketCopyData {
   final String deliveryAddressLabel;
   final String? mobileNumber;
   final String mobileNumberLabel;
+  final List<TicketSummaryRow> summaryRows;
+  final String? paymentLine;
+  final String? qrCaption;
+  final String? footerText;
 }
 
 class KotLineItem {
@@ -87,6 +109,7 @@ class KotLineItem {
 class KotTicketData {
   const KotTicketData({
     required this.restaurantName,
+    this.restaurantSubtitle,
     required this.serialLabel,
     required this.serialValue,
     required this.timeLabel,
@@ -94,12 +117,16 @@ class KotTicketData {
     required this.typeLabel,
     required this.typeValue,
     required this.items,
+    this.itemsLabel = 'Items',
+    this.noteLabel = 'Note',
+    this.serverLabel = 'Server',
     this.tableLabel,
     this.tableValue,
     this.serverName,
   });
 
   final String restaurantName;
+  final String? restaurantSubtitle;
   final String serialLabel;
   final String serialValue;
   final String timeLabel;
@@ -109,7 +136,40 @@ class KotTicketData {
   final String? tableLabel;
   final String? tableValue;
   final List<KotLineItem> items;
+  final String itemsLabel;
+  final String noteLabel;
+  final String serverLabel;
   final String? serverName;
+}
+
+class UtilityTicketSection {
+  const UtilityTicketSection({
+    required this.title,
+    required this.lines,
+  });
+
+  final String title;
+  final List<String> lines;
+}
+
+class UtilityTicketData {
+  const UtilityTicketData({
+    required this.title,
+    this.subtitle,
+    this.warning,
+    this.headerRows = const [],
+    this.sections = const [],
+    this.totalRows = const [],
+    this.footerLines = const [],
+  });
+
+  final String title;
+  final String? subtitle;
+  final String? warning;
+  final List<TicketSummaryRow> headerRows;
+  final List<UtilityTicketSection> sections;
+  final List<TicketSummaryRow> totalRows;
+  final List<String> footerLines;
 }
 
 class TicketBitmapRenderer {
@@ -122,6 +182,10 @@ class TicketBitmapRenderer {
 
   static int get debugPrintableWidth => _width.toInt();
 
+  static int debugPrintableWidthForPaper(int paperWidthMm) {
+    return paperWidthMm == 80 ? 576 : 384;
+  }
+
   static Future<Uint8List> renderKot(KotTicketData data) async {
     final noteCount = data.items
         .where((item) => item.note?.trim().isNotEmpty == true)
@@ -133,7 +197,11 @@ class TicketBitmapRenderer {
         data.tableLabel?.trim().isNotEmpty == true &&
         data.tableValue?.trim().isNotEmpty == true;
     final height =
-        (300 + dynamicRows + noteRows + footerRows + (hasTable ? 30 : 0))
+        (300 +
+                dynamicRows +
+                noteRows +
+                footerRows +
+                (hasTable ? 30 : 0))
             .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -145,18 +213,10 @@ class TicketBitmapRenderer {
     var y = 0.0;
     y = _text(
       canvas,
-      'KOT',
+      'KITCHEN ORDER',
       y + 10,
-      fontSize: 62,
+      fontSize: 42,
       weight: FontWeight.w800,
-      align: TextAlign.center,
-    );
-    y = _text(
-      canvas,
-      data.restaurantName,
-      y,
-      fontSize: 28,
-      weight: FontWeight.w700,
       align: TextAlign.center,
     );
     y = _rule(canvas, y + 8);
@@ -173,7 +233,7 @@ class TicketBitmapRenderer {
       );
     }
     y = _rule(canvas, y + 8);
-    y = _text(canvas, 'Items', y, fontSize: 28, weight: FontWeight.w700);
+    y = _text(canvas, data.itemsLabel, y, fontSize: 28, weight: FontWeight.w700);
     for (final item in data.items) {
       y = _kotItemRow(canvas, item, y);
     }
@@ -184,7 +244,7 @@ class TicketBitmapRenderer {
     ];
     if (notedItems.isNotEmpty) {
       y = _rule(canvas, y + 8);
-      y = _text(canvas, 'Note', y, fontSize: 28, weight: FontWeight.w700);
+      y = _text(canvas, data.noteLabel, y, fontSize: 28, weight: FontWeight.w700);
       for (final item in notedItems) {
         y = _text(
           canvas,
@@ -200,7 +260,7 @@ class TicketBitmapRenderer {
     if (server != null && server.isNotEmpty) {
       y = _text(
         canvas,
-        'Server: $server',
+        '${data.serverLabel}: $server',
         y + 16,
         fontSize: 26,
         weight: FontWeight.w700,
@@ -220,12 +280,18 @@ class TicketBitmapRenderer {
   static Future<Uint8List> render(TicketCopyData data) async {
     final dynamicRows = data.items.length * 58;
     final optionalRows =
+        (data.restaurantSubtitle?.trim().isNotEmpty == true ? 82 : 0) +
         (data.customerName?.trim().isNotEmpty == true ? 32 : 0) +
         (data.deliveryAddress?.trim().isNotEmpty == true ? 64 : 0) +
         (data.mobileNumber?.trim().isNotEmpty == true ? 32 : 0) +
         (data.note?.trim().isNotEmpty == true ? 80 : 0);
+    final summaryRows = data.summaryRows.length * 34;
+    final paymentRows = data.paymentLine?.trim().isNotEmpty == true ? 42 : 0;
     final qrRows = data.orderDetailsUrl?.trim().isNotEmpty == true ? 168 : 0;
-    final height = (430 + dynamicRows + optionalRows + qrRows).toDouble();
+    final footerRows = data.footerText?.trim().isNotEmpty == true ? 38 : 0;
+    final height =
+        (430 + dynamicRows + optionalRows + summaryRows + paymentRows + qrRows + footerRows)
+            .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
@@ -259,6 +325,16 @@ class TicketBitmapRenderer {
       weight: FontWeight.w700,
       align: TextAlign.center,
     );
+    final restaurantSubtitle = data.restaurantSubtitle?.trim();
+    if (restaurantSubtitle != null && restaurantSubtitle.isNotEmpty) {
+      y = _text(
+        canvas,
+        restaurantSubtitle,
+        y,
+        fontSize: 19,
+        align: TextAlign.center,
+      );
+    }
     if (data.tableLine.trim().isNotEmpty) {
       y = _text(
         canvas,
@@ -296,14 +372,38 @@ class TicketBitmapRenderer {
     }
 
     y = _rule(canvas, y + 8);
-    y = _row(
-      canvas,
-      data.totalLabel,
-      data.totalAmount,
-      y,
-      fontSize: 27,
-      weight: FontWeight.w700,
-    );
+    if (data.summaryRows.isEmpty) {
+      y = _row(
+        canvas,
+        data.totalLabel,
+        data.totalAmount,
+        y,
+        fontSize: 27,
+        weight: FontWeight.w700,
+      );
+    } else {
+      for (final row in data.summaryRows) {
+        y = _row(
+          canvas,
+          row.label,
+          row.value,
+          y,
+          fontSize: row.emphasis ? 27 : 22,
+          weight: row.emphasis ? FontWeight.w800 : FontWeight.w500,
+        );
+      }
+    }
+    if (data.paymentLine?.trim().isNotEmpty == true) {
+      y = _rule(canvas, y + 8);
+      y = _text(
+        canvas,
+        data.paymentLine!.trim(),
+        y,
+        fontSize: 24,
+        weight: FontWeight.w700,
+        align: TextAlign.center,
+      );
+    }
     if (data.note?.trim().isNotEmpty == true) {
       y = _text(
         canvas,
@@ -318,10 +418,22 @@ class TicketBitmapRenderer {
       y = _drawQrCentered(canvas, qrUrl, y + 4);
       y = _text(
         canvas,
-        'SCAN FOR LIVE ORDER DETAILS',
+        data.qrCaption?.trim().isNotEmpty == true
+            ? data.qrCaption!.trim()
+            : 'SCAN FOR LIVE ORDER DETAILS',
         y + 6,
         fontSize: 17,
         weight: FontWeight.w700,
+        align: TextAlign.center,
+      );
+    }
+    if (data.footerText?.trim().isNotEmpty == true) {
+      y = _text(
+        canvas,
+        data.footerText!.trim(),
+        y + 8,
+        fontSize: 20,
+        weight: FontWeight.w600,
         align: TextAlign.center,
       );
     }
@@ -331,6 +443,113 @@ class TicketBitmapRenderer {
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
     if (png == null) {
       throw StateError('Ticket bitmap encoding failed.');
+    }
+    return png.buffer.asUint8List();
+  }
+
+  static Future<Uint8List> renderUtility(UtilityTicketData data) async {
+    final sectionLines = data.sections.fold<int>(
+      0,
+      (total, section) => total + section.lines.length + 1,
+    );
+    final height =
+        (260 + data.headerRows.length * 34 + sectionLines * 34 + data.totalRows.length * 38 + data.footerLines.length * 34)
+            .toDouble();
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, _width, height),
+      Paint()..color = Colors.white,
+    );
+
+    var y = 0.0;
+    final warning = data.warning?.trim();
+    if (warning != null && warning.isNotEmpty) {
+      y = _text(
+        canvas,
+        warning,
+        y + 10,
+        fontSize: 22,
+        weight: FontWeight.w800,
+        align: TextAlign.center,
+      );
+      y = _rule(canvas, y + 4);
+    }
+    y = _text(
+      canvas,
+      data.title,
+      y + 10,
+      fontSize: 34,
+      weight: FontWeight.w800,
+      align: TextAlign.center,
+    );
+    final subtitle = data.subtitle?.trim();
+    if (subtitle != null && subtitle.isNotEmpty) {
+      y = _text(
+        canvas,
+        subtitle,
+        y,
+        fontSize: 20,
+        weight: FontWeight.w600,
+        align: TextAlign.center,
+      );
+    }
+    y = _rule(canvas, y + 8);
+    for (final row in data.headerRows) {
+      y = _row(
+        canvas,
+        row.label,
+        row.value,
+        y,
+        fontSize: row.emphasis ? 25 : 22,
+        weight: row.emphasis ? FontWeight.w800 : FontWeight.w500,
+      );
+    }
+    for (final section in data.sections) {
+      y = _rule(canvas, y + 8);
+      y = _text(
+        canvas,
+        section.title,
+        y,
+        fontSize: 24,
+        weight: FontWeight.w800,
+      );
+      for (final line in section.lines) {
+        y = _text(canvas, line, y, fontSize: 22);
+      }
+    }
+    if (data.totalRows.isNotEmpty) {
+      y = _rule(canvas, y + 8);
+      for (final row in data.totalRows) {
+        y = _row(
+          canvas,
+          row.label,
+          row.value,
+          y,
+          fontSize: row.emphasis ? 27 : 22,
+          weight: row.emphasis ? FontWeight.w800 : FontWeight.w500,
+        );
+      }
+    }
+    if (data.footerLines.isNotEmpty) {
+      y = _rule(canvas, y + 8);
+      for (final line in data.footerLines) {
+        y = _text(
+          canvas,
+          line,
+          y,
+          fontSize: 21,
+          weight: FontWeight.w600,
+          align: TextAlign.center,
+        );
+      }
+    }
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(_width.toInt(), y.ceil());
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) {
+      throw StateError('Utility ticket bitmap encoding failed.');
     }
     return png.buffer.asUint8List();
   }
