@@ -4,9 +4,11 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
-from database import create_tables
+from database import AsyncSessionLocal, create_tables
 from main import app
+from models import ChatbotConversation, ChatbotIntegration
 from services import facebook_chatbot
 
 
@@ -302,6 +304,239 @@ async def test_facebook_oauth_callback_saves_page_token(monkeypatch):
     assert config["pageName"] == "OAuth Cafe"
     assert config["tokenPreview"] == "oaut…oken"
     assert "oauth-page-token" not in fetched.text
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_chat_history_api_returns_recent_ten_without_truncating_db(monkeypatch):
+    page_id = f"history-page-{uuid.uuid4()}"
+    broadcasts = []
+
+    async def fake_resolve(_token: str):
+        return {"pageId": page_id, "pageName": "History Page"}
+
+    async def fake_send(_integration, _psid: str, _text: str):
+        return None
+
+    async def fake_broadcast(outlet_id: str, payload: dict):
+        broadcasts.append((outlet_id, payload))
+
+    monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
+    monkeypatch.setattr(facebook_chatbot, "_send_message", fake_send)
+    monkeypatch.setattr(facebook_chatbot.manager, "broadcast", fake_broadcast)
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-history")
+        saved = await client.put(
+            "/admin/chatbot/facebook",
+            headers=headers,
+            json={"pageAccessToken": "page-token", "isEnabled": True, "orderingEnabled": True},
+        )
+        assert saved.status_code == 200
+
+        async with AsyncSessionLocal() as db:
+            integration = (
+                await db.execute(
+                    select(ChatbotIntegration).where(ChatbotIntegration.page_id == page_id)
+                )
+            ).scalar_one()
+            conv = ChatbotConversation(
+                integration_id=integration.id,
+                page_id=page_id,
+                psid="psid-history",
+                state_json={"status": "needs", "reason": "Photo requested", "unread": 2},
+                history_json=[
+                    {"role": "user", "text": f"m{i}"}
+                    for i in range(12)
+                ],
+                last_user_message="m11",
+            )
+            db.add(conv)
+            await db.commit()
+            conv_id = conv.id
+
+        reply = await client.post(
+            f"/admin/chatbot/chats/{conv_id}/reply",
+            headers=headers,
+            json={"text": "manager answer"},
+        )
+        handback = await client.post(
+            f"/admin/chatbot/chats/{conv_id}/handback",
+            headers=headers,
+        )
+        listed = await client.get("/admin/chatbot/chats", headers=headers)
+
+    assert reply.status_code == 200
+    assert handback.status_code == 200
+    assert listed.status_code == 200
+    assert [payload["type"] for _, payload in broadcasts] == [
+        "chat_updated",
+        "chat_updated",
+    ]
+    assert [payload["data"]["conversationId"] for _, payload in broadcasts] == [
+        conv_id,
+        conv_id,
+    ]
+    chat = next(row for row in listed.json()["data"]["chats"] if row["id"] == conv_id)
+    assert [m["text"] for m in chat["messages"]] == [
+        "m4",
+        "m5",
+        "m6",
+        "m7",
+        "m8",
+        "m9",
+        "m10",
+        "m11",
+        "manager answer",
+        "Handed back to bot",
+    ]
+
+    async with AsyncSessionLocal() as db:
+        stored = (
+            await db.execute(
+                select(ChatbotConversation).where(ChatbotConversation.id == conv_id)
+            )
+        ).scalar_one()
+        assert len(stored.history_json) == 14
+        assert stored.history_json[0]["text"] == "m0"
+        assert stored.history_json[-1]["text"] == "Handed back to bot"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_facebook_webhook_broadcasts_chat_update_for_customer_message(monkeypatch):
+    page_id = f"webhook-chat-page-{uuid.uuid4()}"
+    broadcasts = []
+
+    async def fake_resolve(_token: str):
+        return {"pageId": page_id, "pageName": "Webhook Chat Page"}
+
+    async def fake_broadcast(outlet_id: str, payload: dict):
+        broadcasts.append((outlet_id, payload))
+
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_SECRET", "")
+    monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
+    monkeypatch.setattr(facebook_chatbot.manager, "broadcast", fake_broadcast)
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-webhook-chat-event")
+        saved = await client.put(
+            "/admin/chatbot/facebook",
+            headers=headers,
+            json={"pageAccessToken": "page-token", "isEnabled": True, "orderingEnabled": True},
+        )
+        assert saved.status_code == 200
+        webhook = await client.post(
+            "/webhooks/facebook",
+            json={
+                "object": "page",
+                "entry": [
+                    {
+                        "id": page_id,
+                        "messaging": [
+                            {"sender": {"id": "psid-live"}, "message": {"text": "hello"}}
+                        ],
+                    }
+                ],
+            },
+        )
+
+    assert webhook.status_code == 200
+    assert len(broadcasts) == 1
+    assert broadcasts[0][1]["type"] == "chat_updated"
+    assert broadcasts[0][1]["data"]["conversationId"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_batched_llm_receives_recent_ten_without_truncating_db(monkeypatch):
+    page_id = f"llm-history-page-{uuid.uuid4()}"
+    captured = {}
+    broadcasts = []
+
+    async def fake_resolve(_token: str):
+        return {"pageId": page_id, "pageName": "LLM History Page"}
+
+    async def fake_call(conversations, _system_prompt):
+        captured["history"] = conversations[0]["history"]
+        return {
+            "responses": [
+                {
+                    "id": conversations[0]["id"],
+                    "reply": "ঠিক আছে",
+                    "escalate": {"needed": False},
+                    "order": {},
+                }
+            ]
+        }
+
+    async def fake_send(_integration, _psid: str, _text: str):
+        return None
+
+    async def fake_broadcast(outlet_id: str, payload: dict):
+        broadcasts.append((outlet_id, payload))
+
+    monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
+    monkeypatch.setattr(facebook_chatbot, "_call_batched_llm", fake_call)
+    monkeypatch.setattr(facebook_chatbot, "_send_message", fake_send)
+    monkeypatch.setattr(facebook_chatbot.manager, "broadcast", fake_broadcast)
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-llm-history")
+        saved = await client.put(
+            "/admin/chatbot/facebook",
+            headers=headers,
+            json={"pageAccessToken": "page-token", "isEnabled": True, "orderingEnabled": True},
+        )
+        assert saved.status_code == 200
+
+    async with AsyncSessionLocal() as db:
+        integration = (
+            await db.execute(
+                select(ChatbotIntegration).where(ChatbotIntegration.page_id == page_id)
+            )
+        ).scalar_one()
+        conv = ChatbotConversation(
+            integration_id=integration.id,
+            page_id=page_id,
+            psid="psid-llm-history",
+            state_json={},
+            history_json=[{"role": "user", "text": f"h{i}"} for i in range(12)],
+            last_user_message="h11",
+        )
+        db.add(conv)
+        await db.commit()
+        conv_id = conv.id
+
+    await facebook_chatbot._process_batch([{"conversation_id": conv_id, "text": "h11"}])
+
+    assert [payload["type"] for _, payload in broadcasts] == ["chat_updated"]
+    assert broadcasts[0][1]["data"]["conversationId"] == conv_id
+    assert [entry["text"] for entry in captured["history"]] == [
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "h7",
+        "h8",
+        "h9",
+        "h10",
+        "h11",
+    ]
+
+    async with AsyncSessionLocal() as db:
+        stored = (
+            await db.execute(
+                select(ChatbotConversation).where(ChatbotConversation.id == conv_id)
+            )
+        ).scalar_one()
+        assert len(stored.history_json) == 13
+        assert stored.history_json[0]["text"] == "h0"
+        assert stored.history_json[-1]["text"] == "ঠিক আছে"
 
 
 @pytest.mark.asyncio(loop_scope="session")

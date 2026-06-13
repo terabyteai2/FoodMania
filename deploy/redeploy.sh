@@ -136,6 +136,7 @@ rsync -az --delete \
 say "Updating nginx routes + restarting backend"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" bash -s <<REMOTE
 set -euo pipefail
+mkdir -p ${REMOTE_DIR}/backend/uploads/software_downloads
 if [[ -f ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf ]]; then
   install -m 644 ${REMOTE_DIR}/deploy/nginx/rastarant-http.conf /etc/nginx/conf.d/rastarant.conf
 fi

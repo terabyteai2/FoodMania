@@ -14,7 +14,8 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
-from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, tenants, ws
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, software_downloads, tenants, ws
+from services.facebook_chatbot import start_batch_worker, stop_batch_worker
 from subscription_service import maybe_expire_subscription
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
@@ -116,6 +117,7 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.OUTLET_VIDEOS_DIR, exist_ok=True)
 
     expiry_task = asyncio.create_task(_expire_stale_subscriptions_loop())
+    start_batch_worker()
 
     public_url = _start_ngrok()
     if public_url:
@@ -141,6 +143,7 @@ async def lifespan(app: FastAPI):
         await expiry_task
     except asyncio.CancelledError:
         pass
+    await stop_batch_worker()
 
 
 app = FastAPI(title="Rastarant POS API", version="1.0.0", lifespan=lifespan)
@@ -172,6 +175,7 @@ app.include_router(platform.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
 app.include_router(app_download.router)
+app.include_router(software_downloads.router)
 
 
 @app.exception_handler(Exception)

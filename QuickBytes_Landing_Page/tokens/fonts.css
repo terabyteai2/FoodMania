@@ -1,0 +1,6 @@
+/* QuickBytes webfonts.
+   Brand face is Inter (spec §8). Bengali UI text uses Noto Sans Bengali.
+   NOTE: loaded from Google Fonts CDN — no local font binaries were provided.
+   If self-hosted .woff2 files become available, replace this @import with
+   @font-face rules pointing at local files. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap');

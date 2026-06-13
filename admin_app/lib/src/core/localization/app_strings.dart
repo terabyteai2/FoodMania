@@ -63,6 +63,43 @@ class AppStrings {
   String get reports => isBn ? 'রিপোর্ট' : 'Reports';
   String get sync => isBn ? 'সিঙ্ক' : 'Sync';
   String get settings => isBn ? 'সেটিংস' : 'Settings';
+
+  // ── QuickBytes navigation + More hub ──────────────────────────────────────
+  String get moreTab => isBn ? 'আরও' : 'More';
+  String get liveTab => isBn ? 'লাইভ' : 'Live';
+  String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
+  String get stockTab => isBn ? 'স্টক' : 'Stock';
+  String get manageSection => isBn ? 'ম্যানেজ' : 'Manage';
+  String get messages => isBn ? 'মেসেজ' : 'Messages';
+  String get staff => isBn ? 'স্টাফ' : 'Staff';
+  String get auditTrail => isBn ? 'অডিট ট্রেইল' : 'Audit trail';
+  String get serviceMode => isBn ? 'সার্ভিস মোড' : 'Service mode';
+  String get fullService => isBn ? 'ফুল' : 'Full';
+  String get counterService => isBn ? 'কাউন্টার' : 'Counter';
+  String get switchRoleDemo =>
+      isBn ? 'রোল পরিবর্তন (ডেমো)' : 'Switch role (demo)';
+  String get comingSoon => isBn ? 'শীঘ্রই আসছে' : 'Coming soon';
+  String get onTheFloor => isBn ? 'অন দ্য ফ্লোর' : 'On the floor';
+  String get tableVacant => isBn ? 'খালি' : 'Vacant';
+  String tablesOccupiedFree(int occupied, int free) => isBn
+      ? '● ${_n(occupied)} টি ব্যস্ত · ○ ${_n(free)} টি খালি'
+      : '● $occupied occupied · ○ $free free';
+  String get newDineInOrder =>
+      isBn ? '+ নতুন ডাইন-ইন অর্ডার' : '+ New dine-in order';
+  String get newParcelOrder =>
+      isBn ? '+ নতুন পার্সেল অর্ডার' : '+ New parcel order';
+  String get newDeliveryOrder =>
+      isBn ? '+ নতুন ডেলিভারি অর্ডার' : '+ New delivery order';
+  String get quickSell => isBn ? 'কুইক সেল' : 'Quick sell';
+  String get noOpenParcels =>
+      isBn ? 'কোনো খোলা পার্সেল নেই' : 'No open parcel orders';
+  String get noOpenDeliveries =>
+      isBn ? 'কোনো খোলা ডেলিভারি নেই' : 'No open delivery orders';
+  String toAcceptCount(int n) =>
+      isBn ? '${_n(n)} টি গ্রহণ বাকি' : '$n to accept';
+  String get toAcceptLabel => isBn ? 'গ্রহণ বাকি' : 'to accept';
+  String ongoingCount(int n) => isBn ? '${_n(n)} টি চলমান' : '$n ongoing';
+
   String get save => isBn ? 'সেভ' : 'Save';
   String get cancel => isBn ? 'বাতিল' : 'Cancel';
   String get requiredField => isBn ? 'প্রয়োজনীয়' : 'Required';
@@ -259,16 +296,16 @@ class AppStrings {
 
   String get receiptPrinter => isBn ? 'রিসিট প্রিন্টার' : 'Receipt Printer';
   String get receiptPrinterSubtitle => isBn
-      ? 'বিল্ট-ইন প্রিন্টার, Type-C USB অথবা Bluetooth প্রিন্টিং ব্যবহার করে।'
-      : 'Uses built-in, type-C USB, or Bluetooth printing.';
+      ? 'Type-C USB অথবা Bluetooth প্রিন্টিং ব্যবহার করে।'
+      : 'Uses type-C USB or Bluetooth printing.';
   String get noPrinterSelected =>
       isBn ? 'কোনো প্রিন্টার সিলেক্ট করা নেই' : 'No printer selected';
   String get printerConnectedAuto => isBn
       ? 'কানেক্টেড। নতুন অর্ডার অটোমেটিক প্রিন্ট হবে।'
       : 'Connected. New orders will print automatically.';
   String get pairPrinterInstruction => isBn
-      ? 'বিল্ট-ইন প্রিন্টার ব্যবহার করুন, Type-C কেবল লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে কানেক্ট করুন।'
-      : 'Use the built-in printer, plug in type-C, or scan nearby Bluetooth devices.';
+      ? 'Type-C কেবল লাগান অথবা কাছের Bluetooth ডিভাইস স্ক্যান করে কানেক্ট করুন।'
+      : 'Plug in type-C USB or scan nearby Bluetooth devices.';
   String get autoPrintNewOrders => isBn
       ? 'অটো-অ্যাকসেপ্ট ও অটো-প্রিন্ট নতুন অর্ডার'
       : 'Auto-accept & auto-print new orders';
@@ -292,8 +329,8 @@ class AppStrings {
   String get close => isBn ? 'বন্ধ করুন' : 'Close';
   String get printFailed => isBn ? 'প্রিন্ট ব্যর্থ হয়েছে' : 'Print failed';
   String get printerNotConnectedHint => isBn
-      ? 'প্রিন্টার কানেক্ট নেই। বিল্ট-ইন প্রিন্টার ব্যবহার করুন, Type-C কেবল লাগান বা সেটিংস থেকে পেয়ার করুন।'
-      : 'Printer not connected — use built-in, plug in type-C, or pair one in Settings.';
+      ? 'প্রিন্টার কানেক্ট নেই। Type-C কেবল লাগান বা সেটিংস থেকে Bluetooth পেয়ার করুন।'
+      : 'Printer not connected — plug in type-C USB or pair Bluetooth in Settings.';
   String ticketPrinted(String seq) => isBn
       ? '${_digits(seq)}-এর টিকেট প্রিন্ট হয়েছে'
       : 'Ticket printed for $seq';
@@ -479,6 +516,27 @@ class AppStrings {
       : 'Could not reach the server. Check again when the connection is available.';
   String get pendingTab => isBn ? 'পেন্ডিং' : 'Pending';
   String get acceptedTab => isBn ? 'অ্যাকসেপ্টেড' : 'Accepted';
+  String get ongoingTab => isBn ? 'চলমান' : 'Ongoing';
+  String get completedTab => isBn ? 'সম্পন্ন' : 'Completed';
+  String get onTheFloorNow => isBn ? 'এখন ফ্লোরে' : 'On the floor now';
+  String get completedPaid => isBn ? 'সম্পন্ন · পেইড' : 'Completed · paid';
+  String get printKotAction => isBn ? 'KOT প্রিন্ট' : 'Print KOT';
+  String kotPrinted(String seq) =>
+      isBn ? '${_digits(seq)}-এর KOT প্রিন্ট হয়েছে' : 'KOT printed for $seq';
+  String get noOngoingOrders =>
+      isBn ? 'কোনো চলমান অর্ডার নেই।' : 'No ongoing orders.';
+  String get noCompletedOrders =>
+      isBn ? 'এখনো কোনো সম্পন্ন অর্ডার নেই।' : 'No completed orders yet.';
+  // Compact relative age for order cards: "5m ago" / "2h ago".
+  String orderAgeAgo(int minutes) {
+    if (minutes < 1) return isBn ? 'এইমাত্র' : 'just now';
+    if (minutes < 60) {
+      return isBn ? '${_n(minutes)} মিনিট আগে' : '${minutes}m ago';
+    }
+    final hours = (minutes / 60).floor();
+    return isBn ? '${_n(hours)} ঘণ্টা আগে' : '${hours}h ago';
+  }
+
   String get ordersTitle => isBn ? 'অর্ডার' : 'Orders';
   String get ordersEmptySubtitle => isBn
       ? 'এখনো অর্ডার নেই — প্রথম অর্ডার নিন'
@@ -536,6 +594,26 @@ class AppStrings {
         return isBn ? 'ম্যানুয়াল' : 'Manual';
       case OrderSource.localLan:
         return isBn ? 'লিগ্যাসি LAN' : 'Legacy LAN';
+    }
+  }
+
+  // Short channel name for order cards, keyed by the 6 prototype channels
+  // (storefront/chatbot/qr/waiter/counter/manager). See CHANNELS in bytes-shared.jsx.
+  String channelLabel(String key) {
+    switch (key) {
+      case 'storefront':
+        return isBn ? 'ওয়েবসাইট' : 'Website';
+      case 'chatbot':
+        return isBn ? 'মেসেঞ্জার' : 'Messenger';
+      case 'qr':
+        return isBn ? 'টেবিল QR' : 'Table QR';
+      case 'waiter':
+        return isBn ? 'ওয়েটার' : 'Waiter';
+      case 'counter':
+        return isBn ? 'কাউন্টার' : 'Counter';
+      case 'manager':
+      default:
+        return isBn ? 'ম্যানেজার' : 'Manager';
     }
   }
 
@@ -741,6 +819,7 @@ class AppStrings {
   String get howManyPeople => isBn ? 'কতজন অতিথি?' : 'How many people?';
   String get continueAction => isBn ? 'চালিয়ে যান' : 'Continue';
   String get reviewAction => isBn ? 'রিভিউ' : 'Review';
+  String get reviewOrder => isBn ? 'অর্ডার পর্যালোচনা' : 'Review order';
   String get sendToKitchen => isBn ? 'অর্ডার তৈরি করুন' : 'Create order';
   String get printOnly => isBn ? 'শুধু প্রিন্ট' : 'Print only';
   String get kitchenNote => isBn ? 'রান্নাঘরের নোট' : 'Kitchen note';
@@ -866,6 +945,9 @@ class AppStrings {
   String menuItemsSubtitle(int total, int pausedOut) => isBn
       ? '${_n(total)} আইটেম · ${_n(pausedOut)} বন্ধ'
       : '$total items · $pausedOut out';
+  String menuItemsCategorySubtitle(int total, int categories) => isBn
+      ? '${_n(total)} আইটেম · ${_n(categories)} ক্যাটাগরি'
+      : '$total items · $categories categories';
   String get menuSearchHint => isBn ? 'আইটেম খুঁজুন' : 'Search items';
   String get menuEmptyTitle => isBn ? 'মেনু খালি' : 'Your menu is empty';
   String get menuEmptyMessage =>
@@ -877,6 +959,12 @@ class AppStrings {
       : 'Try another search or category.';
   String get menuNewButton => isBn ? 'আইটেম যোগ' : 'Add Item';
   String get menuAddActionShort => isBn ? 'আইটেম' : 'Item';
+  String get menuActionDelivery => isBn ? 'ডেলিভারি' : 'Delivery';
+  String get menuActionScan => isBn ? 'স্ক্যান' : 'Scan';
+  String get menuActionDiscounts => isBn ? 'ডিসকাউন্ট' : 'Discounts';
+  String get menuActionSettings => isBn ? 'সেটিংস' : 'Settings';
+  String get menuDeliveryOn => isBn ? 'ডেলিভারি চালু' : 'Delivery on';
+  String get menuDeliveryOff => isBn ? 'ডেলিভারি বন্ধ' : 'Delivery off';
   String get menuScan => isBn ? 'AI স্ক্যান' : 'AI scan';
   String get menuScanning => isBn ? 'স্ক্যান হচ্ছে...' : 'Scanning...';
   String get menuScanningShort => isBn ? 'স্ক্যান...' : 'Scanning...';
@@ -913,6 +1001,9 @@ class AppStrings {
 
   String get addMenuItem => isBn ? 'মেনু আইটেম যোগ করুন' : 'Add Menu Item';
   String get editMenuItem => isBn ? 'মেনু আইটেম সম্পাদনা' : 'Edit Menu Item';
+  String get menuNewItemTitle => isBn ? 'নতুন আইটেম' : 'New item';
+  String get menuEditItemTitle => isBn ? 'আইটেম সম্পাদনা' : 'Edit item';
+  String get menuAddPhoto => isBn ? 'ছবি যোগ করুন' : 'Add photo';
   String get menuItemAdded =>
       isBn ? 'মেনু আইটেম যোগ হয়েছে' : 'Menu item added';
   String get menuItemUpdated =>
@@ -957,6 +1048,8 @@ class AppStrings {
   String get menuClearImage => isBn ? 'ছবি সরান' : 'Clear image';
   String get menuAvailable => isBn ? 'উপলব্ধ' : 'Available';
   String get menuPaused => isBn ? 'বিরতি' : 'Paused';
+  String get menuHidden => isBn ? 'লুকানো' : 'Hidden';
+  String get menuLowStock => isBn ? 'স্টক কম' : 'Low stock';
   String get menuDiscountTitle =>
       isBn ? 'ডিসকাউন্ট (ঐচ্ছিক)' : 'Discount (optional)';
   String get menuDiscountNone => isBn ? 'কোনো ছাড় নেই' : 'No discount';
@@ -965,6 +1058,8 @@ class AppStrings {
       isBn ? 'নির্দিষ্ট টাকা ছাড়' : 'Flat amount off';
   String get menuDiscountValue => isBn ? 'মান' : 'Value';
   String get menuOptionsTitle => isBn ? 'অপশন' : 'Options';
+  String get menuVariationsAddOns =>
+      isBn ? 'ভ্যারিয়েশন ও অ্যাড-অন' : 'Variations & add-ons';
   String get menuOptionsSubtitle => isBn
       ? 'সাইজ/ভ্যারিয়েন্ট, ডিসকাউন্ট, সেট-মিল এবং অ্যাড-অন'
       : 'Sizes/variants, discount, set meal, and add-ons';
@@ -1093,6 +1188,129 @@ class AppStrings {
   String get kpiAvg => isBn ? 'গড়' : 'Avg';
   String get kpiProfit => isBn ? 'লাভ' : 'Profit';
 
+  // Ordering settings (spec §4.10)
+  String get orderingSettings => isBn ? 'অর্ডারিং' : 'Ordering';
+  String get orderingSettingsSubtitle =>
+      isBn ? 'ভ্যাট, ডিসকাউন্ট ও চার্জ' : 'VAT, discounts & charges';
+  String get vatRateLabel => isBn ? 'ভ্যাট হার (%)' : 'VAT rate (%)';
+  String get serviceChargeLabel =>
+      isBn ? 'সার্ভিস চার্জ (%)' : 'Service charge (%)';
+  String get dailyTargetLabel =>
+      isBn ? 'দৈনিক বিক্রির টার্গেট (৳)' : 'Daily sales target (৳)';
+  String get dailyTargetHint => isBn
+      ? 'লাইভ ট্যাবের পেস কার্ডে ব্যবহৃত। খালি রাখলে ডিফল্ট।'
+      : 'Used by the Live tab pace card. Leave blank for default.';
+  String get discountPresetsTitle =>
+      isBn ? 'ডিসকাউন্ট প্রিসেট' : 'Discount presets';
+  String get discountPresetsHint => isBn
+      ? 'রিভিউ স্ক্রিনে দ্রুত ডিসকাউন্টের জন্য।'
+      : 'Quick discounts on the Review screen.';
+  String get addDiscountPreset => isBn ? 'প্রিসেট যোগ' : 'Add preset';
+  String get presetLabelHint => isBn ? 'লেবেল' : 'Label';
+  String get presetPercent => isBn ? '%' : '%';
+  String get presetFlat => isBn ? '৳' : '৳';
+  String get noDiscountPresets =>
+      isBn ? 'কোনো প্রিসেট নেই' : 'No discount presets yet';
+  String get orderingSaved =>
+      isBn ? 'অর্ডারিং সেটিংস সেভ হয়েছে' : 'Ordering settings saved';
+  String get orderingSaveFailed =>
+      isBn ? 'সেভ করা যায়নি' : "Couldn't save settings";
+
+  // Staff (spec §4.10)
+  String staffActiveCount(int active, int total) => isBn
+      ? '${_n(active)}/${_n(total)} জন সক্রিয়'
+      : '$active of $total active';
+  String get inviteStaffTitle => isBn ? 'স্টাফ আমন্ত্রণ' : 'Invite staff';
+  String get inviteStaffCta => isBn ? 'স্টাফ যোগ করুন' : 'Invite staff';
+  String get inviteAsRole => isBn ? 'যে রোলে আমন্ত্রণ' : 'Invite as';
+  String get staffNameLabel => isBn ? 'নাম' : 'Name';
+  String get staffPhoneLabel => isBn ? 'ফোন' : 'Phone';
+  String get sendInvite => isBn ? 'আমন্ত্রণ পাঠান' : 'Send invite';
+  String get inviteSent => isBn ? 'আমন্ত্রণ পাঠানো হয়েছে' : 'Invite sent';
+  String get inviteFailed =>
+      isBn ? 'আমন্ত্রণ পাঠানো যায়নি' : "Couldn't send invite";
+  String get invitePending => isBn ? 'আমন্ত্রণ অপেক্ষমাণ' : 'Invite pending';
+  String get staffActive => isBn ? 'সক্রিয়' : 'Active';
+  String get staffInactive => isBn ? 'নিষ্ক্রিয়' : 'Inactive';
+  String get noStaffHint => isBn
+      ? 'নিচের আমন্ত্রণ বোতাম দিয়ে টিম যোগ করুন।'
+      : 'Invite your team with the button below.';
+  String get staffLoadFailed =>
+      isBn ? 'স্টাফ লোড করা যায়নি' : "Couldn't load staff";
+  String get managerOwnerOnly => isBn
+      ? 'শুধু মালিক ম্যানেজার যোগ করতে পারেন'
+      : 'Only an owner can add a manager';
+
+  // Messages — Messenger takeover (spec §4.6)
+  String get botLive => isBn ? 'বট চালু' : 'Bot live';
+  String needsYouCount(int n) => isBn ? 'আপনার দরকার ${_n(n)}' : 'Needs you $n';
+  String get allChats => isBn ? 'সব চ্যাট' : 'All chats';
+  String get viaMessenger => isBn ? 'মেসেঞ্জারে' : 'via Messenger';
+  String get chatbotNeedsHelp =>
+      isBn ? 'চ্যাটবটের আপনার সাহায্য দরকার' : 'Chatbot needs your help';
+  String get bytesBot => isBn ? 'বট' : 'BYTES BOT';
+  String get writeReplyHint => isBn ? 'একটি উত্তর লিখুন…' : 'Write a reply…';
+  String get handBackToBot => isBn ? 'বটের কাছে ফেরত' : 'Hand back to bot';
+  String get handedBackToBot =>
+      isBn ? 'বটের কাছে ফেরত দেওয়া হয়েছে' : 'Handed back to the bot';
+  String get handedBackToYou =>
+      isBn ? 'আপনার কাছে হস্তান্তর করা হয়েছে' : 'Handed back to you';
+  String get noConversations =>
+      isBn ? 'কোনো কথোপকথন নেই' : 'No conversations yet';
+  String get noConversationsHint => isBn
+      ? 'গ্রাহকদের মেসেঞ্জার চ্যাট এখানে দেখা যাবে।'
+      : 'Customer Messenger chats will appear here.';
+  String get chatsLoadFailed =>
+      isBn ? 'চ্যাট লোড করা যায়নি' : "Couldn't load chats";
+  String get replyFailed =>
+      isBn ? 'উত্তর পাঠানো যায়নি' : "Couldn't send reply";
+  String get sendImageComingSoon =>
+      isBn ? 'ছবি পাঠানো শীঘ্রই আসছে' : 'Image send coming soon';
+  String get imageMessage => isBn ? '📷 ছবি' : '📷 Image';
+  String get noChatsNeedYou =>
+      isBn ? 'কোনো চ্যাটে আপনার দরকার নেই' : 'No chats need you';
+
+  // Audit trail (spec §4.10)
+  String get auditAllFilter => isBn ? 'সব' : 'All';
+  String get noAuditEntries =>
+      isBn ? 'কোনো অডিট এন্ট্রি নেই' : 'No audit entries yet';
+  String get auditEmptyHint => isBn
+      ? 'ভয়েড, রিফান্ড, কম্প ও ডিসকাউন্ট ওভাররাইড এখানে দেখা যাবে।'
+      : 'Voids, refunds, comps & discount overrides appear here.';
+  String get auditLoadFailed =>
+      isBn ? 'অডিট ট্রেইল লোড করা যায়নি' : "Couldn't load the audit trail";
+  String auditOrderRef(int serial) =>
+      isBn ? 'অর্ডার #${_n(serial)}' : 'Order #$serial';
+  String get auditUnknownWho => isBn ? 'অজানা' : 'Unknown';
+
+  // Control Tower (spec §4.9)
+  String get liveOperations => isBn ? 'লাইভ অপারেশন' : 'Live operations';
+  String get openOrdersStat => isBn ? 'চলমান অর্ডার' : 'Open orders';
+  String get avgWaitStat => isBn ? 'গড় অপেক্ষা' : 'Avg wait';
+  String pendingCountLabel(int n) =>
+      isBn ? '${_n(n)} টি অপেক্ষমাণ' : '$n pending';
+  String get orderChannelsNow =>
+      isBn ? 'অর্ডার চ্যানেল · এখন' : 'Order channels · now';
+  String orderWaitingMinutes(String serial, int mins) => isBn
+      ? 'অর্ডার $serial · ${_n(mins)} মিনিট অপেক্ষায়'
+      : 'Order $serial waiting ${mins}m';
+  String get needsAccepting => isBn ? 'গ্রহণ করা দরকার' : 'needs accepting';
+  String itemsBelowParAlert(int n) =>
+      isBn ? '${_n(n)} টি আইটেম পার-এর নিচে' : '$n items below par';
+  String get paceToTarget => isBn ? 'টার্গেটের দিকে গতি' : 'Pace to target';
+  String get targetLabel => isBn ? 'টার্গেট' : 'target';
+  String get expectedPaceNote => isBn
+      ? 'এখনকার প্রত্যাশিত গতির সাপেক্ষে (মার্কার)'
+      : 'vs. expected pace right now (marker)';
+  String get ordersByStaff =>
+      isBn ? 'স্টাফ অনুযায়ী অর্ডার' : 'Orders by staff';
+  String get noStaffActivity =>
+      isBn ? 'এখনো কোনো স্টাফ কার্যকলাপ নেই' : 'No staff activity yet';
+  String get allClearLiveOps => isBn
+      ? 'সব ঠিক আছে — কোনো সতর্কতা নেই'
+      : 'All clear — no alerts right now';
+  String get liveBadge => isBn ? 'লাইভ' : 'Live';
+
   // Dashboard — right now
   String get rightNow => isBn ? 'এই মুহূর্তে' : 'Right now';
   String get tablesSeated => isBn ? 'টেবিল বসা' : 'Tables seated';
@@ -1130,6 +1348,44 @@ class AppStrings {
   String get statusOut => isBn ? 'শেষ' : 'OUT';
   String get stockIn => isBn ? 'স্টক ইন' : 'Stock in';
   String get startCount => isBn ? 'গণনা শুরু' : 'Start count';
+  // Stock (spec §4.7 ranked table)
+  String get stockValue => isBn ? 'স্টক মূল্য' : 'Stock value';
+  String get belowPar => isBn ? 'পার-এর নিচে' : 'Below par';
+  String belowParItems(int count) =>
+      isBn ? '${_n(count)} টি আইটেম' : '$count items';
+  String get advanced => isBn ? 'অ্যাডভান্সড' : 'Advanced';
+  String get advancedSection => isBn ? 'অ্যাডভান্সড' : 'Advanced';
+  String get colValue => isBn ? 'মূল্য' : 'VALUE';
+  String get colQty => isBn ? 'পরিমাণ' : 'QTY';
+  String get colCover => isBn ? 'কভার' : 'COVER';
+  String get countAction => isBn ? 'গণনা' : 'Count';
+  String get stockItemDetailHint => isBn
+      ? 'ব্যবহার ও সমন্বয়ের ইতিহাস দেখতে যেকোনো আইটেমে ট্যাপ করুন।'
+      : 'Tap any item above for usage & adjustment history.';
+  String get noStockItems =>
+      isBn ? 'কোনো স্টক আইটেম নেই' : 'No stock items yet';
+  String get addFirstStockItem => isBn
+      ? 'প্রথম আইটেম যোগ করতে স্টক ইন ব্যবহার করুন।'
+      : 'Use Stock in to add your first item.';
+  // Variance drill-down
+  String get dailyVariance => isBn ? 'দৈনিক ভ্যারিয়েন্স' : 'Daily variance';
+  String get expectedVsCounted =>
+      isBn ? 'প্রত্যাশিত বনাম গণনাকৃত · আজ' : 'Expected vs counted · today';
+  String get varianceLoss => isBn ? 'ভ্যারিয়েন্স ক্ষতি' : 'Variance loss';
+  String get itemsOff => isBn ? 'গরমিল আইটেম' : 'Items off';
+  String get colSystem => isBn ? 'সিস্টেম' : 'SYSTEM';
+  String get colCounted => isBn ? 'গণনাকৃত' : 'COUNTED';
+  String get colDiff => isBn ? 'পার্থক্য' : 'DIFF';
+  String get noVarianceToday =>
+      isBn ? 'আজ কোনো ভ্যারিয়েন্স নেই।' : 'No variance recorded today.';
+  String get shareVarianceReport =>
+      isBn ? 'ভ্যারিয়েন্স রিপোর্ট শেয়ার' : 'Share variance report';
+  // Suppliers drill-down
+  String get suppliers => isBn ? 'সাপ্লায়ার' : 'Suppliers';
+  String suppliersCount(int count) =>
+      isBn ? '${_n(count)} টি সাপ্লায়ার' : '$count suppliers';
+  String get addSupplier => isBn ? 'সাপ্লায়ার যোগ করুন' : 'Add supplier';
+  String get noSuppliers => isBn ? 'কোনো সাপ্লায়ার নেই' : 'No suppliers yet';
   String get aiScanCount => isBn ? 'AI দিয়ে স্ক্যান' : 'AI scan';
   String get aiScanCountHint => isBn
       ? 'স্টক কাউন্ট শিট বা তাকের ছবি স্ক্যান করে পরিমাণ বসান।'
@@ -1156,6 +1412,25 @@ class AppStrings {
 
   // Stock in flow
   String get stockInTitle => isBn ? 'স্টক ইন' : 'Stock in';
+  String get stockInSubtitle =>
+      isBn ? 'প্রাপ্ত স্টক যোগ করুন' : 'Add received stock';
+  String get stockInConfirmTitle =>
+      isBn ? 'স্টক ইন নিশ্চিত করুন' : 'Confirm stock-in';
+  String get stockInScanSubtitle =>
+      isBn ? 'স্ক্যান করা বিল থেকে' : 'From scanned bill';
+  String get stockInScanReadHint => isBn
+      ? 'বিল থেকে লাইন পড়া হয়েছে · যেকোনো মান ঠিক করুন'
+      : 'lines read from the bill · tweak any value';
+  String get totalStockInValue =>
+      isBn ? 'মোট স্টক-ইন মূল্য' : 'Total stock-in value';
+  String get addAnotherLine =>
+      isBn ? 'আরেকটি লাইন যোগ করুন' : 'Add another line';
+  String get addToInventory =>
+      isBn ? 'ইনভেন্টরিতে যোগ করুন' : 'Add to inventory';
+  String get scanBill => isBn ? 'বিল স্ক্যান করুন' : 'Scan bill';
+  String get stockInQuantityLabel => isBn ? 'পরিমাণ' : 'Quantity';
+  String stockInCostPerUnit(String unit) =>
+      isBn ? 'খরচ / $unit' : 'Cost / $unit';
   String stepXofY(int step, int total) =>
       isBn ? 'ধাপ ${_n(step)} এর ${_n(total)}' : 'Step $step of $total';
   String get dateLabel => isBn ? 'তারিখ' : 'Date';

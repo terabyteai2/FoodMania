@@ -150,9 +150,8 @@ void main() {
   testWidgets('scan menu floating action is manager only', (tester) async {
     final manager = PosAppController()..language = AppLanguage.en;
     await tester.pumpWidget(_scoped(manager, const MenuManagementScreen()));
-    // The menu screen surfaces two floating buttons (Add item + AI scan) for
-    // managers — they live inside a floating _MenuActionBar action row.
-    expect(find.text('AI scan'), findsOneWidget);
+    // The menu screen surfaces the source-of-truth action row for managers.
+    expect(find.text('Scan'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -160,7 +159,7 @@ void main() {
 
     final staff = PosAppController()
       ..language = AppLanguage.en
-      ..accountRole = AccountRole.staff;
+      ..accountRole = AccountRole.waiter;
     await tester.pumpWidget(_scoped(staff, const MenuManagementScreen()));
     expect(tester.takeException(), isNull);
 
@@ -179,7 +178,7 @@ void main() {
     await tester.pumpWidget(_scoped(controller, const MenuManagementScreen()));
     await tester.pump();
 
-    expect(find.text('AI স্ক্যান'), findsOneWidget);
+    expect(find.text('স্ক্যান'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     controller.dispose();

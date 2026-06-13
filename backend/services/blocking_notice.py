@@ -17,6 +17,9 @@ def disabled_blocking_notice() -> dict:
         "enabled": False,
         "title": "",
         "message": "",
+        "imageUrl": None,
+        "inputField": False,
+        "inputLabel": None,
         "updatedAt": None,
     }
 
@@ -39,6 +42,9 @@ def blocking_notice_from_json(raw: str | None) -> dict:
         "enabled": True,
         "title": title,
         "message": message,
+        "imageUrl": parsed.get("imageUrl") or None,
+        "inputField": bool(parsed.get("inputField")),
+        "inputLabel": parsed.get("inputLabel") or None,
         "updatedAt": parsed.get("updatedAt"),
     }
 
@@ -66,6 +72,9 @@ async def set_blocking_notice(
         "enabled": True,
         "title": (body.title or "").strip() or DEFAULT_BLOCKING_NOTICE_TITLE,
         "message": message,
+        "imageUrl": body.imageUrl or None,
+        "inputField": bool(body.inputField),
+        "inputLabel": body.inputLabel or None,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
     await _store_blocking_notice(db, payload)
@@ -89,3 +98,47 @@ async def _store_blocking_notice(db: AsyncSession, payload: dict) -> None:
         config.updated_at = datetime.now(timezone.utc)
     else:
         db.add(SystemConfig(key=BLOCKING_NOTICE_CONFIG_KEY, value=raw))
+
+
+RESPONSES_KEY_PREFIX = "admin_blocking_notice_responses:"
+
+
+async def respond_to_blocking_notice(
+    db: AsyncSession,
+    restaurant_id: str,
+    outlet_id: str,
+    outlet_name: str,
+    response: str,
+) -> dict:
+    key = f"{RESPONSES_KEY_PREFIX}{restaurant_id}"
+    config = (
+        await db.execute(
+            select(SystemConfig).where(SystemConfig.key == key)
+        )
+    ).scalar_one_or_none()
+
+    entries = []
+    if config and config.value:
+        try:
+            entries = json.loads(config.value)
+            if not isinstance(entries, list):
+                entries = []
+        except (json.JSONDecodeError, TypeError):
+            entries = []
+
+    entry = {
+        "outletId": outlet_id,
+        "outletName": outlet_name,
+        "response": response,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    entries.append(entry)
+
+    raw = json.dumps(entries, ensure_ascii=False, separators=(",", ":"))
+    if config:
+        config.value = raw
+        config.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(SystemConfig(key=key, value=raw))
+
+    return entry

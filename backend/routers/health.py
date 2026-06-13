@@ -3,14 +3,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import APIRouter
-from sqlalchemy import text
+from fastapi import APIRouter, Depends
+from sqlalchemy import select, text
 
+from auth import bearer_scheme, decode_device_payload
 from config import settings
 from database import AsyncSessionLocal
-from schemas import ok
+from models import Outlet
+from schemas import BlockingNoticeRespondRequest, ok
 from services import phone_otp
-from services.blocking_notice import get_blocking_notice
+from services.blocking_notice import get_blocking_notice, respond_to_blocking_notice
 
 router = APIRouter()
 
@@ -128,3 +130,30 @@ async def health():
 async def admin_blocking_notice():
     async with AsyncSessionLocal() as db:
         return ok(await get_blocking_notice(db))
+
+
+@router.post("/admin/blocking-notice/respond")
+async def respond_blocking_notice(
+    body: BlockingNoticeRespondRequest,
+    credentials: str | None = Depends(bearer_scheme),
+):
+    if credentials is None:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+    payload = decode_device_payload(credentials.credentials)
+    outlet_id = payload.get("sub", "")
+    if not outlet_id:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    async with AsyncSessionLocal() as db:
+        outlet = (
+            await db.execute(select(Outlet).where(Outlet.id == outlet_id))
+        ).scalar_one_or_none()
+        if not outlet:
+            from fastapi import HTTPException, status
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found")
+        entry = await respond_to_blocking_notice(
+            db, outlet.restaurant_id, outlet.id, outlet.name, body.response,
+        )
+        await db.commit()
+        return ok(entry)

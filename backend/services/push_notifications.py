@@ -109,7 +109,7 @@ async def send_fcm_to_tokens(
     status_val = string_data.get("status", "").lower()
     channel_id = (
         "pos_accepted_orders_v2"
-        if status_val in ("accepted", "served")
+        if status_val in ("accepted", "completed", "served")
         else "pos_pending_orders_v2"
     )
     sent = 0
@@ -163,10 +163,10 @@ def _push_copy(event_type: str, order: Order) -> tuple[str, str]:
         return "New pending order", f"{serial} needs attention"
     if status == "accepted":
         return "Order accepted", f"{serial} accepted"
-    if status == "served":
-        return "Order served", f"{serial} served"
-    if status == "cancelled":
-        return "Order cancelled", f"{serial} cancelled"
+    if status in {"completed", "served"}:
+        return "Order completed", f"{serial} completed"
+    if status in {"rejected", "cancelled"}:
+        return "Order rejected", f"{serial} rejected"
     return "Order updated", f"{serial} is now {status or 'updated'}"
 
 
@@ -184,7 +184,7 @@ async def send_order_push(
     # replaces stacked alerts with the latest one instead of showing a pile.
     collapse_key = (
         f"{outlet_id}:accepted"
-        if status_val in ("accepted", "served")
+        if status_val in ("accepted", "completed", "served")
         else f"{outlet_id}:pending"
     )
     return await send_fcm_to_tokens(

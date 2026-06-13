@@ -1,0 +1,298 @@
+<!-- @template name="Landing Page" description="Marketing landing page for quickbytes.buzz — sells the POS to Rajshahi restaurants, EN/বাংলা toggle, real product shots" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuickBytes — Restaurant POS built in Rajshahi, for Rajshahi</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="./landing.css">
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<header class="nav" data-screen-label="Nav">
+  <div class="container nav-inner">
+    <a class="wordmark" href="#"><img src="assets/logo.png" alt="QuickBytes">QuickBytes</a>
+    <nav class="nav-links">
+      <a href="#channels" data-bn="চ্যানেল">Channels</a>
+      <a href="#bot" data-bn="মেসেঞ্জার বট">Messenger bot</a>
+      <a href="#surfaces" data-bn="ডিভাইস">Devices</a>
+      <a href="#pricing" data-bn="প্রাইসিং">Pricing</a>
+    </nav>
+    <button class="lang-toggle" id="langToggle" type="button">বাংলা</button>
+    <a class="btn btn-lime" href="#download" data-bn="ডাউনলোড">Download</a>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="hero" data-screen-label="Hero">
+  <div class="container hero-grid">
+    <div>
+      <span class="overline" data-bn="রাজশাহীতে তৈরি, রাজশাহীর রেস্টুরেন্টের জন্য">Built in Rajshahi, for Rajshahi restaurants</span>
+      <h1 data-bn="সেটআপে ৫ মিনিট। সব অর্ডার এক প্রিন্টারে।">Set up in 5 minutes. Every order to one printer.</h1>
+      <p class="hero-sub" data-bn="কাউন্টার, ফেসবুক মেসেঞ্জার, নিজের ওয়েবসাইট, টেবিল QR, ওয়েটার — পাঁচ জায়গা থেকে অর্ডার আসে, <b>এক কিউতে জমা হয়, এক জায়গায় প্রিন্ট হয়</b> — আপনার কিচেনে।">Sell at the counter, on Facebook Messenger, your own website, table QR codes, and through waiters. Every order lands in <b>one queue and prints at one destination</b> — your kitchen.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-lime" href="#download" data-bn="ফ্রি ডাউনলোড করুন">Download free</a>
+        <a class="btn btn-ghost" href="https://wa.me/8801921512049" target="_blank" rel="noopener" data-bn="WhatsApp-এ কথা বলুন">WhatsApp us</a>
+      </div>
+      <div class="hero-meta">
+        <span><span class="dot"></span><span data-bn="৭ দিন ফ্রি ট্রায়াল">7-day free trial</span></span>
+        <span><span class="dot"></span><span data-bn="মেনু স্ক্যান করলেই অটো-সেটআপ">Scan your menu — it autofills</span></span>
+        <span><span class="dot"></span>English + বাংলা</span>
+      </div>
+    </div>
+    <div class="hero-shot" aria-hidden="true">
+      <div class="desktop"><img src="assets/desktop-register.png" alt="QuickBytes desktop register"></div>
+      <div class="phone"><img src="assets/phone-orders.png" alt="QuickBytes phone order queue"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHANNELS → ONE PRINTER ============ -->
+<section class="channels" id="channels" data-screen-label="Channels">
+  <div class="container">
+    <div class="section-head">
+      <span class="overline" data-bn="অর্ডার ম্যানেজমেন্ট">Order management</span>
+      <h2 data-bn="বিক্রির পাঁচ পথ। প্রিন্টের এক ঠিকানা।">Five ways to sell. One place to print.</h2>
+      <p data-bn="যে চ্যানেল থেকেই আসুক, প্রতিটি অর্ডার একই রিয়েল-টাইম কিউতে আসে।">No matter where the order comes from, it lands in the same real-time queue.</p>
+    </div>
+    <div class="flow">
+      <div class="flow-channels">
+        <span class="channel"><span class="tag">CTR</span><span data-bn="কাউন্টার">Counter</span></span>
+        <span class="channel"><span class="tag">MSG</span><span data-bn="ফেসবুক মেসেঞ্জার বট">Facebook Messenger bot</span></span>
+        <span class="channel"><span class="tag">WEB</span><span data-bn="নিজের ওয়েবসাইট">Your own website</span></span>
+        <span class="channel"><span class="tag">QR</span><span data-bn="টেবিল QR">Table QR</span></span>
+        <span class="channel"><span class="tag">FLR</span><span data-bn="ওয়েটার">Waiter</span></span>
+      </div>
+      <div class="flow-arrows" aria-hidden="true"><span>→</span><span>→</span><span>→</span></div>
+      <div class="printer-card">
+        <span class="kicker" data-bn="এক প্রিন্টিং ডেস্টিনেশন">One printing destination</span>
+        <h3 data-bn="গ্রহণ করুন ট্যাপ করলেই KOT প্রিন্ট হয়।">Tap Accept, and the KOT prints.</h3>
+        <p data-bn="আলাদা প্রিন্ট স্টেপ নেই, ভুলে যাওয়ার সুযোগ নেই। কিচেন সাথে সাথে রান্না শুরু করে।">No separate print step, nothing to forget. The kitchen starts cooking the moment you say yes.</p>
+        <div class="ticket" aria-hidden="true">
+          *** KOT · #24 · DELIVERY ***<br>
+          2× Kacchi Biryani — Full<br>
+          2× Borhani · 1× Cheese Naan<br>
+          12:41 · Website
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MESSENGER BOT ============ -->
+<section id="bot" data-screen-label="Messenger bot">
+  <div class="container bot-grid">
+    <div class="bot-video-wrap">
+      <video class="bot-video" src="assets/messenger-bot.mp4" autoplay loop muted playsinline controls></video>
+    </div>
+    <div>
+      <span class="overline" data-bn="মেসেঞ্জার বট">Messenger bot</span>
+      <h2 style="font-size: 40px; font-weight: 700; line-height: 1.12;" data-bn="আপনি রান্না করেন, বট অর্ডার নেয়।">The bot takes orders while you cook.</h2>
+      <div class="bot-points">
+        <div class="bot-point"><span class="b-dot"></span><div>
+          <h3 data-bn="কাস্টমার যেভাবে লেখে, সেভাবেই বোঝে">Understands customers the way they actually write</h3>
+          <p data-bn="AI স্বাভাবিক ভাষার চ্যাট বুঝে মেনুর প্রশ্নের উত্তর দেয়, ডেলিভারি অর্ডার নেয়, এলাকা অনুযায়ী চার্জ জানায় — অর্ডার সরাসরি আপনার কিউতে আসে।">AI reads natural-language chats — answers menu questions, takes delivery orders, quotes area-wise charges. The order lands straight in your queue.</p>
+        </div></div>
+        <div class="bot-point"><span class="b-dot"></span><div>
+          <h3 data-bn="না পারলে আপনাকে ডাকে">When it can't answer, it calls you</h3>
+          <p data-bn="ছবির অনুরোধ বা ক্যাটারিং জিজ্ঞাসা এলে কথোপকথন “আপনার দরকার” হয়ে POS-এ চলে আসে।">A photo request or a catering ask escalates the chat straight into your POS as “Needs you”.</p>
+        </div></div>
+        <div class="bot-point"><span class="b-dot"></span><div>
+          <h3 data-bn="ফেসবুক না খুলেই রিপ্লাই">Reply without opening Facebook</h3>
+          <p data-bn="POS থেকেই উত্তর দিন, ছবি পাঠান, দাম জানান — তারপর আবার বটকে দায়িত্ব দিন।">Answer, send a dish photo, quote a price from the POS — then hand the chat back to the bot.</p>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SURFACES ============ -->
+<section class="surfaces" id="surfaces" data-screen-label="Devices">
+  <div class="container">
+    <div class="section-head">
+      <span class="overline" data-bn="প্ল্যাটফর্ম">The platform</span>
+      <h2 data-bn="ফোন, ডেস্কটপ, টার্মিনাল — একটাই সিস্টেম।">Phone, desktop, terminal — one system.</h2>
+      <p data-bn="একই মেনু, একই অর্ডার কিউ, একই অ্যানালিটিক্স — প্রতিটি ডিভাইসে। আলাদা সেটআপ নেই।">Same menu, same order queue, same analytics on every device. No duplicate setup, no sync conflicts.</p>
+    </div>
+    <div class="surface-grid">
+      <div class="surface-card">
+        <span class="kind" data-bn="মোবাইল">Mobile</span>
+        <h3 data-bn="ফ্লোরে, ওয়েটারের হাতে">On the floor, in your waiter's hand</h3>
+        <p data-bn="টেবিল, অর্ডার আর স্টক — পকেটেই। ফুড কার্ট? কাউন্টার মোড + একটা সস্তা ব্লুটুথ প্রিন্টারই যথেষ্ট।">Tables, orders, and stock in a pocket. Running a food cart? Counter mode plus a cheap Bluetooth printer is all it takes.</p>
+        <div class="shot phone-shot"><img src="assets/phone-tables.png" alt="Tables screen on the phone app"></div>
+      </div>
+      <div class="surface-card">
+        <span class="kind" data-bn="ডেস্কটপ">Desktop</span>
+        <h3 data-bn="কাউন্টার স্টেশন — বাংলাতেও">The counter station — in Bangla too</h3>
+        <p data-bn="এক স্ক্রিনে পুরো রেজিস্টার আর অর্ডার কিউ। পুরো অ্যাপ বাংলায় চলে।">The full register and order queue on one screen. The whole app runs in Bangla.</p>
+        <div class="shot"><img src="assets/desktop-orders-bn.png" alt="Desktop order queue in Bengali"></div>
+      </div>
+      <div class="surface-card">
+        <span class="kind" data-bn="টার্মিনাল">Terminal</span>
+        <h3 data-bn="ওয়াইফাই ছাড়াও চলে">Works without WiFi</h3>
+        <p data-bn="পুরনো Sunmi বা PAX টার্মিনালেই চলে। নেট গেলেও কাজ থামে না — একটাও অর্ডার হারায় না।">Runs on the Sunmi and PAX terminals you already own. When the net drops, work continues — not one order is lost.</p>
+        <div class="shot phone-shot"><img src="assets/phone-token.png" alt="Order accepted screen with customer token"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ANALYTICS ============ -->
+<section class="analytics" data-screen-label="Analytics">
+  <div class="container ana-grid">
+    <div>
+      <span class="overline" data-bn="মালিকদের জন্য">For owners</span>
+      <h2 style="font-size: 40px; font-weight: 700; line-height: 1.12;" data-bn="যে সংখ্যা দিয়ে ব্যবসা চালানো যায়।">Numbers you can run a business on.</h2>
+      <p style="margin-top: 16px; font-size: 18px; color: var(--qb-muted);" data-bn="শুধু সুন্দর চার্ট নয় — কোন আইটেমে লাভ, কোন বেলায় বিক্রি, খরচ কোথায় যাচ্ছে। সবই ফোনে। স্টক-ইন? হাতে লেখা সাপ্লায়ার বিলও স্ক্যান করলে AI নিখুঁত এন্ট্রি বানিয়ে দেয়।">Not pretty charts with no depth — which items make money, which dayparts sell, where the costs go. All on your phone. Stocking in? Scan even a handwritten supplier bill and AI turns it into accurate stock entries.</p>
+      <div class="adv-list">
+        <span data-bn="নেট সেলস ও ট্রেন্ড">Net sales &amp; trend</span>
+        <span data-bn="আইটেম-ভিত্তিক মার্জিন">Per-item margin</span>
+        <span data-bn="ফোরকাস্ট ভার্সাস টার্গেট">Forecast vs target</span>
+        <span data-bn="ফুড কস্ট ও লেবার">Food cost &amp; labour</span>
+        <span data-bn="AI বিল স্ক্যান স্টক-ইন">AI bill-scan stock-in</span>
+      </div>
+    </div>
+    <div class="ana-shots" aria-hidden="true">
+      <img src="assets/phone-analytics.png" alt="Net sales and trend analytics">
+      <img src="assets/phone-unit-econ.png" alt="Forecast and unit economics">
+    </div>
+  </div>
+</section>
+
+<!-- ============ DOWNLOAD ============ -->
+<section class="download" id="download" data-screen-label="Download">
+  <div class="container">
+    <div class="section-head">
+      <span class="overline" data-bn="ট্রাই করুন">Try it</span>
+      <h2 data-bn="ডাউনলোড করুন। মেনু স্ক্যান করুন। বিক্রি শুরু করুন।">Download it. Scan your menu. Start selling.</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="step-num">1</span><div><h3 data-bn="অ্যাপ ডাউনলোড করুন">Download the app</h3><p data-bn="আপনার ডিভাইসে ইনস্টল করুন — সাইন-আপে এক মিনিট।">Install on your device — sign-up takes a minute.</p></div></div>
+      <div class="step"><span class="step-num">2</span><div><h3 data-bn="মেনু কার্ড স্ক্যান করুন">Scan your menu card</h3><p data-bn="ক্যামেরা ধরলেই AI আইটেম, ক্যাটাগরি, দাম, ভ্যারিয়েশন আর অ্যাড-অন কয়েক সেকেন্ডে বসিয়ে দেয়।">Point the camera at it — AI fills in items, categories, prices, variations, and add-ons in seconds.</p></div></div>
+      <div class="step"><span class="step-num">3</span><div><h3 data-bn="৫ মিনিটে বিক্রি শুরু">Selling within 5 minutes</h3><p data-bn="প্রিন্টার পেয়ার করুন আর শুরু করুন — প্রথম ৭ দিন ফ্রি।">Pair a printer and go — your first 7 days are free.</p></div></div>
+    </div>
+    <div class="dl-grid">
+      <div class="dl-card">
+        <span class="kind" data-bn="অ্যান্ড্রয়েড ফোন ও ট্যাবলেট">Android phone &amp; tablet</span>
+        <h3>QuickBytes Mobile</h3>
+        <p data-bn="মালিক, ম্যানেজার, ওয়েটার আর ফুড কার্টের জন্য">For owners, managers, waiters &amp; food carts</p>
+        <a class="btn btn-lime" href="/software-downloads/app-release.apk" data-bn=".apk ডাউনলোড">Download .apk</a>
+      </div>
+      <div class="dl-card">
+        <span class="kind" data-bn="অ্যান্ড্রয়েড POS টার্মিনাল">Android POS terminal</span>
+        <h3>QuickBytes Terminal</h3>
+        <p data-bn="Sunmi, iMin, PAX — Android 5.1 থেকেই চলে">Sunmi, iMin, PAX — runs on Android 5.1+</p>
+        <a class="btn btn-lime" href="/software-downloads/app-terminal-release.apk" data-bn=".apk ডাউনলোড">Download .apk</a>
+      </div>
+      <div class="dl-card">
+        <span class="kind" data-bn="উইন্ডোজ ডেস্কটপ">Windows desktop</span>
+        <h3>QuickBytes Desktop</h3>
+        <p data-bn="কাউন্টারের রেজিস্টার স্টেশনের জন্য">The register station for your counter</p>
+        <a class="btn btn-lime" href="/software-downloads/quickbytes-desktop.exe" data-bn=".exe ডাউনলোড">Download .exe</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section id="pricing" data-screen-label="Pricing">
+  <div class="container">
+    <div class="section-head">
+      <span class="overline" data-bn="প্রাইসিং">Pricing</span>
+      <h2 data-bn="৭ দিন ফ্রি। তারপর মাসে ৳৫০০ থেকে।">7 days free. Then from ৳500 a month.</h2>
+    </div>
+    <span class="trial-badge" data-bn="প্রতিটি প্ল্যানে ৭ দিনের ফ্রি ট্রায়াল">Every plan starts with a 7-day free trial</span>
+    <div class="tier-grid">
+      <div class="tier">
+        <h3 data-bn="কাউন্টার">Counter</h3>
+        <div class="price"><span class="amt">৳500</span><span class="per" data-bn="/মাস">/month</span></div>
+        <p class="who" data-bn="রেস্টুরেন্টের ভেতরের সবকিছু — কাউন্টার থেকে কিচেন পর্যন্ত">Everything inside the restaurant — counter to kitchen</p>
+        <ul>
+          <li data-bn="POS রেজিস্টার ও অর্ডার কিউ">POS register &amp; order queue</li>
+          <li data-bn="ডাইন-ইন টেবিল ও ফ্লোর">Dine-in tables &amp; floor</li>
+          <li data-bn="ইনভেন্টরি ও AI বিল স্ক্যান">Inventory &amp; AI bill scan</li>
+          <li data-bn="ওনার অ্যানালিটিক্স">Owner analytics</li>
+          <li data-bn="কন্ট্রোল টাওয়ার (লাইভ অপারেশন)">Control Tower live ops</li>
+          <li data-bn="থার্মাল প্রিন্টিং (KOT ও বিল)">Thermal printing (KOT &amp; bills)</li>
+        </ul>
+        <a class="btn btn-ghost" href="#download" data-bn="ট্রায়াল শুরু করুন">Start trial</a>
+      </div>
+      <div class="tier tier-hot">
+        <span class="tier-badge" data-bn="জনপ্রিয়">Most popular</span>
+        <h3 data-bn="অনলাইন">Online</h3>
+        <div class="price"><span class="amt">৳700</span><span class="per" data-bn="/মাস">/month</span></div>
+        <p class="who" data-bn="কাউন্টারের সবকিছু + অনলাইন অর্ডারিং">Everything in Counter, plus online ordering</p>
+        <ul>
+          <li data-bn="কাউন্টার প্ল্যানের সবকিছু">Everything in Counter</li>
+          <li data-bn="নিজের ওয়েবসাইট — আপনারনাম.quickbytes.buzz">Your own website — yourname.quickbytes.buzz</li>
+          <li data-bn="টেবিল QR অর্ডারিং">Table QR ordering</li>
+          <li data-bn="অনলাইন অর্ডার সরাসরি একই কিউতে">Online orders land in the same queue</li>
+          <li data-bn="লোগো, ব্যানার ও মেনু থিম">Your logo, banner &amp; menu theme</li>
+        </ul>
+        <a class="btn btn-lime" href="#download" data-bn="ট্রায়াল শুরু করুন">Start trial</a>
+      </div>
+      <div class="tier">
+        <h3 data-bn="সবকিছু">Everything</h3>
+        <div class="price"><span class="amt">৳1,000</span><span class="per" data-bn="/মাস">/month</span></div>
+        <p class="who" data-bn="পাঁচ চ্যানেলের সবগুলো, বট আর অ্যাডভান্সড অ্যানালিটিক্স সহ">All five channels, the bot, and advanced analytics</p>
+        <ul>
+          <li data-bn="অনলাইন প্ল্যানের সবকিছু">Everything in Online</li>
+          <li data-bn="ফেসবুক মেসেঞ্জার বট ও চ্যাট টেকওভার">Messenger bot &amp; chat takeover</li>
+          <li data-bn="অ্যাডভান্সড অ্যানালিটিক্স — ফোরকাস্ট, ইউনিট ইকোনমিক্স">Advanced analytics — forecast, unit economics</li>
+          <li data-bn="প্রতি-স্টাফ পারফরম্যান্স ও পেস-টু-টার্গেট">Per-staff performance &amp; pace-to-target</li>
+        </ul>
+        <a class="btn btn-ghost" href="#download" data-bn="ট্রায়াল শুরু করুন">Start trial</a>
+      </div>
+    </div>
+    <p class="pricing-note" data-bn="সব প্ল্যানে: ফোন + ডেস্কটপ + টার্মিনাল, বাংলা/ইংরেজি UI, bKash পেমেন্ট, রিয়েল-টাইম সিঙ্ক।">Every plan includes all three devices, the bilingual UI, bKash payments, and real-time sync.</p>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="cta-band" id="cta" data-screen-label="CTA">
+  <div class="container">
+    <span class="overline" style="color: var(--qb-lime);" data-bn="আমরা রাজশাহীতেই আছি">We're right here in Rajshahi</span>
+    <h2 data-bn="এই সপ্তাহেই আপনার কাউন্টারে QuickBytes বসান।">Put QuickBytes on your counter this week.</h2>
+    <p data-bn="নিজে নিজেই ৫ মিনিটে চালু করুন — বা আমাদের WhatsApp করুন, আমরা রাজশাহীর; আপনার রেস্টুরেন্টে এসে সেটআপ করে দেবো।">Set it up yourself in 5 minutes — or WhatsApp us. We're local; we'll come to your restaurant and set it up ourselves.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-lime" href="#download" data-bn="ফ্রি ডাউনলোড করুন">Download free</a>
+      <a class="btn btn-ghost" href="https://wa.me/8801921512049" target="_blank" rel="noopener">WhatsApp · 01921-512049</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer" data-screen-label="Footer">
+  <div class="container footer-inner">
+    <span class="wordmark"><img src="assets/logo.png" alt="">QuickBytes</span>
+    <span>quickbytes.buzz</span>
+    <span data-bn="রাজশাহীতে তৈরি">Built in Rajshahi</span>
+    <span class="links">
+      <a href="https://wa.me/8801921512049" target="_blank" rel="noopener">WhatsApp 01921-512049</a>
+      <a href="#" data-bn="প্রাইভেসি">Privacy</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var bn = false;
+  var btn = document.getElementById('langToggle');
+  btn.addEventListener('click', function () {
+    bn = !bn;
+    document.body.classList.toggle('bn', bn);
+    document.documentElement.lang = bn ? 'bn' : 'en';
+    btn.textContent = bn ? 'English' : 'বাংলা';
+    document.querySelectorAll('[data-bn]').forEach(function (el) {
+      if (!el.getAttribute('data-en')) el.setAttribute('data-en', el.innerHTML);
+      el.innerHTML = bn ? el.getAttribute('data-bn') : el.getAttribute('data-en');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

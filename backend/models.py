@@ -47,6 +47,11 @@ class Outlet(Base):
     pos_vat_rate_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     pos_service_charge_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     pos_discount_presets: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
+    # Nullable by design: NULL = "not configured" so Control Tower falls back to
+    # its built-in default and existing logic is unaffected (null-safe invariant).
+    pos_daily_sales_target: Mapped[float | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="outlets")
@@ -420,6 +425,7 @@ class ChatbotConversation(Base):
     page_id: Mapped[str] = mapped_column(String, nullable=False)
     psid: Mapped[str] = mapped_column(String, nullable=False)
     state_json: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
+    history_json: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
     last_user_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_bot_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -1,0 +1,176 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": []
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Inter|Noto Sans Bengali))/i]",
+        "message": "Font not provided by the design system. Available: Inter, Noto Sans Bengali."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {},
+    "tokens": [
+      "--accent-text",
+      "--action-primary-bg",
+      "--action-primary-ink",
+      "--action-wash-bg",
+      "--border-card",
+      "--border-hairline",
+      "--font-bengali",
+      "--font-sans",
+      "--fs-body",
+      "--fs-caption",
+      "--fs-display",
+      "--fs-heading",
+      "--fs-micro",
+      "--fs-title",
+      "--fw-bold",
+      "--fw-medium",
+      "--fw-regular",
+      "--fw-semibold",
+      "--hit-desktop",
+      "--hit-mobile",
+      "--lh-body",
+      "--lh-tight",
+      "--numeric-tabular",
+      "--qb-accent-strong",
+      "--qb-accent-wash",
+      "--qb-bg",
+      "--qb-danger",
+      "--qb-hairline",
+      "--qb-info",
+      "--qb-ink",
+      "--qb-ink-on-lime",
+      "--qb-lime",
+      "--qb-muted",
+      "--qb-slate-bg",
+      "--qb-slate-border",
+      "--qb-slate-ink",
+      "--qb-success",
+      "--qb-surface",
+      "--qb-warning",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--shadow-none",
+      "--shadow-popover",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-7",
+      "--space-8",
+      "--surface-card",
+      "--surface-page",
+      "--text-body",
+      "--text-muted",
+      "--text-on-accent",
+      "--tracking-tight",
+      "--tracking-wide"
+    ],
+    "tokenKinds": {
+      "--qb-lime": "color",
+      "--qb-ink-on-lime": "color",
+      "--qb-accent-wash": "color",
+      "--qb-accent-strong": "color",
+      "--qb-bg": "color",
+      "--qb-surface": "color",
+      "--qb-ink": "color",
+      "--qb-muted": "color",
+      "--qb-hairline": "color",
+      "--qb-success": "color",
+      "--qb-warning": "color",
+      "--qb-danger": "color",
+      "--qb-info": "color",
+      "--qb-slate-bg": "color",
+      "--qb-slate-border": "color",
+      "--qb-slate-ink": "color",
+      "--surface-card": "color",
+      "--surface-page": "color",
+      "--text-body": "font",
+      "--text-muted": "font",
+      "--text-on-accent": "font",
+      "--border-hairline": "color",
+      "--action-primary-bg": "color",
+      "--action-primary-ink": "color",
+      "--action-wash-bg": "color",
+      "--accent-text": "font",
+      "--font-sans": "font",
+      "--font-bengali": "font",
+      "--fs-display": "spacing",
+      "--fs-title": "spacing",
+      "--fs-heading": "spacing",
+      "--fs-body": "spacing",
+      "--fs-caption": "spacing",
+      "--fs-micro": "spacing",
+      "--lh-tight": "font",
+      "--lh-body": "font",
+      "--fw-regular": "font",
+      "--fw-medium": "font",
+      "--fw-semibold": "font",
+      "--fw-bold": "font",
+      "--tracking-tight": "font",
+      "--tracking-wide": "font",
+      "--numeric-tabular": "font",
+      "--space-1": "spacing",
+      "--space-2": "spacing",
+      "--space-3": "spacing",
+      "--space-4": "spacing",
+      "--space-5": "spacing",
+      "--space-6": "spacing",
+      "--space-7": "spacing",
+      "--space-8": "spacing",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-pill": "radius",
+      "--border-card": "color",
+      "--shadow-none": "shadow",
+      "--shadow-popover": "shadow",
+      "--hit-mobile": "spacing",
+      "--hit-desktop": "spacing"
+    },
+    "fontFamilies": [
+      "Inter",
+      "Noto Sans Bengali"
+    ]
+  }
+}

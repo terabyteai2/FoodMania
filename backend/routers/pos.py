@@ -59,6 +59,12 @@ def _settings_dict(outlet: Outlet) -> dict:
         "serviceChargePercent": _money(outlet.pos_service_charge_percent),
         "discountPresets": list(outlet.pos_discount_presets or []),
         "tableCount": int(outlet.table_count if outlet.table_count is not None else 10),
+        # NULL when unconfigured — clients fall back to their own default.
+        "dailySalesTarget": (
+            _money(outlet.pos_daily_sales_target)
+            if outlet.pos_daily_sales_target is not None
+            else None
+        ),
     }
 
 
@@ -106,7 +112,7 @@ async def _account(
     ).scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Active account required.")
-    if manager_only and account.role != "manager":
+    if manager_only and account.role not in ("owner", "manager"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager account required.")
     return account
 
@@ -173,6 +179,8 @@ async def patch_pos_settings(
         outlet.pos_vat_rate_percent = body.vatRatePercent
     if body.serviceChargePercent is not None:
         outlet.pos_service_charge_percent = body.serviceChargePercent
+    if body.dailySalesTarget is not None:
+        outlet.pos_daily_sales_target = body.dailySalesTarget
     if body.discountPresets is not None:
         presets = [preset.model_dump() for preset in body.discountPresets]
         for preset in presets:
@@ -343,9 +351,9 @@ async def settle_order(
     outlet = await _outlet(outlet_id, db)
     presets = list(outlet.pos_discount_presets or [])
     preset = next((entry for entry in presets if entry.get("id") == body.discountPresetId), None)
-    if body.discountAmount > 0 and account.role != "manager" and preset is None:
+    if body.discountAmount > 0 and account.role not in ("owner", "manager") and preset is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff may only apply configured discount presets.")
-    if body.discountAmount > 0 and account.role != "manager" and preset is not None:
+    if body.discountAmount > 0 and account.role not in ("owner", "manager") and preset is not None:
         preset_value = float(preset.get("value") or 0)
         allowed_discount = (
             _money(float(order.subtotal or 0) * preset_value / 100)
@@ -357,7 +365,7 @@ async def settle_order(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Staff discount amount must match the configured preset.",
             )
-    if body.customDiscountLabel and account.role != "manager":
+    if body.customDiscountLabel and account.role not in ("owner", "manager"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Custom discounts require a manager account.")
 
     expected_total = _money(
@@ -488,6 +496,69 @@ async def audit_order(
     return ok({"eventId": body.eventId, "action": action})
 
 
+@router.get("/outlets/{outlet_id}/pos/audit")
+async def list_audit(
+    outlet_id: str,
+    days: int = 30,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    # Owner/manager only — every void / refund / comp / discount override.
+    await _account(outlet_id, payload, db, manager_only=True)
+    since = _now() - timedelta(days=max(1, min(days, 365)))
+    events = (
+        await db.execute(
+            select(PosAuditEvent)
+            .where(
+                PosAuditEvent.outlet_id == outlet_id,
+                PosAuditEvent.created_at >= since,
+            )
+            .order_by(PosAuditEvent.created_at.desc())
+            .limit(200)
+        )
+    ).scalars().all()
+
+    order_ids = {e.order_id for e in events if e.order_id}
+    orders: dict[str, Order] = {}
+    if order_ids:
+        rows = (
+            await db.execute(select(Order).where(Order.id.in_(order_ids)))
+        ).scalars().all()
+        orders = {o.id: o for o in rows}
+
+    account_ids = {e.created_by_account_id for e in events if e.created_by_account_id}
+    accounts: dict[str, AdminAccount] = {}
+    if account_ids:
+        rows = (
+            await db.execute(select(AdminAccount).where(AdminAccount.id.in_(account_ids)))
+        ).scalars().all()
+        accounts = {a.id: a for a in rows}
+
+    def _entry(e: PosAuditEvent) -> dict:
+        order = orders.get(e.order_id) if e.order_id else None
+        account = accounts.get(e.created_by_account_id) if e.created_by_account_id else None
+        meta = e.metadata_json or {}
+        raw_amount = meta.get("amount")
+        return {
+            "id": e.id,
+            "eventId": e.event_id,
+            "action": e.action,
+            "reason": e.reason,
+            "amount": _money(raw_amount) if raw_amount is not None else None,
+            "orderId": e.order_id,
+            "orderSerial": (order.serial_number if order is not None else None),
+            "who": (
+                (account.display_name or account.username or account.email)
+                if account is not None
+                else None
+            ),
+            "role": e.created_by_role,
+            "createdAt": e.created_at.isoformat(),
+        }
+
+    return ok({"events": [_entry(e) for e in events]})
+
+
 @router.get("/outlets/{outlet_id}/pos/reports")
 async def pos_reports(
     outlet_id: str,
@@ -503,7 +574,7 @@ async def pos_reports(
             select(Order).where(
                 Order.outlet_id == outlet_id,
                 Order.created_at >= since,
-                Order.status == "served",
+                Order.status.in_(("served", "completed")),
             )
         )
     ).scalars().all()
@@ -512,7 +583,7 @@ async def pos_reports(
             select(Order).where(
                 Order.outlet_id == outlet_id,
                 Order.created_at >= now - timedelta(days=35),
-                Order.status == "served",
+                Order.status.in_(("served", "completed")),
             )
         )
     ).scalars().all()

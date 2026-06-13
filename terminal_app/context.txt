@@ -1,0 +1,174 @@
+# QuickBytes — Restaurant POS Terminal App
+
+A Flutter POS terminal for restaurant managers. App name: `local_pos` (v1.3.6).
+Targets Android (primary) with Linux/macOS/Windows/Web support.
+Supports Bengali (bn) and English (en) with full Bangla digit localization.
+Uses SQLite (sqflite) for local storage, HTTP REST for cloud sync, WebSocket for real-time events.
+
+---
+
+## lib/ — App source root
+
+### main.dart
+Entry point. Initializes Flutter binding, sets image cache limits (48MB/120 images), configures FFI SQLite on desktop platforms, locks orientation, and launches `LocalPosApp`.
+
+### src/app.dart
+`LocalPosApp` — root StatefulWidget. Manages app lifecycle (splash → intro → blocking notice → staff invite → tenant setup → main shell). Defines `MainShell` with 4 lazy tabs: Live (Control Tower), Tables, Orders, More. Shows notification toasts, app update dialogs, admin blocking notice. Handles orientation and navigation rail vs bottom nav based on screen width (≥760px = rail, ≥1050px = extended rail).
+
+### src/app_controller.dart
+`PosAppController` — central ChangeNotifier holding all app state (orders, menu, inventory, auth, sync, printer, notifications, settings). Manages initialization, data reload from DB, cloud sync orchestration, order alerts, auto-print, push notifications, app updates, bKash payment verification, subscription plans, staff invite flow, and lifecycle (foreground/background). Contains all business logic and CRUD operations.
+
+### src/app_scope.dart
+Dependency injection via `InheritedNotifier`. `AppScope` provides `PosAppController` to the widget tree. `AppModel` is an `InheritedModel` with aspect-based rebuild granularity (14 `AppAspect` enums: orders, menu, inventory, suppliers, notifications, sync, printer, dashboard, account, settings, language, tier, appUpdate, chatbot). `TierScope` provides `BusinessTier`.
+
+---
+
+## src/core/ — Foundation layer
+
+### constants/
+- **cloud_defaults.dart** — Default cloud API base URL, sync enable/disable, sync interval constants.
+- **dev_auth_defaults.dart** — Development-mode auth defaults (OTP hints, demo credentials).
+- **google_auth_defaults.dart** — Google Sign-In web client ID and scopes.
+- **payment_defaults.dart** — Payment flags: require bKash gate, use UddoktaPay, etc.
+
+### enums/
+- **business_tier.dart** — Business tier enum: `simple` (counter-only), `standard` (full POS), `plus` (advanced features).
+
+### localization/
+- **app_strings.dart** — `AppLanguage` enum (bn/en) and `AppStrings` class with 1500+ localized strings. All UI labels, error messages, notifications, date formats, and Bangla digit conversion.
+
+### platform/
+- **desktop_platform.dart** — Platform detection helpers: isDesktop, isMobile, isAndroid, etc.
+
+### theme/
+- **app_theme.dart** — `PosColors` (lime accent design system), `PosThemeTone` (dark/light), `AppTheme` (light theme data with custom lime palette). Font families: Plus Jakarta Sans, Inter, Hind Siliguri, Noto Sans Bengali, JetBrains Mono.
+
+### utils/
+- **bounded_string_set.dart** — A Set that caps at a max size (evicts oldest on overflow). Used to prevent unbounded alert-deduplication tracking.
+
+### widgets/ — Reusable UI components
+- **tf_design_system.dart** — Core design system: TfText, TfBottomNav, TfBottomNavItem, PosGradients, PosRadii, PosShadows, TfButton variants, TfChip, TfSegCtrl, TfTabBar, showTopNotificationToast, showNotificationCenter, TfDialog, TfDropdown, TfNumberField, etc. Handles Bangla font fallback, digit conversion, and RTL-aware layout.
+- **app_page_header.dart** — Reusable page header with title, date pill, notification bell, and navigation.
+- **app_scaffold.dart** — Standard page scaffold with top bar, bottom navigation, and content area.
+- **empty_state.dart** — Empty state placeholder with icon, title, and subtitle.
+- **error_view.dart** — Error display widget with retry button.
+- **loading_view.dart** — Loading spinner/indicator.
+- **menu_image_view.dart** — Menu item image display with caching and placeholders.
+- **menu_item_card.dart** — Card for displaying a menu item in menus/lists.
+- **notification_center.dart** — Notification center drawer/overlay showing all in-app notifications.
+- **order_card.dart** — Order summary card shown in order list.
+- **primary_button.dart** — Primary action button following design system.
+- **status_badge.dart** — Colored badge for order status (pending/accepted/completed/rejected).
+- **sync_event_tile.dart** — Tile showing individual sync event entry.
+- **copyable_text_card.dart** — Card with copy-to-clipboard text.
+- **dashboard_card.dart** — Metric display card for dashboard.
+- **tf_global_top_bar.dart** — Global top bar with restaurant name, sync status, and settings access.
+
+---
+
+## src/features/ — Feature modules (12 directories)
+
+### auth/
+- **staff_invite_screen.dart** — Accept/reject staff invitation screen. Shows restaurant info and accept/decline buttons.
+
+### common/
+- **coming_soon_screen.dart** — Placeholder for screens not yet implemented (Tables, Control Tower, Messages, Staff, Audit).
+
+### messaging/
+- **messages_screen.dart** — Messenger takeover inbox (spec §4.6). Two segments: "Needs you" / "All chats". Fetches from `GET /admin/chatbot/chats`, refreshes on websocket chat signals. Supports reply and hand-back.
+
+### more/
+- **more_screen.dart** — Terminal "More" hub. Profile card, Messages link, Settings (printer/cloud), service mode toggle (counter mode), language quick toggle, account info.
+
+### orders/ — Full order management (largest feature)
+- **orders_screen.dart** (~4886 lines) — Order list with filters (status, source, date), create/edit/view orders, menu item selection, customizations, cart management, QR code generation, KOT/bill printing, delivery details, payment handling, order status transitions.
+- **order_list_filters.dart** — Filter chips/controls for the order list (status, source, date range).
+- **widgets/menu_line_customizer.dart** — Widget for customizing individual menu line items (modifiers, quantity, notes).
+
+### settings/
+- **settings_screen.dart** (~2910 lines) — Full settings panel: restaurant name, cloud API URL, sync config, display scale, printer setup (USB/Bluetooth/built-in), language, account, auto-save, search, bKash payment verification, subscription plans, developer debug panel.
+
+### setup/
+- **tenant_setup_screen.dart** — 3-step onboarding wizard (spec §4.3): 1) Business tier selection (Simple/Standard/Plus), 2) Manager & restaurant name, 3) Table count. Provisions tenant via cloud API on completion.
+
+### splash/
+- **splash_screen.dart** — Animated splash screen displayed while `PosAppController.initialize()` runs. Shows branding, transitions to main app on completion.
+- **mode_intro_screen.dart** — Phone/OTP login screen (spec §4.1). Handles phone number entry, OTP autofill from SMS, Google Sign-In fallback. Routes to setup on success.
+
+### sync/
+- **sync_status_screen.dart** — Sync status dashboard: last sync time, pending count, failed count, connection status, sync event log list, manual sync trigger.
+
+### system/
+- **admin_blocking_notice_screen.dart** — Full-screen blocking notice from platform admin (e.g., subscription expired, account suspended). Shows admin message and response options.
+
+### tables/
+- **tables_screen.dart** — Tables/FOH tab (spec §4.2). Three segments: Dine-in, Parcel, Delivery. Shows occupied/available tables, creates new orders. In counter mode becomes quick-sell grid.
+
+### tower/
+- **control_tower_screen.dart** — Live operations dashboard (spec §4.9). Attention alerts (late orders, low stock), quick stats (open orders, tables seated, avg wait), channel-load bars, optional Advanced toggle with pace-to-target and per-staff metrics.
+
+---
+
+## src/models/ — Data models (32 files)
+
+Key models:
+- **account_role.dart** — Manager/owner/waiter role enum.
+- **admin_blocking_notice.dart** — Admin blocking notice data (title, message, isBlocking).
+- **app_update_info.dart** — Update info (version, required flag, release notes).
+- **audit_entry.dart** — POS audit log entry.
+- **bkash_payment_session.dart** — bKash payment session data.
+- **chat_thread.dart** — Facebook Messenger chat thread.
+- **daily_report.dart** — Daily inventory report.
+- **daily_stock_count.dart** — Daily stock count entry.
+- **dashboard_metrics.dart** — Computed dashboard metrics (orders today, sales, pending, etc.).
+- **dashboard_summary.dart** — Cloud API dashboard summary response.
+- **desktop_pos.dart** — Desktop POS config/model.
+- **facebook_chatbot_config.dart** — Facebook chatbot configuration.
+- **inventory_item.dart** — Inventory item with stock tracking.
+- **inventory_summary.dart** — Inventory summary from cloud API.
+- **inventory_supplier.dart** — Supplier details.
+- **inventory_unit.dart** — Unit of measure for inventory.
+- **menu_item.dart** — Menu item (name, price, category, availability, bilingual fields).
+- **order_item.dart** — Individual line item within an order (menu item ref, qty, price, modifiers).
+- **order_model.dart** — Full order (id, status, items, totals, timestamps, source, service type, payment).
+- **order_payment_method.dart** — Payment method enum (cash, card, bkash, etc.).
+- **order_service_type.dart** — Service type enum (dine-in, parcel, delivery).
+- **order_source.dart** — Order source enum (cloud/online, manual POS, etc.).
+- **order_status.dart** — Order lifecycle: pending → accepted → completed/rejected.
+- **payment_gateway_config.dart** — Payment gateway configuration.
+- **pos_notification.dart** — In-app notification model with type, target (orders/settings/messages), read state.
+- **receipt_scan.dart** — Receipt OCR scan result.
+- **sales_report.dart** — Sales report data derived from orders.
+- **server_config.dart** — Restaurant/outlet config (names, ID, table count, public slug, delivery charge).
+- **staff_member.dart** — Staff account details.
+- **stock_adjustment.dart** — Inventory stock adjustment record.
+- **sync_event.dart** — Sync operation event log entry.
+- **sync_status.dart** — Sync status enum (pending, syncing, synced, failed).
+
+---
+
+## src/services/ — Infrastructure services (10 files)
+
+- **cloud_api_service.dart** (~2341 lines) — HTTP REST client for all cloud API endpoints. Handles auth, menu CRUD, order sync, inventory, staff management, chatbot config, payment (bKash/UddoktaPay), analytics, app updates, admin blocking notices. Includes ngrok tunnel error recovery.
+- **local_database_service.dart** (~2886 lines) — SQLite database layer. CRUD for orders, menu, inventory, notifications, sync events. Per-tenant database isolation using outletId as file scope. Stream-based change notifications.
+- **sync_service.dart** (~827 lines) — Two-way sync orchestrator: pushes local changes to cloud, pulls remote changes to local DB. Periodic auto-sync (configurable interval), manual sync triggers, conflict resolution, sync state streaming.
+- **printer_service.dart** (~1776 lines) — Thermal receipt printing via ESC/POS protocol. Supports Bluetooth, USB, built-in, and Windows USB printers. Manages printer discovery, connection state, auto-print on new orders, KOT/bill ticket generation with QR codes.
+- **cloud_realtime_service.dart** (~188 lines) — WebSocket real-time event channel. Connects to backend for live order/notification push with exponential backoff reconnection.
+- **connectivity_service.dart** (~194 lines) — Network connectivity monitoring using `connectivity_plus`. Tracks online/offline state, provides internet access checks, Google auth preflight diagnostics.
+- **push_notification_service.dart** (~28 lines) — FCM push notifications (currently no-op — disabled for POS terminal APK to keep minSdk low).
+- **system_notification_service.dart** (~370 lines) — OS-level notifications via `flutter_local_notifications`. Manages Android notification channels with custom sounds, permission requests, sound registration with MediaStore.
+- **app_update_installer_service.dart** (~112 lines) — In-app APK download and install via platform MethodChannel. Downloads update file, triggers system installer.
+- **ticket_bitmap.dart** (~402 lines) — Renders order tickets (KOT/bill) as bitmaps for thermal printing, including QR codes for order identification.
+
+---
+
+## test/ — 16 test files
+Tests for models (admin blocking notice, dashboard summary, desktop POS, order model, etc.), screens (messages, orders, settings), printer tickets, and localization.
+
+## assets/
+- `brand/` — Brand logos and images
+- `sounds/` — Notification sounds
+- `menu_placeholders/` — Placeholder images for menu items
+- `fonts/` — Custom fonts (Plus Jakarta Sans, Inter, Hind Siliguri, Noto Sans Bengali, JetBrains Mono)
+- `icons/` — Custom icons
+- `customer_web/` — Customer-facing web assets

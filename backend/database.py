@@ -30,8 +30,43 @@ async def create_tables() -> None:
         await _ensure_delivery_charge_columns(conn)
         await _ensure_inventory_redesign_columns(conn)
         await _ensure_pos_columns(conn)
+        await _ensure_chatbot_columns(conn)
+        await _ensure_role_migration(conn)
     await seed_platform_admin()
     await seed_system_config()
+
+
+async def _ensure_role_migration(conn) -> None:
+    """One-time migration to the QuickBytes 3-role model (owner/manager/waiter).
+
+    Every pre-existing ``manager`` account is a tenant creator, so it becomes
+    ``owner``; legacy ``staff`` becomes ``waiter``. Guarded by a
+    ``system_configs`` flag so genuine mid-tier managers created after the
+    migration are never re-mapped on subsequent startups.
+    """
+    flag = "role_model_v2_migrated"
+    done = (
+        await conn.execute(
+            text("SELECT value FROM system_configs WHERE key = :k"), {"k": flag}
+        )
+    ).scalar_one_or_none()
+    if done:
+        return
+    await conn.execute(
+        text("UPDATE admin_accounts SET role = 'owner' WHERE role = 'manager'")
+    )
+    await conn.execute(
+        text("UPDATE admin_accounts SET role = 'waiter' WHERE role = 'staff'")
+    )
+    await conn.execute(
+        text(
+            "INSERT INTO system_configs (key, value, updated_at) "
+            "VALUES (:k, 'true', CURRENT_TIMESTAMP) "
+            "ON CONFLICT (key) DO UPDATE SET value = 'true', "
+            "updated_at = CURRENT_TIMESTAMP"
+        ),
+        {"k": flag},
+    )
 
 
 async def _ensure_auth_columns(conn) -> None:
@@ -271,6 +306,8 @@ async def _ensure_pos_columns(conn) -> None:
         ("pos_vat_rate_percent", "NUMERIC(5, 2) DEFAULT 0"),
         ("pos_service_charge_percent", "NUMERIC(5, 2) DEFAULT 0"),
         ("pos_discount_presets", json_type),
+        # Nullable, no default/backfill: NULL = "not configured" (null-safe invariant).
+        ("pos_daily_sales_target", "NUMERIC(10, 2)"),
     ]
     order_columns = [
         ("shift_id", "VARCHAR"),
@@ -384,6 +421,26 @@ async def _ensure_order_columns(conn) -> None:
     await conn.execute(text("UPDATE orders SET subtotal = total_amount WHERE subtotal IS NULL"))
     await conn.execute(text("UPDATE orders SET vat_rate_percent = 0 WHERE vat_rate_percent IS NULL"))
     await conn.execute(text("UPDATE orders SET vat_amount = 0 WHERE vat_amount IS NULL"))
+
+
+async def _ensure_chatbot_columns(conn) -> None:
+    """Add history_json column to chatbot_conversations for micro-batching."""
+    dialect = conn.dialect.name
+    json_type = "JSON" if dialect == "sqlite" else "JSONB"
+    if dialect == "sqlite":
+        try:
+            await conn.execute(
+                text(f"ALTER TABLE chatbot_conversations ADD COLUMN history_json {json_type}")
+            )
+        except Exception:
+            pass
+    else:
+        await conn.execute(
+            text(
+                f"ALTER TABLE chatbot_conversations ADD COLUMN IF NOT EXISTS "
+                f"history_json {json_type} DEFAULT '[]'::{json_type}"
+            )
+        )
 
 
 async def seed_system_config() -> None:

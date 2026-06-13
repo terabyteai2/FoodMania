@@ -1,0 +1,25 @@
+/* QuickBytes spacing, radii, elevation — spec §8.
+   Corners ≤12px; only toggles are fully round.
+   Hairline borders preferred over box shadows. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --radius-sm: 6px;     /* chips, badges */
+  --radius-md: 10px;    /* buttons, inputs */
+  --radius-lg: 12px;    /* cards — the maximum */
+  --radius-pill: 999px; /* toggles + nav pills ONLY */
+
+  --border-card: 1px solid var(--qb-hairline);
+  --shadow-none: none; /* default — elevation comes from hairlines */
+  --shadow-popover: 0 8px 24px rgba(26, 30, 20, 0.10); /* dropdowns/popovers only */
+
+  --hit-mobile: 44px;  /* min touch target, mobile */
+  --hit-desktop: 40px; /* min target, desktop */
+}

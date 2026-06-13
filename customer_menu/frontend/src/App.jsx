@@ -697,14 +697,15 @@ function WelcomeScreen({ info, onEnter }) {
   const [slide, setSlide] = useState(0)
   const touchX = useRef(null)
   const gallery = info?.galleryImages || []
+  const placeholderAssets = themeAssetPaths(T._slug)
   const hasVideo = !!info?.videoUrl
   const hasGallery = !hasVideo && gallery.length > 0
   const hasBanner = !hasVideo && !hasGallery && !!info?.bannerUrl
-  const hasMedia = hasVideo || hasGallery || hasBanner
-  // Per-theme placeholder paths reserved for future use; the actual asset
-  // files live under public/themes/<slug>/ and are dropped in by the owner.
-  // eslint-disable-next-line no-unused-vars
-  const _placeholderAssets = themeAssetPaths(T._slug)
+  const hasPlaceholder = !hasVideo && !hasGallery && !hasBanner
+  const hasMedia = hasVideo || hasGallery || hasBanner || hasPlaceholder
+
+  const placeholderPoster = hasPlaceholder ? (info?.bannerUrl || info?.galleryImages?.[0] || placeholderAssets.placeholderImage) : null
+  const placeholderVideoUrl = hasPlaceholder ? placeholderAssets.placeholderVideo : null
 
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return
@@ -715,6 +716,10 @@ function WelcomeScreen({ info, onEnter }) {
   useEffect(() => {
     if (videoRef.current) videoRef.current.play().catch(() => {})
   }, [info?.videoUrl])
+
+  useEffect(() => {
+    if (placeholderVideoUrl && videoRef.current) videoRef.current.play().catch(() => {})
+  }, [placeholderVideoUrl])
 
   function onTouchStart(e) { touchX.current = e.touches[0].clientX }
   function onTouchEnd(e) {
@@ -745,6 +750,15 @@ function WelcomeScreen({ info, onEnter }) {
       ) : hasBanner ? (
         <img src={info.bannerUrl} alt="" loading="lazy"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : placeholderPoster ? (
+        <>
+          <img src={placeholderPoster} alt="" loading="eager"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          {placeholderVideoUrl && (
+            <video ref={videoRef} src={placeholderVideoUrl} poster={placeholderPoster} muted autoPlay loop playsInline preload="metadata"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          )}
+        </>
       ) : (
         <>
           <div style={{

@@ -1,0 +1,754 @@
+╭─── Claude Code v2.1.170 ─────────────────────────────────────────────────────╮
+│                                            │ Tips for getting started        │
+│                Welcome back!               │ Run /init to create a CLAUDE.m… │
+│                                            │ ─────────────────────────────── │
+│                   ▐▛███▜▌                  │ What's new                      │
+│                  ▝▜█████▛▘                 │ Introducing Claude Fable 5: a … │
+│                    ▘▘ ▝▝                   │ Fixed sessions not saving tran… │
+│                                            │ Self-hosted runner: added a `p… │
+│        Opus 4.6 · API Usage Billing        │ /release-notes for more         │
+│   ~/Documents/GitHub/FoodMania/admin_app   │                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+ ⚠ Both claude.ai and ANTHROPIC_API_KEY set · auth may not work as expected
+   · to use claude.ai: Unset the ANTHROPIC_API_KEY environment variable, or claude /logout then say "No" to the API key approval before login.
+   · to use ANTHROPIC_API_KEY: claude /logout to sign out of claude.ai.
+
+❯ /compact                                                                      
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Referenced file lib/src/features/settings/settings_screen.dart
+  ⎿  Referenced file lib/src/features/dashboard/dashboard_screen.dart
+  ⎿  Read design_migration_status.txt (393 lines)
+  ⎿  Referenced file lib/src/core/widgets/tf_design_system.dart
+  ⎿  Referenced file lib/src/core/theme/app_theme.dart
+  ⎿  Plan file referenced (~/.claude/plans/design-migration-status-txt-holds-the-c-polymorphic-penguin.md)
+
+❯ /plan                                                                         
+  ⎿  Current Plan
+     /home/dev/.claude/plans/design-migration-status-txt-holds-the-c-polymorphic-
+     penguin.md
+
+     Phase 3: Component Primitives — Implementation Plan
+
+     Context
+
+     Phases 1 (color tokens) and 2 (typography scale) of the QuickBytes design
+     system migration are complete. The token values in app_theme.dart now match
+     the spec, and TfUnifiedTopNav title was updated to 26/700.
+
+     Phase 3 updates the visual appearance of shared primitive widgets to match
+     the new design spec (NEW_DESIGN/DESIGN_SOURCE_OF_TRUTH.md §6, §8). No logic,
+     screen layout, or feature changes — only the look of reusable components.
+
+     File to modify
+
+     lib/src/core/widgets/tf_design_system.dart — all changes are in this single
+     file except one ThemeData update in lib/src/core/theme/app_theme.dart.
+
+     Changes
+
+     3A. TfBottomNav — lime pill indicator (lines 1369–1449)
+
+     Current: Active tab = icon + label colored PosColors.slate, with a thin
+     18×3px lime bar underneath.
+
+     Target (from frame_0001.png, frame_0031.png): Active tab = lime pill
+     (rounded rect) behind the icon, bold label below. No bar.
+
+     Implementation:
+     - Replace the Column children for each tab item:
+       - Wrap the Icon in a Container with lime pill background when selected
+     (PosColors.primary, borderRadius PosRadii.pill, padding ~horizontal:16,
+     vertical:4)
+       - Active label: FontWeight.w700, color PosColors.slate
+       - Inactive: icon + label in PosColors.muted, no background
+       - Remove the 18×3px bar Container entirely
+     - Add optional badge property to TfBottomNavItem (int?) for pending-order
+     badge on Orders tab — rendered as a small red dot/count positioned on the
+     icon
+
+     3B. TfChip — add tint variant (lines 949–1030)
+
+     Current: Single active style: solid PosColors.primary fill +
+     PosColors.accentInk text. Border = PosColors.lineStrong when inactive,
+     PosColors.primary when active.
+
+     Target (spec §8): Two variants:
+     - Default (lime): solid lime+ink — current behavior, keep as-is
+     - tint: accent-tint bg (PosColors.primarySoft) + accent-strong text
+     (PosColors.accentStrong)
+
+     Implementation:
+     - Add bool tint = false parameter to TfChip
+     - When active && tint:
+       - Material color: PosColors.primarySoft (not solid lime)
+       - Text/icon color: PosColors.accentStrong
+       - Border: Colors.transparent (tint fill is the indicator)
+     - When active && !tint (default): keep current solid lime behavior
+     - Remove border on active state for default variant too (lime fill is the
+     indicator per spec)
+
+     3C. TfTabs — white active segment (lines 1804–1890)
+
+     Current: Active segment = PosColors.primarySoft fill, inactive =
+     PosColors.surface. No wrapper background.
+
+     Target (spec §8): Wrapper = surface-2 background. Active segment = white
+     (elevated). Inactive = transparent on the surface-2 wrapper.
+
+     Implementation:
+     - Wrap the Row in a Container with PosColors.surfaceSunk background,
+     borderRadius: PosRadii.sm, padding 4
+     - Active segment: color = PosColors.surface (white), border = PosColors.line
+     - Inactive segment: color = Colors.transparent, no border
+     - Remove per-item left padding (the wrapper padding handles spacing)
+
+     3D. TfFab — rounded-square radius (lines 1311–1351)
+
+     Current: borderRadius: BorderRadius.circular(PosRadii.chip) — that's 5px
+     (too sharp).
+
+     Target (spec §8): "56×56 rounded-square" — use PosRadii.xl (12px).
+
+     Implementation:
+     - Change both BorderRadius.circular(PosRadii.chip) occurrences to
+     BorderRadius.circular(PosRadii.xl)
+     - Update FAB shadow to match spec: 0 8px 22px -6px rgba(126,200,40,.6) — add
+     a new PosShadows.fab constant in app_theme.dart:
+     static const List<BoxShadow> fab = [
+       BoxShadow(color: Color(0x997EC828), blurRadius: 22, offset: Offset(0, 8),
+     spreadRadius: -6),
+     ];
+     - Use PosShadows.fab in TfFab instead of PosShadows.glow
+
+     3E. TfPeriodSelector — ink-on-lime text (lines 2413–2480)
+
+     Current: Active pill text color = Colors.white (violates spec rule: "Ink on
+     lime, always").
+
+     Target: Active text = PosColors.accentInk (#14180E), never white.
+
+     Implementation:
+     - Line 2456: color: on ? Colors.white : PosColors.textSec → color: on ? 
+     PosColors.accentInk : PosColors.textSec
+     - Line 2465: color: (on ? Colors.white : PosColors.textSec) → color: (on ? 
+     PosColors.accentInk : PosColors.textSec)
+
+     3F. TfIconButton (BarBtn) — no changes needed
+
+     Already matches spec: 42px square, hairline border, optional count badge.
+
+     3G. NavigationBarTheme update (app_theme.dart lines 403–427)
+
+     Update to reflect the new pill indicator style:
+     - indicatorColor: PosColors.primary (lime pill)
+     - indicatorShape: StadiumBorder() (pill shape)
+     - Selected icon color: PosColors.accentInk (ink on the lime pill)
+     - Selected label: FontWeight.w700
+
+     3H. NEW: TfBrandHeader widget
+
+     Add a simple brand header component for the Orders home screen. Based on
+     frame_0001.png:
+     - Lime rounded-square mark (bolt icon, ~30px) — reuse existing Mark concept
+     from the prototype
+     - "Quick Bytes" text, bold
+     - Location subtitle below
+
+     Implementation: A new TfBrandHeader widget with title, subtitle params,
+     rendering the lime bolt mark + text. Placed after TfUnifiedTopNav in the
+     file.
+
+     Verification
+
+     1. flutter analyze — zero new errors (ignore pre-existing
+     cloud_api_service_old.dart)
+     2. Visual check: Compare bottom nav, chips, tabs, FAB, period selector
+     against flow_frames/frame_0001.png, frame_0031.png, frame_0042.png
+     3. Confirm ink-on-lime rule: no Colors.white used on any lime-filled surface
+
+     "/plan open" to edit this plan in VS Code
+
+
+
+
+❯ okay now the topbar should be one shared component with the page title,       
+  restaurant name to the left and the notification bell and account avatar      
+  (circular with initials. Drops down with different options like change the    
+  1.mode, language, sign-out to the right..                                     
+  Now the modes changes ( critical)- we're just going to have 2 modes now.      
+  Instead of Foodcart, cafe, etc it's going to be just simple and advanced.     
+  Remove the enitre dashboard home screen features meaning the manager and      
+  owner views and also the 4 modes swtiches.  Don't delete the widget code      
+  please I might use them later, just take them out of the app. Now the home    
+  page will be the orders page for everybody regarless of role.,   checkk the   
+  @NEW_DESIGN/QuickBytes-BUILD-SPEC.md also. The specs are a bit different from 
+  the current app specs so I just want 1 section  of the  changes for now.      
+  Check 4.8 the analytics section. Let's implement that, visible only to the    
+  owner role. You can find the reference codes in                               
+  @NEW_DESIGN/App_design/bytes-analytics.jsx                                    
+  and if that's insufficient and you wanna see how it looks, check              
+  NEW_DESIGN/flow_frames and check fram_0042 to frame_0055.                     
+  So the final tasks-                                                           
+  1. Top navbar                                                                 
+  2.Homes screen changes                                                        
+  3.Seperate Analytics Page                                                     
+  ⎿  Read NEW_DESIGN/QuickBytes-BUILD-SPEC.md (300 lines)
+  ⎿  Read NEW_DESIGN/App_design/bytes-analytics.jsx (476 lines)
+
+  Thought for 12s (ctrl+o to expand)
+
+● I'll explore the codebase to understand the app shell structure, current
+  dashboard/routing, and the top nav implementation before planning these 3
+  tasks.
+
+● 3 Explore agents finished (ctrl+o to expand)
+   ├ Explore app shell structure · 0 tool uses
+   │ ⎿  Done
+   ├ Explore dashboard screen · 0 tool uses
+   │ ⎿  Done
+   └ Explore TfUnifiedTopNav usage · 0 tool uses
+     ⎿  Done
+
+● Explore agents unavailable (503 on haiku). I'll read the key files directly.
+
+  Searched for 4 patterns, read 1 file (ctrl+o to expand)
+
+● Now I see the structure. Let me check the _AppTab.home page builder (index 2 =
+  DashboardScreen) and how isManager is determined.
+
+  Searched for 4 patterns, read 2 files (ctrl+o to expand)
+
+● Now let me look at how the dashboard screen is structured and what the Orders
+  screen header looks like, plus the AccountRole model.
+
+  Searched for 6 patterns, read 5 files (ctrl+o to expand)
+
+● Now I have a clear picture. Let me check how the app uses the AppScope to
+  understand what's available to widgets, then look at a flow frame for
+  analytics reference.
+
+  Searched for 2 patterns, listed 1 directory (ctrl+o to expand)
+
+● Good — there's already a desktop analytics screen but no mobile one. Let me
+  look at the visual frame for analytics and check the existing desktop
+  analytics for any reusable patterns.
+
+  Thought for 35s, read 4 files (ctrl+o to expand)
+
+● Now I have all the context needed. Let me look at one more frame (advanced
+  analytics with toggle on) and check how setBusinessTier works, then write the
+  plan.
+
+  Searched for 1 pattern, read 2 files (ctrl+o to expand)
+
+● I have everything I need. Now let me write the implementation plan.
+
+● Updated plan
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+
+● Plan is written. One quick clarification before I finalize:
+
+● User answered Claude's questions:
+  ⎿  · The current app has only 2 roles: Manager (full access) and Staff 
+     (limited). Should Analytics be visible to both managers and staff who are 
+     managers, or do you want me to add a new 'Owner' role to the enum to gate 
+     analytics separately from regular managers? → Manager = Owner
+● Good — Manager = Owner, so Analytics is visible to anyone with app.isManager 
+  == true. The plan already reflects this. Let me finalize.
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/design-migration-status-txt-holds-the-c-poly
+     morphic-penguin.md · /plan to edit
+     Implementation Plan: Unified Top Bar + Home Screen Changes + Analytics Page
+
+     Context
+ okay now the topbar should be one shared component with the page title,       
+  restaurant name to the left and the notification bell and account avatar      
+  (circular with initials. Drops down with different options like change the    
+  1.mode, language, sign-out to the right..                                     
+  Now the modes changes ( critical)- we're just going to have 2 modes now.      
+  Instead of Foodcart, cafe, etc it's going to be just simple and advanced.     
+  Remove the enitre dashboard home screen features meaning the manager and      
+  owner views and also the 4 modes swtiches.  Don't delete the widget code      
+  please I might use them later, just take them out of the app. Now the home    
+  page will be the orders page for everybody regarless of role.,   checkk the   
+  @NEW_DESIGN/QuickBytes-BUILD-SPEC.md also. The specs are a bit different from 
+  the current app specs so I just want 1 section  of the  changes for now.      
+  Check 4.8 the analytics section. Let's implement that, visible only to the    
+  owner role. You can find the reference codes in                               
+  @NEW_DESIGN/App_design/bytes-analytics.jsx                                    
+  and if that's insufficient and you wanna see how it looks, check              
+  NEW_DESIGN/flow_frames and check fram_0042 to frame_0055.                     
+  So the final tasks-                                                           
+  1. Top navbar                                                                 
+  2.Homes screen changes                                                        
+  3.Seperate Analytics Page                                                     
+  
+
+	Now we
+     need three structural changes:
+     1. A unified top bar shared across all pages with avatar dropdown (mode
+     switch, language, sign out)
+     2. Remove the dashboard home screen from routing (keep widget code) and
+     make Orders the home for all roles
+     3. A new Analytics page visible only to the owner/manager role
+
+     The mode system changes from 4 tiers (FoodCart/Cafe/Restaurant/Enterprise)
+     → 2 modes (Simple/Advanced). The avatar dropdown shows mode options as text
+     only (NO icons).
+
+     Key Architecture (current state)
+
+     - App shell: lib/src/app.dart — MainShell with _LazyIndexedStack, _AppTab
+     enum
+     - Tab enum: _AppTab { orders, menu, home, stock, settings } — home index=2
+     maps to DashboardScreen
+     - Tab orders: _managerTabOrder (all 5), _staffTabOrder (orders, menu,
+     settings)
+     - Role gate: app.isManager (true for owner/manager, false for staff)
+     - Mode system: BusinessTier enum (simple/standard/advanced/enterprise) in
+     lib/src/core/enums/business_tier.dart
+     - Existing reusable widgets: HeaderNotificationBell
+     (notification_center.dart:1069), TfUnifiedTopNav
+     (tf_design_system.dart:497)
+     - User info available: app.accountDisplayName, app.restaurantName,
+     app.language, app.updateLanguage(), app.logOut(), app.setBusinessTier()
+
+     ---
+     Task 1: Home Screen Changes (do first — enables Task 3)
+
+     1A. Modify _AppTab enum and tab orders (lib/src/app.dart)
+
+     enum _AppTab { orders, menu, analytics, stock, settings }
+
+     - Rename home → analytics
+     - Manager tab order: [analytics, orders, menu, stock, settings]
+     - Staff tab order: [orders, menu, settings] (unchanged — no analytics)
+
+     1B. Update pageBuilders in MainShell.build()
+
+     Change the builder at index 2 (was DashboardScreen) to build new
+     AnalyticsScreen:
+     (_) => AnalyticsScreen(onNavigateToTarget: _navigateNotificationTarget),
+
+     1C. Update _destinationFor switch case
+
+     Replace _AppTab.home case with _AppTab.analytics:
+     _AppTab.analytics => _Destination('Analytics', 'অ্যানালিটিক্স',
+     Icons.insights_outlined, Icons.insights),
+
+     1D. Default landing tab
+
+     Change _defaultShellIndex() and _dashboardTabIndex so the app starts on
+     Orders (index 1 in manager order). Actually simplest: change
+     _initialShellIndex to point at the orders tab index in manager order.
+
+     1E. Mode system — simplify display (lib/src/core/enums/business_tier.dart)
+
+     Keep all 4 enum values but update displayName:
+     simple => 'Simple',
+     standard => 'Simple',   // maps to simple for UI purposes
+     advanced => 'Advanced',
+     enterprise => 'Advanced', // maps to advanced for UI purposes
+
+     The avatar dropdown will only present Simple and Advanced as choices,
+     mapping to BusinessTier.simple and BusinessTier.advanced.
+
+     ---
+     Task 2: Analytics Page (Owner-only, new file)
+
+     New file: lib/src/features/analytics/analytics_screen.dart
+
+     Sections (from frames 0042–0055 + bytes-analytics.jsx):
+
+     1. Header — TfGlobalTopBar (or temporary TfUnifiedTopNav until Task 3 is
+     done)
+     2. Timeframe selector — segmented: Today / 7 days / 30 days / Custom
+     3. Advanced analytics toggle — minimal switch
+     4. Filter bar — Filters button + active filter chips
+     5. Hero card — accent-tint wash bg, net sales big number (34/800),
+     sub-metrics (Orders, Avg order, Gross margin)
+     6. Sales trend — area chart with CustomPainter
+     7. Revenue by category — horizontal bar rows + "See all ›"
+     8. Product performance — sortable via tint chips
+     (Revenue/Units/Orders/Margin) + ranked list
+     9. Channels donut + Payments donut — side by side, CustomPainter
+     10. Daypart performance — styled cards
+     11. Peak hours — compact bar sparkline
+     12. Advanced sections (toggle on): Forecast vs target, Unit economics,
+     Customer cohort, Discounts+Wastage, Basket analysis
+
+     Data approach
+
+     Mock data constants (mirrors the JSX ANALYTICS object). Structure ready for
+     API replacement later.
+
+     Sub-screens (pushed via Navigator)
+
+     - _CategoryAllScreen — full category breakdown with sort chips + export
+     button
+     - _ProductsAllScreen — full product list with search + 6 sort dimensions +
+     export
+
+     Charts
+
+     CustomPainter implementations:
+     - _DonutPainter — ring chart with segments + center text
+     - _AreaChartPainter — line + gradient fill + optional compare dashed line +
+     axis labels
+
+     ---
+     Task 3: Unified Top Bar (touches multiple screens)
+
+     New widget: TfGlobalTopBar in tf_design_system.dart
+
+     class TfGlobalTopBar extends StatelessWidget {
+       const TfGlobalTopBar({
+         required this.title,
+         this.subtitle,
+         this.onNavigateToOrders,
+         this.onNavigateToTarget,
+         this.extraActions = const [],
+         super.key,
+       });
+       final String title;
+       final String? subtitle;
+       final VoidCallback? onNavigateToOrders;
+       final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+       final List<Widget> extraActions;
+     }
+
+     Build method renders:
+
+     - TfUnifiedTopNav-style layout (title + subtitle left)
+     - Right side: extraActions + HeaderNotificationBell + _AvatarDropdown
+
+     _AvatarDropdown widget:
+
+     - 36px circle, PosColors.primarySoft bg, PosColors.accentStrong text
+     - Shows first 2 chars of app.accountDisplayName (uppercase)
+     - On tap: PopupMenuButton with custom itemBuilder:
+       - Mode section header "Mode" (eyebrow), then two rows:
+           - "Simple" — text only, active = tint chip style
+         - "Advanced" — text only, active = tint chip style
+       - Divider
+       - Language row — "English" / "বাংলা" with active indicator
+       - Divider
+       - Sign out row — red text
+
+     Screen header replacements:
+
+     Replace current TfAppBar(title: ..., trailing: [... HeaderNotificationBell 
+     ...]) pattern with TfGlobalTopBar(title: ...) in:
+     - orders_screen.dart (~line 661)
+     - inventory_screen.dart (~line 167, 1983, 3074)
+     - menu_management_screen.dart (~line 119)
+     - settings_screen.dart (~line 402)
+     - analytics_screen.dart (new)
+
+     Note: Some pushed sub-screens (stock-in, count, etc.) keep their own
+     back-button headers — only replace the tab root headers.
+
+     ---
+     Implementation Order
+
+     1. Task 1 — restructure tabs/routing in app.dart + mode display names
+     2. Task 2 — build analytics screen (new file, stub first then flesh out)
+     3. Task 3 — add TfGlobalTopBar, then swap headers in existing screens
+
+     ---
+     Files Modified
+
+     File: lib/src/app.dart
+     Change: Tab enum rename, tab orders, page builder, default index,
+     destination
+       icon/label
+     ────────────────────────────────────────
+     File: lib/src/core/enums/business_tier.dart
+     Change: displayName simplification
+     ────────────────────────────────────────
+     File: lib/src/core/widgets/tf_design_system.dart
+     Change: Add TfGlobalTopBar + _AvatarDropdown
+     ────────────────────────────────────────
+     File: lib/src/features/analytics/analytics_screen.dart
+     Change: NEW — full analytics page with charts
+     ────────────────────────────────────────
+     File: lib/src/features/orders/orders_screen.dart
+     Change: Header → TfGlobalTopBar
+     ────────────────────────────────────────
+     File: lib/src/features/inventory/inventory_screen.dart
+     Change: Tab root header → TfGlobalTopBar
+     ────────────────────────────────────────
+     File: lib/src/features/menu/menu_management_screen.dart
+     Change: Tab root header → TfGlobalTopBar
+     ────────────────────────────────────────
+     File: lib/src/features/settings/settings_screen.dart
+     Change: Tab root header → TfGlobalTopBar
+
+     NOT deleted/modified: dashboard_screen.dart, complexity_dial.dart (kept
+     intact, just unused)
+
+     ---
+     Verification
+
+     1. flutter analyze — zero new errors
+     2. App launches with Orders as default visible tab for all roles
+     3. Analytics tab visible only when app.isManager (owner/manager)
+     4. Analytics page renders all sections with mock data, charts paint
+     correctly
+     5. Avatar dropdown: mode switch between Simple/Advanced works and persists,
+     language toggles, sign out logs out
+     6. Dashboard screen code is intact but unreachable from navigation
+     7. No icons in mode dropdown options — text only
+
+● Starting with Task 1: restructuring tabs and routing.
+
+● Please run /login · API Error: 403 pre-consume quota failed, user 
+  quota: ＄10.849446, need quota: ＄12.925500 (request id: 
+  202606101233445462508zE0qbwd6)
+
+✻ Sautéed for 11m 5s
+
+❯ /plan                                                                         
+  ⎿  Current Plan
+     /home/dev/.claude/plans/design-migration-status-txt-holds-the-c-polymorphic
+     -penguin.md
+
+     Implementation Plan: Unified Top Bar + Home Screen Changes + Analytics Page
+
+     Context
+
+     The QuickBytes design system migration (Phases 1–5) is complete. Now we
+     need three structural changes:
+     1. A unified top bar shared across all pages with avatar dropdown (mode
+     switch, language, sign out)
+     2. Remove the dashboard home screen from routing (keep widget code) and
+     make Orders the home for all roles
+     3. A new Analytics page visible only to the owner/manager role
+
+     The mode system changes from 4 tiers (FoodCart/Cafe/Restaurant/Enterprise)
+     → 2 modes (Simple/Advanced). The avatar dropdown shows mode options as text
+     only (NO icons).
+
+     Key Architecture (current state)
+
+     - App shell: lib/src/app.dart — MainShell with _LazyIndexedStack, _AppTab
+     enum
+     - Tab enum: _AppTab { orders, menu, home, stock, settings } — home index=2
+     maps to DashboardScreen
+     - Tab orders: _managerTabOrder (all 5), _staffTabOrder (orders, menu,
+     settings)
+     - Role gate: app.isManager (true for owner/manager, false for staff)
+     - Mode system: BusinessTier enum (simple/standard/advanced/enterprise) in
+     lib/src/core/enums/business_tier.dart
+     - Existing reusable widgets: HeaderNotificationBell
+     (notification_center.dart:1069), TfUnifiedTopNav
+     (tf_design_system.dart:497)
+     - User info available: app.accountDisplayName, app.restaurantName,
+     app.language, app.updateLanguage(), app.logOut(), app.setBusinessTier()
+
+     ---
+     Task 1: Home Screen Changes (do first — enables Task 3)
+
+     1A. Modify _AppTab enum and tab orders (lib/src/app.dart)
+
+     enum _AppTab { orders, menu, analytics, stock, settings }
+
+     - Rename home → analytics
+     - Manager tab order: [analytics, orders, menu, stock, settings]
+     - Staff tab order: [orders, menu, settings] (unchanged — no analytics)
+
+     1B. Update pageBuilders in MainShell.build()
+
+     Change the builder at index 2 (was DashboardScreen) to build new
+     AnalyticsScreen:
+     (_) => AnalyticsScreen(onNavigateToTarget: _navigateNotificationTarget),
+
+     1C. Update _destinationFor switch case
+
+     Replace _AppTab.home case with _AppTab.analytics:
+     _AppTab.analytics => _Destination('Analytics', 'অ্যানালিটিক্স',
+     Icons.insights_outlined, Icons.insights),
+
+     1D. Default landing tab
+
+     Change _defaultShellIndex() and _dashboardTabIndex so the app starts on
+     Orders (index 1 in manager order). Actually simplest: change
+     _initialShellIndex to point at the orders tab index in manager order.
+
+     1E. Mode system — simplify display (lib/src/core/enums/business_tier.dart)
+
+     Keep all 4 enum values but update displayName:
+     simple => 'Simple',
+     standard => 'Simple',   // maps to simple for UI purposes
+     advanced => 'Advanced',
+     enterprise => 'Advanced', // maps to advanced for UI purposes
+
+     The avatar dropdown will only present Simple and Advanced as choices,
+     mapping to BusinessTier.simple and BusinessTier.advanced.
+
+     ---
+     Task 2: Analytics Page (Owner-only, new file)
+
+     New file: lib/src/features/analytics/analytics_screen.dart
+
+     Sections (from frames 0042–0055 + bytes-analytics.jsx):
+
+     1. Header — TfGlobalTopBar (or temporary TfUnifiedTopNav until Task 3 is
+     done)
+     2. Timeframe selector — segmented: Today / 7 days / 30 days / Custom
+     3. Advanced analytics toggle — minimal switch
+     4. Filter bar — Filters button + active filter chips
+     5. Hero card — accent-tint wash bg, net sales big number (34/800),
+     sub-metrics (Orders, Avg order, Gross margin)
+     6. Sales trend — area chart with CustomPainter
+     7. Revenue by category — horizontal bar rows + "See all ›"
+     8. Product performance — sortable via tint chips
+     (Revenue/Units/Orders/Margin) + ranked list
+     9. Channels donut + Payments donut — side by side, CustomPainter
+     10. Daypart performance — styled cards
+     11. Peak hours — compact bar sparkline
+     12. Advanced sections (toggle on): Forecast vs target, Unit economics,
+     Customer cohort, Discounts+Wastage, Basket analysis
+
+     Data approach
+
+     Mock data constants (mirrors the JSX ANALYTICS object). Structure ready for
+     API replacement later.
+
+     Sub-screens (pushed via Navigator)
+
+     - _CategoryAllScreen — full category breakdown with sort chips + export
+     button
+     - _ProductsAllScreen — full product list with search + 6 sort dimensions +
+     export
+
+     Charts
+
+     CustomPainter implementations:
+     - _DonutPainter — ring chart with segments + center text
+     - _AreaChartPainter — line + gradient fill + optional compare dashed line +
+     axis labels
+
+     ---
+     Task 3: Unified Top Bar (touches multiple screens)
+
+     New widget: TfGlobalTopBar in tf_design_system.dart
+
+     class TfGlobalTopBar extends StatelessWidget {
+       const TfGlobalTopBar({
+         required this.title,
+         this.subtitle,
+         this.onNavigateToOrders,
+         this.onNavigateToTarget,
+         this.extraActions = const [],
+         super.key,
+       });
+       final String title;
+       final String? subtitle;
+       final VoidCallback? onNavigateToOrders;
+       final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+       final List<Widget> extraActions;
+     }
+
+     Build method renders:
+
+     - TfUnifiedTopNav-style layout (title + subtitle left)
+     - Right side: extraActions + HeaderNotificationBell + _AvatarDropdown
+
+     _AvatarDropdown widget:
+
+     - 36px circle, PosColors.primarySoft bg, PosColors.accentStrong text
+     - Shows first 2 chars of app.accountDisplayName (uppercase)
+     - On tap: PopupMenuButton with custom itemBuilder:
+       - Mode section header "Mode" (eyebrow), then two rows:
+           - "Simple" — text only, active = tint chip style
+         - "Advanced" — text only, active = tint chip style
+       - Divider
+       - Language row — "English" / "বাংলা" with active indicator
+       - Divider
+       - Sign out row — red text
+
+     Screen header replacements:
+
+     Replace current TfAppBar(title: ..., trailing: [... HeaderNotificationBell 
+     ...]) pattern with TfGlobalTopBar(title: ...) in:
+     - orders_screen.dart (~line 661)
+     - inventory_screen.dart (~line 167, 1983, 3074)
+     - menu_management_screen.dart (~line 119)
+     - settings_screen.dart (~line 402)
+     - analytics_screen.dart (new)
+
+     Note: Some pushed sub-screens (stock-in, count, etc.) keep their own
+     back-button headers — only replace the tab root headers.
+
+     ---
+     Implementation Order
+
+     1. Task 1 — restructure tabs/routing in app.dart + mode display names
+     2. Task 2 — build analytics screen (new file, stub first then flesh out)
+     3. Task 3 — add TfGlobalTopBar, then swap headers in existing screens
+
+     ---
+     Files Modified
+
+     File: lib/src/app.dart
+     Change: Tab enum rename, tab orders, page builder, default index,
+     destination
+       icon/label
+     ────────────────────────────────────────
+     File: lib/src/core/enums/business_tier.dart
+     Change: displayName simplification
+     ────────────────────────────────────────
+     File: lib/src/core/widgets/tf_design_system.dart
+     Change: Add TfGlobalTopBar + _AvatarDropdown
+     ────────────────────────────────────────
+     File: lib/src/features/analytics/analytics_screen.dart
+     Change: NEW — full analytics page with charts
+     ────────────────────────────────────────
+     File: lib/src/features/orders/orders_screen.dart
+     Change: Header → TfGlobalTopBar
+     ────────────────────────────────────────
+     File: lib/src/features/inventory/inventory_screen.dart
+     Change: Tab root header → TfGlobalTopBar
+     ────────────────────────────────────────
+     File: lib/src/features/menu/menu_management_screen.dart
+     Change: Tab root header → TfGlobalTopBar
+     ────────────────────────────────────────
+     File: lib/src/features/settings/settings_screen.dart
+     Change: Tab root header → TfGlobalTopBar
+
+     NOT deleted/modified: dashboard_screen.dart, complexity_dial.dart (kept
+     intact, just unused)
+
+     ---
+     Verification
+
+     1. flutter analyze — zero new errors
+     2. App launches with Orders as default visible tab for all roles
+     3. Analytics tab visible only when app.isManager (owner/manager)
+     4. Analytics page renders all sections with mock data, charts paint
+     correctly
+     5. Avatar dropdown: mode switch between Simple/Advanced works and persists,
+     language toggles, sign out logs out
+     6. Dashboard screen code is intact but unreachable from navigation
+     7. No icons in mode dropdown options — text only
+
+     "/plan open" to edit this plan in VS Code
+
+❯ please recap the task and context                                             
+
+● Please run /login · API Error: 403 token quota is not enough, token 
+  remain quota: ＄10.000000, need quota: ＄12.894756 (request id: 
+  202606101319114076496140Jcdg7rt)
+
+
+
+✻ Worked for 1s

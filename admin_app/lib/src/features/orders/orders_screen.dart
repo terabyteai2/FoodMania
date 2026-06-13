@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -10,8 +9,7 @@ import '../../app_scope.dart';
 import '../../core/enums/business_tier.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/menu_image_view.dart';
-import '../../core/widgets/notification_center.dart';
+import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
 import '../../models/order_item.dart';
@@ -21,6 +19,7 @@ import '../../models/order_source.dart';
 import '../../models/order_status.dart';
 import '../../models/pos_notification.dart';
 import '../desktop_pos/widgets/menu_line_customizer.dart';
+import 'menu_order_widgets.dart';
 import 'order_list_filters.dart';
 
 Future<void> openNewOrderForm(
@@ -29,17 +28,19 @@ Future<void> openNewOrderForm(
   String? initialMenuItemId,
   Map<String, int>? initialMenuItemQuantities,
   List<DesktopMenuLineSelection>? initialCartLines,
+  OrderServiceType? initialServiceType,
+  String? initialTableNo,
+  bool startAtMenu = false,
   bool startAtReview = false,
 }) async {
   final app = AppScope.of(context);
   final menuItems = app.menuItems.where((i) => i.isAvailable).toList();
   final tableCount = app.serverConfig.tableCount;
 
-  final occupiedTables = <String>{
-    for (final order in app.ordersFor())
-      if (order.status.isOpen)
-        if ((order.tableNo ?? '').trim().isNotEmpty) order.tableNo!.trim(),
-  };
+  final dineInOpenOrders = app
+      .ordersFor()
+      .where((o) => o.status.isOpen && o.serviceType == OrderServiceType.dineIn)
+      .toList();
 
   final tier = TierScope.of(context);
   final counterMode = tier == BusinessTier.simple;
@@ -50,11 +51,14 @@ Future<void> openNewOrderForm(
       builder: (_) => _NewOrderPage(
         menuItems: menuItems,
         tableCount: tableCount,
-        occupiedTables: occupiedTables,
+        dineInOpenOrders: dineInOpenOrders,
         counterMode: counterMode,
         initialMenuItemId: initialMenuItemId,
         initialMenuItemQuantities: initialMenuItemQuantities,
         initialCartLines: initialCartLines,
+        initialServiceType: initialServiceType,
+        initialTableNo: initialTableNo,
+        startAtMenu: startAtMenu,
         startAtReview: startAtReview,
         onCreateOrder: (result) async {
           final order = await app.createManualOrder(
@@ -62,8 +66,23 @@ Future<void> openNewOrderForm(
             tableNo: result.tableNo,
             note: result.note,
             serviceType: result.serviceType,
+            customerName: result.customerName,
             paymentMethod: null,
           );
+          // Delivery contact details aren't part of createManualOrder; persist
+          // them right after so the KOT/bill and order card show recipient info.
+          if (result.serviceType == OrderServiceType.delivery &&
+              ((result.deliveryAddress ?? '').isNotEmpty ||
+                  (result.mobileNumber ?? '').isNotEmpty ||
+                  (result.customerName ?? '').isNotEmpty)) {
+            await app.updateOrderDetails(
+              order.id,
+              serviceType: OrderServiceType.delivery,
+              customerName: result.customerName,
+              deliveryAddress: result.deliveryAddress,
+              mobileNumber: result.mobileNumber,
+            );
+          }
           final shouldPrint =
               app.orderPrinterSideEffectsEnabled &&
               app.isManager &&
@@ -228,41 +247,29 @@ class _OrdersScreenState extends State<OrdersScreen>
     final language = app.language;
     final searchQuery = _searchController.text.trim();
     final derived = _deriveOrders(rawOrders, _filters, searchQuery, language);
-    final allOrders = derived.allOrders;
-    final unfilteredPendingOrders = derived.unfilteredPending;
-    final unfilteredAcceptedOrders = derived.unfilteredAccepted;
-    final searchBasePendingOrders = derived.searchBasePending;
-    final searchBaseAcceptedOrders = derived.searchBaseAccepted;
-    final pendingOrders = derived.pendingOrders;
-    final acceptedOrders = derived.acceptedOrders;
+    final ongoingOrders = derived.ongoingOrders;
+    final completedOrders = derived.completedOrders;
 
     final text = app.strings;
     final canCreate = app.menuItems.any((i) => i.isAvailable);
-    final pendingShortcut = _emptyShortcut(
+    final pendingCount = _pendingOrders(ongoingOrders).length;
+    final ongoingShortcut = _emptyShortcut(
       context: context,
-      currentFiltered: pendingOrders,
-      currentSearchBase: searchBasePendingOrders,
-      currentUnfiltered: unfilteredPendingOrders,
-      otherFiltered: acceptedOrders,
-      otherLabel: text.acceptedTab,
-      otherTabIndex: 1,
+      currentFiltered: ongoingOrders,
+      currentSearchBase: derived.searchBaseOngoing,
+      currentUnfiltered: derived.unfilteredOngoing,
       searchActive: searchQuery.isNotEmpty,
-      allowOtherShortcut: false,
     );
-    final acceptedShortcut = _emptyShortcut(
+    final completedShortcut = _emptyShortcut(
       context: context,
-      currentFiltered: acceptedOrders,
-      currentSearchBase: searchBaseAcceptedOrders,
-      currentUnfiltered: unfilteredAcceptedOrders,
-      otherFiltered: pendingOrders,
-      otherLabel: text.pendingTab,
-      otherTabIndex: 0,
+      currentFiltered: completedOrders,
+      currentSearchBase: derived.searchBaseCompleted,
+      currentUnfiltered: derived.unfilteredCompleted,
       searchActive: searchQuery.isNotEmpty,
-      allowOtherShortcut: true,
     );
-    _syncTabWithPendingOrders(pendingOrders.length, acceptedOrders.length);
-    final hasAnyOpenOrders =
-        pendingOrders.isNotEmpty || acceptedOrders.isNotEmpty;
+    _syncTabWithPendingOrders(pendingCount, ongoingOrders.length);
+    final hasAnyOpenOrders = ongoingOrders.isNotEmpty;
+    final floorTotal = ongoingOrders.fold<num>(0, (sum, o) => sum + o.total);
 
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -271,7 +278,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               tooltip: text.newOrder,
               onPressed: () => openNewOrderForm(
                 context,
-                onCreated: () => _tabs.animateTo(1),
+                onCreated: () => _tabs.animateTo(0),
               ),
             )
           : null,
@@ -279,59 +286,76 @@ class _OrdersScreenState extends State<OrdersScreen>
         child: Column(
           children: [
             _TopBar(
-              pendingCount: pendingOrders.length,
-              acceptedCount: acceptedOrders.length,
-              totalFiltered: allOrders.length,
-              filtersActive: _filters.isActive,
-              onFilterPressed: () => _openOrderFilters(context),
+              onNavigateToOrders: () {},
               onNavigateToTarget: widget.onNavigateToTarget,
             ),
+            if (hasAnyOpenOrders)
+              _OrdersSummaryRow(
+                floorTotal: floorTotal,
+                pendingCount: pendingCount,
+                ongoingCount: ongoingOrders.length,
+              ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: TfSearchField(
-                controller: _searchController,
-                hintText: text.orderSearchHint,
-                onChanged: (_) => setState(() {}),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TfSearchField(
+                      controller: _searchController,
+                      hintText: text.orderSearchHint,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TfIconButton(
+                    icon: Icons.tune_rounded,
+                    tooltip: text.filterOrders,
+                    dark: _filters.isActive,
+                    onPressed: () => _openOrderFilters(context),
+                  ),
+                ],
               ),
             ),
             _TabStrip(
               controller: _tabs,
-              pendingCount: pendingOrders.length,
-              acceptedCount: acceptedOrders.length,
+              ongoingCount: ongoingOrders.length,
+              completedCount: completedOrders.length,
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
                   _OrderList(
-                    orders: pendingOrders,
+                    orders: ongoingOrders,
                     emptyTitle: text.quietForNow,
                     canCreate: canCreate,
                     onCreate: () => openNewOrderForm(
                       context,
-                      onCreated: () => _tabs.animateTo(1),
+                      onCreated: () => _tabs.animateTo(0),
                     ),
-                    shortcut: pendingShortcut,
+                    shortcut: ongoingShortcut,
                     searchQuery: searchQuery,
-                    onPrint: (o) => _printBill(context, o),
-                    onEdit: null,
+                    onPrintBill: (o) => _printBill(context, o),
+                    onPrintKot: (o) => _printKot(context, o),
+                    onOpen: (o) => _openEditOrderSheet(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
                     onLoadMore: app.loadMoreOrders,
                   ),
                   _OrderList(
-                    orders: acceptedOrders,
-                    emptyTitle: text.noAcceptedOrdersRightNow,
+                    orders: completedOrders,
+                    emptyTitle: text.noCompletedOrders,
                     canCreate: canCreate,
                     onCreate: () => openNewOrderForm(
                       context,
-                      onCreated: () => _tabs.animateTo(1),
+                      onCreated: () => _tabs.animateTo(0),
                     ),
-                    shortcut: acceptedShortcut,
+                    shortcut: completedShortcut,
                     searchQuery: searchQuery,
-                    onPrint: (o) => _printBill(context, o),
-                    onEdit: (o) => _openEditOrderSheet(context, o),
+                    onPrintBill: (o) => _printBill(context, o),
+                    onPrintKot: (o) => _printKot(context, o),
+                    onOpen: null,
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
@@ -352,21 +376,57 @@ class _OrdersScreenState extends State<OrdersScreen>
     return b.createdAt.compareTo(a.createdAt);
   }
 
+  String _ordersDiagSummary(List<OrderModel> rows, {int sampleLimit = 5}) {
+    final raw = <String, int>{};
+    final admin = <String, int>{};
+    for (final order in rows) {
+      raw[order.status.name] = (raw[order.status.name] ?? 0) + 1;
+      final adminStatus = order.status.adminStatus.name;
+      admin[adminStatus] = (admin[adminStatus] ?? 0) + 1;
+    }
+    String format(Map<String, int> counts) {
+      final keys = counts.keys.toList()..sort();
+      return '{${keys.map((k) => '$k:${counts[k]}').join(', ')}}';
+    }
+
+    final sorted = rows.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final sample = sorted
+        .take(sampleLimit)
+        .map((order) {
+          return '${order.id}#${order.sequenceNo}:'
+              '${order.status.name}/${order.status.adminStatus.name} '
+              '${order.source.name}/${order.serviceType?.name ?? 'none'} '
+              '৳${order.total.toStringAsFixed(0)} '
+              'c=${order.createdAt.toIso8601String()} '
+              'u=${order.updatedAt.toIso8601String()}';
+        })
+        .join(' | ');
+    return 'raw=${format(raw)} admin=${format(admin)} sample=$sample';
+  }
+
   List<OrderModel> _pendingOrders(List<OrderModel> orders) {
     return orders
         .where((o) => o.status.adminStatus == OrderStatus.pending)
         .toList(growable: false);
   }
 
-  List<OrderModel> _acceptedOrders(List<OrderModel> orders) {
+  /// Ongoing = open orders (pending + accepted; preparing/ready map to accepted
+  /// via [OrderStatus.adminStatus]). Served and cancelled are excluded.
+  List<OrderModel> _ongoingOrders(List<OrderModel> orders) {
     return orders
         .where(
           (o) =>
-              o.status.adminStatus == OrderStatus.accepted ||
-              o.status.adminStatus == OrderStatus.served ||
-              o.status == OrderStatus.preparing ||
-              o.status == OrderStatus.ready,
+              o.status.adminStatus == OrderStatus.pending ||
+              o.status.adminStatus == OrderStatus.accepted,
         )
+        .toList(growable: false);
+  }
+
+  /// Completed = terminal paid orders (legacy "served" maps to completed).
+  List<OrderModel> _completedOrders(List<OrderModel> orders) {
+    return orders
+        .where((o) => o.status.adminStatus == OrderStatus.completed)
         .toList(growable: false);
   }
 
@@ -394,9 +454,41 @@ class _OrdersScreenState extends State<OrdersScreen>
     final allOrders = filterMatched
         .where((o) => _matchesOrderSearch(o, searchQuery, language))
         .toList(growable: false);
-    final pendingOrders = _pendingOrders(allOrders)..sort(_sortOrders);
-    final acceptedOrders = _acceptedOrders(allOrders)
+    final ongoingOrders = _ongoingOrders(allOrders)..sort(_sortOrders);
+    final completedOrders = _completedOrders(allOrders)
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (kDebugMode) {
+      debugPrint(
+        '[QB-ORDERS-DIAG] derive raw=${raw.length} '
+        'filterMatched=${filterMatched.length} '
+        'afterSearch=${allOrders.length} '
+        'ongoing=${ongoingOrders.length} completed=${completedOrders.length} '
+        'unfilteredOngoing=${_ongoingOrders(raw).length} '
+        'unfilteredCompleted=${_completedOrders(raw).length} '
+        'searchBaseOngoing=${_ongoingOrders(filterMatched).length} '
+        'searchBaseCompleted=${_completedOrders(filterMatched).length} '
+        'query="$searchQuery" filtersActive=${filters.isActive} '
+        'dateRange=${filters.dateRange.name} source=${filters.source?.name} '
+        '${_ordersDiagSummary(raw)}',
+      );
+      // When filters/search hide everything but raw had orders, dump statuses
+      // so we can see whether it's a status-mapping vs filter problem.
+      if (allOrders.isEmpty && raw.isNotEmpty) {
+        debugPrint(
+          '[QB-ORDERS-DIAG] all hidden — raw statuses: '
+          '${raw.map((o) => '${o.id}:${o.status.name}/${o.status.adminStatus.name}').join(', ')}',
+        );
+      }
+      final rawOpen = raw.where((o) => o.status.isOpen).toList();
+      if (rawOpen.isNotEmpty && ongoingOrders.isEmpty) {
+        debugPrint(
+          '[QB-ORDERS-DIAG] SUSPICIOUS_EMPTY_OPEN_UI '
+          'rawOpen=${rawOpen.length} filtersActive=${filters.isActive} '
+          'dateRange=${filters.dateRange.name} source=${filters.source?.name} '
+          'query="$searchQuery" ${_ordersDiagSummary(rawOpen, sampleLimit: 10)}',
+        );
+      }
+    }
     final derived = _OrdersDerivation(
       raw: raw,
       filters: filters,
@@ -404,12 +496,12 @@ class _OrdersScreenState extends State<OrdersScreen>
       language: language,
       filterMatched: filterMatched,
       allOrders: allOrders,
-      unfilteredPending: _pendingOrders(raw),
-      unfilteredAccepted: _acceptedOrders(raw),
-      searchBasePending: _pendingOrders(filterMatched),
-      searchBaseAccepted: _acceptedOrders(filterMatched),
-      pendingOrders: pendingOrders,
-      acceptedOrders: acceptedOrders,
+      unfilteredOngoing: _ongoingOrders(raw),
+      unfilteredCompleted: _completedOrders(raw),
+      searchBaseOngoing: _ongoingOrders(filterMatched),
+      searchBaseCompleted: _completedOrders(filterMatched),
+      ongoingOrders: ongoingOrders,
+      completedOrders: completedOrders,
     );
     _cachedDerivation = derived;
     return derived;
@@ -420,11 +512,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     required List<OrderModel> currentFiltered,
     required List<OrderModel> currentSearchBase,
     required List<OrderModel> currentUnfiltered,
-    required List<OrderModel> otherFiltered,
-    required String otherLabel,
-    required int otherTabIndex,
     required bool searchActive,
-    required bool allowOtherShortcut,
   }) {
     if (currentFiltered.isNotEmpty) return null;
     final text = AppScope.of(context).strings;
@@ -438,12 +526,6 @@ class _OrdersScreenState extends State<OrdersScreen>
       return _EmptyShortcut(
         label: text.clearFiltersShortcut,
         onTap: () => setState(() => _filters = OrderListFilters.none),
-      );
-    }
-    if (allowOtherShortcut && otherFiltered.isNotEmpty) {
-      return _EmptyShortcut(
-        label: text.viewOtherOrdersInstead(otherLabel),
-        onTap: () => _tabs.animateTo(otherTabIndex),
       );
     }
     return null;
@@ -483,30 +565,34 @@ class _OrdersScreenState extends State<OrdersScreen>
     return normalized.replaceAll('#', '').replaceAll(RegExp(r'\s+'), ' ');
   }
 
-  void _syncTabWithPendingOrders(int pendingCount, int acceptedCount) {
+  void _syncTabWithPendingOrders(int pendingCount, int ongoingCount) {
     final previousPendingCount = _lastPendingCount;
     _lastPendingCount = pendingCount;
+    if (kDebugMode) {
+      debugPrint(
+        '[QB-ORDERS-DIAG] syncTab previousPending=$previousPendingCount '
+        'pending=$pendingCount ongoing=$ongoingCount tab=${_tabs.index}',
+      );
+    }
 
-    // Only auto-switch on actual transitions, not on every rebuild — otherwise
-    // tapping into the pending tab while pendingCount is still 0 bounces the
-    // user straight back to accepted.
+    // Only auto-switch on a real arrival, not on every rebuild. When a new
+    // pending order lands while the user is on Completed, jump to Ongoing so
+    // they see it (pending + accepted now share the Ongoing list).
     if (previousPendingCount == null) return;
-
-    final pendingJustDrained =
-        previousPendingCount > 0 &&
-        pendingCount == 0 &&
-        acceptedCount > 0 &&
-        _tabs.index != 1;
     final hasNewPendingOrder =
         pendingCount > previousPendingCount && _tabs.index != 0;
-
-    if (!pendingJustDrained && !hasNewPendingOrder) return;
+    if (!hasNewPendingOrder) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final targetIndex = pendingJustDrained ? 1 : 0;
-      if (_tabs.index != targetIndex) {
-        _tabs.animateTo(targetIndex);
+      if (_tabs.index != 0) {
+        if (kDebugMode) {
+          debugPrint(
+            '[QB-ORDERS-DIAG] syncTab animate from=${_tabs.index} to=0 '
+            'hasNewPendingOrder=$hasNewPendingOrder',
+          );
+        }
+        _tabs.animateTo(0);
       }
     });
   }
@@ -525,10 +611,29 @@ class _OrdersScreenState extends State<OrdersScreen>
     }
   }
 
+  Future<void> _printKot(BuildContext context, OrderModel order) async {
+    final app = AppScope.of(context);
+    if (!app.isManager) return;
+    final text = app.strings;
+    final ok = await app.printOrderTicket(order);
+    if (!context.mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText(text.kotPrinted(order.displaySequence))),
+      );
+    }
+  }
+
   Future<void> _printBill(BuildContext context, OrderModel order) async {
     final app = AppScope.of(context);
     if (!app.isManager) return;
     final text = app.strings;
+    // Spec: Print Bill marks the order completed so it moves to the Completed
+    // tab. Mirrors the prototype's billAndComplete.
+    if (order.status.adminStatus != OrderStatus.completed) {
+      await app.updateOrderStatus(order.id, OrderStatus.completed);
+    }
+    if (!context.mounted) return;
     final ok = await app.printCustomerInvoice(order);
     if (!context.mounted) return;
     if (ok) {
@@ -548,44 +653,62 @@ class _OrdersScreenState extends State<OrdersScreen>
     await app.updateOrderStatus(order.id, status);
   }
 
-  Future<void> _openEditOrderSheet(
-    BuildContext context,
-    OrderModel order,
-  ) async {
-    final app = AppScope.of(context);
-    if (!app.isManager) return;
-    final result = await showModalBottomSheet<_OrderEditResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _EditOrderSheet(order: order),
-    );
-    if (result == null || !context.mounted) return;
-    if (result.delete) {
-      await app.deleteOrder(order.id);
-      return;
+  Future<void> _openEditOrderSheet(BuildContext context, OrderModel order) =>
+      openEditOrderSheet(context, order);
+}
+
+/// Opens the order edit sheet for [order] (manager+ only) and applies the
+/// result. Reused by the Orders list and the Tables/FOH screen.
+Future<void> openEditOrderSheet(BuildContext context, OrderModel order) async {
+  final app = AppScope.of(context);
+  if (!app.isManager) return;
+  final result = await showModalBottomSheet<_OrderEditResult>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _EditOrderSheet(order: order),
+  );
+  if (result == null || !context.mounted) return;
+  if (result.delete) {
+    await app.deleteOrder(order.id);
+    return;
+  }
+  await app.updateOrderDetails(
+    order.id,
+    serviceType: result.serviceType,
+    tableNo: result.tableNo,
+    note: result.note,
+    customerName: result.customerName,
+    deliveryAddress: result.deliveryAddress,
+    mobileNumber: result.mobileNumber,
+  );
+  if (result.itemsChanged && result.items != null && result.items!.isNotEmpty) {
+    try {
+      await app.updateOrderItems(order.id, result.items!);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TfText('$error')));
     }
-    await app.updateOrderDetails(
-      order.id,
-      serviceType: result.serviceType,
-      tableNo: result.tableNo,
-      note: result.note,
-      customerName: result.customerName,
-      deliveryAddress: result.deliveryAddress,
-      mobileNumber: result.mobileNumber,
-    );
-    if (result.itemsChanged &&
-        result.items != null &&
-        result.items!.isNotEmpty) {
-      try {
-        await app.updateOrderItems(order.id, result.items!);
-      } catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: TfText('$error')));
-      }
-    }
+  }
+  final reasons = <String>[];
+  final hasEdit = result.serviceType != (order.serviceType ?? OrderServiceType.dineIn) ||
+      result.tableNo != order.tableNo ||
+      result.customerName != order.customerName ||
+      result.deliveryAddress != order.deliveryAddress ||
+      result.mobileNumber != order.mobileNumber;
+  if (result.itemsChanged) reasons.add('items modified');
+  if (hasEdit && !result.itemsChanged) reasons.add('order details updated');
+  if (reasons.isNotEmpty) {
+    try {
+      await app.auditOrderAction(
+        orderId: order.id,
+        action: 'comp',
+        reason: reasons.join('; '),
+        shiftId: order.shiftId,
+      );
+    } catch (_) {}
   }
 }
 
@@ -600,12 +723,12 @@ class _OrdersDerivation {
     required this.language,
     required this.filterMatched,
     required this.allOrders,
-    required this.unfilteredPending,
-    required this.unfilteredAccepted,
-    required this.searchBasePending,
-    required this.searchBaseAccepted,
-    required this.pendingOrders,
-    required this.acceptedOrders,
+    required this.unfilteredOngoing,
+    required this.unfilteredCompleted,
+    required this.searchBaseOngoing,
+    required this.searchBaseCompleted,
+    required this.ongoingOrders,
+    required this.completedOrders,
   });
 
   final List<OrderModel> raw;
@@ -614,67 +737,164 @@ class _OrdersDerivation {
   final AppLanguage language;
   final List<OrderModel> filterMatched;
   final List<OrderModel> allOrders;
-  final List<OrderModel> unfilteredPending;
-  final List<OrderModel> unfilteredAccepted;
-  final List<OrderModel> searchBasePending;
-  final List<OrderModel> searchBaseAccepted;
-  final List<OrderModel> pendingOrders;
-  final List<OrderModel> acceptedOrders;
+  final List<OrderModel> unfilteredOngoing;
+  final List<OrderModel> unfilteredCompleted;
+  final List<OrderModel> searchBaseOngoing;
+  final List<OrderModel> searchBaseCompleted;
+  final List<OrderModel> ongoingOrders;
+  final List<OrderModel> completedOrders;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FAB
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// QuickBytes Orders-home header (spec §4.1): brand mark + product + location
+/// on the left, TopActions (Messages w/ escalation badge for manager+, and the
+/// notification bell) on the right. No page-navigation buttons here — the
+/// filter lives next to the search field, primary actions in the bottom bar.
 class _TopBar extends StatelessWidget {
   const _TopBar({
-    required this.pendingCount,
-    required this.acceptedCount,
-    required this.totalFiltered,
-    required this.filtersActive,
-    required this.onFilterPressed,
+    required this.onNavigateToOrders,
     required this.onNavigateToTarget,
   });
 
-  final int pendingCount;
-  final int acceptedCount;
-  final int totalFiltered;
-  final bool filtersActive;
-  final VoidCallback onFilterPressed;
+  final VoidCallback onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    final subtitle = filtersActive
-        ? text.ordersFilteredSubtitle(
-            pendingCount,
-            acceptedCount,
-            totalFiltered,
-          )
-        : totalFiltered == 0
-        ? text.ordersEmptySubtitle
-        : text.pendingSubtitle(pendingCount, acceptedCount);
-    final quietEmpty = totalFiltered == 0 && !filtersActive;
+    return AppPageHeader(
+      title: text.orders,
+      brand: true,
+      onNavigateToOrders: onNavigateToOrders,
+      onNavigateToTarget: onNavigateToTarget,
+    );
+  }
+}
+
+/// Calm summary row: "On the floor ৳X" + "N to accept · M ongoing" (spec §4.1).
+class _OrdersSummaryRow extends StatelessWidget {
+  const _OrdersSummaryRow({
+    required this.floorTotal,
+    required this.pendingCount,
+    required this.ongoingCount,
+  });
+
+  final num floorTotal;
+  final int pendingCount;
+  final int ongoingCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    if (kDebugMode) {
+      debugPrint(
+        '[QB-ORDERS-DIAG] summaryRow build '
+        'pending=$pendingCount accepted=$ongoingCount floorTotal=$floorTotal',
+      );
+    }
     return Padding(
-      padding: EdgeInsets.fromLTRB(12, 14, 12, 7),
-      child: TfAppBar(
-        title: text.ordersTitle,
-        subtitle: subtitle,
-        trailing: [
-          if (!quietEmpty) HeaderModeButton(),
-          if (!quietEmpty)
-            TfIconButton(
-              icon: Icons.tune_rounded,
-              tooltip: text.filterOrders,
-              dark: filtersActive,
-              onPressed: onFilterPressed,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: TfCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TfText(
+                      text.onTheFloorNow,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.muted,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    TfText(
+                      tfFormatCurrency(context, floorTotal),
+                      style: TextStyle(
+                        fontFamily: tfFontFamily(context),
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.text,
+                        height: 1.05,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          HeaderNotificationBell(
-            onNavigateToOrders: () {},
-            onNavigateToTarget: onNavigateToTarget,
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: TfCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        TfText(
+                          tfFormatNumber(context, pendingCount),
+                          style: TextStyle(
+                            fontFamily: tfFontFamily(context),
+                            fontSize: 21,
+                            fontWeight: FontWeight.w700,
+                            color: pendingCount > 0
+                                ? PosColors.accentStrong
+                                : PosColors.text,
+                            height: 1.0,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: TfText(
+                            text.toAcceptLabel,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: PosColors.muted,
+                              height: 1.15,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    TfText(
+                      text.ongoingCount(ongoingCount),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.muted,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -736,10 +956,12 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
     final bottom = MediaQuery.paddingOf(context).bottom;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        color: PosColors.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(PosRadii.card),
+        ),
       ),
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 16 + bottom),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottom),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -758,21 +980,29 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
             ),
             TfText(
               t.filterOrders,
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
+              style: TextStyle(
+                fontFamily: tfFontFamily(context),
+                fontWeight: FontWeight.w700,
+                fontSize: 22,
+                color: PosColors.text,
+                height: 1.18,
+              ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 20),
             TfText(
               t.filterByDate,
               style: TextStyle(
-                fontWeight: FontWeight.w500,
+                fontFamily: tfFontFamily(context),
+                fontWeight: FontWeight.w700,
                 fontSize: 12,
-                color: PosColors.muted,
+                color: PosColors.textTer,
+                letterSpacing: 0.4,
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 10),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 10,
+              runSpacing: 10,
               children: OrderDateRange.values.map((range) {
                 final selected = _dateRange == range;
                 return TfChip(
@@ -783,19 +1013,21 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                 );
               }).toList(),
             ),
-            SizedBox(height: 18),
+            const SizedBox(height: 24),
             TfText(
               t.filterBySource,
               style: TextStyle(
-                fontWeight: FontWeight.w500,
+                fontFamily: tfFontFamily(context),
+                fontWeight: FontWeight.w700,
                 fontSize: 12,
-                color: PosColors.muted,
+                color: PosColors.textTer,
+                letterSpacing: 0.4,
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 10),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 10,
+              runSpacing: 10,
               children: [
                 TfChip(
                   label: t.allChannels,
@@ -815,7 +1047,7 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                 }),
               ],
             ),
-            SizedBox(height: 22),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
@@ -830,7 +1062,7 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                     },
                   ),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TfButton(
                     label: t.applyFilters,
@@ -853,19 +1085,19 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
 class _TabStrip extends StatelessWidget {
   const _TabStrip({
     required this.controller,
-    required this.pendingCount,
-    required this.acceptedCount,
+    required this.ongoingCount,
+    required this.completedCount,
   });
 
   final TabController controller;
-  final int pendingCount;
-  final int acceptedCount;
+  final int ongoingCount;
+  final int completedCount;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) {
@@ -873,8 +1105,8 @@ class _TabStrip extends StatelessWidget {
             activeIndex: controller.index,
             onChanged: (i) => controller.animateTo(i),
             items: [
-              TfTabItem(label: text.pendingTab, count: pendingCount),
-              TfTabItem(label: text.acceptedTab, count: acceptedCount),
+              TfTabItem(label: text.ongoingTab, count: ongoingCount),
+              TfTabItem(label: text.completedTab, count: completedCount),
             ],
           );
         },
@@ -902,8 +1134,9 @@ class _OrderList extends StatelessWidget {
     required this.onCreate,
     required this.shortcut,
     required this.searchQuery,
-    required this.onPrint,
-    required this.onEdit,
+    required this.onPrintBill,
+    required this.onPrintKot,
+    required this.onOpen,
     required this.onStatus,
     this.hasMore = false,
     this.loadingMore = false,
@@ -916,8 +1149,9 @@ class _OrderList extends StatelessWidget {
   final VoidCallback onCreate;
   final _EmptyShortcut? shortcut;
   final String searchQuery;
-  final void Function(OrderModel) onPrint;
-  final void Function(OrderModel)? onEdit;
+  final void Function(OrderModel) onPrintBill;
+  final void Function(OrderModel) onPrintKot;
+  final void Function(OrderModel)? onOpen;
   final void Function(OrderModel, OrderStatus) onStatus;
 
   /// Whether the underlying `orders` list has more pages available.
@@ -934,6 +1168,15 @@ class _OrderList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (orders.isEmpty) {
+      if (kDebugMode) {
+        debugPrint(
+          '[QB-ORDERS-DIAG] orderList empty rendered '
+          'title="$emptyTitle" hasMore=$hasMore loadingMore=$loadingMore '
+          'shortcut=${shortcut?.label ?? 'none'} '
+          'searchActive=${searchQuery.trim().isNotEmpty} '
+          'canCreate=$canCreate',
+        );
+      }
       return _SmartOrdersEmptyState(
         title: emptyTitle,
         canCreate: canCreate,
@@ -960,10 +1203,10 @@ class _OrderList extends StatelessWidget {
           },
           child: useGrid
               ? GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 104),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 480,
-                    mainAxisExtent: 280,
+                    mainAxisExtent: 304,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
                   ),
@@ -974,14 +1217,15 @@ class _OrderList extends StatelessWidget {
                     }
                     return _OrderCard(
                       order: orders[i],
-                      onPrint: () => onPrint(orders[i]),
-                      onEdit: onEdit == null ? null : () => onEdit!(orders[i]),
+                      onPrintBill: () => onPrintBill(orders[i]),
+                      onPrintKot: () => onPrintKot(orders[i]),
+                      onOpen: onOpen == null ? null : () => onOpen!(orders[i]),
                       onStatus: (s) => onStatus(orders[i], s),
                     );
                   },
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 104),
                   itemCount: itemCount,
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
@@ -990,8 +1234,9 @@ class _OrderList extends StatelessWidget {
                     }
                     return _OrderCard(
                       order: orders[i],
-                      onPrint: () => onPrint(orders[i]),
-                      onEdit: onEdit == null ? null : () => onEdit!(orders[i]),
+                      onPrintBill: () => onPrintBill(orders[i]),
+                      onPrintKot: () => onPrintKot(orders[i]),
+                      onOpen: onOpen == null ? null : () => onOpen!(orders[i]),
                       onStatus: (s) => onStatus(orders[i], s),
                     );
                   },
@@ -1053,7 +1298,7 @@ class _SmartOrdersEmptyState extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 48, 24, 36),
+          padding: const EdgeInsets.fromLTRB(24, 56, 24, 40),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight: (constraints.maxHeight - 96)
@@ -1064,11 +1309,12 @@ class _SmartOrdersEmptyState extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 78,
-                  height: 78,
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
                     color: PosColors.primarySoft,
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(PosRadii.xl),
+                    border: Border.all(color: PosColors.line, width: 1),
                   ),
                   child: const Icon(
                     TfNavIcon.orders,
@@ -1082,8 +1328,8 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: PosColors.slate,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                     height: 1.2,
                   ),
                 ),
@@ -1093,9 +1339,9 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: PosColors.muted,
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: FontWeight.w400,
-                    height: 1.35,
+                    height: 1.45,
                   ),
                 ),
                 if (!canCreate) ...[
@@ -1105,8 +1351,8 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: PosColors.danger,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -1140,17 +1386,76 @@ class _SmartOrdersEmptyState extends StatelessWidget {
 // Order card with left accent bar
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Visual style for one of the 6 prototype channels (bytes-shared.jsx CHANNELS):
+/// glyph + icon/soft hue + a [key] that maps to a localized [AppStrings.channelLabel].
+class _ChannelStyle {
+  const _ChannelStyle(this.key, this.icon, this.color, this.soft);
+  final String key;
+  final IconData icon;
+  final Color color;
+  final Color soft;
+}
+
+/// Best-effort map from the coarse [OrderSource] to the 6 prototype channels.
+/// Storefront-vs-Table-QR can't be distinguished without a real per-order
+/// channel field, so cloud is treated as the website storefront; `manual`
+/// orders use [OrderModel.createdByRole] to tell a waiter from a manager.
+_ChannelStyle _resolveChannel(OrderModel order) {
+  switch (order.source) {
+    case OrderSource.cloud:
+      return const _ChannelStyle(
+        'storefront',
+        Icons.public,
+        PosColors.channelWebsite,
+        PosColors.infoSoft,
+      );
+    case OrderSource.facebookMessenger:
+      return const _ChannelStyle(
+        'chatbot',
+        Icons.chat_bubble_outline_rounded,
+        PosColors.channelMessenger,
+        PosColors.infoSoft,
+      );
+    case OrderSource.desktopPos:
+    case OrderSource.localLan:
+      return const _ChannelStyle(
+        'counter',
+        Icons.storefront_outlined,
+        PosColors.channelCounter,
+        PosColors.successSoft,
+      );
+    case OrderSource.manual:
+      final role = (order.createdByRole ?? '').toLowerCase();
+      if (role == 'waiter' || role == 'staff') {
+        return const _ChannelStyle(
+          'waiter',
+          Icons.groups_outlined,
+          PosColors.channelWaiter,
+          PosColors.channelNeutralSoft,
+        );
+      }
+      return const _ChannelStyle(
+        'manager',
+        Icons.person_outline_rounded,
+        PosColors.channelManager,
+        PosColors.channelNeutralSoft,
+      );
+  }
+}
+
 class _OrderCard extends StatelessWidget {
   const _OrderCard({
     required this.order,
-    required this.onPrint,
-    required this.onEdit,
+    required this.onPrintBill,
+    required this.onPrintKot,
+    required this.onOpen,
     required this.onStatus,
   });
 
   final OrderModel order;
-  final VoidCallback onPrint;
-  final VoidCallback? onEdit;
+  final VoidCallback onPrintBill;
+  final VoidCallback onPrintKot;
+  final VoidCallback? onOpen;
   final ValueChanged<OrderStatus> onStatus;
 
   @override
@@ -1161,11 +1466,7 @@ class _OrderCard extends StatelessWidget {
     final adminStatus = order.status.adminStatus;
     final isPending = adminStatus == OrderStatus.pending;
     final isAccepted = adminStatus == OrderStatus.accepted;
-    final canPrintBill =
-        isAccepted ||
-        adminStatus == OrderStatus.preparing ||
-        adminStatus == OrderStatus.ready ||
-        adminStatus == OrderStatus.served;
+    final isCompleted = adminStatus == OrderStatus.completed;
     final elapsedMinutes = DateTime.now()
         .difference(order.createdAt.toLocal())
         .inMinutes;
@@ -1174,272 +1475,271 @@ class _OrderCard extends StatelessWidget {
         : 0;
     final isLate = lateMinutes > 0;
 
-    // Rail colour: amber pending · red late pending · green in-kitchen/served.
-    final railColor = switch (adminStatus) {
-      OrderStatus.pending => isLate ? PosColors.danger : PosColors.primary,
-      OrderStatus.cancelled => PosColors.coral,
-      _ => PosColors.success,
-    };
-
-    // Status pill kind.
-    final TfStatusKind? statusKind = isLate
-        ? TfStatusKind.late
-        : isPending
-        ? TfStatusKind.pending
-        : (isAccepted ||
-              adminStatus == OrderStatus.preparing ||
-              adminStatus == OrderStatus.ready)
-        ? TfStatusKind.accepted
-        : adminStatus == OrderStatus.served
-        ? TfStatusKind.served
-        : null;
-
-    final statusLabel = isLate
-        ? text.orderStatusLate(lateMinutes)
-        : isPending
-        ? text.orderStatusPending
-        : (isAccepted ||
-              adminStatus == OrderStatus.preparing ||
-              adminStatus == OrderStatus.ready)
-        ? text.orderStatusInKitchen
-        : adminStatus == OrderStatus.served
-        ? text.servedAction
-        : null;
-
-    final sourceLabel = _sourceLabel(order, text);
-    final subline = isPending
-        ? '$sourceLabel · ${text.agoMinutes(elapsedMinutes)} · ${text.orderItemsCount(order.items.length)}'
-        : '${text.agoMinutes(elapsedMinutes)} · ${text.orderItemsCount(order.items.length)}';
-
-    final nextStatus = (isPending && app.isManager)
-        ? OrderStatus.accepted
-        : null;
-    final deliveryName = (order.customerName ?? '').trim();
-    final deliveryAddress = (order.deliveryAddress ?? '').trim();
-    final mobileNumber = (order.mobileNumber ?? '').trim();
-    final isDelivery = order.serviceType == OrderServiceType.delivery;
-    final showDeliveryMeta =
-        order.serviceType == OrderServiceType.delivery &&
-        (deliveryName.isNotEmpty ||
-            deliveryAddress.isNotEmpty ||
-            mobileNumber.isNotEmpty);
-    final serviceKind = isDelivery ? TfStatusKind.pending : TfStatusKind.info;
+    // Card surfaces the CHANNEL (glyph + name) the order arrived through; the
+    // order TYPE (Table 5 / Parcel / Delivery) sits beside the serial hero.
+    final channel = _resolveChannel(order);
+    final typeLabel = _sourceLabel(order, text);
+    final subline =
+        '${text.channelLabel(channel.key)} · ${text.orderAgeAgo(elapsedMinutes)}';
+    final itemQty = order.items.fold<num>(0, (s, it) => s + it.qty).round();
+    final itemsPreview = order.items
+        .take(2)
+        .map((item) {
+          final qty = item.qty > 1
+              ? '${tfFormatNumber(context, item.qty)}× '
+              : '';
+          return '$qty${item.localizedName(app.language)}';
+        })
+        .join(', ');
+    final morePreview = order.items.length > 2 ? '…' : '';
 
     return TfCard(
       padded: false,
       clip: true,
-      child: InkWell(
-        onLongPress: canPrint && canPrintBill ? onPrint : null,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TfRail(color: railColor),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header: #id · source · status · total
-                      Row(
+      borderColor: isPending ? PosColors.pendingBorder : PosColors.line,
+      child: Opacity(
+        opacity: isCompleted ? 0.82 : 1,
+        child: InkWell(
+          onTap: onOpen,
+          onLongPress: canPrint && isAccepted ? onPrintBill : null,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: channel.soft,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(channel.icon, color: channel.color, size: 19),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                TfText(
-                                  order.displaySequence,
-                                  style: TextStyle(
-                                    fontFamily: tfFontFamily(context),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
-                                    color: PosColors.slate,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
-                                TfText(
-                                  '· $sourceLabel',
-                                  style: TextStyle(
-                                    fontFamily: tfFontFamily(context),
-                                    fontSize: 14,
-                                    color: PosColors.slate,
-                                  ),
-                                ),
-                                if (statusKind != null && statusLabel != null)
-                                  TfStatusBadge(
-                                    label: statusLabel,
-                                    kind: statusKind,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              TfStatusBadge(
-                                label: _serviceTypeLabel(context, order),
-                                kind: serviceKind,
-                              ),
-                              const SizedBox(height: 6),
                               TfText(
-                                tfFormatCurrency(context, order.total),
+                                order.displaySequence,
                                 style: TextStyle(
                                   fontFamily: tfFontFamily(context),
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w500,
-                                  color: PosColors.slate,
-                                  letterSpacing: -0.3,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  color: PosColors.text,
+                                  height: 1.1,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
                               ),
+                              // Spec §4.1: order TYPE replaces the customer name,
+                              // sitting beside the serial hero.
+                              TfText(
+                                typeLabel,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: PosColors.ink2,
+                                  height: 1.1,
+                                ),
+                              ),
+                              // Spec §4.1: no pending/accepted badge — pending is
+                              // conveyed by the Accept action + card border. Only
+                              // surface a LATE badge as an urgency signal.
+                              if (isLate)
+                                TfStatusBadge(
+                                  label: text.orderStatusLate(lateMinutes),
+                                  kind: TfStatusKind.late,
+                                  upper: false,
+                                ),
                             ],
+                          ),
+                          const SizedBox(height: 5),
+                          TfText(
+                            subline,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: PosColors.muted,
+                              fontWeight: FontWeight.w500,
+                              height: 1.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      TfText(
-                        subline,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: PosColors.muted,
-                          height: 1.4,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 12),
+                    TfText(
+                      tfFormatCurrency(context, order.total),
+                      style: TextStyle(
+                        fontFamily: tfFontFamily(context),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.text,
+                        height: 1.15,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                      if (showDeliveryMeta) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            if (!isPending && deliveryName.isNotEmpty)
-                              _OrderContactPill(
-                                icon: Icons.person_outline_rounded,
-                                label: deliveryName,
-                              ),
-                            if (deliveryAddress.isNotEmpty)
-                              _OrderContactPill(
-                                icon: Icons.location_on_outlined,
-                                label: deliveryAddress,
-                              ),
-                            if (!isPending && mobileNumber.isNotEmpty)
-                              _OrderContactPill(
-                                icon: Icons.phone_outlined,
-                                label: mobileNumber,
-                              ),
-                          ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Spec §4.1: emphasized "N items · preview" line (count bold,
+                // item preview muted) — replaces the boxed line list.
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: text.orderItemsCount(itemQty),
+                        style: TextStyle(
+                          fontFamily: tfFontFamily(context),
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.text,
+                          height: 1.45,
                         ),
-                      ],
-                      const SizedBox(height: 10),
-                      // Items list — first 3, then "+N more".
-                      ...order.items
-                          .take(3)
-                          .map(
-                            (item) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: TfText(
-                                '${tfFormatNumber(context, item.qty)}× ${item.localizedName(app.language)}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: PosColors.slate,
-                                  height: 1.35,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                      if (order.items.length > 3)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: TfText(
-                            text.isBn
-                                ? '+${tfFormatNumber(context, order.items.length - 3)} আরও'
-                                : '+${tfFormatNumber(context, order.items.length - 3)} more',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: PosColors.muted,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                      ),
+                      TextSpan(
+                        text: ' · $itemsPreview$morePreview',
+                        style: TextStyle(
+                          fontFamily: tfFontFamily(context),
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w400,
+                          color: PosColors.ink2,
+                          height: 1.45,
                         ),
-                      if ((order.note ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        TfText(
-                          order.note!.trim(),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: PosColors.muted,
-                            fontStyle: FontStyle.italic,
-                            height: 1.35,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      // Actions row.
-                      if (canPrint && (isPending || canPrintBill)) ...[
-                        const SizedBox(height: 12),
-                        if (isPending)
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TfButton(
-                                  label: text.rejectOrderAction,
-                                  variant: TfButtonVariant.ghost,
-                                  size: TfButtonSize.md,
-                                  onPressed: () =>
-                                      onStatus(OrderStatus.cancelled),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TfButton(
-                                  label: text.acceptAndSendToKitchen,
-                                  icon: TfNavIcon.check,
-                                  size: TfButtonSize.md,
-                                  onPressed: () => onStatus(nextStatus!),
-                                ),
-                              ),
-                            ],
-                          )
-                        else
-                          Row(
-                            children: [
-                              if (onEdit != null) ...[
-                                Expanded(
-                                  child: TfButton(
-                                    label: text.isBn ? 'এডিট' : 'Edit',
-                                    icon: Icons.edit_outlined,
-                                    variant: TfButtonVariant.ghost,
-                                    size: TfButtonSize.md,
-                                    onPressed: onEdit,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              Expanded(
-                                child: TfButton(
-                                  label: text.printBillAction,
-                                  icon: TfNavIcon.printer,
-                                  variant: TfButtonVariant.dark,
-                                  size: TfButtonSize.md,
-                                  onPressed: onPrint,
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
+                      ),
                     ],
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                // if ((order.note ?? '').trim().isNotEmpty) ...[
+                //   const SizedBox(height: 10),
+                //   Container(
+                //     width: double.infinity,
+                //     padding: const EdgeInsets.all(12),
+                //     decoration: BoxDecoration(
+                //       color: PosColors.surface,
+                //       borderRadius: BorderRadius.circular(PosRadii.tile),
+                //       border: Border.all(color: PosColors.line, width: 1),
+                //     ),
+                //     child: TfText(
+                //       order.note!.trim(),
+                //       style: const TextStyle(
+                //         fontSize: 14,
+                //         color: PosColors.textSec,
+                //         fontStyle: FontStyle.italic,
+                //         height: 1.4,
+                //       ),
+                //       maxLines: 2,
+                //       overflow: TextOverflow.ellipsis,
+                //     ),
+                //   ),
+                // ],
+                if (isCompleted) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.only(top: 10),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: PosColors.line)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 16,
+                          color: PosColors.success,
+                        ),
+                        const SizedBox(width: 6),
+                        TfText(
+                          text.completedPaid,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: PosColors.success,
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (canPrint && isPending) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      InkWell(
+                        onTap: () => onStatus(OrderStatus.rejected),
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        child: Container(
+                          width: 44,
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: PosColors.surface,
+                            borderRadius: BorderRadius.circular(PosRadii.md),
+                            border: Border.all(
+                              color: PosColors.lineStrong,
+                              width: 1,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: PosColors.danger,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      TfButton(
+                        label: text.acceptAndSendToKitchen,
+                        icon: TfNavIcon.check,
+                        variant: TfButtonVariant.accent,
+                        size: TfButtonSize.md,
+                        fullWidth: false,
+                        onPressed: () => onStatus(OrderStatus.accepted),
+                      ),
+                    ],
+                  ),
+                ] else if (canPrint && isAccepted) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TfButton(
+                          label: text.printKotAction,
+                          icon: TfNavIcon.printer,
+                          variant: TfButtonVariant.ghost,
+                          size: TfButtonSize.md,
+                          onPressed: onPrintKot,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TfButton(
+                          label: text.printBillAction,
+                          icon: Icons.receipt_long_outlined,
+                          variant: TfButtonVariant.accent,
+                          size: TfButtonSize.md,
+                          onPressed: onPrintBill,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1460,52 +1760,6 @@ class _OrderCard extends StatelessWidget {
       case null:
         return text.isBn ? 'ডাইন-ইন' : 'Dine-in';
     }
-  }
-
-  String _serviceTypeLabel(BuildContext context, OrderModel order) {
-    final type = order.serviceType ?? OrderServiceType.dineIn;
-    return AppScope.of(context).strings.isBn ? type.banglaLabel : type.label;
-  }
-}
-
-class _OrderContactPill extends StatelessWidget {
-  const _OrderContactPill({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 280),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: PosColors.surfaceWarm,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: PosColors.line),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: PosColors.muted),
-            const SizedBox(width: 5),
-            Flexible(
-              child: TfText(
-                label,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: PosColors.slate,
-                  height: 1.25,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -1666,7 +1920,9 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: PosColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PosRadii.xl),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -1786,9 +2042,13 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                 context,
                                 entry.key,
                               ).price.toStringAsFixed(2),
-                              style: const TextStyle(
+                              style: TextStyle(
+                                fontFamily: tfFontFamily(context),
                                 fontSize: 12,
                                 color: PosColors.muted,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
                           ],
@@ -1802,9 +2062,11 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                         width: 28,
                         child: TfText(
                           '${entry.value}',
-                          style: const TextStyle(
+                          style: TextStyle(
+                            fontFamily: tfFontFamily(context),
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                       ),
@@ -1830,9 +2092,11 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                       ),
                       TfText(
                         _runningTotal.toStringAsFixed(2),
-                        style: const TextStyle(
+                        style: TextStyle(
+                          fontFamily: tfFontFamily(context),
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
@@ -1949,7 +2213,9 @@ class _MenuItemPickerSheetState extends State<_MenuItemPickerSheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: PosColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PosRadii.xl),
+          ),
         ),
         height: MediaQuery.sizeOf(context).height * 0.7,
         child: SafeArea(
@@ -2120,8 +2386,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: PosColors.line, width: 0.5),
+                      borderRadius: BorderRadius.circular(PosRadii.card),
+                      border: Border.all(color: PosColors.line, width: 1),
                     ),
                     child: Column(
                       children: [
@@ -2174,11 +2440,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: PosColors.line,
-                              width: 0.5,
-                            ),
+                            borderRadius: BorderRadius.circular(PosRadii.tile),
+                            border: Border.all(color: PosColors.line, width: 1),
                           ),
                           child: QrImageView(
                             data: menuUrl ?? order.id,
@@ -2215,8 +2478,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: PosColors.line, width: 0.5),
+                      borderRadius: BorderRadius.circular(PosRadii.card),
+                      border: Border.all(color: PosColors.line, width: 1),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2353,38 +2616,48 @@ class _OrderResult {
     required this.serviceType,
     this.tableNo,
     this.note,
+    this.customerName,
+    this.mobileNumber,
+    this.deliveryAddress,
   });
 
   final List<OrderRequestItem> items;
   final OrderServiceType serviceType;
   final String? tableNo;
   final String? note;
+  final String? customerName;
+  final String? mobileNumber;
+  final String? deliveryAddress;
 }
-
-enum _MenuLayoutMode { compactGrid, largeTiles }
 
 class _NewOrderPage extends StatefulWidget {
   const _NewOrderPage({
     required this.menuItems,
     required this.tableCount,
-    required this.occupiedTables,
+    required this.dineInOpenOrders,
     required this.onCreateOrder,
     this.counterMode = false,
     this.initialMenuItemId,
     this.initialMenuItemQuantities,
     this.initialCartLines,
+    this.initialServiceType,
+    this.initialTableNo,
+    this.startAtMenu = false,
     this.startAtReview = false,
   });
 
   final List<MenuItem> menuItems;
   final int tableCount;
-  final Set<String> occupiedTables;
+  final List<OrderModel> dineInOpenOrders;
   final Future<OrderModel> Function(_OrderResult result) onCreateOrder;
   // When true, skip table/source step and auto-select counter (takeaway) mode.
   final bool counterMode;
   final String? initialMenuItemId;
   final Map<String, int>? initialMenuItemQuantities;
   final List<DesktopMenuLineSelection>? initialCartLines;
+  final OrderServiceType? initialServiceType;
+  final String? initialTableNo;
+  final bool startAtMenu;
   final bool startAtReview;
 
   @override
@@ -2403,8 +2676,13 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
+  // Delivery (form-first) fields, used when _source == delivery.
+  final _custNameCtrl = TextEditingController();
+  final _custPhoneCtrl = TextEditingController();
+  final _custAddrCtrl = TextEditingController();
   String _query = '';
-  _MenuLayoutMode _menuLayoutMode = _MenuLayoutMode.compactGrid;
+  MenuLayoutMode _menuLayoutMode = MenuLayoutMode.list;
+  int _gridCols = 4;
   OrderModel? _createdOrder;
   bool _creating = false;
   bool _printingKot = false;
@@ -2442,6 +2720,20 @@ class _NewOrderPageState extends State<_NewOrderPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _pageCtrl.jumpToPage(_step);
       });
+    } else if (widget.initialServiceType != null) {
+      _source = widget.initialServiceType;
+      _selectedTable = widget.initialServiceType == OrderServiceType.dineIn
+          ? widget.initialTableNo
+          : '';
+      if (widget.startAtMenu || widget.startAtReview) {
+        _step = widget.startAtReview && _cartLines.isNotEmpty ? 2 : 1;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _pageCtrl.jumpToPage(_step);
+        });
+      }
+    } else {
+      _source = OrderServiceType.dineIn;
+      _selectedTable = '';
     }
   }
 
@@ -2450,8 +2742,17 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     _pageCtrl.dispose();
     _searchCtrl.dispose();
     _noteCtrl.dispose();
+    _custNameCtrl.dispose();
+    _custPhoneCtrl.dispose();
+    _custAddrCtrl.dispose();
     super.dispose();
   }
+
+  /// Delivery requires name + phone + address before leaving step 1 (spec §4.3).
+  bool get _deliveryValid =>
+      _custNameCtrl.text.trim().isNotEmpty &&
+      _custPhoneCtrl.text.trim().isNotEmpty &&
+      _custAddrCtrl.text.trim().isNotEmpty;
 
   void _goToStep(int index) {
     if (index < 0 || index >= _totalSteps) return;
@@ -2481,6 +2782,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   void _continueFromSource() {
     if (_source == null) return;
     if (_source == OrderServiceType.dineIn && _selectedTable == null) return;
+    if (_source == OrderServiceType.delivery && !_deliveryValid) return;
     _goToStep(1);
   }
 
@@ -2576,9 +2878,23 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     });
   }
 
-  void _selectMenuLayout(_MenuLayoutMode mode) {
+  void _selectMenuLayout(MenuLayoutMode mode) {
     if (_menuLayoutMode == mode) return;
     setState(() => _menuLayoutMode = mode);
+  }
+
+  void _selectGridCols(int cols) {
+    if (_gridCols == cols) return;
+    setState(() => _gridCols = cols);
+  }
+
+  Map<String, int> get _categoryCounts {
+    final allItems = widget.menuItems;
+    final counts = <String, int>{'All': allItems.length};
+    for (final item in allItems) {
+      counts[item.category] = (counts[item.category] ?? 0) + 1;
+    }
+    return counts;
   }
 
   void _goToReview() {
@@ -2597,12 +2913,22 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         : null;
     setState(() => _creating = true);
     try {
+      final isDelivery = _source == OrderServiceType.delivery;
       final order = await widget.onCreateOrder(
         _OrderResult(
           items: items,
           serviceType: _source!,
           tableNo: tableNo,
           note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+          customerName: isDelivery && _custNameCtrl.text.trim().isNotEmpty
+              ? _custNameCtrl.text.trim()
+              : null,
+          mobileNumber: isDelivery && _custPhoneCtrl.text.trim().isNotEmpty
+              ? _custPhoneCtrl.text.trim()
+              : null,
+          deliveryAddress: isDelivery && _custAddrCtrl.text.trim().isNotEmpty
+              ? _custAddrCtrl.text.trim()
+              : null,
         ),
       );
       if (!mounted) return;
@@ -2673,6 +2999,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   @override
   Widget build(BuildContext context) {
     final isSuccess = _step == 3;
+    final skipsSourceStep =
+        widget.startAtMenu && widget.initialServiceType != null;
+    final firstReachableStep = widget.counterMode || skipsSourceStep ? 1 : 0;
+    final displayStep = skipsSourceStep ? _step - 1 : _step;
+    final displayTotalSteps = skipsSourceStep ? _totalSteps - 1 : _totalSteps;
     final cartQtyByItemId = _cartQtyByItemId;
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -2680,16 +3011,17 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         child: Column(
           children: [
             _WizardHeader(
-              step: _step,
-              totalSteps: _totalSteps,
+              step: displayStep,
+              totalSteps: displayTotalSteps,
               tableLabel: _tableLabel,
               onClose: () => Navigator.pop(context),
-              onBack: _step > (widget.counterMode ? 1 : 0) && !isSuccess
+              onBack: _step > firstReachableStep && !isSuccess
                   ? () => _goToStep(_step - 1)
                   : null,
               counterMode: widget.counterMode,
+              skipsSourceStep: skipsSourceStep,
             ),
-            _StepIndicator(step: _step, total: _totalSteps),
+            _StepIndicator(step: displayStep, total: displayTotalSteps),
             Expanded(
               child: PageView(
                 controller: _pageCtrl,
@@ -2700,16 +3032,22 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     onSelectSource: _selectSource,
                     tableCount: widget.tableCount,
                     selectedTable: _selectedTable,
-                    occupiedTables: widget.occupiedTables,
+                    dineInOpenOrders: widget.dineInOpenOrders,
                     onSelectTable: _selectTable,
+                    nameCtrl: _custNameCtrl,
+                    phoneCtrl: _custPhoneCtrl,
+                    addressCtrl: _custAddrCtrl,
+                    onDeliveryChanged: () => setState(() {}),
                     onContinue:
                         _source != null &&
                             (_source != OrderServiceType.dineIn ||
-                                _selectedTable != null)
+                                _selectedTable != null) &&
+                            (_source != OrderServiceType.delivery ||
+                                _deliveryValid)
                         ? _continueFromSource
                         : null,
                   ),
-                  _MenuStep(
+                  MenuStep(
                     visibleItems: _visibleItems,
                     categories: _categories,
                     selectedCategory: _selectedCategory,
@@ -2720,8 +3058,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     searchCtrl: _searchCtrl,
                     query: _query,
                     layoutMode: _menuLayoutMode,
+                    gridCols: _gridCols,
+                    categoryCounts: _categoryCounts,
                     onSearchChanged: (value) => setState(() => _query = value),
                     onLayoutChanged: _selectMenuLayout,
+                    onGridColsChanged: _selectGridCols,
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),
                     onTap: (item) => unawaited(_tap(item)),
@@ -2769,6 +3110,7 @@ class _WizardHeader extends StatelessWidget {
     required this.onClose,
     required this.onBack,
     this.counterMode = false,
+    this.skipsSourceStep = false,
   });
 
   final int step;
@@ -2777,25 +3119,30 @@ class _WizardHeader extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback? onBack;
   final bool counterMode;
+  final bool skipsSourceStep;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
     final isBn = text.isBn;
-    final stepLabels = isBn
-        ? const [
-            'অর্ডার কোথা থেকে?',
-            'আইটেম যোগ করুন',
-            'রিভিউ ও পাঠান',
-            'অর্ডার তৈরি হয়েছে',
-          ]
-        : const [
-            "Where's this order for?",
-            'Add items',
-            'Review & send',
-            'Order created',
-          ];
+    final stepLabels = skipsSourceStep
+        ? (isBn
+              ? const ['আইটেম যোগ করুন', 'রিভিউ ও পাঠান', 'অর্ডার তৈরি হয়েছে']
+              : const ['Add items', 'Review & send', 'Order created'])
+        : (isBn
+              ? const [
+                  'অর্ডার কোথা থেকে?',
+                  'আইটেম যোগ করুন',
+                  'রিভিউ ও পাঠান',
+                  'অর্ডার তৈরি হয়েছে',
+                ]
+              : const [
+                  "Where's this order for?",
+                  'Add items',
+                  'Review & send',
+                  'Order created',
+                ]);
     final stepLabel = stepLabels[step.clamp(0, stepLabels.length - 1)];
 
     return Padding(
@@ -2816,23 +3163,22 @@ class _WizardHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TfText(
-                  '${isBn ? 'ধাপ' : 'STEP'} ${step + 1} ${isBn ? 'এর' : 'OF'} $totalSteps'
-                      .toUpperCase(),
+                  '${isBn ? 'ধাপ' : 'Step'} ${tfFormatNumber(context, step + 1)} ${isBn ? 'এর' : 'of'} ${tfFormatNumber(context, totalSteps)}',
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: PosColors.muted,
-                    letterSpacing: 0.5,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.textTer,
+                    letterSpacing: 0.4,
                   ),
                 ),
                 const SizedBox(height: 2),
                 TfText(
                   stepLabel,
                   style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                     color: PosColors.slate,
-                    letterSpacing: -0.3,
+                    height: 1.15,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2847,15 +3193,12 @@ class _WizardHeader extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
-                  vertical: 5,
+                  vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: PosColors.primarySoft,
-                  borderRadius: BorderRadius.circular(PosRadii.xs),
-                  border: Border.all(
-                    color: PosColors.primary.withValues(alpha: 0.3),
-                    width: 0.5,
-                  ),
+                  color: PosColors.surfaceSunk,
+                  borderRadius: BorderRadius.circular(PosRadii.chip),
+                  border: Border.all(color: PosColors.line, width: 1),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -2864,7 +3207,7 @@ class _WizardHeader extends StatelessWidget {
                       width: 6,
                       height: 6,
                       decoration: const BoxDecoration(
-                        color: PosColors.primary,
+                        color: PosColors.primaryDark,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -2872,10 +3215,10 @@ class _WizardHeader extends StatelessWidget {
                     const Text(
                       'COUNTER',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: PosColors.primaryDark,
-                        letterSpacing: 0.5,
+                        letterSpacing: 0,
                       ),
                     ),
                   ],
@@ -2921,8 +3264,8 @@ class _StepIndicator extends StatelessWidget {
                 duration: const Duration(milliseconds: 280),
                 height: 3,
                 decoration: BoxDecoration(
-                  color: i <= step ? PosColors.primary : PosColors.line,
-                  borderRadius: BorderRadius.circular(2),
+                  color: i <= step ? PosColors.primaryDark : PosColors.line,
+                  borderRadius: BorderRadius.circular(PosRadii.pill),
                 ),
               ),
             ),
@@ -2945,23 +3288,48 @@ class _SourceAndTableStep extends StatelessWidget {
     required this.onSelectSource,
     required this.tableCount,
     required this.selectedTable,
-    required this.occupiedTables,
+    required this.dineInOpenOrders,
     required this.onSelectTable,
     required this.onContinue,
+    required this.nameCtrl,
+    required this.phoneCtrl,
+    required this.addressCtrl,
+    required this.onDeliveryChanged,
   });
 
   final OrderServiceType? source;
   final ValueChanged<OrderServiceType> onSelectSource;
   final int tableCount;
   final String? selectedTable;
-  final Set<String> occupiedTables;
+  final List<OrderModel> dineInOpenOrders;
   final ValueChanged<String> onSelectTable;
   final VoidCallback? onContinue;
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final TextEditingController addressCtrl;
+  final VoidCallback onDeliveryChanged;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final isDineIn = source == OrderServiceType.dineIn;
+    final isDelivery = source == OrderServiceType.delivery;
+
+    final byTable = <String, OrderModel>{};
+    final occupiedTableKeys = <String>{};
+    for (final o in dineInOpenOrders) {
+      final raw = (o.tableNo ?? '').trim();
+      if (raw.isEmpty) continue;
+      occupiedTableKeys.add(raw.startsWith('T') ? raw.substring(1) : raw);
+      byTable[raw] = o;
+      if (raw.startsWith('T')) {
+        byTable[raw.substring(1)] = o;
+      } else {
+        byTable['T$raw'] = o;
+      }
+    }
+    final occupiedCount = occupiedTableKeys.length;
+
     return Column(
       children: [
         Expanded(
@@ -2989,8 +3357,44 @@ class _SourceAndTableStep extends StatelessWidget {
                         onTap: () => onSelectSource(OrderServiceType.takeaway),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SourceTile(
+                        icon: Icons.delivery_dining_outlined,
+                        source: OrderServiceType.delivery,
+                        selected: source == OrderServiceType.delivery,
+                        onTap: () => onSelectSource(OrderServiceType.delivery),
+                      ),
+                    ),
                   ],
                 ),
+                if (isDelivery) ...[
+                  const SizedBox(height: 20),
+                  TfField(
+                    label: text.isBn ? 'গ্রাহকের নাম' : 'Recipient name',
+                    controller: nameCtrl,
+                    prefix: const Icon(Icons.person_outline_rounded, size: 18),
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => onDeliveryChanged(),
+                  ),
+                  const SizedBox(height: 12),
+                  TfField(
+                    label: text.isBn ? 'ফোন নম্বর' : 'Phone number',
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    prefix: const Icon(Icons.phone_outlined, size: 18),
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => onDeliveryChanged(),
+                  ),
+                  const SizedBox(height: 12),
+                  TfField(
+                    label: text.isBn ? 'ঠিকানা' : 'Address',
+                    controller: addressCtrl,
+                    maxLines: 2,
+                    prefix: const Icon(Icons.location_on_outlined, size: 18),
+                    onChanged: (_) => onDeliveryChanged(),
+                  ),
+                ],
                 if (isDineIn) ...[
                   const SizedBox(height: 24),
                   Row(
@@ -3007,7 +3411,7 @@ class _SourceAndTableStep extends StatelessWidget {
                       ),
                       TfText(
                         '${tfFormatNumber(context, tableCount)} ${text.isBn ? "টেবিল" : "tables"}'
-                        ' · ${tfFormatNumber(context, tableCount - occupiedTables.length)} ${text.isBn ? "খালি" : "free"}',
+                        ' · ${tfFormatNumber(context, tableCount - occupiedCount)} ${text.isBn ? "খালি" : "free"}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: PosColors.muted,
@@ -3020,22 +3424,22 @@ class _SourceAndTableStep extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 80,
-                          mainAxisExtent: 80,
-                          mainAxisSpacing: 8,
-                          crossAxisSpacing: 8,
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.92,
                         ),
                     itemCount: tableCount,
                     itemBuilder: (_, i) {
-                      final tableNo = '${i + 1}';
-                      final sel = selectedTable == tableNo;
-                      final occ = occupiedTables.contains(tableNo);
-                      return _TableTile(
-                        number: i + 1,
-                        selected: sel,
-                        occupied: occ,
-                        onTap: () => onSelectTable(tableNo),
+                      final label = 'T${i + 1}';
+                      final order = byTable[label];
+                      final sel = selectedTable == '${i + 1}';
+                      return _WizardTableCell(
+                        label: label,
+                        isSelected: sel,
+                        order: order,
+                        onTap: () => onSelectTable('${i + 1}'),
                       );
                     },
                   ),
@@ -3075,36 +3479,32 @@ class _SourceTile extends StatelessWidget {
     final isBn = tfIsBn(context);
     final label = isBn ? source.banglaLabel : source.label;
     return Material(
-      color: selected ? PosColors.primaryDark : PosColors.surface,
-      borderRadius: BorderRadius.circular(12),
+      color: selected ? PosColors.primarySoft : PosColors.surface,
+      borderRadius: BorderRadius.circular(PosRadii.card),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(PosRadii.card),
             border: Border.all(
-              color: selected ? PosColors.primaryDark : PosColors.line,
-              width: 0.5,
+              color: selected ? Colors.transparent : PosColors.line,
+              width: 1,
             ),
           ),
           child: Column(
             children: [
-              Icon(
-                icon,
-                size: 28,
-                color: selected ? Colors.white : PosColors.primaryDark,
-              ),
+              Icon(icon, size: 28, color: PosColors.primaryDark),
               const SizedBox(height: 10),
               TfText(
                 label,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: selected ? Colors.white : PosColors.slate,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.slate,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -3156,11 +3556,12 @@ class _ReviewStep extends StatelessWidget {
                 child: Row(
                   children: [
                     Container(
-                      width: 38,
-                      height: 38,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         color: PosColors.primarySoft,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(PosRadii.tile),
+                        border: Border.all(color: PosColors.line, width: 1),
                       ),
                       child: const Icon(
                         Icons.receipt_long_rounded,
@@ -3241,9 +3642,12 @@ class _ReviewStep extends StatelessWidget {
                                 '${tfFormatNumber(context, line.qty)}×',
                                 style: TextStyle(
                                   fontFamily: tfFontFamily(context),
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                   fontSize: 14,
                                   color: PosColors.slate,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
                               ),
                             ),
@@ -3262,9 +3666,12 @@ class _ReviewStep extends StatelessWidget {
                               tfFormatCurrency(context, line.lineTotal),
                               style: TextStyle(
                                 fontFamily: tfFontFamily(context),
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w600,
                                 fontSize: 14,
                                 color: PosColors.slate,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
                           ],
@@ -3355,10 +3762,12 @@ class _ReviewStep extends StatelessWidget {
               );
               final totalLabel = TfText(
                 totalText,
-                style: const TextStyle(
+                style: TextStyle(
+                  fontFamily: tfFontFamily(context),
                   color: PosColors.slate,
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -3398,7 +3807,7 @@ class _AmountLine extends StatelessWidget {
         TfText(
           label,
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 13,
             color: PosColors.muted,
             fontWeight: FontWeight.w400,
           ),
@@ -3407,9 +3816,10 @@ class _AmountLine extends StatelessWidget {
         TfText(
           value,
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 13,
             color: PosColors.slate,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
       ],
@@ -3474,7 +3884,7 @@ class _OrderCreatedStep extends StatelessWidget {
                     style: const TextStyle(
                       color: PosColors.slate,
                       fontSize: 22,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0,
                     ),
                   ),
@@ -3482,20 +3892,24 @@ class _OrderCreatedStep extends StatelessWidget {
                   TfText(
                     orderNo,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
+                      fontFamily: tfFontFamily(context),
                       color: PosColors.primaryDark,
                       fontSize: 54,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w700,
                       height: 0.95,
                       letterSpacing: 0,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(height: 8),
                   TfText(
                     '$source · ${tfFormatCurrency(context, order?.total ?? total)}',
-                    style: const TextStyle(
+                    style: TextStyle(
+                      fontFamily: tfFontFamily(context),
                       color: PosColors.muted,
                       fontSize: 13,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -3509,9 +3923,9 @@ class _OrderCreatedStep extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: PosColors.surface,
                       borderRadius: BorderRadius.circular(PosRadii.lg),
-                      border: Border.all(color: PosColors.line, width: 0.5),
+                      border: Border.all(color: PosColors.line, width: 1),
                     ),
                     child: QrImageView(
                       data: qrData,
@@ -3604,10 +4018,12 @@ class _CreatedOrderBillCard extends StatelessWidget {
                       width: 34,
                       child: TfText(
                         '${tfFormatNumber(context, item.qty)}×',
-                        style: const TextStyle(
+                        style: TextStyle(
+                          fontFamily: tfFontFamily(context),
                           fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                           color: PosColors.slate,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ),
@@ -3626,10 +4042,11 @@ class _CreatedOrderBillCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     TfText(
                       tfFormatCurrency(context, item.lineTotal),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         color: PosColors.slate,
                         fontWeight: FontWeight.w500,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
@@ -3666,784 +4083,120 @@ class _CreatedOrderBillCard extends StatelessWidget {
   }
 }
 
-class _TableTile extends StatelessWidget {
-  const _TableTile({
-    required this.number,
-    required this.selected,
-    required this.occupied,
+class _WizardTableCell extends StatelessWidget {
+  const _WizardTableCell({
+    required this.label,
+    required this.isSelected,
+    required this.order,
     required this.onTap,
   });
 
-  final int number;
-  final bool selected;
-  final bool occupied;
+  final String label;
+  final bool isSelected;
+  final OrderModel? order;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    // Selected: amber; occupied (and not selected): muted/disabled; free: paper.
-    final bg = selected
-        ? PosColors.primary
-        : occupied
-        ? PosColors.background
-        : PosColors.surface;
-    final borderColor = selected ? PosColors.primaryDark : PosColors.line;
-    final numberColor = selected
-        ? PosColors.primaryDark
-        : occupied
-        ? PosColors.muted
-        : PosColors.slate;
-    final subColor = selected ? PosColors.primaryDark : PosColors.muted;
-    final sub = selected
-        ? text.isBn
-              ? 'নির্বাচিত'
-              : 'selected'
-        : occupied
-        ? text.isBn
-              ? 'বসা'
-              : 'busy'
-        : text.isBn
-        ? 'খালি'
-        : 'free';
-    return Opacity(
-      opacity: occupied && !selected ? 0.6 : 1,
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor, width: 0.5),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TfText(
-                  tfFormatNumber(context, number),
-                  style: TextStyle(
-                    fontFamily: tfFontFamily(context),
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                    color: numberColor,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                TfText(sub, style: TextStyle(fontSize: 10, color: subColor)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+    final occupied = order != null && !isSelected;
+    final mins = order != null
+        ? DateTime.now().difference(order!.createdAt.toLocal()).inMinutes
+        : 0;
 
-class _MenuStep extends StatelessWidget {
-  const _MenuStep({
-    required this.visibleItems,
-    required this.categories,
-    required this.selectedCategory,
-    required this.cart,
-    required this.lineCount,
-    required this.total,
-    required this.totalQty,
-    required this.searchCtrl,
-    required this.query,
-    required this.layoutMode,
-    required this.onSearchChanged,
-    required this.onLayoutChanged,
-    required this.onCategorySelected,
-    required this.onTap,
-    required this.onDecrement,
-    required this.onSubmit,
-  });
+    Color bg;
+    Color borderColor;
+    Color numberColor;
+    String subtitle;
 
-  final List<MenuItem> visibleItems;
-  final List<String> categories;
-  final String selectedCategory;
-  final Map<String, int> cart;
-  final int lineCount;
-  final double total;
-  final int totalQty;
-  final TextEditingController searchCtrl;
-  final String query;
-  final _MenuLayoutMode layoutMode;
-  final ValueChanged<String> onSearchChanged;
-  final ValueChanged<_MenuLayoutMode> onLayoutChanged;
-  final ValueChanged<String> onCategorySelected;
-  final ValueChanged<MenuItem> onTap;
-  final ValueChanged<String> onDecrement;
-  final VoidCallback? onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
-    final isBn = text.isBn;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: searchCtrl,
-                  onChanged: onSearchChanged,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: text.searchMenuItems,
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: PosColors.muted,
-                    ),
-                    suffixIcon: query.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              searchCtrl.clear();
-                              onSearchChanged('');
-                            },
-                            icon: Icon(
-                              Icons.close_rounded,
-                              color: PosColors.muted,
-                            ),
-                          ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              TfIconButton(
-                icon: Icons.grid_view_rounded,
-                tooltip: isBn ? 'কম্প্যাক্ট গ্রিড' : 'Compact grid',
-                dark: layoutMode == _MenuLayoutMode.compactGrid,
-                onPressed: () => onLayoutChanged(_MenuLayoutMode.compactGrid),
-              ),
-              const SizedBox(width: 6),
-              TfIconButton(
-                icon: Icons.view_agenda_outlined,
-                tooltip: isBn ? 'বড় টাইল' : 'Large tiles',
-                dark: layoutMode == _MenuLayoutMode.largeTiles,
-                onPressed: () => onLayoutChanged(_MenuLayoutMode.largeTiles),
-              ),
-            ],
-          ),
-        ),
-        _CategoryChips(
-          categories: categories,
-          selected: selectedCategory,
-          onSelected: onCategorySelected,
-        ),
-        Expanded(
-          child: _MenuGrid(
-            items: visibleItems,
-            cart: cart,
-            layoutMode: layoutMode,
-            onTap: onTap,
-            onDecrement: onDecrement,
-          ),
-        ),
-        _CartFooter(
-          cart: cart,
-          lineCount: lineCount,
-          total: total,
-          totalQty: totalQty,
-          onSubmit: onSubmit,
-        ),
-      ],
-    );
-  }
-}
-
-class _CategoryChips extends StatelessWidget {
-  const _CategoryChips({
-    required this.categories,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final List<String> categories;
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final allLabel = AppScope.of(context).strings.categoryAll;
-    return SizedBox(
-      height: 36,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-        itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 6),
-        itemBuilder: (_, i) {
-          final cat = categories[i];
-          final sel = cat == selected;
-          // 'All' is a synthetic display label — localise it here only.
-          final label = cat == 'All' ? allLabel : cat;
-          return TfChip(
-            label: label,
-            active: sel,
-            small: true,
-            onTap: () => onSelected(cat),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _MenuGrid extends StatelessWidget {
-  const _MenuGrid({
-    required this.items,
-    required this.cart,
-    required this.layoutMode,
-    required this.onTap,
-    required this.onDecrement,
-  });
-
-  final List<MenuItem> items;
-  final Map<String, int> cart;
-  final _MenuLayoutMode layoutMode;
-  final ValueChanged<MenuItem> onTap;
-  final ValueChanged<String> onDecrement;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return Center(
-        child: TfText(
-          AppScope.of(context).strings.noItemsInCategory,
-          style: TextStyle(color: PosColors.muted),
-        ),
-      );
+    if (isSelected) {
+      bg = PosColors.primarySoft;
+      borderColor = PosColors.primaryDark;
+      numberColor = PosColors.primaryDark;
+      subtitle = text.isBn ? 'নির্বাচিত' : 'Selected';
+    } else if (occupied) {
+      bg = PosColors.seatTint;
+      borderColor = PosColors.seatLine;
+      numberColor = PosColors.seatInk;
+      subtitle = text.agoMinutes(mins);
+    } else {
+      bg = PosColors.surface;
+      borderColor = PosColors.line;
+      numberColor = PosColors.text;
+      subtitle = text.tableVacant;
     }
-
-    if (layoutMode == _MenuLayoutMode.compactGrid) {
-      return GridView.builder(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          mainAxisExtent: 108,
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-        ),
-        itemCount: items.length,
-        itemBuilder: (_, i) => _CompactMenuTile(
-          item: items[i],
-          qty: cart[items[i].id] ?? 0,
-          onTap: () => onTap(items[i]),
-          onDecrement: () => onDecrement(items[i].id),
-        ),
-      );
-    }
-
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 160,
-        mainAxisExtent: 112,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-      ),
-      itemCount: items.length,
-      itemBuilder: (_, i) => _MenuTile(
-        item: items[i],
-        qty: cart[items[i].id] ?? 0,
-        onTap: () => onTap(items[i]),
-        onDecrement: () => onDecrement(items[i].id),
-      ),
-    );
-  }
-}
-
-class _CompactMenuTile extends StatelessWidget {
-  const _CompactMenuTile({
-    required this.item,
-    required this.qty,
-    required this.onTap,
-    required this.onDecrement,
-  });
-
-  final MenuItem item;
-  final int qty;
-  final VoidCallback onTap;
-  final VoidCallback onDecrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final inCart = qty > 0;
-    final extras = item.extras;
-    final hasChoices = desktopMenuNeedsCustomization(item);
-    final iconKey = resolveMenuIconKey(
-      iconKey: extras.iconKey,
-      name: item.name,
-      category: item.category,
-    );
-    final fg = inCart ? Colors.white : PosColors.slate;
-    final muted = inCart
-        ? Colors.white.withValues(alpha: 0.76)
-        : PosColors.muted;
 
     return Material(
-      color: inCart ? PosColors.slate : PosColors.surface,
-      borderRadius: BorderRadius.circular(PosRadii.md),
+      color: bg,
+      borderRadius: BorderRadius.circular(PosRadii.tile),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        onTap: occupied ? null : onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.md),
-            border: Border.all(
-              color: inCart ? PosColors.primary : PosColors.line,
-              width: 0.5,
-            ),
+            borderRadius: BorderRadius.circular(PosRadii.tile),
+            border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
           ),
-          child: Stack(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(7, 7, 7, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(PosRadii.xs),
-                      child: SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: _ItemImage(
-                          url: item.imageUrl ?? '',
-                          iconKey: iconKey,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Expanded(
-                      child: TfText(
-                        item.localizedName(app.language),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: fg,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.only(right: inCart ? 27 : 0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TfText(
-                              tfFormatCurrency(context, item.price),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                          if (hasChoices && !inCart) ...[
-                            const SizedBox(width: 3),
-                            Icon(
-                              Icons.tune_rounded,
-                              size: 10,
-                              color: PosColors.muted,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
+              TfText(
+                label,
+                style: TextStyle(
+                  fontFamily: tfFontFamily(context),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: numberColor,
+                  height: 1.1,
                 ),
               ),
-              if (inCart) ...[
-                Positioned(
-                  top: 5,
-                  right: 5,
-                  child: GestureDetector(
-                    onTap: onDecrement,
-                    child: Container(
-                      width: 21,
-                      height: 21,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.24),
-                        borderRadius: BorderRadius.circular(PosRadii.xs),
-                      ),
-                      child: const Icon(
-                        Icons.remove_rounded,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                    ),
+              const Spacer(),
+              if (isSelected)
+                TfText(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: numberColor,
                   ),
-                ),
-                Positioned(
-                  right: 5,
-                  bottom: 5,
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: 22),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PosColors.primary,
-                      borderRadius: BorderRadius.circular(PosRadii.xs),
-                    ),
-                    child: TfText(
-                      tfFormatNumber(context, qty),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: PosColors.primaryDark,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.item,
-    required this.qty,
-    required this.onTap,
-    required this.onDecrement,
-  });
-
-  final MenuItem item;
-  final int qty;
-  final VoidCallback onTap;
-  final VoidCallback onDecrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final inCart = qty > 0;
-    final extras = item.extras;
-    final hasChoices = desktopMenuNeedsCustomization(item);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 150),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(PosRadii.md),
-          border: Border.all(
-            color: inCart ? PosColors.primary : Colors.transparent,
-            width: inCart ? 2 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: inCart ? 0.12 : 0.05),
-              blurRadius: inCart ? 8 : 6,
-              offset: Offset(0, inCart ? 4 : 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // ── Background image ──────────────────────────────────────────
-            _ItemImage(
-              url: item.imageUrl ?? '',
-              iconKey: resolveMenuIconKey(
-                iconKey: extras.iconKey,
-                name: item.name,
-                category: item.category,
-              ),
-            ),
-
-            // ── Gradient overlay for readability ──────────────────────────
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.72),
-                  ],
-                  stops: const [0.3, 1.0],
-                ),
-              ),
-            ),
-
-            // ── Yellow tint when in cart (image mode) ─────────────────────
-            if (inCart)
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: PosColors.primary.withValues(alpha: 0.22),
-                ),
-              ),
-
-            // ── Text content ──────────────────────────────────────────────
-            Padding(
-              padding: EdgeInsets.fromLTRB(10, 10, 10, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TfText(
-                    item.localizedName(app.language),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 11.5,
-                      color: Colors.white,
-                      height: 1.2,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TfText(
-                          tfFormatCurrency(context, item.price),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.85),
-                          ),
-                        ),
-                      ),
-                      if (hasChoices) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.tune_rounded,
-                          size: 12,
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Quantity stepper (top-right) ──────────────────────────────
-            if (inCart)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: onDecrement,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.remove_rounded,
-                          size: 13,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 4),
-                    Container(
-                      constraints: BoxConstraints(minWidth: 20),
-                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: PosColors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: TfText(
-                        tfFormatNumber(context, qty),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 12,
-                          color: PosColors.primaryDark,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Renders a menu item image from either a network URL or a base64 data URL.
-// Network images are automatically cached to local storage via CachedNetworkImage.
-// Cache dimensions are sized to the actual render box × device pixel ratio so
-// the in-memory image buffer never exceeds the displayed resolution.
-class _ItemImage extends StatelessWidget {
-  const _ItemImage({required this.url, required this.iconKey});
-  final String url;
-  final String iconKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxSide = [
-          constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
-          constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
-        ].reduce((a, b) => a > b ? a : b);
-        final cachePx = (maxSide * dpr).round().clamp(64, 512);
-
-        if (url.startsWith('data:image/')) {
-          try {
-            final bytes = base64Decode(url.split(',').last);
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              cacheWidth: cachePx,
-              cacheHeight: cachePx,
-            );
-          } catch (_) {
-            return _placeholder();
-          }
-        }
-        return CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          memCacheWidth: cachePx,
-          memCacheHeight: cachePx,
-          fadeInDuration: const Duration(milliseconds: 200),
-          placeholder: (context, url) => _placeholder(),
-          errorWidget: (context, url, err) => _placeholder(),
-        );
-      },
-    );
-  }
-
-  Widget _placeholder() => MenuImageView(imageUrl: null, iconKey: iconKey);
-}
-
-class _CartFooter extends StatelessWidget {
-  const _CartFooter({
-    required this.cart,
-    required this.lineCount,
-    required this.total,
-    required this.totalQty,
-    required this.onSubmit,
-  });
-
-  final Map<String, int> cart;
-  final int lineCount;
-  final double total;
-  final int totalQty;
-  final VoidCallback? onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
-    final hasItems = cart.isNotEmpty;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: const BoxDecoration(color: PosColors.primaryDark),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          12,
-          16,
-          MediaQuery.of(context).padding.bottom + 12,
-        ),
-        child: Row(
-          children: [
-            if (hasItems) ...[
-              // Amber cart badge with item count, matches the JSX hero pill.
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: PosColors.primary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: TfText(
-                  tfFormatNumber(context, totalQty),
+                )
+              else if (order != null) ...[
+                TfText(
+                  tfFormatCurrency(context, order!.total),
                   style: TextStyle(
                     fontFamily: tfFontFamily(context),
                     fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: PosColors.primaryDark,
+                    fontWeight: FontWeight.w800,
+                    color: PosColors.seatInk,
+                    height: 1.1,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TfText(
-                      text.orderItemsLine(totalQty, lineCount),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.68),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    TfText(
-                      tfFormatCurrency(context, total),
-                      style: TextStyle(
-                        fontFamily: tfFontFamily(context),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 20,
-                        color: Colors.white,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else
-              Expanded(
-                child: TfText(
-                  text.tapItemsToAdd,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontSize: 13,
+                const SizedBox(height: 2),
+                TfText(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.seatInk,
                   ),
                 ),
-              ),
-            const SizedBox(width: 12),
-            TfButton(
-              label: text.reviewAction,
-              trailingIcon: TfNavIcon.arrow,
-              size: TfButtonSize.md,
-              fullWidth: false,
-              onPressed: onSubmit,
-            ),
-          ],
+              ] else
+                TfText(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.muted,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+

@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     MENU_SCAN_GROQ_MODEL: str = "openai/gpt-oss-20b"
     CHATBOT_GROQ_MODEL: str = "openai/gpt-oss-20b"
+    CHATBOT_DEEPSEEK_MODEL: str = "deepseek-chat"
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_API_KEYS: str = ""
     CHATBOT_OPENROUTER_MODEL: str = "openai/gpt-5-mini"

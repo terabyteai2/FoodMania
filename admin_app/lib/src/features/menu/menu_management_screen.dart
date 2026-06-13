@@ -7,8 +7,8 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/menu_image_view.dart';
-import '../../core/widgets/notification_center.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
 import '../../services/cloud_api_service.dart';
@@ -71,6 +71,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         })
         .toList(growable: false);
     final paused = app.menuItems.where((item) => !item.isAvailable).length;
+    final realCategoryCount = app.categories.length;
     _selectedItemIds.removeWhere(
       (id) => !app.menuItems.any((item) => item.id == id),
     );
@@ -88,126 +89,145 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
     return Scaffold(
       backgroundColor: PosColors.background,
-      floatingActionButton: _MenuActionBar(
-        scanBusy: _scanBusy,
-        onAddItem: () => _openMenuForm(context),
-        onScan: _scanBusy ? null : () => _scanMenu(context),
-        text: text,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: BouncingScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(12, 14, 12, 18),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TfAppBar(
-                      title: text.menu,
-                      subtitle: text.menuItemsSubtitle(
-                        app.menuItems.length,
-                        paused,
-                      ),
-                      trailing: [
-                        if (app.isManager)
-                          TfIconButton(
-                            icon: TfNavIcon.settings,
-                            tooltip: text.isBn
-                                ? 'মেনু সেটিংস'
-                                : 'Menu settings',
-                            onPressed: () => _openMenuSettings(context),
+        child: Column(
+          children: [
+            Expanded(
+              child: CustomScrollView(
+                physics: BouncingScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TfGlobalTopBar(
+                            title: text.menu,
+                            subtitle: text.menuItemsCategorySubtitle(
+                              app.menuItems.length,
+                              realCategoryCount,
+                            ),
+                            onNavigateToOrders: widget.onNavigateToOrders,
+                            onNavigateToTarget: widget.onNavigateToTarget,
                           ),
-                        HeaderModeButton(),
-                        HeaderNotificationBell(
-                          onNavigateToOrders:
-                              widget.onNavigateToOrders ?? () {},
-                          onNavigateToTarget: widget.onNavigateToTarget,
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 14),
-                    TfSearchField(
-                      controller: _searchController,
-                      hintText: text.menuSearchHint,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    if (app.menuItems.isNotEmpty) ...[
-                      SizedBox(height: 10),
-                      _CategoryStrip(
-                        categories: categories,
-                        selectedCategory: _selectedCategory,
-                        allLabel: text.allCategories,
-                        countOf: (cat) => cat == text.allCategories
-                            ? app.menuItems.length
-                            : app.menuItems
-                                  .where(
-                                    (i) => i.localizedCategory(language) == cat,
+                          if (app.isManager) ...[
+                            const SizedBox(height: 12),
+                            _MenuActionRow(
+                              text: text,
+                              scanning: _scanBusy,
+                              deliveryOn: app.serverConfig.deliveryCharge > 0,
+                              onDelivery: () =>
+                                  _openDeliveryChargeEditor(context),
+                              onScan: _scanBusy
+                                  ? null
+                                  : () => _scanMenu(context),
+                              onDiscounts: () => _openDiscountsAction(context),
+                              onSettings: () => _openMenuSettings(context),
+                            ),
+                          ],
+                          SizedBox(height: 12),
+                          TfSearchField(
+                            controller: _searchController,
+                            hintText: text.menuSearchHint,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          if (app.menuItems.isNotEmpty) ...[
+                            SizedBox(height: 12),
+                            TfFilterChipRow(
+                              chips: categories
+                                  .map(
+                                    (cat) => TfFilterChipData(
+                                      label: cat,
+                                      count: cat == text.allCategories
+                                          ? app.menuItems.length
+                                          : app.menuItems
+                                                .where(
+                                                  (i) =>
+                                                      i.localizedCategory(
+                                                        language,
+                                                      ) ==
+                                                      cat,
+                                                )
+                                                .length,
+                                      active: cat == _selectedCategory,
+                                    ),
                                   )
-                                  .length,
-                        onSelected: (value) =>
-                            setState(() => _selectedCategory = value),
+                                  .toList(),
+                              onSelected: (index) => setState(
+                                () => _selectedCategory = categories[index],
+                              ),
+                            ),
+                          ],
+                          SizedBox(height: 20),
+                          if (app.menuItems.isEmpty)
+                            TfEmptyState(
+                              title: text.menuEmptyTitle,
+                              message: text.menuEmptyMessage,
+                              icon: Icons.restaurant_menu_rounded,
+                            )
+                          else if (items.isEmpty)
+                            TfEmptyState(
+                              title: text.menuNoResultsTitle,
+                              message: text.menuNoResultsMessage,
+                              icon: Icons.search_off_rounded,
+                            )
+                          else ...[
+                            if (_selectedItemIds.isNotEmpty) ...[
+                              _BulkMenuToolbar(
+                                count: _selectedItemIds.length,
+                                onDiscount: () => _applyBulkDiscount(context),
+                                onClear: () => setState(_selectedItemIds.clear),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                            _MenuList(
+                              items: items,
+                              language: language,
+                              selectedIds: _selectedItemIds,
+                              selectionMode: _selectedItemIds.isNotEmpty,
+                              onEdit: app.isManager
+                                  ? (item) => _openMenuForm(context, item: item)
+                                  : (_) {},
+                              onSelect: (item) {
+                                if (!app.isManager) return;
+                                setState(() {
+                                  if (!_selectedItemIds.add(item.id)) {
+                                    _selectedItemIds.remove(item.id);
+                                  }
+                                });
+                              },
+                              onDelete: app.isManager
+                                  ? (item) => _confirmDelete(context, item)
+                                  : (_) {},
+                              onAvailabilityChanged: (item, value) async {
+                                if (!app.isManager) return;
+                                await app.toggleMenuAvailability(
+                                  item.id,
+                                  value,
+                                );
+                              },
+                              onAddImage: app.isManager
+                                  ? (item) => _addImageToItem(context, item)
+                                  : (_) {},
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                    SizedBox(height: 10),
-                    if (app.menuItems.isEmpty)
-                      TfEmptyState(
-                        title: text.menuEmptyTitle,
-                        message: text.menuEmptyMessage,
-                        icon: Icons.restaurant_menu_rounded,
-                      )
-                    else if (items.isEmpty)
-                      TfEmptyState(
-                        title: text.menuNoResultsTitle,
-                        message: text.menuNoResultsMessage,
-                        icon: Icons.search_off_rounded,
-                      )
-                    else ...[
-                      if (_selectedItemIds.isNotEmpty) ...[
-                        _BulkMenuToolbar(
-                          count: _selectedItemIds.length,
-                          onDiscount: () => _applyBulkDiscount(context),
-                          onClear: () => setState(_selectedItemIds.clear),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      _MenuList(
-                        items: items,
-                        language: language,
-                        selectedIds: _selectedItemIds,
-                        selectionMode: _selectedItemIds.isNotEmpty,
-                        onEdit: app.isManager
-                            ? (item) => _openMenuForm(context, item: item)
-                            : (_) {},
-                        onSelect: (item) {
-                          if (!app.isManager) return;
-                          setState(() {
-                            if (!_selectedItemIds.add(item.id)) {
-                              _selectedItemIds.remove(item.id);
-                            }
-                          });
-                        },
-                        onDelete: app.isManager
-                            ? (item) => _confirmDelete(context, item)
-                            : (_) {},
-                        onAvailabilityChanged: (item, value) async {
-                          if (!app.isManager) return;
-                          await app.toggleMenuAvailability(item.id, value);
-                        },
-                        onAddImage: app.isManager
-                            ? (item) => _addImageToItem(context, item)
-                            : (_) {},
-                      ),
-                      // Reserve space so the floating action bar never covers
-                      // the last menu row.
-                      if (app.isManager) const SizedBox(height: 92),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
             ),
+            if (app.isManager)
+              TfStickyCTA(
+                child: TfButton(
+                  label: text.menuNewButton,
+                  icon: Icons.add_rounded,
+                  size: TfButtonSize.lg,
+                  onPressed: () => _openMenuForm(context),
+                ),
+              ),
           ],
         ),
       ),
@@ -412,11 +432,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               .where((i) => i.localizedCategory(language) == category)
               .length;
     return SizedBox(
-      height: 38,
+      height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final category = categories[index];
           final selected = category == _selectedCategory;
@@ -428,7 +448,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               decoration: BoxDecoration(
                 color: selected ? Pc.ink : Pc.surface,
                 border: Border.all(color: selected ? Pc.ink : Pc.border),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(PosRadii.chip),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -446,8 +466,9 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   const SizedBox(width: 8),
                   Text(
                     '${countOf(category)}',
-                    style: Pc.mono(
-                      10.5,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                       color: selected
                           ? Colors.white.withValues(alpha: 0.78)
                           : Pc.textTer,
@@ -525,6 +546,22 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         .where((item) => _selectedItemIds.contains(item.id))
         .toList(growable: false);
     await _applyDiscountToItems(context, selected, clearSelection: true);
+  }
+
+  // Discounts action row entry: apply to the current selection, or to every
+  // item when nothing is selected.
+  Future<void> _openDiscountsAction(BuildContext context) async {
+    final app = AppScope.of(context);
+    final selected = app.menuItems
+        .where((item) => _selectedItemIds.contains(item.id))
+        .toList(growable: false);
+    final target = selected.isNotEmpty ? selected : app.menuItems;
+    if (target.isEmpty) return;
+    await _applyDiscountToItems(
+      context,
+      target,
+      clearSelection: selected.isNotEmpty,
+    );
   }
 
   Future<void> _openMenuSettings(BuildContext context) async {
@@ -666,7 +703,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   text.isBn ? 'মেনু স্ক্যান' : 'Scan menu',
                   style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w700,
                     color: PosColors.slate,
                   ),
                 ),
@@ -769,22 +806,28 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
           _MenuItemForm(initialItem: item, existingCategories: app.categories),
     );
     if (result == null) return;
+    if (result.deleteRequested) {
+      if (item != null && context.mounted) {
+        await _confirmDelete(context, item);
+      }
+      return;
+    }
     await app.saveMenuItem(
       id: item?.id,
-      name: result.name,
-      nameEn: result.name,
+      name: result.name!,
+      nameEn: result.name!,
       nameBn: item?.nameBn,
-      description: result.description,
-      descriptionEn: result.description,
+      description: result.description!,
+      descriptionEn: result.description!,
       descriptionBn: item?.descriptionBn,
-      category: result.category,
-      categoryEn: result.category,
+      category: result.category!,
+      categoryEn: result.category!,
       categoryBn: item?.categoryBn,
-      price: result.price,
+      price: result.price!,
       imageUrl: result.imageUrl,
-      isAvailable: result.isAvailable,
+      isAvailable: result.isAvailable!,
       preparationTimeMinutes: result.preparationTimeMinutes,
-      tags: result.tags,
+      tags: result.tags!,
       createdAt: item?.createdAt,
     );
     if (!context.mounted) return;
@@ -874,96 +917,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
           context,
         ).showSnackBar(SnackBar(content: TfText(text.menuDeleted)));
       },
-    );
-  }
-}
-
-class _MenuActionBar extends StatelessWidget {
-  const _MenuActionBar({
-    required this.scanBusy,
-    required this.onAddItem,
-    required this.onScan,
-    required this.text,
-  });
-
-  final bool scanBusy;
-  final VoidCallback onAddItem;
-  final VoidCallback? onScan;
-  final AppStrings text;
-
-  @override
-  Widget build(BuildContext context) {
-    final shellWidth = (MediaQuery.sizeOf(context).width - 28)
-        .clamp(0.0, 360.0)
-        .toDouble();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: SizedBox(
-        width: shellWidth,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: PosColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: PosColors.line, width: 0.5),
-            boxShadow: PosShadows.glow,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _MenuActionButton(
-                    label: text.menuAddActionShort,
-                    icon: Icons.add_rounded,
-                    onPressed: onAddItem,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MenuActionButton(
-                    label: scanBusy ? text.menuScanningShort : text.menuScan,
-                    icon: Icons.upload_file_outlined,
-                    primary: true,
-                    busy: scanBusy,
-                    onPressed: onScan,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MenuActionButton extends StatelessWidget {
-  const _MenuActionButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.primary = false,
-    this.busy = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final bool primary;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
-      child: TfButton(
-        onPressed: onPressed,
-        icon: icon,
-        label: label,
-        busy: busy,
-        variant: primary ? TfButtonVariant.primary : TfButtonVariant.dark,
-        fullWidth: true,
-      ),
     );
   }
 }
@@ -1177,7 +1130,7 @@ class _DesktopMenuCard extends StatelessWidget {
                     GestureDetector(
                       onTap: canEdit ? onAddImage : null,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(PosRadii.tile),
                         child: SizedBox(
                           width: 58,
                           height: 58,
@@ -1215,15 +1168,9 @@ class _DesktopMenuCard extends StatelessWidget {
                       Positioned(
                         top: -7,
                         right: -8,
-                        child: Transform.scale(
-                          scale: 0.72,
-                          alignment: Alignment.topRight,
-                          child: Switch.adaptive(
-                            value: item.isAvailable,
-                            onChanged: onAvailabilityChanged,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
+                        child: TfToggle(
+                          value: item.isAvailable,
+                          onChanged: onAvailabilityChanged,
                         ),
                       ),
                   ],
@@ -1237,7 +1184,7 @@ class _DesktopMenuCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Pc.text,
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   height: 1.12,
                 ),
@@ -1248,7 +1195,7 @@ class _DesktopMenuCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: Pc.mono(10, color: Pc.textTer),
+                style: TextStyle(fontSize: 11, color: Pc.textTer),
               ),
               const Spacer(),
               Wrap(
@@ -1267,12 +1214,13 @@ class _DesktopMenuCard extends StatelessWidget {
                             showDiscount && badge == extras.discountBadgeLabel()
                             ? Pc.dangerSoft
                             : Pc.surfaceAlt,
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.circular(PosRadii.tag),
                       ),
                       child: Text(
                         badge,
-                        style: Pc.mono(
-                          9,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
                           color:
                               showDiscount &&
                                   badge == extras.discountBadgeLabel()
@@ -1347,62 +1295,6 @@ class _DesktopMenuCard extends StatelessWidget {
   }
 }
 
-class _CategoryStrip extends StatelessWidget {
-  const _CategoryStrip({
-    required this.categories,
-    required this.selectedCategory,
-    required this.allLabel,
-    required this.countOf,
-    required this.onSelected,
-  });
-
-  final List<String> categories;
-  final String selectedCategory;
-  final String allLabel;
-  final int Function(String category) countOf;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: categories.length,
-        separatorBuilder: (_, _) => SizedBox(width: 7),
-        itemBuilder: (context, index) {
-          final category = categories[index];
-          final selected = category == selectedCategory;
-          return Material(
-            color: selected ? PosColors.primary : PosColors.surface,
-            borderRadius: BorderRadius.circular(PosRadii.pill),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => onSelected(category),
-              child: Container(
-                height: 30,
-                padding: EdgeInsets.symmetric(horizontal: 11),
-                alignment: Alignment.center,
-                child: TfText(
-                  AppScope.of(context).strings.categoryCountLabel(
-                    category == allLabel ? 'All' : category,
-                    countOf(category),
-                  ),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w500,
-                    color: selected ? PosColors.primaryDark : PosColors.muted,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
 enum _MenuSettingsTarget { selected, all }
 
 class _MenuSettingsAction {
@@ -1443,7 +1335,9 @@ class _MenuSettingsSheet extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: PosColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(PosRadii.card),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -1458,7 +1352,7 @@ class _MenuSettingsSheet extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: tfFontFamily(context),
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: PosColors.slate,
                 ),
               ),
@@ -1482,7 +1376,7 @@ class _MenuSettingsSheet extends StatelessWidget {
                     context,
                   ).pop(const _MenuSettingsAction.deliveryCharge()),
                   child: Padding(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
                         const Icon(
@@ -1500,7 +1394,7 @@ class _MenuSettingsSheet extends StatelessWidget {
                                 style: const TextStyle(
                                   color: PosColors.slate,
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 3),
@@ -1520,7 +1414,7 @@ class _MenuSettingsSheet extends StatelessWidget {
                           style: const TextStyle(
                             color: PosColors.slate,
                             fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -1628,7 +1522,9 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: PosColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PosRadii.card),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -1643,7 +1539,7 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
                   style: const TextStyle(
                     color: PosColors.slate,
                     fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1699,6 +1595,122 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
   }
 }
 
+/// Icon action row (spec §4.10) — Delivery · Scan · Discounts · Settings.
+class _MenuActionRow extends StatelessWidget {
+  const _MenuActionRow({
+    required this.text,
+    required this.scanning,
+    required this.deliveryOn,
+    required this.onDelivery,
+    required this.onScan,
+    required this.onDiscounts,
+    required this.onSettings,
+  });
+
+  final AppStrings text;
+  final bool scanning;
+  final bool deliveryOn;
+  final VoidCallback onDelivery;
+  final VoidCallback? onScan;
+  final VoidCallback onDiscounts;
+  final VoidCallback onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _MenuActionButton(
+          icon: Icons.delivery_dining_outlined,
+          label: deliveryOn ? text.menuDeliveryOn : text.menuDeliveryOff,
+          active: deliveryOn,
+          onTap: onDelivery,
+        ),
+        const SizedBox(width: 8),
+        _MenuActionButton(
+          icon: Icons.document_scanner_outlined,
+          label: scanning ? text.menuScanningShort : text.menuActionScan,
+          onTap: onScan,
+        ),
+        const SizedBox(width: 8),
+        _MenuActionButton(
+          icon: Icons.percent_rounded,
+          label: text.menuActionDiscounts,
+          onTap: onDiscounts,
+        ),
+        const SizedBox(width: 8),
+        _MenuActionButton(
+          icon: Icons.tune_rounded,
+          label: text.menuActionSettings,
+          onTap: onSettings,
+        ),
+      ],
+    );
+  }
+}
+
+class _MenuActionButton extends StatelessWidget {
+  const _MenuActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onTap == null;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(PosRadii.card),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: active ? PosColors.primarySoft : PosColors.surface,
+            borderRadius: BorderRadius.circular(PosRadii.card),
+            border: Border.all(
+              color: active ? PosColors.primaryWash : PosColors.lineStrong,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: disabled
+                    ? PosColors.muted
+                    : active
+                    ? PosColors.accentStrong
+                    : PosColors.inkSoft,
+              ),
+              const SizedBox(height: 5),
+              TfText(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: disabled
+                      ? PosColors.muted
+                      : active
+                      ? PosColors.accentStrong
+                      : PosColors.inkSoft,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BulkMenuToolbar extends StatelessWidget {
   const _BulkMenuToolbar({
     required this.count,
@@ -1714,7 +1726,7 @@ class _BulkMenuToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return TfCard(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
           Expanded(
@@ -1724,7 +1736,7 @@ class _BulkMenuToolbar extends StatelessWidget {
                   : '$count items selected',
               style: const TextStyle(
                 color: PosColors.slate,
-                fontSize: 13,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1780,7 +1792,9 @@ class _BulkDiscountSheetState extends State<_BulkDiscountSheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: PosColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PosRadii.card),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -1894,77 +1908,41 @@ class _MenuList extends StatelessWidget {
       children: [
         for (final category in categoryNames) ...[
           Padding(
-            padding: EdgeInsets.fromLTRB(
-              2,
-              category == categoryNames.first ? 0 : 14,
-              2,
-              7,
-            ),
-            child: TfText(
-              category,
-              style: TextStyle(
-                color: PosColors.slate,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          TfCard(
-            padding: EdgeInsets.zero,
-            child: ListView.separated(
-              itemCount: grouped[category]!.length,
-              shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: PosColors.lineStrong),
-              itemBuilder: (context, index) {
-                final item = grouped[category]![index];
-                return _MenuRow(
-                  item: item,
-                  language: language,
-                  selected: selectedIds.contains(item.id),
-                  selectionMode: selectionMode,
-                  onEdit: () => selectionMode ? onSelect(item) : onEdit(item),
-                  onSelect: () => onSelect(item),
-                  onDelete: () => onDelete(item),
-                  onAvailabilityChanged: (value) =>
-                      onAvailabilityChanged(item, value),
-                  onAddImage: () => onAddImage(item),
-                );
-              },
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 11),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TfMicroLabel(
+                    category.toUpperCase(),
+                    color: PosColors.muted,
+                  ),
+                ),
+                TfText(
+                  tfFormatNumber(context, grouped[category]!.length),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.muted,
+                  ),
+                ),
+              ],
             ),
           ),
+          Column(
+            children: [
+              for (final item in grouped[category]!) ...[
+                _buildRow(context, item),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
         ],
       ],
     );
   }
-}
 
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({
-    required this.item,
-    required this.language,
-    required this.selected,
-    required this.selectionMode,
-    required this.onEdit,
-    required this.onSelect,
-    required this.onDelete,
-    required this.onAvailabilityChanged,
-    required this.onAddImage,
-  });
-
-  final MenuItem item;
-  final AppLanguage language;
-  final bool selected;
-  final bool selectionMode;
-  final VoidCallback onEdit;
-  final VoidCallback onSelect;
-  final VoidCallback onDelete;
-  final ValueChanged<bool> onAvailabilityChanged;
-  final VoidCallback onAddImage;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildRow(BuildContext context, MenuItem item) {
     final text = AppScope.of(context).strings;
     final priceDecimals = item.price == item.price.roundToDouble() ? 0 : 2;
     final extras = item.extras;
@@ -1976,211 +1954,242 @@ class _MenuRow extends StatelessWidget {
       name: item.name,
       category: item.category,
     );
-    final discountLabel = text.isBn
-        ? tfToBnNumbers(extras.discountBadgeLabel())
-        : extras.discountBadgeLabel();
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onEdit,
-        onLongPress: onSelect,
-        onSecondaryTap: onDelete,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(10, 9, 8, 9),
-          child: Row(
-            children: [
-              Tooltip(
-                message: hasImage ? text.editMenuItem : text.menuChooseGallery,
-                child: GestureDetector(
+
+    final icon = ClipRRect(
+      borderRadius: BorderRadius.circular(PosRadii.tile),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            MenuImageView(imageUrl: item.imageUrl, iconKey: iconKey),
+            if (!hasImage)
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: PosColors.surface,
+                    borderRadius: BorderRadius.circular(PosRadii.tag),
+                    border: Border.all(color: PosColors.line, width: 1),
+                  ),
+                  child: const Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 11,
+                    color: PosColors.primaryDark,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    final discountLabel = showDiscount
+        ? (text.isBn
+              ? tfToBnNumbers(extras.discountBadgeLabel())
+              : extras.discountBadgeLabel())
+        : null;
+
+    return _SourceMenuRow(
+      icon: icon,
+      title: item.localizedName(language),
+      price: tfFormatCurrency(
+        context,
+        item.price,
+        decimalDigits: priceDecimals,
+      ),
+      discountPrice: showDiscount
+          ? tfFormatCurrency(context, discounted, decimalDigits: priceDecimals)
+          : null,
+      discountLabel: discountLabel,
+      available: item.isAvailable,
+      onTap: () => selectionMode ? onSelect(item) : onEdit(item),
+      onLongPress: () => onSelect(item),
+      selected: selectedIds.contains(item.id),
+      selectionMode: selectionMode,
+      onSelect: () => onSelect(item),
+      onAddImage: () => onAddImage(item),
+      onAvailabilityChanged: (value) => onAvailabilityChanged(item, value),
+    );
+  }
+}
+
+class _SourceMenuRow extends StatelessWidget {
+  const _SourceMenuRow({
+    required this.icon,
+    required this.title,
+    required this.price,
+    required this.available,
+    required this.onAvailabilityChanged,
+    this.discountPrice,
+    this.discountLabel,
+    this.selected = false,
+    this.selectionMode = false,
+    this.onTap,
+    this.onLongPress,
+    this.onSelect,
+    this.onAddImage,
+  });
+
+  final Widget icon;
+  final String title;
+  final String price;
+  final String? discountPrice;
+  final String? discountLabel;
+  final bool available;
+  final bool selected;
+  final bool selectionMode;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSelect;
+  final VoidCallback? onAddImage;
+  final ValueChanged<bool> onAvailabilityChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final hidden = !available;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 140),
+      opacity: hidden ? 0.58 : 1,
+      child: Material(
+        color: selected ? PosColors.primarySoft : PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.lg),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 76),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(PosRadii.lg),
+              border: Border.all(
+                color: selected ? PosColors.primaryWash : PosColors.line,
+              ),
+            ),
+            child: Row(
+              children: [
+                if (selectionMode) ...[
+                  Checkbox(value: selected, onChanged: (_) => onSelect?.call()),
+                  const SizedBox(width: 6),
+                ],
+                GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: onAddImage,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 38,
-                      height: 38,
-                      child: Stack(
-                        fit: StackFit.expand,
+                  child: SizedBox(width: 48, height: 48, child: icon),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TfText(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.text,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          MenuImageView(
-                            imageUrl: item.imageUrl,
-                            iconKey: iconKey,
-                          ),
-                          if (!hasImage)
-                            Align(
-                              alignment: Alignment.bottomRight,
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: BoxDecoration(
-                                  color: PosColors.surface,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: PosColors.line,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.add_photo_alternate_outlined,
-                                  size: 11,
-                                  color: PosColors.primaryDark,
-                                ),
+                          if (discountPrice != null) ...[
+                            TfText(
+                              price,
+                              style: const TextStyle(
+                                color: PosColors.textTer,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.lineThrough,
                               ),
                             ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 10),
-              if (selectionMode) ...[
-                Checkbox(value: selected, onChanged: (_) => onSelect()),
-                const SizedBox(width: 6),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: TfText(
-                            item.localizedName(language),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: PosColors.slate,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              height: 1.1,
-                            ),
-                          ),
-                        ),
-                        if (extras.includes.isNotEmpty ||
-                            extras.addOns.isNotEmpty) ...[
-                          SizedBox(width: 6),
-                          Icon(
-                            Icons.tune_rounded,
-                            size: 12,
-                            color: PosColors.muted,
-                          ),
-                        ],
-                      ],
-                    ),
-                    SizedBox(height: 3),
-                    TfText(
-                      item.localizedDescription(language).trim().isEmpty
-                          ? item.localizedCategory(language)
-                          : item.localizedDescription(language),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: PosColors.muted,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Row(
-                      children: [
-                        TfText(
-                          item.isAvailable
-                              ? text.menuAvailable
-                              : text.menuPaused,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: item.isAvailable
-                                ? PosColors.success
-                                : PosColors.danger,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (showDiscount) ...[
-                          SizedBox(width: 6),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: PosColors.danger.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: TfText(
-                              discountLabel,
-                              style: TextStyle(
+                            TfText(
+                              discountPrice!,
+                              style: const TextStyle(
                                 color: PosColors.danger,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ),
+                          ] else
+                            TfText(
+                              price,
+                              style: const TextStyle(
+                                color: PosColors.text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          if (discountLabel != null)
+                            _MiniMenuTag(
+                              label: discountLabel!,
+                              color: PosColors.danger,
+                              fill: PosColors.dangerSoft,
+                            ),
+                          if (hidden)
+                            _MiniMenuTag(
+                              label: text.menuHidden,
+                              color: PosColors.muted,
+                              fill: PosColors.surfaceSunk,
+                            ),
                         ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (showDiscount) ...[
-                    TfText(
-                      tfFormatCurrency(
-                        context,
-                        item.price,
-                        decimalDigits: priceDecimals,
                       ),
-                      style: TextStyle(
-                        color: PosColors.muted,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
-                        decoration: TextDecoration.lineThrough,
-                      ),
-                    ),
-                    TfText(
-                      tfFormatCurrency(
-                        context,
-                        discounted,
-                        decimalDigits: priceDecimals,
-                      ),
-                      style: TextStyle(
-                        color: PosColors.danger,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ] else
-                    TfText(
-                      tfFormatCurrency(
-                        context,
-                        item.price,
-                        decimalDigits: priceDecimals,
-                      ),
-                      style: TextStyle(
-                        color: PosColors.slate,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  SizedBox(height: 3),
-                  Transform.scale(
-                    scale: 0.76,
-                    alignment: Alignment.centerRight,
-                    child: Switch.adaptive(
-                      value: item.isAvailable,
-                      onChanged: onAvailabilityChanged,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(width: 10),
+                TfToggle(
+                  value: available,
+                  onChanged: onAvailabilityChanged,
+                  semanticLabel: text.menuAvailable,
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniMenuTag extends StatelessWidget {
+  const _MiniMenuTag({
+    required this.label,
+    required this.color,
+    required this.fill,
+  });
+
+  final String label;
+  final Color color;
+  final Color fill;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(PosRadii.xs),
+      ),
+      child: TfText(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 1.1,
         ),
       ),
     );
@@ -2314,188 +2323,172 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         color: PosColors.background,
         child: Padding(
           padding: EdgeInsets.only(bottom: bottomInset),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 14, 16, 18),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TfText(
-                            widget.initialItem == null
-                                ? text.addMenuItem
-                                : text.editMenuItem,
-                            style: Theme.of(context).textTheme.titleLarge,
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.92,
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TfText(
+                                  widget.initialItem == null
+                                      ? text.menuNewItemTitle
+                                      : text.menuEditItemTitle,
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(
+                                        fontFamily: tfFontFamily(context),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ),
+                              if (widget.initialItem != null)
+                                IconButton(
+                                  tooltip: text.deleteAction,
+                                  onPressed: () => Navigator.pop(
+                                    context,
+                                    _MenuFormResult.delete(),
+                                  ),
+                                  color: PosColors.danger,
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              IconButton(
+                                tooltip: MaterialLocalizations.of(
+                                  context,
+                                ).closeButtonTooltip,
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12),
-                    TextFormField(
-                      controller: _nameController,
-                      textInputAction: TextInputAction.next,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(labelText: text.menuItemName),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return text.menuItemNameRequired;
-                        }
-                        return null;
-                      },
-                    ),
-                    SizedBox(height: 10),
-                    TextFormField(
-                      controller: _descriptionController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: text.menuDescriptionOptional,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    // Keep all alphanumeric entry fields grouped together
-                    // (category → price → prep time) before the user is
-                    // asked to upload an image. This avoids the previous
-                    // ordering where prep time was awkwardly stranded below
-                    // the image picker.
-                    _buildCategoryField(text),
-                    SizedBox(height: 10),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final compact = constraints.maxWidth < 420;
-                        final price = TextFormField(
-                          controller: _priceController,
-                          decoration: InputDecoration(
-                            labelText: text.menuPrice,
-                          ),
-                          keyboardType: TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(
-                              RegExp(r'^\d*\.?\d{0,2}'),
-                            ),
-                          ],
-                          validator: (value) {
-                            final price = double.tryParse(value ?? '');
-                            if (price == null || price <= 0) {
-                              return text.menuPriceInvalid;
-                            }
-                            return null;
-                          },
-                        );
-                        final prep = TextFormField(
-                          controller: _prepController,
-                          decoration: InputDecoration(
-                            labelText: text.menuPrepTime,
-                            hintText: text.menuPrepTimeHint,
-                          ),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                        );
-                        if (compact) {
-                          return Column(
-                            children: [price, SizedBox(height: 10), prep],
-                          );
-                        }
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: price),
-                            SizedBox(width: 12),
-                            Expanded(child: prep),
-                          ],
-                        );
-                      },
-                    ),
-                    SizedBox(height: 10),
-                    _ImagePickerField(
-                      busy: _imageBusy,
-                      hasImage: _imageController.text.trim().isNotEmpty,
-                      chooseLabel: text.menuChooseGallery,
-                      clearLabel: text.menuClearImage,
-                      onPick: _pickImage,
-                      onClear: () {
-                        _imageController.clear();
-                        setState(() {});
-                      },
-                    ),
-                    if (_imageController.text.trim().isNotEmpty) ...[
-                      SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AspectRatio(
-                          aspectRatio: 1,
-                          child: MenuImageView(
+                          const SizedBox(height: 12),
+                          _EditorPhotoBlock(
+                            busy: _imageBusy,
                             imageUrl: _imageController.text.trim(),
                             iconKey: placeholderIconKey,
+                            addLabel: text.menuAddPhoto,
+                            clearLabel: text.menuClearImage,
+                            onPick: _pickImage,
+                            onClear: () {
+                              _imageController.clear();
+                              setState(() {});
+                            },
                           ),
-                        ),
+                          const SizedBox(height: 18),
+                          _EditorField(
+                            label: text.menuItemName,
+                            child: TextFormField(
+                              controller: _nameController,
+                              textInputAction: TextInputAction.next,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                hintText: text.isBn
+                                    ? 'যেমন চিকেন বিরিয়ানি'
+                                    : 'e.g. Chicken Biryani',
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return text.menuItemNameRequired;
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _EditorField(
+                            label: text.menuPrice,
+                            child: TextFormField(
+                              controller: _priceController,
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(
+                                  Icons.currency_exchange_rounded,
+                                  size: 18,
+                                ),
+                                hintText: '0',
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d{0,2}'),
+                                ),
+                              ],
+                              validator: (value) {
+                                final price = double.tryParse(value ?? '');
+                                if (price == null || price <= 0) {
+                                  return text.menuPriceInvalid;
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _EditorField(
+                            label: text.menuCategory,
+                            child: _buildCategoryField(text),
+                          ),
+                          const SizedBox(height: 16),
+                          _EditorToggleCard(
+                            text: text,
+                            available: _isAvailable,
+                            discountOn: _discountMode != _DiscountMode.none,
+                            discountMode: _discountMode,
+                            discountController: _discountController,
+                            onAvailableChanged: (value) =>
+                                setState(() => _isAvailable = value),
+                            onDiscountEnabledChanged: (value) => setState(() {
+                              if (value) {
+                                _discountMode = _DiscountMode.percent;
+                                if (_discountController.text.trim().isEmpty) {
+                                  _discountController.text = '10';
+                                }
+                              } else {
+                                _discountMode = _DiscountMode.none;
+                                _discountController.clear();
+                              }
+                            }),
+                            onDiscountModeChanged: (mode) =>
+                                setState(() => _discountMode = mode),
+                          ),
+                          const SizedBox(height: 14),
+                          _AdvancedMenuOptions(
+                            text: text,
+                            descriptionController: _descriptionController,
+                            prepController: _prepController,
+                            includesController: _includesController,
+                            optionsController: _optionsController,
+                            addOnsController: _addOnsController,
+                            initiallyExpanded:
+                                _descriptionController.text.trim().isNotEmpty ||
+                                _prepController.text.trim().isNotEmpty ||
+                                _initialExtras.includes.isNotEmpty ||
+                                _initialExtras.options.isNotEmpty ||
+                                _initialExtras.addOns.isNotEmpty,
+                          ),
+                        ],
                       ),
-                    ] else ...[
-                      SizedBox(height: 10),
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: PosColors.line),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: MenuImageView(
-                          imageUrl: null,
-                          iconKey: placeholderIconKey,
-                        ),
-                      ),
-                    ],
-                    SizedBox(height: 14),
-                    _OptionalMenuOptions(
-                      text: text,
-                      discountMode: _discountMode,
-                      discountController: _discountController,
-                      includesController: _includesController,
-                      optionsController: _optionsController,
-                      addOnsController: _addOnsController,
-                      initiallyExpanded:
-                          _discountMode != _DiscountMode.none ||
-                          _initialExtras.includes.isNotEmpty ||
-                          _initialExtras.options.isNotEmpty,
-                      onDiscountModeChanged: (m) => setState(() {
-                        _discountMode = m;
-                        if (m == _DiscountMode.none) {
-                          _discountController.clear();
-                        }
-                      }),
                     ),
-                    SizedBox(height: 10),
-                    SwitchListTile.adaptive(
-                      value: _isAvailable,
-                      onChanged: (value) =>
-                          setState(() => _isAvailable = value),
-                      contentPadding: EdgeInsets.zero,
-                      title: TfText(text.menuAvailableForOrder),
-                    ),
-                    SizedBox(height: 14),
-                    TfButton(
+                  ),
+                  TfStickyCTA(
+                    child: TfButton(
                       onPressed: _submit,
-                      icon: Icons.save_outlined,
+                      icon: Icons.check_rounded,
                       label: widget.initialItem == null
                           ? text.menuCreateItem
                           : text.menuSaveItem,
                       size: TfButtonSize.lg,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -2690,26 +2683,314 @@ class _MenuItemFormState extends State<_MenuItemForm> {
 
 enum _DiscountMode { none, percent, flat }
 
-class _OptionalMenuOptions extends StatelessWidget {
-  const _OptionalMenuOptions({
+class _EditorField extends StatelessWidget {
+  const _EditorField({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TfMicroLabel(label.toUpperCase()),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+}
+
+class _EditorPhotoBlock extends StatelessWidget {
+  const _EditorPhotoBlock({
+    required this.busy,
+    required this.imageUrl,
+    required this.iconKey,
+    required this.addLabel,
+    required this.clearLabel,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final bool busy;
+  final String imageUrl;
+  final String iconKey;
+  final String addLabel;
+  final String clearLabel;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl.isNotEmpty;
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(PosRadii.lg),
+          child: Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: PosColors.surfaceSunk,
+              borderRadius: BorderRadius.circular(PosRadii.lg),
+              border: Border.all(color: PosColors.lineStrong),
+            ),
+            child: MenuImageView(
+              imageUrl: hasImage ? imageUrl : null,
+              iconKey: iconKey,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SizedBox(
+            height: 80,
+            child: OutlinedButton(
+              onPressed: busy ? null : onPick,
+              style: OutlinedButton.styleFrom(
+                backgroundColor: PosColors.surface,
+                foregroundColor: PosColors.accentStrong,
+                side: const BorderSide(color: PosColors.lineStrong),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(PosRadii.lg),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (busy)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    const Icon(Icons.photo_camera_outlined, size: 22),
+                  const SizedBox(height: 6),
+                  TfText(
+                    addLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (hasImage) ...[
+          const SizedBox(width: 8),
+          TfIconButton(
+            icon: Icons.clear_rounded,
+            tooltip: clearLabel,
+            onPressed: busy ? null : onClear,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _EditorToggleCard extends StatelessWidget {
+  const _EditorToggleCard({
     required this.text,
+    required this.available,
+    required this.discountOn,
     required this.discountMode,
     required this.discountController,
-    required this.includesController,
-    required this.optionsController,
-    required this.addOnsController,
-    required this.initiallyExpanded,
+    required this.onAvailableChanged,
+    required this.onDiscountEnabledChanged,
     required this.onDiscountModeChanged,
   });
 
   final AppStrings text;
+  final bool available;
+  final bool discountOn;
   final _DiscountMode discountMode;
   final TextEditingController discountController;
+  final ValueChanged<bool> onAvailableChanged;
+  final ValueChanged<bool> onDiscountEnabledChanged;
+  final ValueChanged<_DiscountMode> onDiscountModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TfCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _EditorToggleRow(
+            icon: Icons.check_rounded,
+            label: text.menuAvailable,
+            hint: text.menuAvailableForOrder,
+            value: available,
+            onChanged: onAvailableChanged,
+            first: true,
+          ),
+          _EditorToggleRow(
+            icon: Icons.local_offer_outlined,
+            label: text.isBn ? 'ডিসকাউন্ট সেট করুন' : 'Set discount',
+            hint: discountOn
+                ? '${discountController.text.trim().isEmpty ? '10' : discountController.text.trim()}${discountMode == _DiscountMode.percent ? '%' : '৳'} ${text.menuDiscountSummary}'
+                : text.menuDiscountNone,
+            value: discountOn,
+            onChanged: onDiscountEnabledChanged,
+          ),
+          if (discountOn)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final v in const [5, 10, 15, 20, 25])
+                        TfChip(
+                          label: '$v%',
+                          active:
+                              discountMode == _DiscountMode.percent &&
+                              discountController.text.trim() == '$v',
+                          small: true,
+                          tint: true,
+                          onTap: () {
+                            discountController.text = '$v';
+                            onDiscountModeChanged(_DiscountMode.percent);
+                          },
+                        ),
+                      TfChip(
+                        label: text.isBn ? 'টাকা' : 'Flat',
+                        active: discountMode == _DiscountMode.flat,
+                        small: true,
+                        tint: true,
+                        onTap: () => onDiscountModeChanged(_DiscountMode.flat),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: discountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*\.?\d{0,2}'),
+                      ),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: text.menuDiscountValue,
+                      suffixText: discountMode == _DiscountMode.percent
+                          ? '%'
+                          : '৳',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorToggleRow extends StatelessWidget {
+  const _EditorToggleRow({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.value,
+    required this.onChanged,
+    this.first = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String hint;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          border: first
+              ? null
+              : const Border(top: BorderSide(color: PosColors.line)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: PosColors.surfaceSunk,
+                borderRadius: BorderRadius.circular(PosRadii.md),
+              ),
+              child: Icon(icon, size: 18, color: PosColors.inkSoft),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TfText(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  TfText(
+                    hint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: PosColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            TfToggle(value: value, onChanged: onChanged),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdvancedMenuOptions extends StatelessWidget {
+  const _AdvancedMenuOptions({
+    required this.text,
+    required this.descriptionController,
+    required this.prepController,
+    required this.includesController,
+    required this.optionsController,
+    required this.addOnsController,
+    required this.initiallyExpanded,
+  });
+
+  final AppStrings text;
+  final TextEditingController descriptionController;
+  final TextEditingController prepController;
   final TextEditingController includesController;
   final TextEditingController optionsController;
   final TextEditingController addOnsController;
   final bool initiallyExpanded;
-  final ValueChanged<_DiscountMode> onDiscountModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2719,33 +3000,54 @@ class _OptionalMenuOptions extends StatelessWidget {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: initiallyExpanded,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          leading: const Icon(Icons.tune_rounded, color: PosColors.muted),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          leading: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: PosColors.surfaceSunk,
+              borderRadius: BorderRadius.circular(PosRadii.md),
+            ),
+            child: const Icon(
+              Icons.list_alt_outlined,
+              size: 19,
+              color: PosColors.inkSoft,
+            ),
+          ),
           title: TfText(
-            text.menuOptionsTitle,
+            text.menuVariationsAddOns,
             style: const TextStyle(
-              color: PosColors.slate,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+              color: PosColors.text,
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
           subtitle: TfText(
             text.menuOptionsSubtitle,
-            style: const TextStyle(
-              color: PosColors.muted,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: PosColors.muted, fontSize: 12.5),
           ),
           children: [
-            _DiscountSection(
-              text: text,
-              mode: discountMode,
-              controller: discountController,
-              onModeChanged: onDiscountModeChanged,
+            TextFormField(
+              controller: descriptionController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: text.menuDescriptionOptional,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: prepController,
+              decoration: InputDecoration(
+                labelText: text.menuPrepTime,
+                hintText: text.menuPrepTimeHint,
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 10),
             TextFormField(
               controller: optionsController,
               maxLines: 3,
@@ -2779,113 +3081,6 @@ class _OptionalMenuOptions extends StatelessWidget {
   }
 }
 
-class _DiscountSection extends StatelessWidget {
-  const _DiscountSection({
-    required this.text,
-    required this.mode,
-    required this.controller,
-    required this.onModeChanged,
-  });
-
-  final AppStrings text;
-  final _DiscountMode mode;
-  final TextEditingController controller;
-  final ValueChanged<_DiscountMode> onModeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TfText(
-          text.menuDiscountTitle,
-          style: TextStyle(
-            fontSize: 13,
-            color: PosColors.slate,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          children: [
-            for (final entry in <(_DiscountMode, String)>[
-              (_DiscountMode.none, text.menuDiscountNone),
-              (_DiscountMode.percent, text.menuDiscountPercent),
-              (_DiscountMode.flat, text.menuDiscountFlat),
-            ])
-              TfChip(
-                label: entry.$2,
-                active: mode == entry.$1,
-                small: true,
-                onTap: () => onModeChanged(entry.$1),
-              ),
-          ],
-        ),
-        if (mode != _DiscountMode.none) ...[
-          SizedBox(height: 8),
-          TextFormField(
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-            ],
-            decoration: InputDecoration(
-              labelText: text.menuDiscountValue,
-              suffixText: mode == _DiscountMode.percent ? '%' : '৳',
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _ImagePickerField extends StatelessWidget {
-  const _ImagePickerField({
-    required this.busy,
-    required this.hasImage,
-    required this.chooseLabel,
-    required this.clearLabel,
-    required this.onPick,
-    required this.onClear,
-  });
-
-  final bool busy;
-  final bool hasImage;
-  final String chooseLabel;
-  final String clearLabel;
-  final VoidCallback onPick;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 8,
-      children: [
-        TfButton(
-          label: chooseLabel,
-          icon: Icons.photo_library_outlined,
-          variant: TfButtonVariant.paper,
-          size: TfButtonSize.sm,
-          fullWidth: false,
-          busy: busy,
-          onPressed: busy ? null : onPick,
-        ),
-        TfButton(
-          label: clearLabel,
-          icon: Icons.clear,
-          variant: TfButtonVariant.paper,
-          size: TfButtonSize.sm,
-          fullWidth: false,
-          onPressed: hasImage && !busy ? onClear : null,
-        ),
-      ],
-    );
-  }
-}
-
 class _MenuFormResult {
   _MenuFormResult({
     required this.name,
@@ -2896,14 +3091,26 @@ class _MenuFormResult {
     required this.tags,
     this.imageUrl,
     this.preparationTimeMinutes,
-  });
+  }) : deleteRequested = false;
 
-  final String name;
-  final String description;
-  final String category;
-  final double price;
+  const _MenuFormResult.delete()
+    : name = null,
+      description = null,
+      category = null,
+      price = null,
+      imageUrl = null,
+      isAvailable = null,
+      preparationTimeMinutes = null,
+      tags = null,
+      deleteRequested = true;
+
+  final String? name;
+  final String? description;
+  final String? category;
+  final double? price;
   final String? imageUrl;
-  final bool isAvailable;
+  final bool? isAvailable;
   final int? preparationTimeMinutes;
-  final List<String> tags;
+  final List<String>? tags;
+  final bool deleteRequested;
 }

@@ -21,7 +21,10 @@ import 'core/utils/bounded_string_set.dart';
 import 'models/account_role.dart';
 import 'models/admin_blocking_notice.dart';
 import 'models/app_update_info.dart';
+import 'models/audit_entry.dart';
 import 'models/bkash_payment_session.dart';
+import 'models/chat_thread.dart';
+import 'models/staff_member.dart';
 import 'models/daily_report.dart';
 import 'models/dashboard_metrics.dart';
 import 'models/dashboard_summary.dart';
@@ -111,11 +114,6 @@ const int kOrdersMaxInMemory = 500;
 /// without bound over a long-running app session.
 const int kAlertSetCap = 2000;
 
-/// Accepted orders should not sit in the active queue forever. With no separate
-/// acceptedAt column in the local/remote order schema, updatedAt is the
-/// accepted-since signal because status transitions stamp it.
-const Duration kAcceptedOrderAutoServeAfter = Duration(minutes: 30);
-
 class _QueuedPosNotification {
   const _QueuedPosNotification({
     required this.type,
@@ -175,11 +173,20 @@ class PosAppController extends ChangeNotifier {
 
   final Uuid _uuid = Uuid();
   final List<StreamSubscription<Object?>> _subscriptions = [];
+  final StreamController<Map<String, Object?>> _chatEventController =
+      StreamController<Map<String, Object?>>.broadcast();
   final BoundedStringSet _knownOrderIds = BoundedStringSet(cap: kAlertSetCap);
   final Set<String> _autoPrintInFlight = <String>{};
 
   /// Coalesces concurrent print requests for the same order (auto + manual).
   final Map<String, Future<bool>> _orderPrintFutures = <String, Future<bool>>{};
+
+  Stream<Map<String, Object?>> get chatEvents => _chatEventController.stream;
+
+  @visibleForTesting
+  void debugEmitChatEvent(Map<String, Object?> event) {
+    _chatEventController.add(event);
+  }
 
   /// Orders we already fired a pending alert for (prevents sync/DB replay loops).
   final BoundedStringSet _alertedPendingOrderIds = BoundedStringSet(
@@ -217,10 +224,8 @@ class PosAppController extends ChangeNotifier {
   bool _coalesceNextOrderAlertBatch = false;
   Timer? _databaseChangeDebounce;
   Timer? _adminBlockingNoticePollTimer;
-  Timer? _autoServeAcceptedOrdersTimer;
   bool _handlingDatabaseChange = false;
   bool _databaseChangePending = false;
-  bool _autoServingAcceptedOrders = false;
   AudioPlayer? _notificationPlayer;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['openid', 'email', 'profile'],
@@ -275,9 +280,15 @@ class PosAppController extends ChangeNotifier {
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
   bool varianceTrackingEnabled = false;
+
+  /// Counter (quick-sell) service mode — manager+ toggle in More. When on, the
+  /// Tables tab becomes a tap-to-ring quick-sell grid instead of the FOH map.
+  bool counterModeEnabled = false;
   List<MenuItem> menuItems = [];
   List<String> quickSellMenuItemIds = [];
   List<OrderModel> orders = [];
+  int? _lastOrdersForIdentityHash;
+  String? _lastOrdersForDiagSignature;
   bool _hasMoreOrders = false;
   bool _loadingMoreOrders = false;
   List<PosNotification> notifications = [];
@@ -365,6 +376,33 @@ class PosAppController extends ChangeNotifier {
   bool get isCloudReady =>
       cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl;
   bool get isManager => accountRole.isManager;
+
+  /// Owner-only — full Analytics, Settings, invite any role.
+  bool get isOwner => accountRole.isOwner;
+
+  /// Floor-only role (Tables · Orders · More).
+  bool get isWaiter => accountRole.isWaiter;
+
+  /// Settings is owner-only (spec §RBAC).
+  bool get canManageSettings => isOwner;
+
+  /// Messenger chat takeover — owner & manager.
+  bool get canMessages => isManager;
+
+  /// Stock & menu management — owner & manager (waiters view menu only).
+  bool get canManageStock => isManager;
+
+  /// Demo-only role switch (More → profile). In production the role comes from
+  /// the authenticated session; here it lets one device preview each role's
+  /// navigation and access. Persists so it survives a relaunch.
+  Future<void> setAccountRoleDemo(AccountRole role) async {
+    if (accountRole == role) return;
+    accountRole = role;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_accountRoleKey, role.value);
+    notifyListeners();
+  }
+
   bool get hasAdminBlockingNotice => adminBlockingNotice?.isBlocking == true;
 
   /// Order-triggered printer side effects (auto-print + preflight + alerts).
@@ -375,6 +413,9 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> onResumed() async {
     isAppForeground = true;
+    // Resume the auto-sync cadence that onPaused() stopped; the immediate
+    // catch-up sync below handles the gap while backgrounded.
+    syncService.setForeground(true);
     debugPrint('[QB-NOTIF] lifecycle=resumed');
     // Resuming clears any stale OS notifications that the user has obviously
     // seen by virtue of opening the app.
@@ -401,6 +442,9 @@ class PosAppController extends ChangeNotifier {
 
   void onPaused() {
     isAppForeground = false;
+    // Stop the periodic sync wakeups while backgrounded to save battery; the
+    // next onResumed() restarts the cadence and triggers a catch-up sync.
+    syncService.setForeground(false);
     debugPrint('[QB-NOTIF] lifecycle=background');
   }
 
@@ -493,6 +537,14 @@ class PosAppController extends ChangeNotifier {
       accountId = preferences.getString(_accountIdKey) ?? '';
       accountDisplayName = preferences.getString(_accountDisplayNameKey) ?? '';
       accountRole = AccountRole.parse(preferences.getString(_accountRoleKey));
+      // Legacy migration: pre-3-role installs stored the tenant creator as
+      // 'manager'. On a local-only device (no cloud token) the creator is the
+      // owner, so upgrade the cached role. Cloud accounts refresh their real
+      // role from the backend on next login.
+      if (accountRole == AccountRole.manager &&
+          (preferences.getString(_deviceTokenKey) ?? '').isEmpty) {
+        accountRole = AccountRole.owner;
+      }
       _accountPassword = preferences.getString(_accountPasswordKey) ?? '';
       notificationSoundEnabled =
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
@@ -500,12 +552,16 @@ class PosAppController extends ChangeNotifier {
           preferences.getString(_notificationSoundPathKey) ?? '';
       varianceTrackingEnabled =
           preferences.getBool(_varianceTrackingEnabledKey) ?? false;
+      counterModeEnabled = preferences.getBool(_counterModeEnabledKey) ?? false;
       _dismissedAppUpdateVersionCode =
           preferences.getInt(_dismissedAppUpdateVersionCodeKey) ?? 0;
       isLoggedIn = preferences.getBool(_accountLoggedInKey) ?? isTenantReady;
 
-      await printerService.initialize();
-      printerState = printerService.state;
+      // The printer probe (USB/Bluetooth scan) is the heaviest startup step and
+      // isn't needed before the first frame — it's deferred to a post-frame
+      // callback below so the splash clears sooner. `printerState` keeps its
+      // default (disconnected) value until the stateStream subscription
+      // delivers the real state once the probe completes.
       await systemNotifications.initialize();
       unawaited(systemNotifications.requestNotificationAccess());
       // Existing installs may have stored either an app-private file path or
@@ -553,6 +609,12 @@ class PosAppController extends ChangeNotifier {
           notifyListeners();
         }),
       );
+      // Deferred printer probe (see note above): runs after the first frame so
+      // it never delays startup. The subscription above is already registered,
+      // so the post-probe connection state is delivered to the UI.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(printerService.initialize()),
+      );
       _subscriptions.add(
         syncService.stateStream.listen((state) {
           if (state.isSyncing && _lastInternetOnline == false) {
@@ -580,6 +642,9 @@ class PosAppController extends ChangeNotifier {
       // inventory, etc. — using outletId as the file scope keeps them
       // physically separated on disk.
       await database.initialize(tenantKey: serverConfig.outletId);
+      // Reclaim old synced sync_events (full JSON payloads kept indefinitely);
+      // fire-and-forget so it never delays startup.
+      unawaited(database.pruneSyncedEvents());
       _lastInternetOnline = await connectivityService.hasInternetAccess();
       await syncService.initialize(
         cloudConfig: cloudConfig,
@@ -594,8 +659,6 @@ class PosAppController extends ChangeNotifier {
         ..clear()
         ..addAll(orders.map((order) => order.id));
       _seedOrderAlertState();
-      _startAcceptedOrderAutoServeTimer();
-      unawaited(_autoServeExpiredAcceptedOrders());
       if (isCloudReady && cloudConfig.canSync) {
         _coalesceNextOrderAlertBatch = true;
         unawaited(syncService.syncNow());
@@ -629,11 +692,9 @@ class PosAppController extends ChangeNotifier {
     return DashboardMetrics(
       todayOrders: todaysOrders.length,
       pendingOrders: orders.where((order) => order.status.isOpen).length,
-      completedOrders: orders
-          .where((order) => order.status == OrderStatus.served)
-          .length,
+      completedOrders: orders.where((order) => order.status.isCompleted).length,
       totalSales: todaysOrders
-          .where((order) => order.status != OrderStatus.cancelled)
+          .where((order) => !order.status.isRejected)
           .fold<double>(0, (total, order) => total + order.total),
       sevenDaySales: _salesSince(sevenDayStart),
       thirtyDaySales: _salesSince(thirtyDayStart),
@@ -662,8 +723,7 @@ class PosAppController extends ChangeNotifier {
     return orders
         .where(
           (order) =>
-              !order.createdAt.isBefore(startAt) &&
-              order.status != OrderStatus.cancelled,
+              !order.createdAt.isBefore(startAt) && !order.status.isRejected,
         )
         .fold<double>(0, (total, order) => total + order.total);
   }
@@ -903,6 +963,33 @@ class PosAppController extends ChangeNotifier {
   int get lowStockCount =>
       inventoryItems.where((i) => i.isLowStock || i.isOutOfStock).length;
 
+  String _ordersDiagSummary(List<OrderModel> rows, {int sampleLimit = 5}) {
+    final raw = <String, int>{};
+    final admin = <String, int>{};
+    for (final order in rows) {
+      raw[order.status.name] = (raw[order.status.name] ?? 0) + 1;
+      final adminStatus = order.status.adminStatus.name;
+      admin[adminStatus] = (admin[adminStatus] ?? 0) + 1;
+    }
+    String format(Map<String, int> counts) {
+      final keys = counts.keys.toList()..sort();
+      return '{${keys.map((k) => '$k:${counts[k]}').join(', ')}}';
+    }
+
+    final sample = rows
+        .take(sampleLimit)
+        .map((order) {
+          return '${order.id}#${order.sequenceNo}:'
+              '${order.status.name}/${order.status.adminStatus.name} '
+              '${order.source.name}/${order.serviceType?.name ?? 'none'} '
+              '৳${order.total.toStringAsFixed(0)} '
+              'c=${order.createdAt.toIso8601String()} '
+              'u=${order.updatedAt.toIso8601String()}';
+        })
+        .join(' | ');
+    return 'raw=${format(raw)} admin=${format(admin)} sample=$sample';
+  }
+
   List<String> get inventoryCategories {
     final cats =
         inventoryItems
@@ -919,6 +1006,23 @@ class PosAppController extends ChangeNotifier {
     final loadedOrders = await database.getOrders(limit: kOrdersInitialPage);
     orders = loadedOrders;
     _hasMoreOrders = loadedOrders.length >= kOrdersInitialPage;
+    if (kDebugMode) {
+      final open = loadedOrders.where((o) => o.status.isOpen).length;
+      final pending = loadedOrders
+          .where((o) => o.status.adminStatus == OrderStatus.pending)
+          .length;
+      final accepted = loadedOrders
+          .where((o) => o.status.adminStatus == OrderStatus.accepted)
+          .length;
+      final completed = loadedOrders.where((o) => o.status.isCompleted).length;
+      final rejected = loadedOrders.where((o) => o.status.isRejected).length;
+      debugPrint(
+        '[QB-ORDERS-DIAG] reloadData loaded=${loadedOrders.length} '
+        'open=$open pending=$pending acceptedAdmin=$accepted '
+        'completed=$completed rejected=$rejected hasMore=$_hasMoreOrders '
+        '${_ordersDiagSummary(loadedOrders)}',
+      );
+    }
     syncEvents = await database.getSyncEvents(statuses: null, limit: 100);
     inventoryItems = await database.getInventoryItems();
     inventorySuppliers = await database.getInventorySuppliers();
@@ -1057,6 +1161,104 @@ class PosAppController extends ChangeNotifier {
     return cloudApiService.scanInventoryReceipt(pages);
   }
 
+  Future<List<AuditEntry>> fetchAuditEvents({int days = 30}) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchPosAuditEvents(days: days);
+  }
+
+  Future<List<ChatThread>> fetchChats() {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchChats();
+  }
+
+  Future<Map<String, Object?>> fetchAnalytics({
+    String range = 'today',
+    String? start,
+    String? end,
+    String channel = 'all',
+    String daypart = 'all',
+  }) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchAnalytics(
+      range: range,
+      start: start,
+      end: end,
+      channel: channel,
+      daypart: daypart,
+    );
+  }
+
+  Future<Map<String, Object?>> fetchSalesTable({
+    String range = 'today',
+    String? start,
+    String? end,
+    String channel = 'all',
+  }) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchSalesTable(
+      range: range,
+      start: start,
+      end: end,
+      channel: channel,
+    );
+  }
+
+  Future<ChatThread> replyToChat(String conversationId, String text) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.replyToChat(conversationId, text);
+  }
+
+  Future<ChatThread> handBackChat(String conversationId) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.handBackChat(conversationId);
+  }
+
+  Future<List<StaffMember>> fetchStaff() {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchStaff();
+  }
+
+  Future<void> inviteStaff({
+    String? phone,
+    String? email,
+    String? displayName,
+    String role = 'waiter',
+  }) async {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      throw CloudApiException('Cloud sync not configured.');
+    }
+    await cloudApiService.addStaffAccount(
+      phone: phone,
+      email: email,
+      displayName: displayName,
+      role: role,
+    );
+  }
+
+  Future<void> setStaffActive(String staffId, bool isActive) async {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      throw CloudApiException('Cloud sync not configured.');
+    }
+    await cloudApiService.updateStaffAccount(
+      staffId: staffId,
+      isActive: isActive,
+    );
+  }
+
   void _scheduleDatabaseChanged() {
     _databaseChangeDebounce?.cancel();
     _databaseChangeDebounce = Timer(
@@ -1075,7 +1277,7 @@ class PosAppController extends ChangeNotifier {
       if (status == OrderStatus.pending) {
         _alertedPendingOrderIds.add(order.id);
       }
-      if (status == OrderStatus.accepted || status == OrderStatus.served) {
+      if (status == OrderStatus.accepted || status == OrderStatus.completed) {
         _alertedAcceptedOrderIds.add(order.id);
       }
       if (printerService.hasPrintedOrder(order.id)) {
@@ -1098,6 +1300,29 @@ class PosAppController extends ChangeNotifier {
           for (final order in orders) order.id: order.status.adminStatus,
         };
         await reloadData();
+        if (kDebugMode) {
+          final added = orders
+              .map((o) => o.id)
+              .where((id) => !previousOrderIds.contains(id))
+              .toList();
+          final removed = previousOrderIds
+              .where((id) => orders.every((o) => o.id != id))
+              .toList();
+          final statusChanges = <String>[];
+          for (final order in orders) {
+            final previous = previousStatusById[order.id];
+            final next = order.status.adminStatus;
+            if (previous != null && previous != next) {
+              statusChanges.add('${order.id}:${previous.name}->${next.name}');
+            }
+          }
+          debugPrint(
+            '[QB-ORDERS-DIAG] dbChanged prev=${previousOrderIds.length} '
+            'now=${orders.length} added=$added removed=$removed '
+            'statusChanges=$statusChanges notifyListenersAlreadyFired=true '
+            '${_ordersDiagSummary(orders)}',
+          );
+        }
         _knownOrderIds
           ..clear()
           ..addAll(orders.map((order) => order.id));
@@ -1105,7 +1330,6 @@ class PosAppController extends ChangeNotifier {
           previousOrderIds: previousOrderIds,
           previousStatusById: previousStatusById,
         );
-        unawaited(_autoServeExpiredAcceptedOrders());
       } while (_databaseChangePending);
     } finally {
       _handlingDatabaseChange = false;
@@ -1358,7 +1582,7 @@ class PosAppController extends ChangeNotifier {
       );
       accountEmail = email.trim();
       accountUsername = username.trim();
-      accountRole = AccountRole.manager;
+      accountRole = AccountRole.owner;
       accountDisplayName = username.trim();
       _accountPassword = password;
       if (cloudConfig.canSync) {
@@ -1367,7 +1591,7 @@ class PosAppController extends ChangeNotifier {
           email: accountEmail,
           username: accountUsername,
           password: password,
-          role: AccountRole.manager,
+          role: AccountRole.owner,
           displayName: accountDisplayName,
         );
         await _loginCloudAccount(
@@ -2059,6 +2283,10 @@ class PosAppController extends ChangeNotifier {
   void _handleRemoteSyncEvent(Map<String, Object?> event) {
     final type = event['type']?.toString() ?? '';
     final data = event['data'];
+    if (type == 'chat_updated') {
+      _chatEventController.add(event);
+      return;
+    }
     if (type == 'admin_blocking_notice_changed' && data is Map) {
       unawaited(
         _applyAdminBlockingNotice(
@@ -2130,6 +2358,14 @@ class PosAppController extends ChangeNotifier {
       _checkingAdminBlockingNotice = false;
       adminBlockingNoticeRefreshing = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> respondToBlockingNotice(String response) async {
+    try {
+      await cloudApiService.respondToBlockingNotice(response);
+    } catch (e) {
+      debugPrint('[QB-BLOCKING-NOTICE] respond failed: $e');
     }
   }
 
@@ -2384,7 +2620,8 @@ class PosAppController extends ChangeNotifier {
       );
     }
     isLoggedIn = true;
-    accountRole = AccountRole.manager;
+    // A local-only (no-cloud) account is always the tenant creator → owner.
+    accountRole = AccountRole.owner;
     await _persistAccountAuth();
   }
 
@@ -3043,9 +3280,29 @@ class PosAppController extends ChangeNotifier {
       amount: amount,
       paymentMethod: paymentMethod,
     );
-    if (action == 'void' && order.status != OrderStatus.served) {
-      await database.updateOrderStatus(order.id, OrderStatus.cancelled);
+    if (action == 'void' && !order.status.isCompleted) {
+      await database.updateOrderStatus(order.id, OrderStatus.rejected);
     }
+    unawaited(syncService.syncNow());
+  }
+
+  Future<void> auditOrderAction({
+    required String orderId,
+    required String action,
+    required String reason,
+    String? shiftId,
+    double? amount,
+    String? paymentMethod,
+  }) async {
+    if (!isManager) throw Exception('Only managers can perform this action.');
+    await database.queueDesktopAudit(
+      orderId: orderId,
+      action: action,
+      reason: reason,
+      shiftId: shiftId,
+      amount: amount,
+      paymentMethod: paymentMethod,
+    );
     unawaited(syncService.syncNow());
   }
 
@@ -3053,35 +3310,6 @@ class PosAppController extends ChangeNotifier {
     await database.updateOrderStatus(id, status);
     // Auto-print runs from [_processOrderAlerts] on database change — no second call here.
     unawaited(syncService.syncNow());
-  }
-
-  void _startAcceptedOrderAutoServeTimer() {
-    _autoServeAcceptedOrdersTimer?.cancel();
-    _autoServeAcceptedOrdersTimer = Timer.periodic(
-      const Duration(minutes: 1),
-      (_) => unawaited(_autoServeExpiredAcceptedOrders()),
-    );
-  }
-
-  Future<void> _autoServeExpiredAcceptedOrders() async {
-    if (_autoServingAcceptedOrders) return;
-    _autoServingAcceptedOrders = true;
-    try {
-      final cutoff = DateTime.now().subtract(kAcceptedOrderAutoServeAfter);
-      final due = await database.getAcceptedOrdersOlderThan(cutoff);
-      if (due.isEmpty) return;
-      for (final order in due) {
-        await database.updateOrderStatus(order.id, OrderStatus.served);
-      }
-      debugPrint('[QB-ORDERS] auto-served ${due.length} accepted order(s)');
-      unawaited(syncService.syncNow());
-    } catch (error, stack) {
-      debugPrint(
-        '[QB-ORDERS] auto-serve accepted orders failed: $error\n$stack',
-      );
-    } finally {
-      _autoServingAcceptedOrders = false;
-    }
   }
 
   Future<void> updateOrderDetails(
@@ -3111,7 +3339,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> deleteOrder(String id) async {
-    await database.updateOrderStatus(id, OrderStatus.cancelled);
+    await database.updateOrderStatus(id, OrderStatus.rejected);
     unawaited(syncService.syncNow());
   }
 
@@ -3487,7 +3715,7 @@ class PosAppController extends ChangeNotifier {
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
-      await updateOrderStatus(order.id, OrderStatus.served);
+      await updateOrderStatus(order.id, OrderStatus.completed);
     }
     if (orderPrinterSideEffectsEnabled &&
         !_alertedPrintOrderIds.contains('${order.id}:invoice')) {
@@ -3660,6 +3888,14 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+  Future<void> setCounterModeEnabled(bool value) async {
+    if (counterModeEnabled == value) return;
+    counterModeEnabled = value;
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_counterModeEnabledKey, value);
+  }
+
   Future<void> setNotificationSoundPath(String path) async {
     var stored = path.trim();
     if (stored.isNotEmpty && !stored.startsWith('content://')) {
@@ -3815,12 +4051,10 @@ class PosAppController extends ChangeNotifier {
       'Printer is not connected.',
       'Select a Bluetooth printer first.',
       'Connect a USB printer or select a Bluetooth printer first.',
-      'Use a built-in printer, connect a USB printer, or select a Bluetooth printer first.',
       'Bluetooth permission is required.',
       'Printer permission is required.',
       'Bluetooth is not ready.',
       'USB printer is not ready.',
-      'Built-in printer is not ready.',
     };
     return known.contains(message.trim());
   }
@@ -3861,7 +4095,7 @@ class PosAppController extends ChangeNotifier {
   void _markAcceptedOrdersPrintAlerted() {
     for (final order in orders) {
       final status = order.status.adminStatus;
-      if (status == OrderStatus.accepted || status == OrderStatus.served) {
+      if (status == OrderStatus.accepted) {
         _alertedPrintOrderIds.add(order.id);
         _autoPrintGiveUpOrderIds.add(order.id);
       }
@@ -3906,10 +4140,9 @@ class PosAppController extends ChangeNotifier {
         }
       }
 
-      final isAcceptedNow =
-          status == OrderStatus.accepted || status == OrderStatus.served;
+      final isAcceptedNow = status == OrderStatus.accepted;
       // [_alertedAcceptedOrderIds] is seeded at startup with every order that
-      // was already accepted/served, and is also added-to whenever we fire an
+      // was already accepted, and is also added-to whenever we fire an
       // "order accepted" alert. So treating membership as "we've already
       // handled this acceptance" gives us a single dedup signal that survives
       // both app restarts (via the seed) and intra-session reloads (via the
@@ -3920,9 +4153,7 @@ class PosAppController extends ChangeNotifier {
         final becameAccepted =
             !wasKnown ||
             previousStatus == OrderStatus.pending ||
-            (previousStatus != null &&
-                previousStatus != OrderStatus.accepted &&
-                previousStatus != OrderStatus.served);
+            (previousStatus != null && previousStatus != OrderStatus.accepted);
         if (becameAccepted && !alreadyHandled) {
           _alertedAcceptedOrderIds.add(id);
           orderNotifications.add(
@@ -3940,7 +4171,7 @@ class PosAppController extends ChangeNotifier {
       }
 
       // Auto-print only when this acceptance is new — i.e. the order was not
-      // in accepted/served status at startup, and we haven't already fired an
+      // in accepted status at startup, and we haven't already fired an
       // alert for this acceptance during this session. That excludes:
       //   - historical orders that were already accepted when the app opened,
       //   - reloads / debounced re-runs of the same accepted order.
@@ -4035,8 +4266,7 @@ class PosAppController extends ChangeNotifier {
     if (!isManager) return;
     if (_autoPrintInfrastructureBlocked != null) return;
     final status = order.status.adminStatus;
-    final isAccepted =
-        status == OrderStatus.accepted || status == OrderStatus.served;
+    final isAccepted = status == OrderStatus.accepted;
     if (isAccepted &&
         printerState.autoPrintEnabled &&
         !printerState.hasSelectedPrinter) {
@@ -4065,7 +4295,24 @@ class PosAppController extends ChangeNotifier {
     // Common case: no filter — return the underlying list reference so
     // identity stays stable across rebuilds and downstream memoization can
     // skip work when [orders] has not changed.
-    if (status == null && source == null) return orders;
+    if (status == null && source == null) {
+      if (kDebugMode) {
+        final identity = identityHashCode(orders);
+        final signature =
+            '$identity/${orders.length}/${orders.map((o) => '${o.id}:${o.status.name}:${o.updatedAt.microsecondsSinceEpoch}').join('|')}';
+        if (_lastOrdersForIdentityHash != identity ||
+            _lastOrdersForDiagSignature != signature) {
+          _lastOrdersForIdentityHash = identity;
+          _lastOrdersForDiagSignature = signature;
+          debugPrint(
+            '[QB-ORDERS-DIAG] controller ordersFor unfiltered '
+            'identity=$identity count=${orders.length} '
+            '${_ordersDiagSummary(orders)}',
+          );
+        }
+      }
+      return orders;
+    }
     return orders
         .where((order) {
           final matchesStatus =
@@ -4080,7 +4327,6 @@ class PosAppController extends ChangeNotifier {
   void dispose() {
     _databaseChangeDebounce?.cancel();
     _adminBlockingNoticePollTimer?.cancel();
-    _autoServeAcceptedOrdersTimer?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -4093,6 +4339,7 @@ class PosAppController extends ChangeNotifier {
     }
     appUpdateInstaller.close();
     cloudApiService.close();
+    unawaited(_chatEventController.close());
     unawaited(database.close());
     super.dispose();
   }
@@ -4317,6 +4564,7 @@ class PosAppController extends ChangeNotifier {
   static final String _businessTierKey = 'local_pos_business_tier';
   static final String _quickSellMenuItemIdsKey =
       'local_pos_quick_sell_menu_item_ids';
+  static final String _counterModeEnabledKey = 'local_pos_counter_mode_enabled';
   static final String _languageKey = 'local_pos_language';
   static final String _languagePreferenceSetKey =
       'local_pos_language_preference_set';

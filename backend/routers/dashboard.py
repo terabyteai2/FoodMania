@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ BDT_OFFSET = timedelta(hours=6)
 LATE_ORDER_MIN = 20
 OPEN_STATUSES = {"pending", "accepted", "preparing", "ready"}
 KITCHEN_STATUSES = {"accepted", "preparing"}
+REJECTED_STATUSES = {"cancelled", "rejected"}
 
 # Review tab revenue-by-hour chart axis: 15 hourly buckets covering 9:00–23:00
 # (a restaurant service day). Orders outside the window fold into the nearest end.
@@ -27,6 +28,10 @@ REVIEW_START_HOUR = 9
 REVIEW_BUCKETS = 15
 # Food-cost % above this flags an item as low-margin ("margin kom") in the UI.
 HIGH_FOOD_COST_PCT = 38.0
+
+
+def _is_rejected_status(value: str | None) -> bool:
+    return (value or "").strip().lower() in REJECTED_STATUSES
 
 
 def _bdt_day_bounds(reference: datetime) -> tuple[datetime, datetime]:
@@ -156,7 +161,7 @@ def _revenue_by_hour(today_orders: list[Order], week_orders: list[Order]) -> dic
     for order in today_orders:
         today[_hour_bucket(_bdt_local(order.created_at))] += float(order.total_amount or 0)
     for order in week_orders:
-        if order.status == "cancelled":
+        if _is_rejected_status(order.status):
             continue
         week[_hour_bucket(_bdt_local(order.created_at))] += float(order.total_amount or 0)
     today = [round(v, 2) for v in today]
@@ -403,7 +408,7 @@ async def _build_fleet(
     rev_yesterday: dict[str, float] = defaultdict(float)
     covers_by_outlet: dict[str, int] = defaultdict(int)
     for order in week_orders:
-        if order.status == "cancelled":
+        if _is_rejected_status(order.status):
             continue
         if today_start <= order.created_at < today_end:
             today_by_outlet[order.outlet_id].append(order)
@@ -417,7 +422,7 @@ async def _build_fleet(
     seated_by_outlet: dict[str, set[str]] = defaultdict(set)
     open_by_outlet: dict[str, list[Order]] = defaultdict(list)
     for order in open_orders:
-        if order.status == "cancelled":
+        if _is_rejected_status(order.status):
             continue
         table = _table_no(order)
         if table:
@@ -503,7 +508,7 @@ async def _build_fleet(
         sum(
             float(order.total_amount or 0)
             for order in week_orders
-            if order.status != "cancelled" and order.created_at < today_start
+            if not _is_rejected_status(order.status) and order.created_at < today_start
         )
         / 7.0,
         2,
@@ -629,7 +634,7 @@ async def dashboard_summary(
     daily_totals: dict[str, float] = defaultdict(float)
     daily_counts: dict[str, int] = defaultdict(int)
     for order in week_orders:
-        if order.status == "cancelled":
+        if _is_rejected_status(order.status):
             continue
         local_day = (order.created_at.astimezone(timezone.utc) + BDT_OFFSET).date().isoformat()
         daily_totals[local_day] += float(order.total_amount or 0)
@@ -656,7 +661,8 @@ async def dashboard_summary(
 
     today_orders = [
         order for order in week_orders
-        if today_start <= order.created_at < today_end and order.status != "cancelled"
+        if today_start <= order.created_at < today_end
+        and not _is_rejected_status(order.status)
     ]
     order_count_today = len(today_orders)
     avg_ticket = _safe_div(earned_today, float(order_count_today))
@@ -668,7 +674,9 @@ async def dashboard_summary(
     )
     profit_pct = round(_safe_div(earned_today - today_cost, earned_today) * 100.0, 1)
 
-    open_orders_count = len([o for o in open_orders_query if o.status != "cancelled"])
+    open_orders_count = len(
+        [o for o in open_orders_query if not _is_rejected_status(o.status)]
+    )
 
     # Top movers — aggregate today's line items by menuItemId
     mover_qty: dict[str, int] = defaultdict(int)
@@ -736,7 +744,7 @@ async def dashboard_summary(
     late_threshold = now - timedelta(minutes=LATE_ORDER_MIN)
     needs_attention: list[dict[str, Any]] = []
     for order in open_orders_query:
-        if order.status == "cancelled":
+        if _is_rejected_status(order.status):
             continue
         table = _table_no(order)
         if table:
@@ -849,3 +857,584 @@ async def dashboard_summary(
             "review": review,
         }
     )
+
+
+# ── Owner analytics (spec §4.8) ───────────────────────────────────────────────
+# Real, range/channel/daypart-scoped analytics that replaces the old mock data
+# in the Flutter analytics screen. Advanced blocks (forecast/cohort/discounts/
+# wastage) are null-graceful: when their underlying data doesn't exist they
+# return null and the UI hides the card (never zero-fills).
+
+ANALYTICS_LOOKBACK_DAYS = 90  # cohort/LTV window over online channels
+
+_MESSENGER_SOURCES = {"facebook_messenger", "facebook", "messenger", "fb_messenger"}
+_WEBSITE_SOURCES = {
+    "customer_web", "online", "web", "cloud_customer", "web_cloud", "customer_cloud",
+}
+_ONLINE_CHANNELS = {"website", "messenger"}
+
+_CHANNEL_LABELS = {
+    "website": "Website",
+    "messenger": "Messenger",
+    "counter": "Counter",
+    "pos": "POS",
+}
+
+_SERVICE_LABELS = {
+    "dineIn": "Dine-in",
+    "takeaway": "Takeaway",
+    "delivery": "Delivery",
+}
+
+# (key, label, time-window label) for the daypart breakdown.
+_DAYPART_META = [
+    ("lunch", "Lunch", "11–4 PM"),
+    ("dinner", "Dinner", "6–10 PM"),
+    ("late", "Late", "10–12 AM"),
+]
+
+_WEEKDAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _channel_key(source: str | None) -> str:
+    raw = (source or "").strip().lower()
+    if raw in _MESSENGER_SOURCES:
+        return "messenger"
+    if raw in _WEBSITE_SOURCES:
+        return "website"
+    if raw == "desktop_pos":
+        return "counter"
+    return "pos"
+
+
+def _daypart_key(hour: int) -> str:
+    if 11 <= hour < 16:
+        return "lunch"
+    if 18 <= hour < 22:
+        return "dinner"
+    if hour >= 22 or hour < 2:
+        return "late"
+    return "other"
+
+
+def _analytics_period(
+    range_key: str, start: str | None, end: str | None, now: datetime
+) -> tuple[datetime, datetime, datetime, datetime]:
+    """(cur_start, cur_end, prev_start, prev_end) UTC bounds for a range key."""
+    today_start, today_end = _bdt_day_bounds(now)
+    key = (range_key or "today").strip().lower()
+    if key == "week":
+        cur_start, cur_end = today_start - timedelta(days=6), today_end
+    elif key == "month":
+        cur_start, cur_end = today_start - timedelta(days=29), today_end
+    elif key == "custom":
+        cur_start = _parse_as_of(start) if start else today_start
+        cur_end = _parse_as_of(end) if end else today_end
+        if cur_end <= cur_start:
+            cur_end = cur_start + timedelta(days=1)
+    else:  # "today" / unknown
+        cur_start, cur_end = today_start, today_end
+    span = cur_end - cur_start
+    return cur_start, cur_end, cur_start - span, cur_start
+
+
+def _matches_filters(order: Order, channel: str, daypart: str) -> bool:
+    if channel and channel != "all" and _channel_key(order.source) != channel:
+        return False
+    if daypart and daypart != "all":
+        if _daypart_key(_bdt_local(order.created_at).hour) != daypart:
+            return False
+    return True
+
+
+@router.get("/outlets/{outlet_id}/analytics")
+async def analytics(
+    outlet_id: str,
+    range_: str = Query("today", alias="range"),
+    start: str | None = None,
+    end: str | None = None,
+    channel: str = "all",
+    daypart: str = "all",
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    now = datetime.now(timezone.utc)
+    today_start, today_end = _bdt_day_bounds(now)
+    cur_start, cur_end, prev_start, prev_end = _analytics_period(range_, start, end, now)
+
+    outlet = (
+        await db.execute(select(Outlet).where(Outlet.id == outlet_id))
+    ).scalar_one_or_none()
+    if outlet is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
+
+    async def _load(a: datetime, b: datetime) -> list[Order]:
+        rows = (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= a)
+                .where(Order.created_at < b)
+            )
+        ).scalars().all()
+        return [
+            o for o in rows
+            if not _is_rejected_status(o.status)
+            and _matches_filters(o, channel, daypart)
+        ]
+
+    cur_orders = await _load(cur_start, cur_end)
+    prev_orders = await _load(prev_start, prev_end)
+
+    revenue = sum(float(o.total_amount or 0) for o in cur_orders)
+    prev_revenue = sum(float(o.total_amount or 0) for o in prev_orders)
+    order_count = len(cur_orders)
+    aov = _safe_div(revenue, float(order_count))
+
+    # Menu lookup across both periods (for margins, categories, growth).
+    cur_qty, cur_sales, cur_name = _aggregate_items(cur_orders)
+    prev_qty, prev_sales, _prev_name = _aggregate_items(prev_orders)
+    all_ids = set(cur_qty) | set(prev_qty)
+    menu_lookup: dict[str, MenuItem] = {}
+    if all_ids:
+        menu_rows = (
+            await db.execute(
+                select(MenuItem)
+                .where(MenuItem.outlet_id == outlet_id)
+                .where(MenuItem.id.in_(list(all_ids)))
+            )
+        ).scalars().all()
+        menu_lookup = {row.id: row for row in menu_rows}
+
+    items_sold, overall_food_cost = _items_sold(
+        cur_qty, cur_sales, cur_name, menu_lookup, limit=500
+    )
+    gross_margin = (
+        round(1 - (overall_food_cost / 100.0), 4) if overall_food_cost is not None else None
+    )
+
+    # Product performance — sales, margin, growth vs previous period.
+    products: list[dict[str, Any]] = []
+    for it in items_sold:
+        mid = it["menuItemId"]
+        row = menu_lookup.get(mid)
+        fc = it["foodCostPct"]
+        products.append(
+            {
+                "menuItemId": mid,
+                "name": it["nameEn"] or "",
+                "category": (row.category if row and row.category else "") or "",
+                "qty": it["qty"],
+                "salesBdt": round(it["salesBdt"], 2),
+                "marginPct": round(100.0 - fc, 1) if fc is not None else None,
+                "growthPct": _delta_pct(it["salesBdt"], prev_sales.get(mid, 0.0)),
+            }
+        )
+
+    # Revenue by category rollup.
+    cat_sales: dict[str, float] = defaultdict(float)
+    cat_cost: dict[str, float] = defaultdict(float)
+    cat_cost_rev: dict[str, float] = defaultdict(float)
+    cat_prev: dict[str, float] = defaultdict(float)
+    for mid, s in cur_sales.items():
+        row = menu_lookup.get(mid)
+        cat = (row.category if row and row.category else None) or "Other"
+        cat_sales[cat] += s
+        if row and row.cost_price is not None and s > 0:
+            cat_cost[cat] += float(row.cost_price) * cur_qty.get(mid, 0)
+            cat_cost_rev[cat] += s
+    for mid, s in prev_sales.items():
+        row = menu_lookup.get(mid)
+        cat = (row.category if row and row.category else None) or "Other"
+        cat_prev[cat] += s
+    grand_cat = sum(cat_sales.values())
+    categories: list[dict[str, Any]] = []
+    for cat, s in sorted(cat_sales.items(), key=lambda kv: kv[1], reverse=True):
+        cm = cat_cost_rev.get(cat, 0.0)
+        margin_pct = round((1 - cat_cost[cat] / cm) * 100.0, 1) if cm > 0 else None
+        categories.append(
+            {
+                "name": cat,
+                "valueBdt": round(s, 2),
+                "share": round(_safe_div(s, grand_cat), 4),
+                "marginPct": margin_pct,
+                "growthPct": _delta_pct(s, cat_prev.get(cat, 0.0)),
+            }
+        )
+
+    # Channel donut.
+    ch_totals: dict[str, float] = defaultdict(float)
+    for o in cur_orders:
+        ch_totals[_channel_key(o.source)] += float(o.total_amount or 0)
+    grand_ch = sum(ch_totals.values())
+    channels = [
+        {
+            "key": k,
+            "label": _CHANNEL_LABELS.get(k, k.title()),
+            "valueBdt": round(v, 2),
+            "pct": round(_safe_div(v, grand_ch) * 100.0) if grand_ch > 0 else 0,
+        }
+        for k, v in sorted(ch_totals.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+
+    # Dayparts (share / orders / margin).
+    dp_sales: dict[str, float] = defaultdict(float)
+    dp_orders: dict[str, int] = defaultdict(int)
+    dp_cost: dict[str, float] = defaultdict(float)
+    dp_cost_rev: dict[str, float] = defaultdict(float)
+    for o in cur_orders:
+        k = _daypart_key(_bdt_local(o.created_at).hour)
+        dp_sales[k] += float(o.total_amount or 0)
+        dp_orders[k] += 1
+        for line in _line_items(o.items):
+            row = menu_lookup.get(str(line.get("menuItemId") or "").strip())
+            rev = _item_revenue(line)
+            if row and row.cost_price is not None and rev > 0:
+                dp_cost[k] += float(row.cost_price) * _item_qty(line)
+                dp_cost_rev[k] += rev
+    grand_dp = sum(dp_sales.values())
+    dayparts = []
+    for k, label, window in _DAYPART_META:
+        s = dp_sales.get(k, 0.0)
+        cm = dp_cost_rev.get(k, 0.0)
+        dayparts.append(
+            {
+                "key": k,
+                "name": label,
+                "time": window,
+                "share": round(_safe_div(s, grand_dp), 4),
+                "orders": dp_orders.get(k, 0),
+                "marginPct": round((1 - dp_cost[k] / cm) * 100.0, 1) if cm > 0 else None,
+            }
+        )
+
+    # 7-day trend + peak hours (filtered the same way, for context).
+    trend_start = today_start - timedelta(days=13)
+    trend_rows = (
+        await db.execute(
+            select(Order)
+            .where(Order.outlet_id == outlet_id)
+            .where(Order.created_at >= trend_start)
+            .where(Order.created_at < today_end)
+        )
+    ).scalars().all()
+    trend_orders = [
+        o for o in trend_rows
+        if not _is_rejected_status(o.status)
+        and _matches_filters(o, channel, daypart)
+    ]
+    daily: dict[str, float] = defaultdict(float)
+    for o in trend_orders:
+        day = (o.created_at.astimezone(timezone.utc) + BDT_OFFSET).date().isoformat()
+        daily[day] += float(o.total_amount or 0)
+    sales_trend: list[float] = []
+    prev_trend: list[float] = []
+    trend_labels: list[str] = []
+    for i in range(7):
+        day = today_start - timedelta(days=6 - i)
+        prev_day = today_start - timedelta(days=13 - i)
+        key = (day + BDT_OFFSET).date().isoformat()
+        prev_key = (prev_day + BDT_OFFSET).date().isoformat()
+        sales_trend.append(round(daily.get(key, 0.0) / 1000.0, 2))
+        prev_trend.append(round(daily.get(prev_key, 0.0) / 1000.0, 2))
+        trend_labels.append(_WEEKDAY_ABBR[(day + BDT_OFFSET).weekday()])
+    today_orders = [o for o in trend_orders if today_start <= o.created_at < today_end]
+    peak_hours = _revenue_by_hour(today_orders, trend_orders)["today"]
+
+    advanced = {
+        "forecast": _analytics_forecast(revenue, cur_start, cur_end, now, outlet),
+        "cohort": await _analytics_cohort(db, outlet_id, cur_start, now, cur_orders),
+        "discounts": _analytics_discounts(cur_orders, revenue, order_count),
+        "wastage": await _analytics_wastage(db, outlet_id, cur_start, cur_end),
+    }
+
+    return ok(
+        {
+            "range": (range_ or "today").strip().lower(),
+            "channel": channel,
+            "daypart": daypart,
+            "periodStart": cur_start.isoformat(),
+            "periodEnd": cur_end.isoformat(),
+            "revenue": round(revenue),
+            "prevRevenue": round(prev_revenue),
+            "orders": order_count,
+            "aov": round(aov),
+            "margin": gross_margin,
+            "salesTrend": sales_trend,
+            "prevSalesTrend": prev_trend,
+            "trendLabels": trend_labels,
+            "peakHours": peak_hours,
+            "channels": channels,
+            "payments": _by_source(cur_orders),
+            "products": products,
+            "categories": categories,
+            "dayparts": dayparts,
+            "advanced": advanced,
+        }
+    )
+
+
+def _sales_table_rows(
+    orders: list[Order], menu_lookup: dict[str, MenuItem]
+) -> list[dict[str, Any]]:
+    """Per (item × service × channel) sales rows for the owner sales table.
+
+    A group keys on a single menu item, so cost_price is uniform within it:
+    costBdt is None when that item has no cost_price, so the UI renders margin
+    and profit as "—" instead of a fabricated 0.
+    """
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    order_seen: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    for order in orders:
+        service_key = _service_key(order.service_type)
+        channel_key = _channel_key(order.source)
+        for line in _line_items(order.items):
+            menu_item_id = str(line.get("menuItemId") or "").strip()
+            if not menu_item_id:
+                continue
+            key = (menu_item_id, service_key, channel_key)
+            row = groups.get(key)
+            if row is None:
+                menu_row = menu_lookup.get(menu_item_id)
+                cost_price = (
+                    float(menu_row.cost_price)
+                    if (menu_row and menu_row.cost_price is not None)
+                    else None
+                )
+                row = {
+                    "menuItemId": menu_item_id,
+                    "name": (menu_row.name_en if menu_row and menu_row.name_en else None)
+                    or str(line.get("name") or "").strip(),
+                    "category": (menu_row.category if menu_row and menu_row.category else "")
+                    or "",
+                    "serviceKey": service_key,
+                    "service": _SERVICE_LABELS.get(service_key, "Dine-in"),
+                    "channelKey": channel_key,
+                    "channel": _CHANNEL_LABELS.get(channel_key, channel_key.title()),
+                    "units": 0,
+                    "salesBdt": 0.0,
+                    "_cost": 0.0,
+                    "_cost_price": cost_price,
+                }
+                groups[key] = row
+            qty = _item_qty(line)
+            row["units"] += qty
+            row["salesBdt"] += _item_revenue(line)
+            if row["_cost_price"] is not None:
+                row["_cost"] += row["_cost_price"] * qty
+            order_seen[key].add(order.id)
+
+    rows: list[dict[str, Any]] = []
+    for key, row in groups.items():
+        cost_known = row["_cost_price"] is not None
+        rows.append(
+            {
+                "id": ":".join(key),
+                "menuItemId": row["menuItemId"],
+                "name": row["name"],
+                "category": row["category"],
+                "service": row["service"],
+                "serviceKey": row["serviceKey"],
+                "channel": row["channel"],
+                "channelKey": row["channelKey"],
+                "units": row["units"],
+                "orders": len(order_seen[key]),
+                "salesBdt": round(row["salesBdt"], 2),
+                "costBdt": round(row["_cost"], 2) if cost_known else None,
+            }
+        )
+    rows.sort(key=lambda r: r["salesBdt"], reverse=True)
+    return rows
+
+
+@router.get("/outlets/{outlet_id}/analytics/sales-table")
+async def sales_table(
+    outlet_id: str,
+    range_: str = Query("today", alias="range"),
+    start: str | None = None,
+    end: str | None = None,
+    channel: str = "all",
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    now = datetime.now(timezone.utc)
+    cur_start, cur_end, _prev_start, _prev_end = _analytics_period(range_, start, end, now)
+
+    rows = (
+        await db.execute(
+            select(Order)
+            .where(Order.outlet_id == outlet_id)
+            .where(Order.created_at >= cur_start)
+            .where(Order.created_at < cur_end)
+        )
+    ).scalars().all()
+    orders = [
+        o
+        for o in rows
+        if not _is_rejected_status(o.status) and _matches_filters(o, channel, "all")
+    ]
+
+    ids = {
+        str(line.get("menuItemId") or "").strip()
+        for o in orders
+        for line in _line_items(o.items)
+        if str(line.get("menuItemId") or "").strip()
+    }
+    menu_lookup: dict[str, MenuItem] = {}
+    if ids:
+        menu_rows = (
+            await db.execute(
+                select(MenuItem)
+                .where(MenuItem.outlet_id == outlet_id)
+                .where(MenuItem.id.in_(list(ids)))
+            )
+        ).scalars().all()
+        menu_lookup = {row.id: row for row in menu_rows}
+
+    return ok(
+        {
+            "range": (range_ or "today").strip().lower(),
+            "channel": channel,
+            "periodStart": cur_start.isoformat(),
+            "periodEnd": cur_end.isoformat(),
+            "rows": _sales_table_rows(orders, menu_lookup),
+        }
+    )
+
+
+def _analytics_forecast(
+    revenue: float, cur_start: datetime, cur_end: datetime, now: datetime, outlet: Outlet
+) -> dict[str, Any] | None:
+    if revenue <= 0:
+        return None
+    span = (cur_end - cur_start).total_seconds()
+    elapsed = max(0.0, min(span, (now - cur_start).total_seconds()))
+    frac = elapsed / span if span > 0 else 1.0
+    projected = revenue / frac if frac > 0 else revenue
+    target: float | None = None
+    if outlet.pos_daily_sales_target is not None:
+        days = max(1, round(span / 86400.0))
+        target = float(outlet.pos_daily_sales_target) * days
+    pace = round(projected / target, 2) if (target and target > 0) else None
+    return {
+        "projected": round(projected),
+        "target": round(target) if target is not None else None,
+        "pace": pace,
+    }
+
+
+async def _analytics_cohort(
+    db: AsyncSession,
+    outlet_id: str,
+    cur_start: datetime,
+    now: datetime,
+    cur_orders: list[Order],
+) -> dict[str, Any] | None:
+    """Repeat-rate / LTV from ONLINE channels only (messenger + website).
+    FOH walk-ins never contribute. Returns null when there's no online history."""
+    lookback_start = now - timedelta(days=ANALYTICS_LOOKBACK_DAYS)
+    rows = (
+        await db.execute(
+            select(Order)
+            .where(Order.outlet_id == outlet_id)
+            .where(Order.created_at >= lookback_start)
+            .where(Order.created_at < now)
+        )
+    ).scalars().all()
+    online = [
+        o for o in rows
+        if not _is_rejected_status(o.status)
+        and _channel_key(o.source) in _ONLINE_CHANNELS
+    ]
+    by_cust: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"orders": 0, "spend": 0.0, "first": None}
+    )
+    for o in sorted(online, key=lambda x: x.created_at):
+        key = (o.mobile_number or "").strip() or (o.customer_name or "").strip()
+        if not key:
+            continue
+        e = by_cust[key]
+        e["orders"] += 1
+        e["spend"] += float(o.total_amount or 0)
+        if e["first"] is None:
+            e["first"] = o.created_at
+    if not by_cust:
+        return None
+    total = len(by_cust)
+    repeat = sum(1 for c in by_cust.values() if c["orders"] > 1) / total
+    ltv = sum(c["spend"] for c in by_cust.values()) / total
+    freq = sum(c["orders"] for c in by_cust.values()) / total
+    new_c = ret_c = 0
+    for o in cur_orders:
+        if _channel_key(o.source) not in _ONLINE_CHANNELS:
+            continue
+        key = (o.mobile_number or "").strip() or (o.customer_name or "").strip()
+        if not key:
+            continue
+        first = by_cust.get(key, {}).get("first")
+        if first is not None and first >= cur_start:
+            new_c += 1
+        else:
+            ret_c += 1
+    nr = new_c + ret_c
+    return {
+        "repeat": round(repeat, 2),
+        "ltv": round(ltv),
+        "newPct": round(_safe_div(new_c, nr) * 100.0) if nr else 0,
+        "returnPct": round(_safe_div(ret_c, nr) * 100.0) if nr else 0,
+        "freq": round(freq, 1),
+    }
+
+
+def _analytics_discounts(
+    cur_orders: list[Order], revenue: float, order_count: int
+) -> dict[str, Any] | None:
+    given = sum(float(o.discount_amount or 0) for o in cur_orders)
+    if given <= 0:
+        return None
+    discounted = sum(1 for o in cur_orders if float(o.discount_amount or 0) > 0)
+    gross = revenue + given
+    return {
+        "given": round(given),
+        "orders": round(_safe_div(discounted, order_count), 2) if order_count else 0,
+        "marginHit": round(_safe_div(given, gross), 3) if gross > 0 else 0,
+    }
+
+
+async def _analytics_wastage(
+    db: AsyncSession, outlet_id: str, cur_start: datetime, cur_end: datetime
+) -> dict[str, Any] | None:
+    """Opt-in: from StockAdjustment type='waste'. Null when no wastage logged."""
+    waste_rows = (
+        await db.execute(
+            select(StockAdjustment)
+            .where(StockAdjustment.outlet_id == outlet_id)
+            .where(StockAdjustment.type == "waste")
+            .where(StockAdjustment.created_at >= cur_start)
+            .where(StockAdjustment.created_at < cur_end)
+        )
+    ).scalars().all()
+    if not waste_rows:
+        return None
+    waste_cost = sum(abs(float(r.total_cost_bdt or 0)) for r in waste_rows)
+    by_item: dict[str, float] = defaultdict(float)
+    for r in waste_rows:
+        by_item[r.inventory_item_id] += abs(float(r.total_cost_bdt or 0))
+    inv = (
+        await db.execute(
+            select(InventoryItem)
+            .where(InventoryItem.outlet_id == outlet_id)
+            .where(InventoryItem.deleted_at.is_(None))
+        )
+    ).scalars().all()
+    inv_map = {i.id: i for i in inv}
+    stock_value = sum(float(i.quantity or 0) * float(i.cost_per_unit or 0) for i in inv)
+    top_id = max(by_item, key=by_item.get) if by_item else None
+    top_name = inv_map[top_id].name if (top_id and top_id in inv_map) else "—"
+    return {
+        "cost": round(waste_cost),
+        "pct": round(_safe_div(waste_cost, stock_value), 3) if stock_value > 0 else 0,
+        "topItem": top_name or "—",
+    }

@@ -1,0 +1,39 @@
+/* QuickBytes color system — spec §8.
+   Philosophy: mostly white with ONE electric-lime moment per screen. */
+:root {
+  /* Accent */
+  --qb-lime: #99FF47;          /* primary accent — "go", "positive", "active" */
+  --qb-ink-on-lime: #14180E;   /* text on lime — NEVER white on lime */
+  --qb-accent-wash: #F0FADF;   /* soft lime tint — emphasis, accept, bot bubbles */
+  --qb-accent-strong: #3E7E14; /* lime-family text on white */
+
+  /* Neutrals */
+  --qb-bg: #F7F8F4;            /* app background */
+  --qb-surface: #FFFFFF;       /* cards, sheets */
+  --qb-ink: #1A1E14;           /* primary text */
+  --qb-muted: #878C79;         /* secondary text */
+  --qb-hairline: #EDEEE8;      /* borders — preferred over shadows */
+
+  /* Signals */
+  --qb-success: #498F18;
+  --qb-warning: #B0760A;
+  --qb-danger: #D43A3F;
+  --qb-info: #3E6FE0;
+
+  /* Occupied table — deliberately slate, never lime (occupied = neutral) */
+  --qb-slate-bg: #EDF1F7;
+  --qb-slate-border: #D5DEEC;
+  --qb-slate-ink: #4C679C;
+
+  /* Semantic aliases */
+  --surface-card: var(--qb-surface);
+  --surface-page: var(--qb-bg);
+  --text-body: var(--qb-ink);
+  --text-muted: var(--qb-muted);
+  --text-on-accent: var(--qb-ink-on-lime);
+  --border-hairline: var(--qb-hairline);
+  --action-primary-bg: var(--qb-lime);
+  --action-primary-ink: var(--qb-ink-on-lime);
+  --action-wash-bg: var(--qb-accent-wash);
+  --accent-text: var(--qb-accent-strong);
+}

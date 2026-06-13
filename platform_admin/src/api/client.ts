@@ -359,3 +359,15 @@ export type OutletActivity = {
   deviceCount: number;
   totalRevenue: number;
 };
+
+// ── Blocking notice types ─────────────────────────────────────────────────────
+
+export type BlockingNotice = {
+  enabled: boolean;
+  title: string;
+  message: string;
+  imageUrl: string | null;
+  inputField: boolean;
+  inputLabel: string | null;
+  updatedAt: string | null;
+};

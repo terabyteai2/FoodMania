@@ -24,7 +24,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 MAX_MENU_SCAN_PAGES = 6
 MAX_MENU_SCAN_PAGE_BYTES = 1200 * 1024
-MANAGER_SCAN_ROLES = frozenset({"manager", "owner", "admin", "staff"})
+MANAGER_SCAN_ROLES = frozenset({"owner", "manager", "admin", "staff", "waiter"})
 
 ALLOWED_MENU_THEMES = frozenset(
     {

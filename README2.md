@@ -639,3 +639,9 @@ OpenAPI: **`{BASE_URL}/docs`**
 ---
 
 *শেষ আপডেট: রুট টু এন্ড `rastarant` এর জন্য এজেন্ট‑ফ্রেন্ডলি সম্পূর্ণতার দিকে টানা। এন্ডপয়েন্ট/সেটিংস পরিবর্তন হলে `config.py`, `main.py`, `routers/`, ও OpenAPI `/docs` সাথে সিঙ্ক করুন।*
+
+
+cd /home/dev/Documents/QuickBytes/bytes_pos && flutter run \
+  --dart-define=POS_CLOUD_API_URL=https://quickbytes.buzz 2>&1 | \
+  grep -E "(ERROR|Exception|warning:|Error:)" | head -100
+

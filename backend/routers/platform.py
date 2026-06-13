@@ -238,7 +238,7 @@ async def _manager_email_for_outlet(db: AsyncSession, outlet_id: str) -> str | N
     return (
         await db.execute(
             select(AdminAccount.email)
-            .where(AdminAccount.outlet_id == outlet_id, AdminAccount.role == "manager")
+            .where(AdminAccount.outlet_id == outlet_id, AdminAccount.role.in_(("owner", "manager")))
             .limit(1)
         )
     ).scalar_one_or_none()
@@ -250,7 +250,7 @@ async def _manager_phone_for_outlet(db: AsyncSession, outlet_id: str) -> str | N
     phone = (
         await db.execute(
             select(AdminAccount.phone)
-            .where(AdminAccount.outlet_id == outlet_id, AdminAccount.role == "manager")
+            .where(AdminAccount.outlet_id == outlet_id, AdminAccount.role.in_(("owner", "manager")))
             .limit(1)
         )
     ).scalar_one_or_none()
@@ -832,6 +832,37 @@ async def outlet_activity(
 
 # ── Accounts ──────────────────────────────────────────────────────────────────
 
+@router.get("/accounts/search")
+async def search_accounts(
+    admin: PlatformAdmin = Depends(_require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+    q: str = Query("", min_length=1),
+):
+    _ = admin
+    rows = (
+        await db.execute(
+            select(AdminAccount, Outlet.name, Restaurant.name)
+            .join(Outlet, AdminAccount.outlet_id == Outlet.id)
+            .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
+            .where(AdminAccount.phone.ilike(f"%{q}%"))
+            .order_by(AdminAccount.created_at.desc())
+            .limit(50)
+        )
+    ).all()
+    results = []
+    for account, outlet_name, restaurant_name in rows:
+        from phone_utils import display_phone
+        results.append({
+            "id": account.id,
+            "outletId": account.outlet_id,
+            "outletName": outlet_name,
+            "restaurantName": restaurant_name,
+            "phone": display_phone(account.phone),
+            "displayName": account.display_name,
+        })
+    return ok(results)
+
+
 @router.get("/outlets/{outlet_id}/accounts")
 async def list_outlet_accounts(
     outlet_id: str,
@@ -872,7 +903,7 @@ async def create_outlet_account(
     if username_taken:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already in use")
 
-    role = body.role if body.role in {"manager", "staff"} else "manager"
+    role = body.role if body.role in {"owner", "manager", "waiter"} else "manager"
     account = AdminAccount(
         outlet_id=outlet_id,
         email=body.email.strip().lower(),
@@ -906,7 +937,7 @@ async def patch_account(
     if body.isActive is not None:
         account.is_active = body.isActive
     if body.role is not None:
-        if body.role not in {"manager", "staff"}:
+        if body.role not in {"owner", "manager", "waiter"}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
         account.role = body.role
     if body.displayName is not None:
@@ -1586,7 +1617,7 @@ async def publish_blocking_notice(
     _ = admin
     payload = await set_blocking_notice(db, body)
     await db.commit()
-    notified_outlets = await _broadcast_blocking_notice(db, payload)
+    notified_outlets = await _broadcast_blocking_notice(db, payload, outlet_ids=body.outletIds)
     return ok({**payload, "notifiedOutlets": notified_outlets})
 
 
@@ -1602,8 +1633,13 @@ async def disable_blocking_notice(
     return ok({**payload, "notifiedOutlets": notified_outlets})
 
 
-async def _broadcast_blocking_notice(db: AsyncSession, payload: dict) -> int:
-    outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
+async def _broadcast_blocking_notice(
+    db: AsyncSession,
+    payload: dict,
+    outlet_ids: list[str] | None = None,
+) -> int:
+    if outlet_ids is None:
+        outlet_ids = (await db.execute(select(Outlet.id))).scalars().all()
     for outlet_id in outlet_ids:
         await manager.broadcast(
             outlet_id,

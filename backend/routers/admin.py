@@ -75,8 +75,14 @@ from services.app_update import get_app_update
 
 router = APIRouter()
 
+OWNER = "owner"
 MANAGER = "manager"
-STAFF = "staff"
+WAITER = "waiter"
+STAFF = "staff"  # legacy alias for waiter (floor role)
+# Elevated roles — the "manager access" gate (owner is a superset of manager).
+MANAGEMENT_ROLES = (OWNER, MANAGER)
+# Floor roles (waiter; staff retained so legacy rows still match).
+FLOOR_ROLES = (WAITER, STAFF)
 RESERVED_PUBLIC_SLUGS = {
     "admin",
     "api",
@@ -124,8 +130,10 @@ def _clean_email(value: str) -> str:
 
 
 def _normalize_role(value: str | None) -> str:
-    role = (value or STAFF).strip().lower()
-    if role not in {MANAGER, STAFF}:
+    role = (value or WAITER).strip().lower()
+    if role == STAFF:
+        role = WAITER  # legacy alias
+    if role not in {OWNER, MANAGER, WAITER}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account role.")
     return role
 
@@ -299,7 +307,7 @@ async def _current_account(
     account = (await db.execute(select(AdminAccount).where(AdminAccount.id == account_id))).scalar_one_or_none()
     if account is None or not account.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is not active.")
-    if require_manager and account.role != MANAGER:
+    if require_manager and account.role not in MANAGEMENT_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
     return account
 
@@ -420,7 +428,7 @@ async def demo_manager_login(
         await db.execute(
             select(AdminAccount).where(
                 AdminAccount.outlet_id == outlet.id,
-                AdminAccount.role == MANAGER,
+                AdminAccount.role.in_(MANAGEMENT_ROLES),
             )
         )
     ).scalar_one_or_none()
@@ -433,7 +441,7 @@ async def demo_manager_login(
             email=email,
             username="demo-manager",
             password_hash=None,
-            role=MANAGER,
+            role=OWNER,
             display_name="Demo Manager",
             auth_provider="phone",
             phone=phone,
@@ -505,7 +513,7 @@ async def phone_verify_otp(
     def _can_login(account: AdminAccount) -> bool:
         if not account.is_active:
             return False
-        if account.role == MANAGER:
+        if account.role in MANAGEMENT_ROLES:
             return True
         return account.invite_status in {None, INVITE_ACCEPTED}
 
@@ -531,7 +539,7 @@ async def phone_verify_otp(
     pending_staff = [
         a
         for a in accounts
-        if a.role == STAFF and a.invite_status == INVITE_PENDING
+        if a.role in FLOOR_ROLES and a.invite_status == INVITE_PENDING
     ]
     if pending_staff:
         pending_staff.sort(key=lambda a: a.created_at, reverse=True)
@@ -630,7 +638,7 @@ async def phone_complete_manager_signup(
         email=synthetic_email,
         username=synthetic_email,
         password_hash=None,
-        role=MANAGER,
+        role=OWNER,
         phone=phone,
         phone_verified_at=datetime.now(timezone.utc),
         display_name=(body.managerName or "").strip() or None,
@@ -671,7 +679,7 @@ async def staff_invite_respond(
             select(AdminAccount).where(
                 (AdminAccount.id == body.inviteId)
                 & (AdminAccount.phone == phone)
-                & (AdminAccount.role == STAFF)
+                & (AdminAccount.role.in_(FLOOR_ROLES))
             )
         )
     ).scalar_one_or_none()
@@ -739,7 +747,7 @@ async def staff_dev_bypass_login(
         await db.execute(
             select(AdminAccount).where(
                 (AdminAccount.outlet_id == outlet.id)
-                & (AdminAccount.role == STAFF)
+                & (AdminAccount.role.in_(FLOOR_ROLES))
                 & (AdminAccount.email == email)
             )
         )
@@ -783,7 +791,7 @@ async def google_start_or_login(
 
     if account is not None:
         resolved_outlet: Outlet | None = None
-        if requested_role != MANAGER:
+        if requested_role not in MANAGEMENT_ROLES:
             if requested_server_id:
                 resolved_outlet = (
                     await db.execute(select(Outlet).where(Outlet.server_id == requested_server_id))
@@ -793,7 +801,7 @@ async def google_start_or_login(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="Server ID not registered. Ask your manager for the correct server link.",
                     )
-            elif account.role != MANAGER:
+            elif account.role not in MANAGEMENT_ROLES:
                 # Existing staff accounts can sign in without retyping serverId.
                 # Keep them bound to their current outlet for shared manager/staff
                 # sync when the app did not supply serverId.
@@ -813,11 +821,11 @@ async def google_start_or_login(
             # the manager's serverId outlet to restore shared order sync.
             if (
                 resolved_outlet is not None
-                and account.role != MANAGER
+                and account.role not in MANAGEMENT_ROLES
                 and account.outlet_id != resolved_outlet.id
             ):
                 account.outlet_id = resolved_outlet.id
-                account.role = STAFF
+                account.role = WAITER
         if not account.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff account is disabled.")
         if not account.google_sub:
@@ -839,7 +847,7 @@ async def google_start_or_login(
             )
         )
 
-    if requested_role != MANAGER:
+    if requested_role not in MANAGEMENT_ROLES:
         # Staff one-tap onboarding requires manager's serverId so both apps
         # attach to the same outlet and share the same order stream.
         if not requested_server_id:
@@ -863,7 +871,7 @@ async def google_start_or_login(
             email=email,
             username=email,
             password_hash=None,
-            role=STAFF,
+            role=WAITER,
             google_sub=google_sub,
             display_name=display_name,
             auth_provider="google",
@@ -930,7 +938,7 @@ async def google_start_or_login(
         email=email,
         username=email,
         password_hash=None,
-        role=MANAGER,
+        role=OWNER,
         google_sub=google_sub,
         display_name=display_name,
         auth_provider="google",
@@ -1168,10 +1176,14 @@ async def list_staff(
     db: AsyncSession = Depends(get_db),
 ):
     manager = await _current_account(payload, db, require_manager=True)
+    # Show managers + floor staff (role badges), excluding owner accounts.
     rows = (
         await db.execute(
             select(AdminAccount)
-            .where((AdminAccount.outlet_id == manager.outlet_id) & (AdminAccount.role == STAFF))
+            .where(
+                (AdminAccount.outlet_id == manager.outlet_id)
+                & (AdminAccount.role.in_((MANAGER, *FLOOR_ROLES)))
+            )
             .order_by(AdminAccount.created_at.desc())
         )
     ).scalars().all()
@@ -1185,6 +1197,35 @@ async def add_staff(
     db: AsyncSession = Depends(get_db),
 ):
     manager = await _current_account(payload, db, require_manager=True)
+
+    # Role-gated invites (spec §4.10): owner may invite a waiter or a manager;
+    # a manager may invite waiters only. A manager seat is owner-only and may be
+    # granted only when no active manager already exists.
+    requested_role = _normalize_role(body.role)
+    if requested_role == OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Owners cannot be invited."
+        )
+    if requested_role == MANAGER:
+        if manager.role != OWNER:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only an owner can invite a manager.",
+            )
+        active_manager = (
+            await db.execute(
+                select(AdminAccount).where(
+                    (AdminAccount.outlet_id == manager.outlet_id)
+                    & (AdminAccount.role == MANAGER)
+                    & (AdminAccount.is_active.is_(True))
+                )
+            )
+        ).scalar_one_or_none()
+        if active_manager is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An active manager already exists.",
+            )
 
     phone: str | None = None
     email: str | None = None
@@ -1200,7 +1241,7 @@ async def add_staff(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Phone is already used by another outlet.",
                 )
-            existing.role = STAFF
+            existing.role = requested_role
             existing.display_name = body.displayName or existing.display_name
             existing.invite_status = INVITE_PENDING
             existing.is_active = False
@@ -1216,7 +1257,7 @@ async def add_staff(
             email=synthetic_email,
             username=synthetic_email,
             password_hash=None,
-            role=STAFF,
+            role=requested_role,
             phone=phone,
             display_name=body.displayName,
             auth_provider="phone",
@@ -1237,7 +1278,7 @@ async def add_staff(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Email is already used by another outlet.",
                 )
-            existing.role = STAFF
+            existing.role = requested_role
             existing.display_name = body.displayName or existing.display_name
             existing.is_active = True
             existing.invite_status = INVITE_ACCEPTED
@@ -1250,7 +1291,7 @@ async def add_staff(
             email=email,
             username=email,
             password_hash=None,
-            role=STAFF,
+            role=requested_role,
             display_name=body.displayName,
             auth_provider="google",
             is_active=True,
@@ -1277,12 +1318,18 @@ async def update_staff(
             select(AdminAccount).where(
                 (AdminAccount.id == account_id)
                 & (AdminAccount.outlet_id == manager.outlet_id)
-                & (AdminAccount.role == STAFF)
+                & (AdminAccount.role.in_((MANAGER, *FLOOR_ROLES)))
             )
         )
     ).scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
+    # Only an owner may toggle/edit a manager seat.
+    if account.role == MANAGER and manager.role != OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an owner can manage a manager.",
+        )
     if body.isActive is not None:
         account.is_active = body.isActive
     if body.displayName is not None:

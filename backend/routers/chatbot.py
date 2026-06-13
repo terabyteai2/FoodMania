@@ -2,23 +2,31 @@ import hashlib
 import html
 import hmac
 import json
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_device_payload
 from config import settings
 from database import get_db
+from models import ChatbotConversation, ChatbotIntegration
 from routers.admin import _current_account
 from schemas import (
+    ChatReplyRequest,
     FacebookChatbotConfigRequest,
     FacebookChatbotNativeOAuthRequest,
     FacebookChatbotOAuthCompleteRequest,
     ok,
 )
 from services.facebook_chatbot import (
+    CHAT_HISTORY_APP_LIMIT,
+    ChatbotError,
+    append_chat_history,
+    broadcast_chat_update,
     complete_facebook_native_oauth,
     complete_facebook_oauth_page_selection,
     complete_facebook_oauth,
@@ -27,11 +35,157 @@ from services.facebook_chatbot import (
     get_latest_facebook_oauth_pages,
     get_facebook_oauth_pages,
     handle_facebook_webhook,
+    recent_chat_history,
     save_facebook_config,
+    _send_message,
 )
 
 router = APIRouter()
 CHATBOT_ADMIN_ROLES = {"manager", "owner"}
+_CHAT_FROM = {
+    "user": "customer",
+    "bot": "bot",
+    "manager": "manager",
+    "system": "system",
+}
+
+
+def _chat_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _chat_status(state: dict) -> str:
+    value = str((state or {}).get("status") or "").strip().lower()
+    return value if value in {"needs", "replied", "bot"} else "bot"
+
+
+def _chat_dict(conv: ChatbotConversation) -> dict:
+    state = conv.state_json or {}
+    history = recent_chat_history(conv.history_json, limit=CHAT_HISTORY_APP_LIMIT)
+    messages = [
+        {
+            "from": _CHAT_FROM.get(str(entry.get("role") or ""), "system"),
+            "text": str(entry.get("text") or ""),
+            "kind": entry.get("kind"),
+            "at": entry.get("at") or entry.get("time") or entry.get("createdAt"),
+        }
+        for entry in history
+        if isinstance(entry, dict)
+    ]
+    return {
+        "id": conv.id,
+        "psid": conv.psid,
+        "name": state.get("customerName") or "Messenger customer",
+        "handle": conv.psid[-6:] if conv.psid else "",
+        "status": _chat_status(state),
+        "reason": state.get("reason"),
+        "lastUserMessage": conv.last_user_message,
+        "lastBotMessage": conv.last_bot_message,
+        "unread": int(state.get("unread") or 0),
+        "updatedAt": conv.updated_at.isoformat(),
+        "messages": messages,
+    }
+
+
+async def _integration_for_account(account, db: AsyncSession) -> ChatbotIntegration | None:
+    return (
+        await db.execute(
+            select(ChatbotIntegration).where(
+                ChatbotIntegration.outlet_id == account.outlet_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _conversation_for_account(
+    conversation_id: str, account, db: AsyncSession
+) -> tuple[ChatbotConversation, ChatbotIntegration]:
+    conv = (
+        await db.execute(
+            select(ChatbotConversation).where(ChatbotConversation.id == conversation_id)
+        )
+    ).scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found.")
+    integration = (
+        await db.execute(
+            select(ChatbotIntegration).where(ChatbotIntegration.id == conv.integration_id)
+        )
+    ).scalar_one_or_none()
+    if integration is None or integration.outlet_id != account.outlet_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chat not in this outlet.")
+    return conv, integration
+
+
+@router.get("/admin/chatbot/chats")
+async def list_chats(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    integration = await _integration_for_account(account, db)
+    if integration is None:
+        return ok({"chats": []})
+    conversations = (
+        await db.execute(
+            select(ChatbotConversation)
+            .where(ChatbotConversation.integration_id == integration.id)
+            .order_by(ChatbotConversation.updated_at.desc())
+            .limit(100)
+        )
+    ).scalars().all()
+    return ok({"chats": [_chat_dict(c) for c in conversations]})
+
+
+@router.post("/admin/chatbot/chats/{conversation_id}/reply")
+async def reply_to_chat(
+    conversation_id: str,
+    body: ChatReplyRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    conv, integration = await _conversation_for_account(conversation_id, account, db)
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Reply text required."
+        )
+    try:
+        await _send_message(integration, conv.psid, text)
+    except ChatbotError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error))
+    append_chat_history(conv, role="manager", text=text)
+    state = dict(conv.state_json or {})
+    state["status"] = "replied"
+    state["unread"] = 0
+    conv.state_json = state
+    conv.last_bot_message = text
+    conv.updated_at = _chat_now()
+    await db.commit()
+    await db.refresh(conv)
+    await broadcast_chat_update(integration, conv)
+    return ok(_chat_dict(conv))
+
+
+@router.post("/admin/chatbot/chats/{conversation_id}/handback")
+async def hand_chat_back_to_bot(
+    conversation_id: str,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    conv, integration = await _conversation_for_account(conversation_id, account, db)
+    append_chat_history(conv, role="system", text="Handed back to bot")
+    state = dict(conv.state_json or {})
+    state["status"] = "bot"
+    state.pop("reason", None)
+    conv.state_json = state
+    conv.updated_at = _chat_now()
+    await db.commit()
+    await db.refresh(conv)
+    await broadcast_chat_update(integration, conv)
+    return ok(_chat_dict(conv))
 
 
 async def _current_chatbot_admin(payload: dict, db: AsyncSession):

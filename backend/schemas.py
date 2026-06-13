@@ -94,6 +94,7 @@ class StaffInviteRequest(BaseModel):
     phone: str | None = None
     email: str | None = None
     displayName: str | None = None
+    role: str | None = None  # waiter (default) | manager (owner-only)
 
 
 class StaffUpdateRequest(BaseModel):
@@ -123,6 +124,10 @@ class FacebookChatbotConfigResponse(BaseModel):
     pageName: str | None = None
     tokenPreview: str | None = None
     lastError: str | None = None
+
+
+class ChatReplyRequest(BaseModel):
+    text: str
 
 
 class FacebookChatbotOAuthStartResponse(BaseModel):
@@ -382,6 +387,7 @@ class PosSettingsPatchPayload(BaseModel):
     vatRatePercent: float | None = Field(default=None, ge=0, le=100)
     serviceChargePercent: float | None = Field(default=None, ge=0, le=100)
     discountPresets: list[PosDiscountPresetPayload] | None = None
+    dailySalesTarget: float | None = Field(default=None, ge=0)
 
 
 class PosShiftOpenPayload(BaseModel):
@@ -499,6 +505,14 @@ class PlatformAppUpdateRequest(BaseModel):
 class PlatformBlockingNoticeRequest(BaseModel):
     title: str | None = None
     message: str
+    imageUrl: str | None = None
+    inputField: bool = False
+    inputLabel: str | None = None
+    outletIds: list[str] | None = None
+
+
+class BlockingNoticeRespondRequest(BaseModel):
+    response: str
 
 
 class PlatformAdminCreateRequest(BaseModel):

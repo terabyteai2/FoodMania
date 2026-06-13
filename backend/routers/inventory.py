@@ -296,7 +296,7 @@ async def _require_inventory_account(
     ).scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Active account required.")
-    if manager_only and account.role != "manager":
+    if manager_only and account.role not in ("owner", "manager"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
     return account
 
@@ -999,7 +999,7 @@ async def inventory_daily_report(
             .where(Order.outlet_id == outlet_id)
             .where(Order.created_at >= day_start)
             .where(Order.created_at < day_end)
-            .where(Order.status != "cancelled")
+            .where(Order.status.notin_(("cancelled", "rejected")))
         )
     ).scalars().all()
     revenue_by_source: dict[str, float] = defaultdict(float)

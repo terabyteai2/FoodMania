@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { AccountSearchResult, apiFetch } from "../api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AccountSearchResult, apiFetch, BlockingNotice } from "../api/client";
 
 type BlockingNoticePayload = {
   title: string;
@@ -19,6 +19,9 @@ const emptyForm = {
 };
 
 export default function MessagesPage() {
+  const [currentNotice, setCurrentNotice] = useState<BlockingNotice | null>(null);
+  const [loadingNotice, setLoadingNotice] = useState(true);
+
   const [form, setForm] = useState(emptyForm);
   const [target, setTarget] = useState<"all" | "specific">("all");
   const [searchQ, setSearchQ] = useState("");
@@ -26,8 +29,25 @@ export default function MessagesPage() {
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
+  const [unblocking, setUnblocking] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [confirmUnblock, setConfirmUnblock] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const fetchNotice = useCallback(async () => {
+    try {
+      const notice = await apiFetch<BlockingNotice>("/platform/blocking-notice");
+      setCurrentNotice(notice);
+    } catch {
+      setCurrentNotice(null);
+    } finally {
+      setLoadingNotice(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotice();
+  }, [fetchNotice]);
 
   useEffect(() => {
     if (target !== "specific" || searchQ.trim().length < 2) {
@@ -83,6 +103,7 @@ export default function MessagesPage() {
       setResult({ ok: true, msg: `Message sent to ${targetLabel}.` });
       setForm(emptyForm);
       setSelected(new Set());
+      await fetchNotice();
     } catch (e) {
       setResult({ ok: false, msg: e instanceof Error ? e.message : "Send failed." });
     } finally {
@@ -90,12 +111,42 @@ export default function MessagesPage() {
     }
   }
 
+  async function unblock() {
+    setUnblocking(true);
+    setResult(null);
+    try {
+      const res = await apiFetch<{ notifiedOutlets: number }>("/platform/blocking-notice", {
+        method: "DELETE",
+      });
+      setResult({ ok: true, msg: `Notice cleared. ${res.notifiedOutlets} outlet${res.notifiedOutlets === 1 ? "" : "s"} notified.` });
+      setConfirmUnblock(false);
+      await fetchNotice();
+    } catch (e) {
+      setResult({ ok: false, msg: e instanceof Error ? e.message : "Unblock failed." });
+    } finally {
+      setUnblocking(false);
+    }
+  }
+
+  if (loadingNotice) {
+    return (
+      <div className="page-header">
+        <h1>Messages</h1>
+        <p className="muted" style={{ fontSize: 13 }}>Loading…</p>
+      </div>
+    );
+  }
+
+  const isBlocking = currentNotice?.enabled === true;
+
   return (
     <>
       <div className="page-header">
-        <h1>Send Admin Message</h1>
+        <h1>{isBlocking ? "Active Notice" : "Send Admin Message"}</h1>
         <span className="muted" style={{ fontSize: 13 }}>
-          Publish a blocking notice to restaurant POS apps.
+          {isBlocking
+            ? "A blocking notice is currently active on all POS apps."
+            : "Publish a blocking notice to restaurant POS apps."}
         </span>
       </div>
 
@@ -105,181 +156,255 @@ export default function MessagesPage() {
         </p>
       )}
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: "0 0 16px", fontSize: 15 }}>Message content</h2>
+      {isBlocking ? (
+        <>
+          <div className="card" style={{ marginBottom: 20, borderLeft: "4px solid var(--danger)" }}>
+            <h2 style={{ margin: "0 0 16px", fontSize: 15, color: "var(--danger)" }}>
+              Blocking notice active
+            </h2>
 
-        <div className="form-group">
-          <label>Hero image URL</label>
-          <input
-            type="url"
-            value={form.imageUrl}
-            onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-            placeholder="https://example.com/banner.png"
-            style={{ width: "100%" }}
-          />
-          <span className="muted" style={{ fontSize: 12 }}>
-            Optional. Shown as a hero image above the message.
-          </span>
-        </div>
-
-        <div className="form-group">
-          <label>Title *</label>
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="Important notice"
-            style={{ width: "100%" }}
-          />
-          <span className="muted" style={{ fontSize: 12 }}>
-            Defaults to "Notice from Terafoods" if left empty.
-          </span>
-        </div>
-
-        <div className="form-group">
-          <label>Message text *</label>
-          <textarea
-            rows={4}
-            value={form.message}
-            onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
-            placeholder="Describe the reason for this notice…"
-            style={{ width: "100%" }}
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="toggle-row">
-            <span>Show input field (for contact info / reply)</span>
-            <div
-              className={`toggle-switch ${form.inputField ? "on" : ""}`}
-              onClick={() => setForm((f) => ({ ...f, inputField: !f.inputField }))}
-            />
-          </label>
-        </div>
-
-        {form.inputField && (
-          <div className="form-group">
-            <label>Input label / placeholder</label>
-            <input
-              type="text"
-              value={form.inputLabel}
-              onChange={(e) => setForm((f) => ({ ...f, inputLabel: e.target.value }))}
-              placeholder="Your contact email"
-              style={{ width: "100%" }}
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: "0 0 16px", fontSize: 15 }}>Target</h2>
-
-        <div className="form-group">
-          <label style={{ display: "flex", gap: 20, alignItems: "center" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="target"
-                checked={target === "all"}
-                onChange={() => setTarget("all")}
+            {currentNotice.imageUrl && (
+              <img
+                src={currentNotice.imageUrl}
+                alt="Notice banner"
+                style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 6, marginBottom: 12 }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
-              All outlets
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="target"
-                checked={target === "specific"}
-                onChange={() => setTarget("specific")}
-              />
-              Specific outlets
-            </label>
-          </label>
-        </div>
+            )}
 
-        {target === "specific" && (
-          <>
-            <div className="search-bar" style={{ marginBottom: 12 }}>
-              <input
-                type="search"
-                placeholder="Search by mobile number…"
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                style={{ width: "100%" }}
-              />
-              {searching && <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Searching…</span>}
+            <div style={{ marginBottom: 8 }}>
+              <strong style={{ fontSize: 14 }}>{currentNotice.title}</strong>
             </div>
 
-            {selected.size > 0 && (
-              <p style={{ fontSize: 13, margin: "0 0 8px", color: "var(--accent)" }}>
-                {selected.size} outlet{selected.size === 1 ? "" : "s"} selected
+            <p style={{ fontSize: 14, lineHeight: 1.5, margin: "0 0 8px", whiteSpace: "pre-wrap" }}>
+              {currentNotice.message}
+            </p>
+
+            {currentNotice.inputField && (
+              <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+                Input enabled: <em>{currentNotice.inputLabel || "response"}</em>
               </p>
             )}
 
-            {searchResults.length > 0 ? (
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }} />
-                      <th>Phone</th>
-                      <th>Name</th>
-                      <th>Outlet</th>
-                      <th>Restaurant</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {searchResults.map((a) => (
-                      <tr
-                        key={a.id}
-                        style={{ cursor: "pointer", opacity: selected.has(a.id) ? 1 : 0.7 }}
-                        onClick={() => toggleAccount(a.id)}
-                      >
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(a.id)}
-                            onChange={() => toggleAccount(a.id)}
-                          />
-                        </td>
-                        <td>{a.phone}</td>
-                        <td>{a.displayName || "—"}</td>
-                        <td>{a.outletName}</td>
-                        <td>{a.restaurantName}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : searchQ.trim().length >= 2 && !searching ? (
-              <p className="muted" style={{ fontSize: 13 }}>No accounts match "{searchQ}".</p>
-            ) : null}
-          </>
-        )}
-      </div>
+            {currentNotice.updatedAt && (
+              <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+                Published: {new Date(currentNotice.updatedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
-        <button
-          type="button"
-          className="btn"
-          onClick={send}
-          disabled={sending || (target === "specific" && selected.size === 0)}
-          style={{ minWidth: 160 }}
-        >
-          {sending ? "Sending…" : "Send Message"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary btn"
-          onClick={() => {
-            setForm(emptyForm);
-            setSelected(new Set());
-            setResult(null);
-          }}
-        >
-          Discard
-        </button>
-      </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {confirmUnblock ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={unblock}
+                  disabled={unblocking}
+                  style={{ minWidth: 160 }}
+                >
+                  {unblocking ? "Clearing…" : "Yes, clear notice"}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn"
+                  onClick={() => setConfirmUnblock(false)}
+                  disabled={unblocking}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => setConfirmUnblock(true)}
+                style={{ minWidth: 160 }}
+              >
+                Clear Notice
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h2 style={{ margin: "0 0 16px", fontSize: 15 }}>Message content</h2>
+
+            <div className="form-group">
+              <label>Hero image URL</label>
+              <input
+                type="url"
+                value={form.imageUrl}
+                onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                placeholder="https://example.com/banner.png"
+                style={{ width: "100%" }}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Optional. Shown as a hero image above the message.
+              </span>
+            </div>
+
+            <div className="form-group">
+              <label>Title *</label>
+              <input
+                type="text"
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                placeholder="Important notice"
+                style={{ width: "100%" }}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Defaults to "Notice from Terafoods" if left empty.
+              </span>
+            </div>
+
+            <div className="form-group">
+              <label>Message text *</label>
+              <textarea
+                rows={4}
+                value={form.message}
+                onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                placeholder="Describe the reason for this notice…"
+                style={{ width: "100%" }}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="toggle-row">
+                <span>Show input field (for contact info / reply)</span>
+                <div
+                  className={`toggle-switch ${form.inputField ? "on" : ""}`}
+                  onClick={() => setForm((f) => ({ ...f, inputField: !f.inputField }))}
+                />
+              </label>
+            </div>
+
+            {form.inputField && (
+              <div className="form-group">
+                <label>Input label / placeholder</label>
+                <input
+                  type="text"
+                  value={form.inputLabel}
+                  onChange={(e) => setForm((f) => ({ ...f, inputLabel: e.target.value }))}
+                  placeholder="Your contact email"
+                  style={{ width: "100%" }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h2 style={{ margin: "0 0 16px", fontSize: 15 }}>Target</h2>
+
+            <div className="form-group">
+              <label style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="target"
+                    checked={target === "all"}
+                    onChange={() => setTarget("all")}
+                  />
+                  All outlets
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="target"
+                    checked={target === "specific"}
+                    onChange={() => setTarget("specific")}
+                  />
+                  Specific outlets
+                </label>
+              </label>
+            </div>
+
+            {target === "specific" && (
+              <>
+                <div className="search-bar" style={{ marginBottom: 12 }}>
+                  <input
+                    type="search"
+                    placeholder="Search by mobile number…"
+                    value={searchQ}
+                    onChange={(e) => setSearchQ(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                  {searching && <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Searching…</span>}
+                </div>
+
+                {selected.size > 0 && (
+                  <p style={{ fontSize: 13, margin: "0 0 8px", color: "var(--accent)" }}>
+                    {selected.size} outlet{selected.size === 1 ? "" : "s"} selected
+                  </p>
+                )}
+
+                {searchResults.length > 0 ? (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 40 }} />
+                          <th>Phone</th>
+                          <th>Name</th>
+                          <th>Outlet</th>
+                          <th>Restaurant</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {searchResults.map((a) => (
+                          <tr
+                            key={a.id}
+                            style={{ cursor: "pointer", opacity: selected.has(a.id) ? 1 : 0.7 }}
+                            onClick={() => toggleAccount(a.id)}
+                          >
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selected.has(a.id)}
+                                onChange={() => toggleAccount(a.id)}
+                              />
+                            </td>
+                            <td>{a.phone}</td>
+                            <td>{a.displayName || "—"}</td>
+                            <td>{a.outletName}</td>
+                            <td>{a.restaurantName}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : searchQ.trim().length >= 2 && !searching ? (
+                  <p className="muted" style={{ fontSize: 13 }}>No accounts match "{searchQ}".</p>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={send}
+              disabled={sending || (target === "specific" && selected.size === 0)}
+              style={{ minWidth: 160 }}
+            >
+              {sending ? "Sending…" : "Send Message"}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn"
+              onClick={() => {
+                setForm(emptyForm);
+                setSelected(new Set());
+                setResult(null);
+              }}
+            >
+              Discard
+            </button>
+          </div>
+        </>
+      )}
     </>
   );
 }

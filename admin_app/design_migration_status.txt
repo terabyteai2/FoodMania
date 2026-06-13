@@ -1,0 +1,392 @@
+================================================================================
+  DESIGN SYSTEM MIGRATION STATUS
+  QuickBytes POS — Admin App (Flutter, mobile only)
+  Generated: 2026-06-09
+================================================================================
+
+SCOPE: Mobile admin app only. The desktop_pos module (Pc theme layer) is
+       untouched by this migration.
+STRATEGY: Hard swap — update token values in place, no parallel old/new aliases.
+
+────────────────────────────────────────────────────────────────────────────────
+1. CURRENT STATE AUDIT
+────────────────────────────────────────────────────────────────────────────────
+
+1.1 TOKEN ARCHITECTURE (well structured)
+
+  File: lib/src/core/theme/app_theme.dart
+  ├── PosColors       — color tokens (lime ramp, neutrals, signals)
+  ├── PosSpacing      — base-4 spatial scale (sp1–sp8)
+  ├── PosRadii        — radius tokens (xs/sm/md/lg/xl/pill)
+  ├── PosShadows      — elevation (soft, glow, bar, raised)
+  ├── PosGradients    — brand/deep/wash gradients
+  └── AppTheme        — ThemeData builder (light/dark)
+
+  File: lib/src/core/widgets/tf_design_system.dart (3780 lines)
+  └── Full widget library: TfButton, TfCard, TfChip, TfToggle, TfFab,
+      TfBottomNav, TfAppBar, TfField, TfSearchField, TfTabs, TfStatusBadge,
+      TfIconButton, TfSectionHeader, TfDualActionBar, TfStickyCTA,
+      TfItemRow, TfFohTile, TfFohCounter, TfPeriodSelector, TfMoney, etc.
+
+1.2 TOKEN COMPLIANCE (screens)
+
+  Token usage (PosColors/PosRadii/PosSpacing/PosShadows) in features: ~1084 refs
+  Raw/inline color values in features (bypassing tokens):               ~102 refs
+  Raw border radius values (bypassing PosRadii):                        ~35 refs
+
+  Assessment: ~91% token compliance. Most violations are in desktop_pos (out of
+  scope) and payment screens (bkash). Mobile screens are well-disciplined.
+
+1.3 COLOR TOKEN DELTA (current → new spec)
+
+  Token               Current (#)     New Spec (#)     Status
+  ─────────────────────────────────────────────────────────────────────────
+  accent/primary      99FF47          99FF47           ✓ matches
+  accent press        84F02C          84F02C           ✓ matches
+  accent-strong       498F18          3E7E14           ✗ NEEDS UPDATE
+  accent-ink          14180E          14180E           ✓ matches
+  accent-tint (soft)  EAF7D6          F0FADF           ✗ NEEDS UPDATE
+  accent-tint-2       CDF79B          D8F3AD           ✗ NEEDS UPDATE
+  background          F3F5EE          F7F8F4           ✗ NEEDS UPDATE
+  surface             FFFFFF          FFFFFF           ✓ matches
+  surface-2 (sunk)    ECEFE4          F2F3EE           ✗ NEEDS UPDATE
+  surface-3           E2E6D8          E9EBE3           ✗ NEEDS UPDATE
+  ink (primaryDark)   14180E          1A1E14           ✗ NEEDS UPDATE
+  ink-2 (inkSoft)     4C5142          565B4C           ✗ NEEDS UPDATE
+  muted               7C8270          878C79           ✗ NEEDS UPDATE
+  placeholder         A4A997          AEB2A2           ✗ NEEDS UPDATE
+  line                E6E9DD          EDEEE8           ✗ NEEDS UPDATE
+  line-2 (strong)     D4D8C7          E0E2D8           ✗ NEEDS UPDATE
+  success             498F18          498F18           ✓ matches
+  successSoft         E4FBC9          E4FBC9           ✓ matches
+  warning             B0760A          B0760A           ✓ matches
+  warningSoft         FBEFCD          FBEFCD           ✓ matches
+  danger              D43A3F          D43A3F           ✓ matches
+  dangerSoft          FBE3E2          FBE3E2           ✓ matches
+  info                3E6FE0          3E6FE0           ✓ matches
+  infoSoft            E3EAFC          E3EAFC           ✓ matches
+
+  MISSING TOKENS (not present in current system):
+  - seat-tint         —               EDF1F7           NEW (occupied table)
+  - seat-line         —               D5DEEC           NEW (occupied table)
+  - seat-ink          —               4C679C           NEW (occupied table)
+  - Channel hues (dine-in/website/messenger/qr/counter/manager)
+
+1.4 TYPOGRAPHY DELTA
+
+  Role             Current (size/weight)   New Spec        Status
+  ─────────────────────────────────────────────────────────────────────────
+  Screen title big  28/800                  26/700          ✗ NEEDS UPDATE
+  Screen title      22/700                  22/700          ✓ matches
+  Money hero        30/700                  33–76/800       ✗ NEEDS UPDATE (range)
+  Section H2        18/600                  15/700          ✗ NEEDS UPDATE
+  Order serial      N/A                     19/800          NEW role needed
+  Title (row/tile)  15/600                  14–15/600       ✓ close enough
+  Price/money       17/700                  14–17/700       ✓ matches
+  Body              14/400                  14/400          ✓ matches
+  Body-S            13/muted                13/muted        ✓ matches
+  Label/status      13/600                  11–13/500–700   ✓ range match
+  Eyebrow           12/700 · 0.05em         11–12/700 · 0.05–0.08em  ✓ close
+
+1.5 RADIUS / SPACING / ELEVATION
+
+  Radii: ✓ Already matches spec (xs:3, sm:5, md:7, lg:9, xl:12, pill:999)
+  Spacing: ✓ Base-4 system already in place and matches spec
+  Elevation: ✓ Minimal shadows, borders-first policy already enforced
+
+1.6 COMPONENT GAPS (design system widgets that need visual updates)
+
+  Component            Issue
+  ─────────────────────────────────────────────────────────────────────────
+  TfBottomNav          Uses thin bar indicator → spec requires lime pill behind
+                       icon + bold label
+  TfChip               Active state uses solid lime → spec distinguishes "lime"
+                       (solid lime+ink) vs "tint" (accent-tint + accent-strong)
+  TfTabs (Seg)         Active = primarySoft fill → spec says white (or lime
+                       variant); wrapper = surface-2
+  TfUnifiedTopNav      Title is 28/800 → spec says 26/700 for big titles
+  TfFab                Radius uses PosRadii.chip (5px) → spec says rounded-square
+                       (larger, ~12–14px)
+  TfPeriodSelector     Active pill uses white text on lime → spec says ink-on-lime
+                       always (#14180E), never white
+  Header (brand)       No lime mark + "QuickBytes" brand variant exists in widgets
+
+────────────────────────────────────────────────────────────────────────────────
+2. MIGRATION PLAN (design system tokens + primitives only)
+────────────────────────────────────────────────────────────────────────────────
+
+PHASE 1: COLOR TOKEN VALUES  [COMPLETED ✓]
+──────────────────────────────────────────────────────
+
+  File: lib/src/core/theme/app_theme.dart — PosColors class
+
+  Actions:
+  1. Update neutral tokens:
+     - background:     F3F5EE → F7F8F4
+     - surfaceSunk:    ECEFE4 → F2F3EE
+     - surface3:       E2E6D8 → E9EBE3
+     - primaryDark:    14180E → 1A1E14
+     - inkSoft:        4C5142 → 565B4C
+     - muted:          7C8270 → 878C79
+     - mutedSoft:      A4A997 → AEB2A2
+     - line:           E6E9DD → EDEEE8
+     - lineStrong:     D4D8C7 → E0E2D8
+
+  2. Update accent tokens:
+     - accentStrong (lime700): 498F18 → 3E7E14
+     - primarySoft:            EAF7D6 → F0FADF
+     - primaryWash (lime200):  CDF79B → D8F3AD
+
+  3. Add new tokens:
+     - seatTint:   EDF1F7   (occupied table wash)
+     - seatLine:   D5DEEC   (occupied table border)
+     - seatInk:    4C679C   (occupied table text)
+     - Channel color constants (website/messenger/qr/counter/manager)
+
+  4. Remove PosColors.accentStrong alias pointing to lime700 (498F18) — point
+     it at new 3E7E14 value directly.
+
+  5. Update ThemeData dark overrides to keep dark mode proportionally adjusted
+     to the new light values.
+
+  Verification: Run app in light mode, confirm no jarring visual regressions on
+  Orders, Menu, Stock screens. Signal colors (success/warning/danger) unchanged.
+
+
+PHASE 2: TYPOGRAPHY SCALE  [COMPLETED ✓]
+──────────────────────────────────────────────────
+
+  File: lib/src/core/theme/app_theme.dart — TextTheme in _build()
+  File: lib/src/core/widgets/tf_design_system.dart — TfUnifiedTopNav, TfMicroLabel
+
+  Actions:
+  1. displaySmall (screen title big): Keep 22/700 for pushed screens, but add a
+     displayMedium (26/700) for tab-root titles (matches spec's "big" tier).
+
+  2. headlineMedium (money hero): Update to 33/800 as the default hero size.
+     Larger analytics heroes (76px) are screen-specific overrides, not tokens.
+
+  3. titleLarge (section H2): 18/600 → 15/700. This is a visible change — all
+     section headings shrink slightly and become bolder.
+
+  4. Add "order serial hero" role: 19/800 tabular — new TextTheme slot or a
+     named style constant in tf_design_system.dart.
+
+  5. Eyebrow (labelSmall): letterSpacing 0.05em is already correct. Optionally
+     drop fontSize to 11 for tighter eyebrows per spec.
+
+  6. TfUnifiedTopNav: Change title from 28/800 to 26/700.
+
+  Verification: Scan all screens for clipped text / overflow from size changes.
+  Check Bangla rendering (height/spacing safe).
+
+
+PHASE 3: COMPONENT PRIMITIVES  [COMPLETED ✓]
+───────────────────────────────────────────────────────
+
+  File: lib/src/core/widgets/tf_design_system.dart
+
+  3A. TfBottomNav (bottom tab bar)
+      - Replace "thin lime bar" indicator with lime pill behind icon
+      - Active tab: lime pill bg + bold label; inactive: muted icon + normal label
+      - Height remains 70, add localized labels (already present)
+
+  3B. TfChip
+      - Active state: solid lime + ink (current) → keep for default
+      - Add `TfChipVariant.tint` → accent-tint bg + accent-strong text
+      - Remove lineStrong border on active state (lime fill is the indicator)
+
+  3C. TfTabs (segmented control)
+      - Wrapper: surfaceSunk → surface-2 background
+      - Active segment: primarySoft → white (elevated segment, like iOS style)
+      - Add "lime" variant where active = lime fill
+
+  3D. TfFab
+      - borderRadius: PosRadii.chip (5) → PosRadii.lg (9) or xl (12)
+      - Matches spec's "56×56 rounded-square"
+      - Shadow: Keep glow, matches spec FAB shadow
+
+  3E. TfPeriodSelector
+      - Active pill text: white → PosColors.accentInk (ink-on-lime rule)
+      - This is a spec violation in the current code
+
+  3F. TfIconButton (BarBtn)
+      - Verify: 42px square, hairline border, optional badge — already matches
+      - No changes needed
+
+  3G. TfStatusBadge
+      - No pending badge on order cards (this is flow, not system) — no action
+      - Badge styling already matches spec
+
+  3H. NEW: Brand header variant
+      - Add a "brand" mode to TfUnifiedTopNav or create TfBrandHeader
+      - Shows: lime mark (bolt icon) + "QuickBytes" + location subtitle
+      - Used on Orders home screen
+
+  Verification: Screenshot each changed component in isolation; compare with
+  flow_frames reference images.
+
+
+PHASE 4: THEMEDATA WIRING  [COMPLETED ✓]
+──────────────────────────────────────────────────
+
+  File: lib/src/core/theme/app_theme.dart — _build() method
+
+  Actions:
+  1. NavigationBarTheme: Update indicatorColor/indicatorShape to match the new
+     pill style from Phase 3A.
+
+  2. ChipTheme: Update selectedColor behavior to reflect the two-variant system
+     (solid lime default vs tint variant).
+
+  3. SegmentedButtonTheme: Match Phase 3C wrapper/active style.
+
+  4. CardTheme: borderRadius stays lg (9) — matches spec's ≤12 rule.
+
+  5. InputDecorationTheme: focusedBorder color → new accentStrong (3E7E14).
+
+  6. Verify FAB shadow in the elevated button or custom component level.
+
+  Verification: Run `flutter analyze` clean; visual scan of all screens.
+
+
+PHASE 5: CLEANUP & VALIDATION  [COMPLETED ✓]
+──────────────────────────────────────────────────────
+
+  Actions:
+  1. Grep for any remaining raw Color(0x...) literals in mobile feature screens
+     that should now use the updated tokens. Fix stragglers.
+
+  2. Remove backward-compatible aliases in PosColors that are no longer needed
+     (coral, purple, surfaceWarm, surfaceTinted, etc.) — these are dead weight
+     from prior migrations.
+
+  3. Verify all Bangla locale rendering with new token values (line heights,
+     spacing, contrast ratios).
+
+  4. Run contrast checks: new muted (#878C79) on new bg (#F7F8F4) must pass
+     WCAG AA for large text (3:1 minimum).
+
+  5. Update the `accentStrong` references — verify all lime-text-on-white usages
+     now use the new #3E7E14 value.
+
+  6. Confirm desktop_pos module is unaffected (Pc aliases still point to correct
+     PosColors values — some values changed underneath, assess if Pc needs its
+     own pinned values).
+
+────────────────────────────────────────────────────────────────────────────────
+3. WHAT IS NOT IN SCOPE
+────────────────────────────────────────────────────────────────────────────────
+
+  - Screen layout/flow changes (e.g., order card anatomy, table grid)
+  - New screens or features (Messages, Control Tower, Analytics overhaul)
+  - Role-based navigation changes (Owner/Manager/Waiter nav tabs)
+  - Business logic changes (order lifecycle, stock-in, chat handoff)
+  - Desktop POS module (keeps existing Pc layer)
+  - Dark mode redesign (proportional adjustments only)
+  - i18n string additions (only visual token/component changes)
+  - API integration or data model changes
+
+────────────────────────────────────────────────────────────────────────────────
+4. RISK NOTES
+────────────────────────────────────────────────────────────────────────────────
+
+  1. INK COLOR CHANGE (14180E → 1A1E14): This shifts the primary text color from
+     pure-black-green to a slightly softer ink. All text in the app will shift.
+     The change is subtle (~3% lighter) but pervasive.
+
+  2. ACCENT-STRONG (498F18 → 3E7E14): Used for lime text on white backgrounds.
+     Changing this affects text buttons, links, and active text indicators. The
+     new value is slightly darker/bluer — verify legibility.
+
+  3. DESKTOP POS SIDE-EFFECTS: The Pc theme aliases PosColors values. When we
+     update PosColors.background (F3F5EE → F7F8F4), the desktop module's Pc.bg
+     changes too. Either: (a) pin Pc values to their old literals, or (b) accept
+     the visual shift on desktop.
+
+  4. SECTION HEADING SHRINK (18px → 15px): TfSectionHeader and titleLarge usage
+     throughout the app will visually shrink. Screens with tight layouts will
+     gain breathing room; screens designed around 18px may look sparse.
+
+────────────────────────────────────────────────────────────────────────────────
+5. COMPLETION SUMMARY
+────────────────────────────────────────────────────────────────────────────────
+
+  All 5 phases completed on 2026-06-09.
+
+  Files modified:
+  - lib/src/core/theme/app_theme.dart (tokens, shadows, ThemeData wiring)
+  - lib/src/core/widgets/tf_design_system.dart (components: BottomNav, Chip,
+    Tabs, Fab, PeriodSelector, CreateOrderTray, + new TfBrandHeader)
+  - lib/src/core/widgets/copyable_text_card.dart (dead alias fix)
+  - lib/src/core/widgets/notification_center.dart (dead alias fix)
+  - lib/src/features/inventory/inventory_screen.dart (dead alias fix)
+  - lib/src/features/inventory/stock_in_screen.dart (dead alias fix)
+  - lib/src/features/settings/settings_screen.dart (dead alias + ink-on-lime)
+  - lib/src/features/dashboard/dashboard_screen.dart (ink-on-lime fix)
+
+  Key changes:
+  - All color tokens updated to match DESIGN_SOURCE_OF_TRUTH.md §2
+  - Typography scale aligned to spec §3
+  - TfBottomNav: lime pill indicator (replaces thin bar)
+  - TfChip: added `tint` variant (accent-tint bg + accent-strong text)
+  - TfTabs: white active segment on surface-2 wrapper
+  - TfFab: rounded-square (12px) + spec FAB shadow
+  - TfPeriodSelector + TfCreateOrderTray: ink-on-lime enforced
+  - NavigationBarTheme: pill indicator, accentInk icon
+  - SegmentedButtonTheme: white active on surface-2
+  - New TfBrandHeader widget (lime bolt mark + title)
+  - PosShadows.fab added
+
+  Validation: `flutter analyze` passes with 0 new issues (79 pre-existing in
+  cloud_api_service_old.dart + 5 dashboard_screen.dart warnings, all unrelated).
+
+────────────────────────────────────────────────────────────────────────────────
+6. POST-MIGRATION: UNIFIED TOP BAR  [PENDING]
+────────────────────────────────────────────────────────────────────────────────
+
+  Priority: HIGH — current top bar is visually inconsistent across screens.
+
+  Goal: One shared top bar component used on every screen for design coherence.
+
+  LAYOUT:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  [Page Title]                          [🔔]  [Avatar ▾]         │
+  │  Restaurant Name                                                 │
+  └──────────────────────────────────────────────────────────────────┘
+
+  LEFT SIDE:
+  - Page title (bold, 26/700 per spec)
+  - Restaurant/outlet name below (muted, 13/500)
+
+  RIGHT SIDE:
+  - Notification bell icon (TfIconButton style, 42px, hairline border)
+  - Account avatar: circular, filled with user initials (2 chars),
+    accent-tint bg + accent-strong text, 36px diameter
+
+  AVATAR DROPDOWN (on tap):
+  - Mode switch: Foodcart / Café / Restaurant / Chain (current mode highlighted)
+  - Language toggle: English ↔ বাংলা
+  - Sign out
+
+  Dropdown styling:
+  - Surface card with line border, PosRadii.md, PosShadows.raised
+  - Each option: 44px min-height row, icon + label
+  - Active mode: tint chip style (accent-tint bg + accent-strong text)
+  - Dividers between sections
+
+  IMPLEMENTATION:
+  - Replace or extend TfUnifiedTopNav to become the single shared top bar
+  - Must accept: title, subtitle (restaurant name), onNotification, user initials
+  - Dropdown: use PopupMenuButton or custom overlay anchored to avatar
+  - File: lib/src/core/widgets/tf_design_system.dart
+  - Consume in: lib/src/app.dart (or each tab root screen)
+
+  CONSTRAINTS:
+  - Must work with existing TfBottomNav (no layout conflicts)
+  - Bangla support for all dropdown labels
+  - Notification bell should accept optional badge count (int?)
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

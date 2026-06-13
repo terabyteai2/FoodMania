@@ -150,7 +150,7 @@ async def push_order(
     status_value = _normalize_order_status(body.status)
     # Staff-created manual orders should enter the manager's actionable flow
     # directly so manager-side auto-print can run without extra status taps.
-    if created_by_role == "staff" and status_value == "pending":
+    if created_by_role in ("staff", "waiter") and status_value == "pending":
         status_value = "accepted"
     existing = (await db.execute(select(Order).where(Order.id == body.id))).scalar_one_or_none()
     if existing:

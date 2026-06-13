@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -14,7 +15,9 @@ from sqlalchemy.orm import joinedload
 
 from auth import ALGORITHM
 from config import settings
+from database import AsyncSessionLocal
 from models import ChatbotConversation, ChatbotIntegration, ChatbotOAuthSession, MenuItem, Outlet
+from routers.ws import manager
 from services.customer_orders import (
     DeliveryOrderLine,
     create_delivery_order,
@@ -29,12 +32,85 @@ FACEBOOK_OAUTH_STATE_TYPE = "facebook_chatbot_oauth"
 FACEBOOK_OAUTH_CALLBACK_PATH = "/admin/chatbot/facebook/oauth/callback"
 GRAPH_TIMEOUT_SECONDS = 8.0
 GROQ_TIMEOUT_SECONDS = 30.0
+DEEPSEEK_TIMEOUT_SECONDS = 45.0
 MAX_CONTEXT_MENU_ITEMS = 80
 MAX_REPLY_CHARS = 1900
+BATCH_WAIT_SECONDS = 4.0
+BATCH_MAX_SIZE = 10
+BATCH_LLM_MAX_TOKENS = 4000
+CHAT_HISTORY_CONTEXT_LIMIT = 10
+CHAT_HISTORY_APP_LIMIT = 10
+
+
+_chatbot_queue: asyncio.Queue = asyncio.Queue()
+_batch_worker_task: asyncio.Task | None = None
 
 
 class ChatbotError(RuntimeError):
     pass
+
+
+def _chat_history(value: Any) -> list:
+    return list(value) if isinstance(value, list) else []
+
+
+def recent_chat_history(value: Any, *, limit: int = CHAT_HISTORY_APP_LIMIT) -> list[dict]:
+    entries = [entry for entry in _chat_history(value) if isinstance(entry, dict)]
+    if limit <= 0:
+        return entries
+    return entries[-limit:]
+
+
+def append_chat_history(
+    conversation: ChatbotConversation,
+    *,
+    role: str,
+    text: str,
+    kind: str | None = None,
+) -> None:
+    entry = {
+        "role": role,
+        "text": text,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if kind:
+        entry["kind"] = kind
+    history = _chat_history(conversation.history_json)
+    history.append(entry)
+    conversation.history_json = history
+
+
+def _conversation_status(conversation: ChatbotConversation) -> str:
+    state = conversation.state_json or {}
+    value = str(state.get("status") or "").strip().lower()
+    return value if value in {"needs", "replied", "bot"} else "bot"
+
+
+def _conversation_unread(conversation: ChatbotConversation) -> int:
+    state = conversation.state_json or {}
+    try:
+        return int(state.get("unread") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def chat_update_payload(conversation: ChatbotConversation) -> dict:
+    return {
+        "conversationId": conversation.id,
+        "status": _conversation_status(conversation),
+        "unread": _conversation_unread(conversation),
+        "updatedAt": conversation.updated_at.isoformat(),
+    }
+
+
+async def broadcast_chat_update(
+    integration: ChatbotIntegration,
+    conversation: ChatbotConversation,
+) -> None:
+    await manager.broadcast(
+        integration.outlet_id,
+        {"type": "chat_updated", "data": chat_update_payload(conversation)},
+    )
 
 
 def mask_page_token(token: str | None) -> str | None:
@@ -679,39 +755,38 @@ async def _handle_event(
     if not psid:
         return
     text = _event_text(message, postback)
+
+    # Let the bot handle non-text messages by passing a placeholder
     if not text:
-        await _send_message(
-            integration,
-            psid,
-            "Please send a text message so I can help with the menu or delivery order.",
-        )
-        return
+        text = "[User sent a non-text message like sticker or image]"
 
     conversation = await _get_conversation(db, integration, psid)
     conversation.last_user_message = text
-    try:
-        reply = await _chatbot_reply(db, integration, conversation, text)
-        integration.last_error = None
-    except Exception as error:
-        logger.exception("facebook chatbot failed page=%s psid=%s", integration.page_id, psid)
-        reply = "Sorry, I could not process that right now. Please try again or use the menu link."
-        integration.last_error = str(error)[:800]
-    conversation.last_bot_message = reply
+    append_chat_history(conversation, role="user", text=text)
     conversation.updated_at = datetime.now(timezone.utc)
     integration.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-    try:
-        await _send_message(integration, psid, reply)
-    except Exception as error:
-        logger.warning(
-            "facebook chatbot reply send failed page=%s psid=%s error=%s",
-            integration.page_id,
-            psid,
-            error,
-        )
-        integration.last_error = str(error)[:800]
-        integration.updated_at = datetime.now(timezone.utc)
+    integration.last_error = None
+
+    # When a manager has taken over the thread — escalated ('needs') or actively
+    # replying ('replied') — the bot must NOT auto-respond. Record the inbound
+    # message and bump unread so it surfaces in Messages, then stop. The manager
+    # hands the thread back to the bot (status -> 'bot') when done.
+    control_status = str((conversation.state_json or {}).get("status") or "").strip().lower()
+    if control_status in {"needs", "replied"}:
+        state = dict(conversation.state_json or {})
+        state["unread"] = int(state.get("unread") or 0) + 1
+        conversation.state_json = state
         await db.commit()
+        await broadcast_chat_update(integration, conversation)
+        return
+
+    await db.commit()
+    await broadcast_chat_update(integration, conversation)
+
+    await _chatbot_queue.put({
+        "conversation_id": conversation.id,
+        "text": text,
+    })
 
 
 def _event_text(message: dict | None, postback: dict | None) -> str:
@@ -753,114 +828,6 @@ async def _get_conversation(
     return conversation
 
 
-async def _chatbot_reply(
-    db: AsyncSession,
-    integration: ChatbotIntegration,
-    conversation: ChatbotConversation,
-    user_text: str,
-) -> str:
-    outlet = integration.outlet
-    menu_items = await _available_menu_items(db, outlet.id)
-    state = _normalize_state(conversation.state_json)
-    model_payload = await _chat_with_groq(
-        outlet=outlet,
-        menu_items=menu_items,
-        state=state,
-        user_text=user_text,
-        ordering_enabled=integration.ordering_enabled,
-    )
-    reply = str(model_payload.get("reply") or "").strip()
-    order_action = model_payload.get("order") if isinstance(model_payload.get("order"), dict) else {}
-
-    if not integration.ordering_enabled:
-        conversation.state_json = state
-        return reply or _menu_link_reply(outlet)
-
-    state, state_reply = await _apply_order_action(
-        db=db,
-        outlet=outlet,
-        state=state,
-        action=order_action,
-    )
-    conversation.state_json = state
-    return state_reply or reply or "I can help with menu questions and delivery orders."
-
-
-async def _chat_with_groq(
-    *,
-    outlet: Outlet,
-    menu_items: list[MenuItem],
-    state: dict,
-    user_text: str,
-    ordering_enabled: bool,
-) -> dict:
-    api_key = settings.GROQ_API_KEY.strip()
-    model = settings.CHATBOT_GROQ_MODEL.strip()
-    if not api_key or not model:
-        return {
-            "reply": (
-                f"Thanks for messaging {outlet.name}. AI chat is not configured yet. "
-                f"You can order here: {_menu_link(outlet)}"
-            ),
-            "order": {"intent": "none"},
-        }
-
-    context = _restaurant_context(outlet, menu_items, ordering_enabled)
-    messages = [
-        {"role": "system", "content": _system_prompt()},
-        {"role": "user", "content": json.dumps({
-            "restaurant": context,
-            "conversationState": state,
-            "customerMessage": user_text,
-        }, ensure_ascii=False)},
-    ]
-    try:
-        async with httpx.AsyncClient(timeout=GROQ_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_completion_tokens": 700,
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
-    except httpx.HTTPError as error:
-        raise ChatbotError("Groq chatbot request failed.") from error
-
-    content = (
-        ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
-        if isinstance(payload, dict)
-        else None
-    )
-    if not isinstance(content, str) or not content.strip():
-        raise ChatbotError("Groq returned an empty chatbot response.")
-    return _parse_json_object(content)
-
-
-def _system_prompt() -> str:
-    return (
-        "You are the restaurant's Facebook Messenger assistant. Reply in banglish only with moslty bangla, in roman alphabet."
-        "Reply briefly and warmly. "
-        "Use only the provided restaurant/menu context. The only order type is delivery. "
-        "Collect menu items, quantities, customerName, mobileNumber, and deliveryAddress. "
-        "You can be flexible to change order information."
-        "Never create an order immediately after collecting details; first summarize the cart "
-        "and ask the customer to confirm. When you get the general seense that the customer confirms, set "
-        "order.intent to confirm and order.confirmed to true. Return JSON only: "
-        "{\"reply\":\"...\",\"order\":{\"intent\":\"none|draft|confirm|cancel\","
-        "\"items\":[{\"menuItemId\":\"...\",\"qty\":1}],\"customerName\":\"\","
-        "\"mobileNumber\":\"\",\"deliveryAddress\":\"\",\"confirmed\":false}}."
-    )
-
-
 def _restaurant_context(
     outlet: Outlet,
     menu_items: list[MenuItem],
@@ -870,7 +837,6 @@ def _restaurant_context(
         "restaurantName": outlet.restaurant.name if outlet.restaurant else outlet.name,
         "outletName": outlet.name,
         "orderingEnabled": ordering_enabled,
-        "orderingUrl": _menu_link(outlet),
         "menu": [
             {
                 "id": item.id,
@@ -905,16 +871,17 @@ async def _apply_order_action(
     outlet: Outlet,
     state: dict,
     action: dict,
-) -> tuple[dict, str | None]:
+) -> tuple[dict, dict | None]:
     intent = str(action.get("intent") or "none").strip().lower()
     if intent == "cancel":
-        return _empty_state(), "No problem, I cancelled the draft order. What else can I help with?"
+        return _empty_state(), {"type": "order_cancelled"}
 
     state = _merge_state(state, action)
     lines, issue = await _validated_lines(db, outlet.id, state)
     if issue:
         state["awaitingConfirmation"] = False
-        return state, issue
+        return state, {"type": "validation_failed", "reason": issue}
+    
     if not lines:
         return state, None
 
@@ -926,43 +893,48 @@ async def _apply_order_action(
     confirmed = bool(action.get("confirmed")) or intent == "confirm"
     awaiting = bool(state.get("awaitingConfirmation"))
 
-    if confirmed and awaiting and has_details:
-        order = await create_delivery_order(
-            db=db,
-            outlet=outlet,
-            lines=lines,
-            customer_name=str(state.get("customerName") or ""),
-            mobile_number=str(state.get("mobileNumber") or ""),
-            delivery_address=str(state.get("deliveryAddress") or ""),
-            note="Facebook Messenger order",
-            source=FACEBOOK_ORDER_SOURCE,
-            created_by_role="customer",
-        )
-        return _empty_state(), (
-            "Order confirmed. "
-            f"Your order number is #{order.serial_number}. Total: ৳{float(order.total_amount):.0f}."
-        )
-
-    if confirmed and not awaiting:
+    if confirmed and has_details:
+        if awaiting or intent == "confirm":
+            order = await create_delivery_order(
+                db=db,
+                outlet=outlet,
+                lines=lines,
+                customer_name=str(state.get("customerName") or ""),
+                mobile_number=str(state.get("mobileNumber") or ""),
+                delivery_address=str(state.get("deliveryAddress") or ""),
+                note="Facebook Messenger order",
+                source=FACEBOOK_ORDER_SOURCE,
+                created_by_role="customer",
+            )
+            return _empty_state(), {
+                "type": "order_created",
+                "orderNumber": order.serial_number,
+                "totalAmount": float(order.total_amount),
+            }
         state["awaitingConfirmation"] = True
-        return state, _confirmation_reply(lines, totals, state)
+        return state, {
+            "type": "needs_confirmation",
+            "items": [{"name": l.name, "qty": l.qty} for l in lines],
+            "total": totals["total"],
+        }
 
     if has_details:
         state["awaitingConfirmation"] = True
-        return state, _confirmation_reply(lines, totals, state)
+        return state, {
+            "type": "needs_confirmation",
+            "items": [{"name": l.name, "qty": l.qty} for l in lines],
+            "total": totals["total"],
+        }
 
     state["awaitingConfirmation"] = False
     missing = [
-        label
-        for key, label in [
-            ("customerName", "name"),
-            ("mobileNumber", "mobile number"),
-            ("deliveryAddress", "delivery address"),
-        ]
+        key
+        for key in ("customerName", "mobileNumber", "deliveryAddress")
         if not str(state.get(key) or "").strip()
     ]
     if missing:
-        return state, "Please share your " + ", ".join(missing) + " for delivery."
+        return state, {"type": "missing_details", "missing": missing}
+    
     return state, None
 
 
@@ -984,6 +956,8 @@ def _merge_state(state: dict, action: dict) -> dict:
         value = action.get(key)
         if isinstance(value, str) and value.strip():
             next_state[key] = value.strip()
+            if next_state.get("awaitingConfirmation"):
+                next_state["awaitingConfirmation"] = False
     return _normalize_state(next_state)
 
 
@@ -1012,7 +986,7 @@ async def _validated_lines(
     by_id = {item.id: item for item in rows}
     missing = [menu_id for menu_id in menu_ids if menu_id not in by_id]
     if missing:
-        return [], "Some selected items are no longer available. Please choose from the current menu."
+        return [], "items_unavailable"
     lines: list[DeliveryOrderLine] = []
     for raw in items:
         if not isinstance(raw, dict):
@@ -1033,17 +1007,9 @@ async def _validated_lines(
     return lines, None
 
 
-def _confirmation_reply(lines: list[DeliveryOrderLine], totals: dict, state: dict) -> str:
-    item_text = ", ".join(f"{line.qty} x {line.name}" for line in lines)
-    return (
-        f"Please confirm your delivery order: {item_text}. "
-        f"Name: {state.get('customerName')}. Mobile: {state.get('mobileNumber')}. "
-        f"Address: {state.get('deliveryAddress')}. Total: ৳{totals['total']:.0f}. "
-        "Reply yes to place the order."
-    )
-
-
 async def _send_message(integration: ChatbotIntegration, psid: str, text: str) -> None:
+    if not text:
+        return
     version = settings.META_GRAPH_API_VERSION.strip() or "v24.0"
     url = f"https://graph.facebook.com/{version}/{integration.page_id}/messages"
     try:
@@ -1071,9 +1037,9 @@ def _parse_json_object(content: str) -> dict:
     try:
         parsed = json.loads(clean)
     except json.JSONDecodeError as error:
-        raise ChatbotError("Groq returned invalid JSON.") from error
+        raise ChatbotError("LLM returned invalid JSON.") from error
     if not isinstance(parsed, dict):
-        raise ChatbotError("Groq response must be a JSON object.")
+        raise ChatbotError("LLM response must be a JSON object.")
     return parsed
 
 
@@ -1098,6 +1064,16 @@ def _empty_state() -> dict:
     }
 
 
+# Bot-escalation reasons. Labels mirror the spec's Chat.reason values so the
+# Messages UI can map them; 'needs' status routes the chat to the manager.
+_ESCALATION_REASON_LABELS = {
+    "photo_request": "Photo requested",
+    "delivery_quote": "Delivery quote",
+    "catering": "Catering ask",
+    "other": "Needs your help",
+}
+
+
 def _safe_int(value: Any, *, fallback: int) -> int:
     if isinstance(value, int):
         return value
@@ -1107,12 +1083,411 @@ def _safe_int(value: Any, *, fallback: int) -> int:
         return fallback
 
 
-def _menu_link(outlet: Outlet) -> str:
-    slug = (outlet.public_slug or "").strip().lower()
-    if slug:
-        return f"https://{slug}.quickbytes.buzz"
-    return f"{settings.BASE_URL.rstrip('/')}/menu/{outlet.id}"
+# ── Micro‑batching ─────────────────────────────────────────────────────────────
 
 
-def _menu_link_reply(outlet: Outlet) -> str:
-    return f"You can view the menu and order here: {_menu_link(outlet)}"
+def start_batch_worker() -> None:
+    global _batch_worker_task
+    if _batch_worker_task is None or _batch_worker_task.done():
+        _batch_worker_task = asyncio.create_task(_batch_worker_loop())
+
+
+async def stop_batch_worker() -> None:
+    global _batch_worker_task
+    if _batch_worker_task is not None and not _batch_worker_task.done():
+        _batch_worker_task.cancel()
+        try:
+            await _batch_worker_task
+        except asyncio.CancelledError:
+            pass
+        _batch_worker_task = None
+
+
+async def _batch_worker_loop() -> None:
+    while True:
+        try:
+            batch = []
+            try:
+                item = await asyncio.wait_for(
+                    _chatbot_queue.get(), timeout=BATCH_WAIT_SECONDS
+                )
+                batch.append(item)
+            except asyncio.TimeoutError:
+                continue
+
+            while len(batch) < BATCH_MAX_SIZE and not _chatbot_queue.empty():
+                try:
+                    batch.append(_chatbot_queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+
+            await _process_batch(batch)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.exception("batch worker error: %s", exc)
+
+
+async def _process_batch(batch: list[dict]) -> None:
+    grouped: dict[str, dict] = {}
+    for item in batch:
+        grouped[item["conversation_id"]] = item
+
+    async with AsyncSessionLocal() as db:
+        conv_ids = list(grouped.keys())
+        result = await db.execute(
+            select(ChatbotConversation)
+            .where(ChatbotConversation.id.in_(conv_ids))
+            .options(
+                joinedload(ChatbotConversation.integration)
+                .joinedload(ChatbotIntegration.outlet)
+                .joinedload(Outlet.restaurant)
+            )
+        )
+        conversations = result.scalars().all()
+        conv_map: dict[str, ChatbotConversation] = {c.id: c for c in conversations}
+
+        outlet_ids = {
+            c.integration.outlet_id
+            for c in conversations
+            if c.integration is not None
+        }
+
+        menu_map: dict[str, list[MenuItem]] = {}
+        for oid in outlet_ids:
+            menu_map[oid] = await _available_menu_items(db, oid)
+
+        llm_conversations: list[dict] = []
+        for conv_id, item in grouped.items():
+            conv = conv_map.get(conv_id)
+            if conv is None or conv.integration is None:
+                logger.warning("batch skipping unknown conversation %s", conv_id)
+                continue
+            integration = conv.integration
+            outlet = integration.outlet
+            state = _normalize_state(conv.state_json)
+            history = recent_chat_history(
+                conv.history_json,
+                limit=CHAT_HISTORY_CONTEXT_LIMIT,
+            )
+            llm_conversations.append({
+                "id": conv_id,
+                "restaurant": _restaurant_context(
+                    outlet, menu_map.get(outlet.id, []), integration.ordering_enabled
+                ),
+                "conversationState": state,
+                "history": history,
+                "customerMessage": item["text"],
+            })
+
+        if not llm_conversations:
+            return
+
+        try:
+            llm_response = await _call_batched_llm(llm_conversations, _batched_system_prompt())
+        except ChatbotError:
+            logger.exception("batched LLM call failed for %d conversations", len(llm_conversations))
+            return
+
+        responses = llm_response.get("responses") if isinstance(llm_response, dict) else []
+        if not isinstance(responses, list):
+            logger.warning("batched LLM returned non-list responses: %r", responses)
+            responses = []
+
+        conversations_needing_final_reply = []
+        conversations_with_immediate_replies = []
+
+        for resp in responses:
+            if not isinstance(resp, dict):
+                continue
+            resp_id = resp.get("id")
+            conv = conv_map.get(resp_id)
+            if conv is None or conv.integration is None:
+                continue
+            integration = conv.integration
+            outlet = integration.outlet
+            state = _normalize_state(conv.state_json)
+
+            reply = str(resp.get("reply") or "").strip()
+            order_action = resp.get("order") if isinstance(resp.get("order"), dict) else {}
+
+            # Escalation takes precedence: hand the thread to a human manager.
+            # Set status='needs' (read by routers/chatbot.py _chat_status), post a
+            # 'system' marker, and send only the holding reply. The bot then stays
+            # silent for this customer (see _handle_event gate) until handback.
+            escalate = resp.get("escalate") if isinstance(resp.get("escalate"), dict) else {}
+            if bool(escalate.get("needed")):
+                reason_code = str(escalate.get("reason") or "other").strip().lower()
+                reason_label = _ESCALATION_REASON_LABELS.get(
+                    reason_code, _ESCALATION_REASON_LABELS["other"]
+                )
+                conv.state_json = {**state, "status": "needs", "reason": reason_label}
+                conv.last_bot_message = (
+                    reply or "আমি টিমের সাথে কথা বলে একটু পরেই জানাচ্ছি।"
+                )
+                append_chat_history(
+                    conv,
+                    role="system",
+                    text=f"⚠ Chatbot needs your help · {reason_label}",
+                )
+                append_chat_history(conv, role="bot", text=conv.last_bot_message)
+                conv.updated_at = datetime.now(timezone.utc)
+                conversations_with_immediate_replies.append(conv)
+                continue
+
+            if integration.ordering_enabled and order_action:
+                state, system_event = await _apply_order_action(
+                    db=db, outlet=outlet, state=state, action=order_action,
+                )
+                conv.state_json = state
+
+                if system_event and system_event.get("type") in (
+                    "order_created", "validation_failed", "missing_details",
+                    "needs_confirmation", "order_cancelled"
+                ):
+                    conv.state_json["systemEvent"] = system_event
+                    conversations_needing_final_reply.append(conv)
+                else:
+                    conv.last_bot_message = reply or "..."
+            else:
+                conv.state_json = state
+                conv.last_bot_message = reply or "..."
+
+            if conv not in conversations_needing_final_reply:
+                append_chat_history(conv, role="bot", text=conv.last_bot_message)
+                conversations_with_immediate_replies.append(conv)
+
+            conv.updated_at = datetime.now(timezone.utc)
+
+        await db.commit()
+
+        for conv in conversations_with_immediate_replies:
+            if conv.integration is not None:
+                await broadcast_chat_update(conv.integration, conv)
+
+        if conversations_needing_final_reply:
+            final_replies = await _generate_final_replies_batch(
+                conversations_needing_final_reply, menu_map
+            )
+            for conv in conversations_needing_final_reply:
+                final_reply = final_replies.get(conv.id)
+                if final_reply:
+                    conv.last_bot_message = final_reply
+                else:
+                    conv.last_bot_message = "..."
+
+                append_chat_history(conv, role="bot", text=conv.last_bot_message)
+            await db.commit()
+
+            for conv in conversations_needing_final_reply:
+                if conv.integration is not None:
+                    await broadcast_chat_update(conv.integration, conv)
+
+        for resp in responses:
+            if not isinstance(resp, dict):
+                continue
+            resp_id = resp.get("id")
+            conv = conv_map.get(resp_id)
+            if conv is None or conv.integration is None:
+                continue
+            try:
+                await _send_message(conv.integration, conv.psid, conv.last_bot_message or "")
+            except ChatbotError as exc:
+                logger.warning(
+                    "batch send failed conv=%s psid=%s error=%s",
+                    conv.id, conv.psid, exc,
+                )
+
+
+async def _generate_final_replies_batch(
+    conversations: list[ChatbotConversation], 
+    menu_map: dict[str, list[MenuItem]]
+) -> dict[str, str]:
+    if not conversations:
+        return {}
+
+    llm_payload = []
+    for conv in conversations:
+        outlet = conv.integration.outlet
+        state = conv.state_json
+        system_event = state.get("systemEvent", {})
+        
+        llm_payload.append({
+            "id": conv.id,
+            "restaurant": _restaurant_context(
+                outlet, menu_map.get(outlet.id, []), conv.integration.ordering_enabled
+            ),
+            "systemEvent": system_event,
+            "conversationState": state,
+        })
+    
+    try:
+        llm_response = await _call_batched_llm(llm_payload, _final_reply_system_prompt())
+    except ChatbotError:
+        logger.exception("final reply LLM call failed")
+        return {}
+
+    responses = llm_response.get("responses") if isinstance(llm_response, dict) else []
+    result = {}
+    if isinstance(responses, list):
+        for resp in responses:
+            if isinstance(resp, dict) and "id" in resp and "reply" in resp:
+                result[str(resp["id"])] = str(resp["reply"]).strip()
+    return result
+
+
+async def _call_batched_llm(conversations: list[dict], system_prompt: str) -> dict:
+    deepseek_key = settings.DEEPSEEK_API_KEY.strip()
+    deepseek_model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
+    if deepseek_key and deepseek_model:
+        try:
+            return await _chat_batched_provider(conversations, system_prompt, "deepseek")
+        except ChatbotError:
+            logger.warning("DeepSeek batched chatbot failed, falling back to Groq")
+
+    return await _chat_batched_provider(conversations, system_prompt, "groq")
+
+
+async def _chat_batched_provider(conversations: list[dict], system_prompt: str, provider: str) -> dict:
+    if provider == "deepseek":
+        api_key = settings.DEEPSEEK_API_KEY.strip()
+        model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
+        url = "https://api.deepseek.com/v1/chat/completions"
+        timeout = DEEPSEEK_TIMEOUT_SECONDS
+        max_tokens_key = "max_tokens"
+        temp = 0.3
+    else:
+        api_key = settings.GROQ_API_KEY.strip()
+        model = settings.CHATBOT_GROQ_MODEL.strip()
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        timeout = GROQ_TIMEOUT_SECONDS
+        max_tokens_key = "max_completion_tokens"
+        temp = 0.2
+
+    if not api_key or not model:
+        raise ChatbotError(f"{provider} is not configured for batch.")
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": json.dumps({"conversations": conversations}, ensure_ascii=False),
+        },
+    ]
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temp,
+                    max_tokens_key: min(BATCH_LLM_MAX_TOKENS, 800 * max(len(conversations), 1)),
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPError as error:
+        raise ChatbotError(f"{provider} batched chatbot request failed.") from error
+
+    content = (
+        ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
+        if isinstance(payload, dict)
+        else None
+    )
+    if not isinstance(content, str) or not content.strip():
+        raise ChatbotError(f"{provider} returned an empty batched chatbot response.")
+    return _parse_json_object(content)
+
+
+def _batched_system_prompt() -> str:
+    return (
+        "You are an advanced AI assistant processing multiple simultaneous Facebook Messenger "
+        "conversations for a restaurant POS system. \n\n"
+        "### CORE DIRECTIVES\n"
+        "1. LANGUAGE & TONE: You MUST reply in conversational Bangla using the Bangla alphabet. "
+        "Be brief, warm, friendly, and use common sense. \n"
+        "2. BATCH PROCESSING: You will receive a JSON object containing an array of independent "
+        "\"conversations\". You MUST process EVERY conversation in the array and return a response "
+        "for EACH one. Do not mix up the context between different conversations.\n"
+        "3. CONTEXT: For each conversation, you are provided with the \"restaurant\" menu, the "
+        "current \"conversationState\" (cart/details), the \"history\" (last 10 messages), and the "
+        "latest \"customerMessage\". Use the history to understand the flow of the specific "
+        "conversation.\n\n"
+        "### MENU & GENERAL CHAT\n"
+        "- Answer questions about menu items, prices, categories, or the restaurant naturally.\n"
+        "- If the customer goes off-topic, respond naturally in Bangla while preserving their "
+        "current order state.\n"
+        "- If the customerMessage is '[User sent a non-text message like sticker or image]', "
+        "politely ask them to send a text message so you can help them.\n\n"
+        "### ORDERING RULES (Delivery Only)\n"
+        "- Goal: Collect menu items (with quantities), customerName, mobileNumber, and "
+        "deliveryAddress.\n"
+        "- Items: Customers can add, remove, or change items freely. \n"
+        "- Quantities: MANDATORY. You must ensure every item has a quantity. If the user doesn't "
+        "specify, assume 1 or ask politely, but the final JSON must always have a valid integer "
+        "for \"qty\".\n"
+        "- Customer Details: You must collect all three details (name, mobile, address). \n"
+        "- Confirmation: Once you have AT LEAST ONE item AND all three customer details, "
+        "summarize the cart in Bangla and ask the customer to confirm. \n"
+        "- Affirmative: If they reply with an affirmative (e.g., \"হ্যাঁ\", \"yes\", \"confirm\", "
+        "\"ঠিক আছে\"), set order.intent to \"confirm\" and order.confirmed to true.\n"
+        "- Cancellation: If they want to cancel, set order.intent to \"cancel\".\n\n"
+        "### ESCALATION (hand off to a human manager)\n"
+        "- Some requests you CANNOT reliably fulfill. When the customer asks for any of the "
+        "following, you MUST escalate to a human instead of guessing or refusing:\n"
+        "  1. A photo/image of a specific dish (e.g. \"ছবি দেখান\", \"photo\", \"কেমন দেখতে\").\n"
+        "  2. A delivery charge/quote for a far or unknown area you have no fixed price for.\n"
+        "  3. Catering, bulk, event, or custom orders (large party, special menu).\n"
+        "- To escalate: set \"escalate\".\"needed\" to true with the matching \"reason\", and write a "
+        "short, warm holding \"reply\" in Bangla telling the customer you're checking with the team "
+        "and will get back shortly. Do NOT invent a photo, price, or promise.\n"
+        "- For anything you can answer normally, set \"escalate\".\"needed\" to false.\n\n"
+        "### OUTPUT FORMAT\n"
+        "You MUST return ONLY a valid JSON object. No markdown formatting (no ```json), no "
+        "explanations, no extra text. \n"
+        "The JSON must strictly follow this exact schema:\n\n"
+        "{\n"
+        '  "responses": [\n'
+        "    {\n"
+        '      "id": "<EXACT conversation id from the input>",\n'
+        '      "reply": "<Your conversational Bangla reply string>",\n'
+        '      "escalate": {\n'
+        '        "needed": <boolean>,\n'
+        '        "reason": "<photo_request | delivery_quote | catering | other>"\n'
+        "      },\n"
+        '      "order": {\n'
+        '        "intent": "<none | draft | confirm | cancel>",\n'
+        '        "items": [\n'
+        '          {"menuItemId": "<EXACT id from the restaurant menu>", "qty": <integer>}\n'
+        "        ],\n"
+        '        "customerName": "<string or empty>",\n'
+        '        "mobileNumber": "<string or empty>",\n'
+        '        "deliveryAddress": "<string or empty>",\n'
+        '        "confirmed": <boolean>\n'
+        "      }\n"
+        "    }\n"
+        "  ]\n"
+        "}"
+    )
+
+
+def _final_reply_system_prompt() -> str:
+    return (
+        "You are generating the final text reply for a Facebook Messenger restaurant bot. "
+        "The system has processed the user's intent and updated the conversation state. "
+        "You MUST reply in conversational Bangla using the Bangla alphabet. Be warm, friendly, and brief.\n\n"
+        "Based on the 'systemEvent' in the input, generate the appropriate message:\n"
+        "- 'order_created': Congratulate the user, mention the order number (orderNumber) and total amount (totalAmount).\n"
+        "- 'order_cancelled': Confirm that the draft order was cancelled.\n"
+        "- 'validation_failed': Inform the user that some items are unavailable (reason) and ask them to choose again.\n"
+        "- 'missing_details': Politely ask for the missing customer details listed in 'missing' (e.g., customerName, mobileNumber, deliveryAddress).\n"
+        "- 'needs_confirmation': Summarize the cart items and total from the event, and ask the user to confirm the order.\n\n"
+        "Return ONLY a JSON object with a 'responses' array: \n"
+        "{\"responses\": [{\"id\": \"<conversation id>\", \"reply\": \"<your Bangla reply>\"}]}"
+    )
