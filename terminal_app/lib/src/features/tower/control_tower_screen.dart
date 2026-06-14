@@ -36,7 +36,6 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
   // dailySalesTarget is nullable and NULL == "not configured").
   static const double _kDefaultDailyTarget = 30000;
 
-  bool _advanced = false;
   bool _settingsRequested = false;
   double? _configuredTarget;
 
@@ -56,11 +55,7 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.selectMany(context, const [
-      AppAspect.orders,
-      AppAspect.settings,
-      AppAspect.language,
-    ]);
+    final app = AppScope.of(context);
     final text = app.strings;
 
     final orders = app.ordersFor();
@@ -106,9 +101,7 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
         subtitle: text.liveOperations,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
-        showAdvanced: true,
-        advancedValue: _advanced,
-        onAdvancedChanged: (v) => setState(() => _advanced = v),
+        showAdvanced: false,
       ),
       showDatePill: false,
       pinHeader: true,
@@ -193,16 +186,14 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
                   // Channel load — always visible.
                   _ChannelLoadCard(text: text, open: open),
 
-                  if (_advanced) ...[
-                    const SizedBox(height: 12),
-                    _PaceCard(
-                      text: text,
-                      liveRev: liveRev,
-                      target: _configuredTarget ?? _kDefaultDailyTarget,
-                    ),
-                    const SizedBox(height: 12),
-                    _StaffCard(text: text, open: open),
-                  ],
+                  const SizedBox(height: 12),
+                  _PaceCard(
+                    text: text,
+                    liveRev: liveRev,
+                    target: _configuredTarget ?? _kDefaultDailyTarget,
+                  ),
+                  const SizedBox(height: 12),
+                  _StaffCard(text: text, open: open),
                 ],
               ),
             ),

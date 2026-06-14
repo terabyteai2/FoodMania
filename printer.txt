@@ -11,10 +11,13 @@ Purpose: Tells the kitchen what to cook. No prices are shown.
 ========================================
            KITCHEN ORDER
 ========================================
-Order #: 24        Token: 2061
-Type: Dine-in      Table: T5
-Server: Rahim      Channel: Waiter
-Time: 14:30 (Waiting 5m)
+Date: 2026-06-13   Time: 14:30
+
+          [ LARGE FONT: # 24 ]
+
+Type: [ DINE-IN ]    Table: T5
+Server: Rahim        Channel: Waiter
+(Waiting 5m)
 ----------------------------------------
 [2] Beef Burger
     + Extra Cheese, No Onions
@@ -25,47 +28,49 @@ Time: 14:30 (Waiting 5m)
 
 [1] French Fries (Large)
 ----------------------------------------
-Printed: 14:30:15 | KOT# 8f7a9d
+Printed: 14:30 | KOT# 8f7a9d
 ========================================
 
 
 --------------------------------------------------------------------------------
 TEMPLATE 2: CUSTOMER RECEIPT (DINE-IN / TAKEAWAY)
 Prints to: Front Counter / Table Printer
-Purpose: Final financial proof of purchase. VAT is extracted, not added.
+Purpose: Final financial proof of purchase.
 --------------------------------------------------------------------------------
 ****************************************
-          SPICY KITCHEN (Restaurant name, NOT outlet)
-        123 Gulshan Ave, Dhaka (Restaurant address, NOT outlet)
+       [ OPTIONAL LOGO IMAGE HERE ]
+              SPICY KITCHEN (Not outlet, restaurant)
+        123 Gulshan Ave, Dhaka (Not outlet, restaurant)
 ****************************************
 Date: 2026-06-13   Time: 15:20
-Order #: 24        Token: 2061
-Table: T5          Server: Rahim
+
+          [ LARGE FONT: # 24 ]
+
+[ DINE-IN ]   Table: T5   Server: Rahim
 ----------------------------------------
-ITEM              QTY  PRICE  TOT
+ITEM              QTY  PRICE    TOT
 ----------------------------------------
-Beef Burger        2 250.00 500.00
-Chicken Tikka      1 300.00 300.00
-Coke               2  50.00 100.00
+Beef Burger        2   250/-   500/-
+Chicken Tikka      1   300/-   300/-
+Coke               2    50/-   100/-
 ----------------------------------------
-Subtotal:                900.00
-Discount:                -50.00
+Subtotal:                  900/-
+{{#if discount}}Discount:               -50/-{{/if}}
 ========================================
-TOTAL:                   850.00
+TOTAL:                     850/- (VAT Included)
 ========================================
-VAT (5% Included):        40.48
-----------------------------------------
       PAYMENT: CASH
-      CASH:              900.00
-      CHANGE:             50.00
+      CASH:                  900/-
+{{#if change}}CHANGE:                   50/-{{/if}}
 ========================================
 
       [  QR CODE IMAGE  ]
-   Scan to track / Rate us!
-   pos.rest.com/t/2061
+   Scan to track your order!
+   pos.rest.com/t/#24
 
       Thank you for dining!
 ****************************************
+            Built by QuickBytes POS
 
 
 --------------------------------------------------------------------------------
@@ -74,103 +79,70 @@ Prints to: Packed inside the delivery bag
 Purpose: Financial receipt for the customer, includes delivery details.
 --------------------------------------------------------------------------------
 ****************************************
-          SPICY KITCHEN (Restaurant name, NOT outlet)
-        123 Gulshan Ave, Dhaka (Restaurant address, NOT outlet)
+       [ OPTIONAL LOGO IMAGE HERE ]
+              SPICY KITCHEN (Not outlet, restaurant)
+        123 Gulshan Ave, Dhaka (Not outlet, restaurant)
 ****************************************
 Date: 2026-06-13   Time: 15:20
-Order #: 24        Token: 2061
+
+          [ LARGE FONT: # 24 ]
+
+[ DELIVERY ]
 ----------------------------------------
 DELIVER TO:
 John Doe
 House 12, Road 5, Dhanmondi
 Phone: 01711-123456
 ----------------------------------------
-ITEM              QTY  PRICE  TOT
+ITEM              QTY  PRICE    TOT
 ----------------------------------------
-Beef Burger        2 250.00 500.00
-Coke               1  50.00  50.00
+Beef Burger        2   250/-   500/-
+Coke               1    50/-    50/-
 ----------------------------------------
-Subtotal:                550.00
-Delivery Fee:             50.00
+Subtotal:                  550/-
+Delivery Fee:               50/-
 ========================================
-TOTAL:                   600.00
+TOTAL:                     600/- (VAT Included)
 ========================================
-VAT (5% Included):        26.19
-----------------------------------------
       PAYMENT: CARD
 ========================================
 
       [  QR CODE IMAGE  ]
-   Track your delivery!
-   pos.rest.com/t/2061
+   Scan to track your order!
+   pos.rest.com/t/#24
 
 ****************************************
+            Built by QuickBytes POS
 
 
 --------------------------------------------------------------------------------
-TEMPLATE 4: DRIVER / DISPATCH COPY (DELIVERY)
-Prints to: Stapled to the OUTSIDE of the delivery bag
-Purpose: Strictly for the delivery rider. NO PRICES. Large text for readability.
---------------------------------------------------------------------------------
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!       DELIVERY COPY            !!!
-!!!   DO NOT SHOW TO CUSTOMER      !!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-Order #: 24      Token: 2061
-Placed: 15:20    Due: 15:50
-Area: Dhanmondi  Zone: North
-----------------------------------------
-CUSTOMER:
-John Doe
-----------------------------------------
-PHONE (CALL IF LOST):
-01711-123456
-----------------------------------------
-ADDRESS:
-House 12, Road 5
-Dhanmondi, Dhaka
-(Landmark: Near Star Kabab)
-----------------------------------------
-ITEMS TO DELIVER:
-[2] Beef Burger
-[1] Coke
-----------------------------------------
-NOTES FOR DRIVER:
-Call customer 5 mins before.
-========================================
-Customer Signature:
-
-
-
-========================================
-
-
---------------------------------------------------------------------------------
-TEMPLATE 5: VOID / COMP / WASTE TICKET
+TEMPLATE 4: VOID / COMP / WASTE TICKET
 Prints to: Manager Printer / Kitchen
 Purpose: Tracks deleted/comped items for theft prevention and inventory.
 --------------------------------------------------------------------------------
 ========================================
        VOID / WASTE TICKET
 ========================================
-Time: 15:25      Cashier: Sarah
+Date: 2026-06-13   Time: 15:25
+
+          [ LARGE FONT: # 24 ]
+
+[ DINE-IN ]   Cashier: Sarah
 Reason: Dropped on floor / Mistake
 ----------------------------------------
 VOIDED ITEMS:
 [1] Chicken Tikka
     + Half Portion
 ----------------------------------------
-Original Order: #24 (Table T5)
-Value: 300.00
-----------------------------------------
-VAT (5% Included): 14.29
+Original Value:              300/- (VAT Included)
 ========================================
+            Built by QuickBytes POS
 
 
 --------------------------------------------------------------------------------
-TEMPLATE 6: END OF DAY / Z-REPORT (SHIFT SUMMARY)
+TEMPLATE 5: END OF DAY / Z-REPORT (SHIFT SUMMARY)
 Prints to: Back Office / Manager Printer
-Purpose: Final financial reconciliation. VAT is shown as an extracted total.
+Purpose: Final financial reconciliation.
 --------------------------------------------------------------------------------
 ========================================
         END OF DAY REPORT
@@ -179,25 +151,21 @@ Date: 2026-06-13
 Shift: 10:00 AM - 10:00 PM
 Manager: David
 ========================================
-GROSS SALES:            45,500.00
-DISCOUNTS:              -1,200.00
+GROSS SALES:               45500/-
+DISCOUNTS:                 -1200/-
 ----------------------------------------
-NET SALES:              44,300.00
+NET SALES:                 44300/-
 ========================================
-VAT (5% Included):       2,109.52
-DELIVERY FEES:           1,500.00
+DELIVERY FEES:              1500/-
 ========================================
-TOTAL REVENUE:          45,800.00
+TOTAL REVENUE:             45800/- (VAT Included)
 ========================================
 PAYMENT BREAKDOWN:
-Cash:                   20,000.00
-Card:                   15,000.00
-Mobile (bKash):          9,300.00
-Delivery Apps:           1,500.00
+Cash:                      20000/-
 ========================================
 TOTAL ORDERS: 145
-Dine-in: 80 | Takeaway: 40
-Delivery: 25
+Dine-in: 80 | Takeaway: 40 | Delivery: 25
 ========================================
-Printed: 22:05:00
+Printed: 22:05
 ========================================
+            Built by QuickBytes POS

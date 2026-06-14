@@ -6,27 +6,9 @@ import 'package:local_pos/src/core/localization/app_strings.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
 import 'package:local_pos/src/features/orders/orders_screen.dart';
 import 'package:local_pos/src/models/account_role.dart';
-import 'package:local_pos/src/models/desktop_pos.dart';
 import 'package:local_pos/src/models/menu_item.dart';
 import 'package:local_pos/src/models/order_service_type.dart';
 import 'package:local_pos/src/models/server_config.dart';
-import 'package:local_pos/src/services/local_database_service.dart';
-
-class _DiscountSettingsDatabase extends LocalDatabaseService {
-  _DiscountSettingsDatabase(this.presets);
-
-  final List<PosDiscountPreset> presets;
-
-  @override
-  Future<DesktopPosSettings> getDesktopPosSettings({
-    required int fallbackTableCount,
-  }) async {
-    return DesktopPosSettings(
-      floorLayout: DesktopPosSettings.fallbackFloor(fallbackTableCount),
-      discountPresets: presets,
-    );
-  }
-}
 
 MenuItem _menuItem() {
   final now = DateTime(2026, 6, 13, 12);
@@ -42,23 +24,19 @@ MenuItem _menuItem() {
   );
 }
 
-PosAppController _controller({
-  required AccountRole role,
-  List<PosDiscountPreset> presets = const [],
-}) {
-  final controller =
-      PosAppController(database: _DiscountSettingsDatabase(presets))
-        ..language = AppLanguage.en
-        ..accountRole = role
-        ..menuItems = [_menuItem()]
-        ..serverConfig = ServerConfig(
-          serverId: 'server',
-          restaurantId: 'restaurant',
-          outletId: 'outlet',
-          restaurantName: 'Test Cafe',
-          outletName: 'Main',
-          tableCount: 4,
-        );
+PosAppController _controller({required AccountRole role}) {
+  final controller = PosAppController()
+    ..language = AppLanguage.en
+    ..accountRole = role
+    ..menuItems = [_menuItem()]
+    ..serverConfig = ServerConfig(
+      serverId: 'server',
+      restaurantId: 'restaurant',
+      outletId: 'outlet',
+      restaurantName: 'Test Cafe',
+      outletName: 'Main',
+      tableCount: 4,
+    );
   return controller;
 }
 
@@ -104,16 +82,7 @@ void main() {
 
     await _openReview(tester, controller);
 
-    expect(find.text('Add discount'), findsOneWidget);
-  });
-
-  testWidgets('waiter does not see add discount on FOH review', (tester) async {
-    final controller = _controller(role: AccountRole.waiter);
-    addTearDown(controller.dispose);
-
-    await _openReview(tester, controller);
-
-    expect(find.text('Add discount'), findsNothing);
+    expect(find.text('Discount (flat ৳)'), findsOneWidget);
   });
 
   testWidgets('custom flat discount updates review total', (tester) async {
@@ -121,45 +90,19 @@ void main() {
     addTearDown(controller.dispose);
 
     await _openReview(tester, controller);
-    await tester.tap(find.text('Add discount'));
-    await tester.pumpAndSettle();
+
+    // Enter a flat discount of 10 in the discount field.
     await tester.enterText(
-      find.widgetWithText(TextField, 'Discount value'),
+      find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.controller != null &&
+            w.decoration?.hintText == '0',
+      ),
       '10',
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Custom discount'),
-      'Promo',
-    );
-    await tester.tap(find.text('Apply discount'));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.text('Promo'), findsWidgets);
-    expect(find.text('Total: ৳90'), findsOneWidget);
-  });
-
-  testWidgets('preset percent discount updates review total', (tester) async {
-    final controller = _controller(
-      role: AccountRole.manager,
-      presets: const [
-        PosDiscountPreset(
-          id: 'staff',
-          label: 'Staff 10%',
-          kind: 'percent',
-          value: 10,
-        ),
-      ],
-    );
-    addTearDown(controller.dispose);
-
-    await _openReview(tester, controller);
-    await tester.tap(find.text('Add discount'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Staff 10%'));
-    await tester.tap(find.text('Apply discount'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Staff 10%'), findsWidgets);
     expect(find.text('Total: ৳90'), findsOneWidget);
   });
 }

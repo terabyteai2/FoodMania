@@ -132,7 +132,6 @@ class OrderCreatedPage extends StatefulWidget {
 
 class _OrderCreatedPageState extends State<OrderCreatedPage> {
   bool _printingKot = false;
-  bool _printingReceipt = false;
 
   Future<void> _printKot() async {
     if (_printingKot) return;
@@ -148,26 +147,6 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
           content: TfText(
             app.strings.ticketPrinted(widget.order.displaySequence),
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _printReceipt() async {
-    if (_printingReceipt) return;
-    setState(() => _printingReceipt = true);
-    final app = AppScope.of(context);
-    final ok = await app.printCustomerInvoice(widget.order);
-    if (!mounted) return;
-    setState(() => _printingReceipt = false);
-    if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-          content: TfText(
-            app.strings.billPrinted(widget.order.displaySequence),
           ),
         ),
       );
@@ -196,9 +175,8 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
                 serviceLabel: widget.serviceLabel,
                 total: widget.order.total,
                 printingKot: _printingKot,
-                printingReceipt: _printingReceipt,
                 onPrintKot: () => unawaited(_printKot()),
-                onPrintReceipt: () => unawaited(_printReceipt()),
+                onDone: () => Navigator.pop(context),
               ),
             ),
           ],
@@ -339,7 +317,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                     searchQuery: searchQuery,
                     onPrintBill: (o) => _printBill(context, o),
                     onPrintKot: (o) => _printKot(context, o),
-                    onOpen: (o) => _openEditOrderSheet(context, o),
+                    onOpen: (o) => o.status.adminStatus == OrderStatus.pending
+                        ? _showPendingOrderDetails(context, o)
+                        : _openEditOrderSheet(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
@@ -359,6 +339,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                     onPrintKot: (o) => _printKot(context, o),
                     onOpen: null,
                     onStatus: (o, s) => _changeStatus(context, o, s),
+                    onCompletedLongPress: (o) =>
+                        _showCompletedOrderActions(context, o),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
                     onLoadMore: app.loadMoreOrders,
@@ -657,6 +639,68 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Future<void> _openEditOrderSheet(BuildContext context, OrderModel order) =>
       openEditOrderSheet(context, order);
+
+  Future<void> _showCompletedOrderActions(
+    BuildContext context,
+    OrderModel order,
+  ) async {
+    final text = AppScope.of(context).strings;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, color: PosColors.slate),
+              title: TfText(text.isBn ? 'সম্পাদনা' : 'Edit'),
+              onTap: () {
+                Navigator.pop(context);
+                _openEditOrderSheet(context, order);
+              },
+            ),
+            Divider(height: 1, color: PosColors.line),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: PosColors.danger,
+              ),
+              title: TfText(
+                text.isBn ? 'মুছে ফেলুন' : 'Delete',
+                style: const TextStyle(color: PosColors.danger),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _changeStatus(context, order, OrderStatus.rejected);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPendingOrderDetails(
+    BuildContext context,
+    OrderModel order,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PendingOrderDetailSheet(
+        order: order,
+        onAccept: () {
+          Navigator.pop(context);
+          _changeStatus(context, order, OrderStatus.accepted);
+        },
+        onReject: () {
+          Navigator.pop(context);
+          _changeStatus(context, order, OrderStatus.rejected);
+        },
+      ),
+    );
+  }
 }
 
 /// Opens the order edit sheet for [order] (manager+ only) and applies the
@@ -711,6 +755,343 @@ Future<void> openEditOrderSheet(BuildContext context, OrderModel order) async {
         shiftId: order.shiftId,
       );
     } catch (_) {}
+  }
+}
+
+class _PendingOrderDetailSheet extends StatelessWidget {
+  const _PendingOrderDetailSheet({
+    required this.order,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final OrderModel order;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final isBn = text.isBn;
+    final channel = _resolveChannel(order);
+    final elapsedMinutes = DateTime.now()
+        .difference(order.createdAt.toLocal())
+        .inMinutes;
+    final typeLabel = _sourceLabel(order, text);
+    final isDelivery = order.serviceType == OrderServiceType.delivery;
+    final subtotal = order.items.fold<double>(
+      0,
+      (s, i) => s + i.lineTotal,
+    );
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(PosRadii.xl),
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              decoration: BoxDecoration(
+                color: PosColors.line,
+                borderRadius: BorderRadius.circular(PosRadii.pill),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                children: [
+                  // ── Header ──────────────────────────────────────────────
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      TfText(
+                        order.displaySequence,
+                        style: TextStyle(
+                          fontFamily: tfFontFamily(context),
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: PosColors.text,
+                          height: 1.0,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TfText(
+                          typeLabel,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: PosColors.ink2,
+                          ),
+                        ),
+                      ),
+                      TfText(
+                        text.orderAgeAgo(elapsedMinutes),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TfText(
+                    text.channelLabel(channel.key),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: PosColors.muted,
+                    ),
+                  ),
+                  // ── Delivery info ────────────────────────────────────────
+                  if (isDelivery &&
+                      ((order.customerName ?? '').isNotEmpty ||
+                          (order.mobileNumber ?? '').isNotEmpty ||
+                          (order.deliveryAddress ?? '').isNotEmpty)) ...[
+                    const SizedBox(height: 12),
+                    TfCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if ((order.customerName ?? '').isNotEmpty)
+                            _DetailRow(
+                              icon: Icons.person_outline_rounded,
+                              value: order.customerName!,
+                            ),
+                          if ((order.mobileNumber ?? '').isNotEmpty)
+                            _DetailRow(
+                              icon: Icons.phone_outlined,
+                              value: order.mobileNumber!,
+                            ),
+                          if ((order.deliveryAddress ?? '').isNotEmpty)
+                            _DetailRow(
+                              icon: Icons.location_on_outlined,
+                              value: order.deliveryAddress!,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // ── Items ────────────────────────────────────────────────
+                  const SizedBox(height: 12),
+                  TfCard(
+                    padded: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+                          child: TfText(
+                            isBn ? 'আইটেমসমূহ' : 'Items',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: PosColors.muted,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const Divider(color: PosColors.line, height: 1),
+                        for (final item in order.items)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 30,
+                                  child: TfText(
+                                    '${tfFormatNumber(context, item.qty)}×',
+                                    style: TextStyle(
+                                      fontFamily: tfFontFamily(context),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: PosColors.slate,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: TfText(
+                                    item.localizedName(app.language),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: PosColors.slate,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                TfText(
+                                  tfFormatCurrency(context, item.lineTotal),
+                                  style: TextStyle(
+                                    fontFamily: tfFontFamily(context),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: PosColors.slate,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // ── Note ────────────────────────────────────────────────
+                  if ((order.note ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    TfCard(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.sticky_note_2_outlined,
+                            size: 16,
+                            color: PosColors.muted,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TfText(
+                              order.note!.trim(),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: PosColors.ink2,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // ── Totals ───────────────────────────────────────────────
+                  const SizedBox(height: 12),
+                  TfCard(
+                    child: Column(
+                      children: [
+                        _AmountLine(
+                          label: isBn ? 'সাবটোটাল' : 'Subtotal',
+                          value: tfFormatCurrency(context, subtotal),
+                        ),
+                        const SizedBox(height: 6),
+                        _AmountLine(
+                          label: isBn ? 'মোট' : 'Total',
+                          value: tfFormatCurrency(context, order.total),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // ── Manager actions ──────────────────────────────────────────
+            if (app.isManager)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: onReject,
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: PosColors.surface,
+                            borderRadius: BorderRadius.circular(PosRadii.md),
+                            border: Border.all(
+                              color: PosColors.lineStrong,
+                              width: 1,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 20,
+                            color: PosColors.danger,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TfButton(
+                          label: text.acceptAndSendToKitchen,
+                          icon: TfNavIcon.check,
+                          variant: TfButtonVariant.accent,
+                          size: TfButtonSize.lg,
+                          onPressed: onAccept,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _sourceLabel(OrderModel order, AppStrings text) {
+    final table = (order.tableNo ?? '').trim();
+    if (table.isNotEmpty) {
+      return text.isBn ? 'টেবিল $table' : 'Table $table';
+    }
+    switch (order.serviceType) {
+      case OrderServiceType.takeaway:
+        return text.isBn ? 'পার্সেল' : 'Parcel';
+      case OrderServiceType.delivery:
+        return text.isBn ? 'ডেলিভারি' : 'Delivery';
+      case OrderServiceType.dineIn:
+      case null:
+        return text.isBn ? 'ডাইন-ইন' : 'Dine-in';
+    }
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.icon, required this.value});
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: PosColors.muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TfText(
+              value,
+              style: const TextStyle(fontSize: 13, color: PosColors.slate),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1140,6 +1521,7 @@ class _OrderList extends StatelessWidget {
     required this.onPrintKot,
     required this.onOpen,
     required this.onStatus,
+    this.onCompletedLongPress,
     this.hasMore = false,
     this.loadingMore = false,
     this.onLoadMore,
@@ -1155,6 +1537,7 @@ class _OrderList extends StatelessWidget {
   final void Function(OrderModel) onPrintKot;
   final void Function(OrderModel)? onOpen;
   final void Function(OrderModel, OrderStatus) onStatus;
+  final void Function(OrderModel)? onCompletedLongPress;
 
   /// Whether the underlying `orders` list has more pages available.
   final bool hasMore;
@@ -1223,6 +1606,9 @@ class _OrderList extends StatelessWidget {
                       onPrintKot: () => onPrintKot(orders[i]),
                       onOpen: onOpen == null ? null : () => onOpen!(orders[i]),
                       onStatus: (s) => onStatus(orders[i], s),
+                      onCompletedLongPress: onCompletedLongPress == null
+                          ? null
+                          : () => onCompletedLongPress!(orders[i]),
                     );
                   },
                 )
@@ -1240,6 +1626,9 @@ class _OrderList extends StatelessWidget {
                       onPrintKot: () => onPrintKot(orders[i]),
                       onOpen: onOpen == null ? null : () => onOpen!(orders[i]),
                       onStatus: (s) => onStatus(orders[i], s),
+                      onCompletedLongPress: onCompletedLongPress == null
+                          ? null
+                          : () => onCompletedLongPress!(orders[i]),
                     );
                   },
                 ),
@@ -1452,6 +1841,7 @@ class _OrderCard extends StatelessWidget {
     required this.onPrintKot,
     required this.onOpen,
     required this.onStatus,
+    this.onCompletedLongPress,
   });
 
   final OrderModel order;
@@ -1459,6 +1849,7 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback onPrintKot;
   final VoidCallback? onOpen;
   final ValueChanged<OrderStatus> onStatus;
+  final VoidCallback? onCompletedLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -1503,7 +1894,9 @@ class _OrderCard extends StatelessWidget {
         opacity: isCompleted ? 0.82 : 1,
         child: InkWell(
           onTap: onOpen,
-          onLongPress: canPrint && isAccepted ? onPrintBill : null,
+          onLongPress: isCompleted
+              ? onCompletedLongPress
+              : (canPrint && isAccepted ? onPrintBill : null),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -2689,7 +3082,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   OrderModel? _createdOrder;
   bool _creating = false;
   bool _printingKot = false;
-  bool _printingReceipt = false;
+  final _discountCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -2745,6 +3138,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     _pageCtrl.dispose();
     _searchCtrl.dispose();
     _noteCtrl.dispose();
+    _discountCtrl.dispose();
     _custNameCtrl.dispose();
     _custPhoneCtrl.dispose();
     _custAddrCtrl.dispose();
@@ -2760,15 +3154,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   void _goToStep(int index) {
     if (index < 0 || index >= _totalSteps) return;
     setState(() => _step = index);
-    _pageCtrl.animateToPage(
-      index,
-      duration: Duration(milliseconds: 280),
-      curve: Curves.easeInOut,
-    );
+    _pageCtrl.jumpToPage(index);
   }
 
-  void _selectTable(String? table) {
+  void _selectTableAndAdvance(String table) {
     setState(() => _selectedTable = table);
+    _goToStep(1);
   }
 
   void _selectSource(OrderServiceType src) {
@@ -2780,6 +3171,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _selectedTable = null;
       }
     });
+    if (src == OrderServiceType.takeaway) _goToStep(1);
   }
 
   void _continueFromSource() {
@@ -2827,7 +3219,11 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     return _cartLines.fold<double>(0, (sum, line) => sum + line.lineTotal);
   }
 
-  double get _total => _roundMoney(_subtotal);
+  double get _discount =>
+      (double.tryParse(_discountCtrl.text.replaceAll(',', '')) ?? 0.0)
+          .clamp(0.0, _subtotal);
+
+  double get _total => _roundMoney(_subtotal - _discount);
 
   double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
 
@@ -2939,25 +3335,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     }
   }
 
-  Future<void> _printCreatedReceipt() async {
-    final order = _createdOrder;
-    if (order == null || _printingReceipt) return;
-    setState(() => _printingReceipt = true);
-    final app = AppScope.of(context);
-    final ok = await app.printCustomerInvoice(order);
-    if (!mounted) return;
-    setState(() => _printingReceipt = false);
-    if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-          content: TfText(app.strings.billPrinted(order.displaySequence)),
-        ),
-      );
-    }
-  }
-
   Future<void> _printCreatedKot() async {
     final order = _createdOrder;
     if (order == null || _printingKot) return;
@@ -3022,19 +3399,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     tableCount: widget.tableCount,
                     selectedTable: _selectedTable,
                     dineInOpenOrders: widget.dineInOpenOrders,
-                    onSelectTable: _selectTable,
+                    onSelectTable: _selectTableAndAdvance,
                     nameCtrl: _custNameCtrl,
                     phoneCtrl: _custPhoneCtrl,
                     addressCtrl: _custAddrCtrl,
                     onDeliveryChanged: () => setState(() {}),
-                    onContinue:
-                        _source != null &&
-                            (_source != OrderServiceType.dineIn ||
-                                _selectedTable != null) &&
-                            (_source != OrderServiceType.delivery ||
-                                _deliveryValid)
-                        ? _continueFromSource
-                        : null,
+                    onContinue: _deliveryValid ? _continueFromSource : null,
                   ),
                   _MenuStep(
                     visibleItems: _visibleItems,
@@ -3058,8 +3428,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                   _ReviewStep(
                     lines: _cartLines,
                     totalQty: _totalQty,
+                    subtotal: _subtotal,
+                    discount: _discount,
                     total: _total,
                     noteCtrl: _noteCtrl,
+                    discountCtrl: _discountCtrl,
+                    onDiscountChanged: () => setState(() {}),
                     sourceLabel: _tableLabel.isEmpty ? '—' : _tableLabel,
                     onEdit: () => _goToStep(1),
                     onCreate: _submit,
@@ -3070,13 +3444,10 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     serviceLabel: _tableLabel,
                     total: _total,
                     printingKot: _printingKot,
-                    printingReceipt: _printingReceipt,
                     onPrintKot: _createdOrder == null
                         ? null
                         : () => unawaited(_printCreatedKot()),
-                    onPrintReceipt: _createdOrder == null
-                        ? null
-                        : () => unawaited(_printCreatedReceipt()),
+                    onDone: () => Navigator.pop(context),
                   ),
                 ],
               ),
@@ -3246,8 +3617,7 @@ class _StepIndicator extends StatelessWidget {
         children: [
           for (var i = 0; i < total; i++) ...[
             Expanded(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 280),
+              child: Container(
                 height: 3,
                 decoration: BoxDecoration(
                   color: i <= step ? PosColors.primaryDark : PosColors.line,
@@ -3434,14 +3804,15 @@ class _SourceAndTableStep extends StatelessWidget {
             ),
           ),
         ),
-        TfStickyCTA(
-          child: TfButton(
-            label: text.continueAction,
-            trailingIcon: TfNavIcon.arrow,
-            size: TfButtonSize.lg,
-            onPressed: onContinue,
+        if (isDelivery)
+          TfStickyCTA(
+            child: TfButton(
+              label: text.continueAction,
+              trailingIcon: TfNavIcon.arrow,
+              size: TfButtonSize.lg,
+              onPressed: onContinue,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -3511,8 +3882,12 @@ class _ReviewStep extends StatelessWidget {
   const _ReviewStep({
     required this.lines,
     required this.totalQty,
+    required this.subtotal,
+    required this.discount,
     required this.total,
     required this.noteCtrl,
+    required this.discountCtrl,
+    required this.onDiscountChanged,
     required this.sourceLabel,
     required this.onEdit,
     required this.onCreate,
@@ -3521,8 +3896,12 @@ class _ReviewStep extends StatelessWidget {
 
   final List<DesktopMenuLineSelection> lines;
   final int totalQty;
+  final double subtotal;
+  final double discount;
   final double total;
   final TextEditingController noteCtrl;
+  final TextEditingController discountCtrl;
+  final VoidCallback onDiscountChanged;
   final String sourceLabel;
   final VoidCallback onEdit;
   final Future<void> Function() onCreate;
@@ -3732,42 +4111,128 @@ class _ReviewStep extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.only(left: 2, bottom: 6),
+                child: TfText(
+                  text.isBn ? 'ডিসকাউন্ট (ফ্ল্যাট ৳)' : 'Discount (flat ৳)',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.slate,
+                  ),
+                ),
+              ),
+              TfCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.local_offer_outlined,
+                      size: 16,
+                      color: PosColors.muted,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: discountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        style: TextStyle(
+                          fontFamily: tfFontFamily(context),
+                          fontSize: 14,
+                          color: PosColors.slate,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          isCollapsed: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          hintText: '0',
+                          hintStyle: TextStyle(
+                            fontFamily: tfFontFamily(context),
+                            color: PosColors.muted,
+                            fontSize: 14,
+                          ),
+                        ),
+                        onChanged: (_) => onDiscountChanged(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
         TfStickyCTA(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final totalText =
-                  '${text.totalLabel}: ${tfFormatCurrency(context, total)}';
+              final hasDiscount = discount > 0;
               final action = TfButton(
                 label: creating ? '...' : text.sendToKitchen,
                 icon: creating ? null : TfNavIcon.check,
                 size: TfButtonSize.lg,
                 onPressed: creating ? null : () => onCreate(),
               );
-              final totalLabel = TfText(
-                totalText,
-                style: TextStyle(
-                  fontFamily: tfFontFamily(context),
-                  color: PosColors.slate,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              final summaryCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (hasDiscount) ...[
+                    TfText(
+                      '${text.isBn ? 'সাবটোটাল' : 'Subtotal'}: ${tfFormatCurrency(context, subtotal)}',
+                      style: TextStyle(
+                        fontFamily: tfFontFamily(context),
+                        color: PosColors.muted,
+                        fontSize: 11,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    TfText(
+                      '${text.isBn ? 'ডিসকাউন্ট' : 'Discount'}: -${tfFormatCurrency(context, discount)}',
+                      style: TextStyle(
+                        fontFamily: tfFontFamily(context),
+                        color: PosColors.danger,
+                        fontSize: 11,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  TfText(
+                    '${text.totalLabel}: ${tfFormatCurrency(context, total)}',
+                    style: TextStyle(
+                      fontFamily: tfFontFamily(context),
+                      color: PosColors.slate,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               );
               if (constraints.maxWidth < 360) {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [totalLabel, const SizedBox(height: 8), action],
+                  children: [summaryCol, const SizedBox(height: 8), action],
                 );
               }
               return Row(
                 children: [
-                  Expanded(child: totalLabel),
+                  Expanded(child: summaryCol),
                   const SizedBox(width: 12),
                   Expanded(flex: 2, child: action),
                 ],
@@ -3819,18 +4284,16 @@ class _OrderCreatedStep extends StatelessWidget {
     required this.serviceLabel,
     required this.total,
     required this.printingKot,
-    required this.printingReceipt,
     required this.onPrintKot,
-    required this.onPrintReceipt,
+    required this.onDone,
   });
 
   final OrderModel? order;
   final String serviceLabel;
   final double total;
   final bool printingKot;
-  final bool printingReceipt;
   final VoidCallback? onPrintKot;
-  final VoidCallback? onPrintReceipt;
+  final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
@@ -3948,13 +4411,13 @@ class _OrderCreatedStep extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: TfButton(
-                  key: const ValueKey('created-order-receipt'),
-                  label: printingReceipt ? '...' : 'Receipt',
-                  labelBn: printingReceipt ? '...' : 'রিসিট',
-                  icon: printingReceipt ? null : Icons.receipt_long_outlined,
+                  key: const ValueKey('created-order-home'),
+                  label: 'Done',
+                  labelBn: 'সম্পন্ন',
+                  icon: Icons.home_outlined,
                   variant: TfButtonVariant.dark,
                   size: TfButtonSize.lg,
-                  onPressed: printingReceipt ? null : onPrintReceipt,
+                  onPressed: onDone,
                 ),
               ),
             ],

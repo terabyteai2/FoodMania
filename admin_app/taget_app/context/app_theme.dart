@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 enum PosThemeTone { dark, light }
 
 // ---------------------------------------------------------------------------
-// PosColors — Volt POS lime design system (design_rules.md §2)
+// PosColors — QuickBytes POS lime design system (DESIGN_SOURCE_OF_TRUTH.md §2)
 // One accent (#99FF47 lime) = go / primary / positive / active.
 // Ink-on-lime (#14180E), never white. Borders not shadows. Crisp corners ≤12.
 // ---------------------------------------------------------------------------
@@ -11,12 +11,12 @@ class PosColors {
   // ── Accent — lime ramp ──────────────────────────────────────────────────
   static const Color lime50 = Color(0xFFF3FDE7);
   static const Color lime100 = Color(0xFFE4FBC9);
-  static const Color lime200 = Color(0xFFCDF79B);
+  static const Color lime200 = Color(0xFFD8F3AD);
   static const Color lime300 = Color(0xFFB4F46E);
   static const Color lime400 = Color(0xFF99FF47); // accent
   static const Color lime500 = Color(0xFF84F02C); // press
   static const Color lime600 = Color(0xFF67C81E);
-  static const Color lime700 = Color(0xFF498F18); // accent-strong
+  static const Color lime700 = Color(0xFF3E7E14); // accent-strong
   static const Color lime800 = Color(0xFF2F5E14);
   static const Color lime900 = Color(0xFF1E3D0F);
 
@@ -24,36 +24,53 @@ class PosColors {
   static const Color primary = lime400; // #99FF47
   static const Color primaryDeep = lime500; // press state #84F02C
   static const Color primaryMid = lime600; // secondary emphasis
-  static const Color primarySoft = Color(0xFFEAF7D6); // accent-tint
-  static const Color primaryWash = lime200; // accent-tint-2
+  static const Color primarySoft = Color(0xFFF0FADF); // accent-tint
+  static const Color primaryWash = lime200; // accent-tint-2 #D8F3AD
   static const Color accentInk = Color(0xFF14180E); // dark ink on lime fills
   static const Color accentSoftInk = Color(0xFF14180E); // text on accentSoft
-  static const Color accentStrong = lime700; // #498F18 lime text on light
+  static const Color accentStrong = lime700; // #3E7E14 lime text on light
   static const Color accentOnInk = lime400; // lime on dark backgrounds
 
   // ── Ink — dark green-black ──────────────────────────────────────────────
-  static const Color primaryDark = Color(0xFF14180E); // ink
-  static const Color inkSoft = Color(0xFF4C5142); // ink-2
+  static const Color primaryDark = Color(0xFF1A1E14); // ink
+  static const Color inkSoft = Color(0xFF565B4C); // ink-2
   static const Color onInk = Color(0xFFF1F4EC); // text on dark
   static const Color onInkSec = Color(0xB3F1F4EC); // white-ish 0.70
   static const Color onInkTer = Color(0x7AF1F4EC); // white-ish 0.48
 
-  // ── Scaffold — LIGHT (neutral green-tinted) ─────────────────────────────
-  static const Color background = Color(0xFFF3F5EE); // bg
+  // ── Scaffold — LIGHT (neutral) ──────────────────────────────────────────
+  static const Color background = Color(0xFFF7F8F4); // bg
   static const Color surface = Color(0xFFFFFFFF); // surface
-  static const Color surfaceSunk = Color(0xFFECEFE4); // surface-2
-  static const Color surface3 = Color(0xFFE2E6D8); // surface-3
-  static const Color track = Color(0xFFECEFE4);
-  static const Color trackInk = Color(0x2414180E);
+  static const Color surfaceSunk = Color(0xFFF2F3EE); // surface-2
+  static const Color surface3 = Color(0xFFE9EBE3); // surface-3
+  static const Color track = Color(0xFFF2F3EE);
+  static const Color trackInk = Color(0x241A1E14);
 
   // ── Secondary text ──────────────────────────────────────────────────────
-  static const Color muted = Color(0xFF7C8270); // muted
-  static const Color mutedSoft = Color(0xFFA4A997); // placeholder
+  static const Color ink2 = Color(0xFF565B4C); // ink-2 (labels)
+  static const Color muted = Color(0xFF878C79); // muted
+  static const Color mutedSoft = Color(0xFFAEB2A2); // placeholder
 
   // ── Borders ─────────────────────────────────────────────────────────────
-  static const Color line = Color(0xFFE6E9DD); // line
-  static const Color lineStrong = Color(0xFFD4D8C7); // line-2
-  static const Color divider = Color(0xFFE6E9DD);
+  static const Color line = Color(0xFFEDEEE8); // line
+  static const Color lineStrong = Color(0xFFE0E2D8); // line-2
+  static const Color divider = Color(0xFFEDEEE8);
+  static const Color pendingBorder = Color(0xFFEAD9A8); // amber pending card
+
+  // ── Occupied-table wash (FOH) — deliberately NOT lime ───────────────────
+  static const Color seatTint = Color(0xFFEDF1F7);
+  static const Color seatLine = Color(0xFFD5DEEC);
+  static const Color seatInk = Color(0xFF4C679C);
+
+  // ── Channel hues ────────────────────────────────────────────────────────
+  static const Color channelWebsite = Color(0xFF3E6FE0);
+  static const Color channelMessenger = Color(0xFF3E6FE0);
+  static const Color channelQr = Color(0xFFB0760A);
+  static const Color channelCounter = Color(0xFF498F18);
+  static const Color channelDineIn = lime400;
+  static const Color channelWaiter = Color(0xFF7C8270);
+  static const Color channelManager = Color(0xFF14180E);
+  static const Color channelNeutralSoft = Color(0xFFECEFE4);
 
   // ── Signals (lime IS success; rest avoid green) ─────────────────────────
   static const Color success = Color(0xFF498F18);
@@ -73,24 +90,17 @@ class PosColors {
   static const Color info = Color(0xFF3E6FE0);
   static const Color infoSoft = Color(0xFFE3EAFC);
 
-  // ── Backward-compatible aliases ─────────────────────────────────────────
+  // ── Semantic aliases ─────────────────────────────────────────────────────
   static const Color accent = primary;
   static const Color accentSoft = primarySoft;
   static const Color accentDeep = primaryDeep;
   static const Color accentMid = primaryMid;
   static const Color accentWash = primaryWash;
-  static const Color slate = primaryDark; // ink alias
+  static const Color slate = primaryDark;
   static const Color slateSoft = inkSoft;
   static const Color text = primaryDark;
   static const Color textSec = muted;
   static const Color textTer = mutedSoft;
-  static const Color primaryGlow = primary;
-  static const Color surfaceWarm = background;
-  static const Color surfaceTinted = surface;
-  static const Color coral = urgent;
-  static const Color coralSoft = urgentSoft;
-  static const Color coralWash = urgentSoft;
-  static const Color purple = muted;
 
   static PosThemeTone get tone => PosThemeTone.light;
   static void setTone(PosThemeTone tone) {}
@@ -142,6 +152,9 @@ class PosShadows {
   ];
   static const List<BoxShadow> raised = [
     BoxShadow(color: Color(0x1414180E), blurRadius: 32, offset: Offset(0, 12)),
+  ];
+  static const List<BoxShadow> fab = [
+    BoxShadow(color: Color(0x997EC828), blurRadius: 22, offset: Offset(0, 8), spreadRadius: -6),
   ];
   static const List<BoxShadow> card = soft;
 }
@@ -233,25 +246,31 @@ class AppTheme {
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       textTheme: TextTheme(
-        // Display / screen title: 22/700
+        // Screen title (big) — tab roots: 26/700
         displaySmall: baseText.copyWith(
+          fontSize: s(26),
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+        ),
+        // Screen title (pushed): 22/700
+        displayMedium: baseText.copyWith(
           fontSize: s(22),
           fontWeight: FontWeight.w700,
           height: 1.18,
         ),
-        // Money XL: 30/700 tabular
+        // Money / token hero: 33/800 tabular
         headlineMedium: baseText.copyWith(
-          fontSize: s(30),
-          fontWeight: FontWeight.w700,
+          fontSize: s(33),
+          fontWeight: FontWeight.w800,
           height: 1.05,
-          letterSpacing: s(-0.02 * 30),
+          letterSpacing: s(-0.02 * 33),
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
-        // Section (H2): 18/600
+        // Section (H2): 15/700
         titleLarge: baseText.copyWith(
-          fontSize: s(18),
-          fontWeight: FontWeight.w600,
-          height: 1.22,
+          fontSize: s(15),
+          fontWeight: FontWeight.w700,
+          height: 1.30,
         ),
         // Money / price: 17/700 tabular
         titleMedium: baseText.copyWith(
@@ -394,15 +413,13 @@ class AppTheme {
         backgroundColor: surf,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: surf2,
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.sm),
-        ),
+        indicatorColor: PosColors.primary,
+        indicatorShape: const StadiumBorder(),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
             fontSize: s(12),
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             color: selected ? ink : mut,
           );
         }),
@@ -410,7 +427,7 @@ class AppTheme {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: s(22),
-            color: selected ? ink : mut,
+            color: selected ? PosColors.accentInk : mut,
           );
         }),
       ),
@@ -435,8 +452,8 @@ class AppTheme {
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? PosColors.primarySoft
-                : surf,
+                ? surf
+                : surf2,
           ),
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
