@@ -38,23 +38,16 @@ class HourlyBarsChart extends StatelessWidget {
       children: [
         SizedBox(
           height: height,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 700),
-            curve: Curves.easeOutCubic,
-            builder: (context, t, _) {
-              return CustomPaint(
-                size: Size.infinite,
-                painter: _HourlyPainter(
-                  today: today,
-                  avg7: avg7,
-                  safeMax: safeMax,
-                  peakIndex: peakIndex,
-                  showGhost: showGhost,
-                  progress: t,
-                ),
-              );
-            },
+          child: CustomPaint(
+            size: Size.infinite,
+            painter: _HourlyPainter(
+              today: today,
+              avg7: avg7,
+              safeMax: safeMax,
+              peakIndex: peakIndex,
+              showGhost: showGhost,
+              progress: 1.0,
+            ),
           ),
         ),
         const SizedBox(height: 6),

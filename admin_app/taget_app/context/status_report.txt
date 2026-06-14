@@ -66,6 +66,13 @@ backend/.env; do not print secrets). 2026-06-11: manually backed up and ran
   /root/db-backups/rastarant-20260611-111636.sql.gz
 Verified: schema_spot_check_ok, systemctl active, local/public /health database ok.
 
+credentials- 
+VPS_HOST="${VPS_HOST:-160.187.130.80}"
+VPS_USER="${VPS_USER:-root}"
+VPS_PORT="${VPS_PORT:-22}"
+REMOTE_DIR="/var/www/rastarant"
+SERVICE_NAME="rastarant"
+
 ==============================  ROLES / AUTH  ==============================
 3 roles: owner > manager > waiter (spec §1). Migrated from old manager/staff.
 Frontend `AccountRole` (admin_app/lib/src/models/account_role.dart):

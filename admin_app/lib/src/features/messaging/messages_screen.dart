@@ -200,8 +200,7 @@ class _Segments extends StatelessWidget {
       return Expanded(
         child: GestureDetector(
           onTap: () => onChanged(value),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+          child: Container(
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -438,13 +437,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         _scrollCtrl.jumpTo(target);
         return;
       }
-      unawaited(
-        _scrollCtrl.animateTo(
-          target,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _scrollCtrl.jumpTo(target);
     });
   }
 

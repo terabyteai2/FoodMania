@@ -55,11 +55,7 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
   void _goTo(int step) {
     if (_busy || step < 0 || step >= _totalSteps) return;
     setState(() => _step = step);
-    _pageController.animateToPage(
-      step,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
+    _pageController.jumpToPage(step);
   }
 
   Future<void> _finish(BusinessTier tier) async {

@@ -222,6 +222,18 @@ class _AuditRow extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (entry.items.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  for (final item in entry.items)
+                    TfText(
+                      '${item.qty}× ${item.name}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: PosColors.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                ],
               ],
             ),
           ),

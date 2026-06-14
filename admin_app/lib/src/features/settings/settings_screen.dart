@@ -3295,6 +3295,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _currentLogoUrl = info['logoUrl']?.toString().trim().isEmpty == true
             ? null
             : info['logoUrl']?.toString().trim();
+        if (mounted) AppScope.of(context).setLogoUrl(_currentLogoUrl);
         _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true
             ? null
             : info['videoUrl']?.toString().trim();
@@ -3320,6 +3321,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _saving = false;
       });
       if (!mounted) return;
+      AppScope.of(context).setLogoUrl(url);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppScope.of(context).strings.heroLogoUploaded)),
       );
@@ -3346,6 +3348,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _currentLogoUrl = null;
         _saving = false;
       });
+      if (mounted) AppScope.of(context).setLogoUrl(null);
     } catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;

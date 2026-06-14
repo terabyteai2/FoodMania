@@ -202,6 +202,12 @@ class MenuAddOnCandidate(BaseModel):
     price: float = Field(gt=0)
 
 
+class MenuSizeVariant(BaseModel):
+    nameEn: str = Field(min_length=1)
+    nameBn: str = ""
+    price: float = Field(gt=0)
+
+
 class MenuScanCandidate(BaseModel):
     nameEn: str = Field(min_length=1)
     nameBn: str = Field(min_length=1)
@@ -215,6 +221,7 @@ class MenuScanCandidate(BaseModel):
     imageUrl: str | None = None
     subItems: list[MenuSubItem] = Field(default_factory=list)
     addOns: list[MenuAddOnCandidate] = Field(default_factory=list)
+    sizeVariants: list[MenuSizeVariant] = Field(default_factory=list)
 
 
 class ReceiptScanCandidate(BaseModel):

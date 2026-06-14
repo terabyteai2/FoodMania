@@ -256,7 +256,7 @@ class _OrdersScreenState extends State<OrdersScreen>
               tooltip: text.newOrder,
               onPressed: () => openNewOrderForm(
                 context,
-                onCreated: () => _tabs.animateTo(0),
+                onCreated: () => _tabs.index = 0,
               ),
             )
           : null,
@@ -309,7 +309,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     canCreate: canCreate,
                     onCreate: () => openNewOrderForm(
                       context,
-                      onCreated: () => _tabs.animateTo(0),
+                      onCreated: () => _tabs.index = 0,
                     ),
                     shortcut: ongoingShortcut,
                     searchQuery: searchQuery,
@@ -330,7 +330,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                     canCreate: canCreate,
                     onCreate: () => openNewOrderForm(
                       context,
-                      onCreated: () => _tabs.animateTo(0),
+                      onCreated: () => _tabs.index = 0,
                     ),
                     shortcut: completedShortcut,
                     searchQuery: searchQuery,
@@ -575,7 +575,7 @@ class _OrdersScreenState extends State<OrdersScreen>
             'hasNewPendingOrder=$hasNewPendingOrder',
           );
         }
-        _tabs.animateTo(0);
+        _tabs.index = 0;
       }
     });
   }
@@ -1143,12 +1143,12 @@ class _TabStrip extends StatelessWidget {
     final text = AppScope.of(context).strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: AnimatedBuilder(
-        animation: controller,
+      child: ListenableBuilder(
+        listenable: controller,
         builder: (context, _) {
           return TfTabs(
             activeIndex: controller.index,
-            onChanged: (i) => controller.animateTo(i),
+            onChanged: (i) => controller.index = i,
             items: [
               TfTabItem(label: text.ongoingTab, count: ongoingCount),
               TfTabItem(label: text.completedTab, count: completedCount),
@@ -3861,8 +3861,7 @@ class _SourceTile extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+        child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(PosRadii.card),

@@ -554,6 +554,13 @@ async def list_audit(
             ),
             "role": e.created_by_role,
             "createdAt": e.created_at.isoformat(),
+            "items": [
+                {
+                    "name": (i.get("name") or i.get("name_en") or "").strip(),
+                    "qty": int(i.get("qty", 1)),
+                }
+                for i in (order.items or [])
+            ] if order is not None else [],
         }
 
     return ok({"events": [_entry(e) for e in events]})

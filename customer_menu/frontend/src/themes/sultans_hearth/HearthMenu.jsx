@@ -39,8 +39,17 @@ function CategoryHeader({ name, nameBn }) {
   )
 }
 
+// Sum qty for a base itemId across all cart keys (handles modifier variant keys like "id::Large").
+function itemTotalQty(itemId, cart, cartExtras) {
+  return Object.entries(cart).reduce((sum, [key, qty]) => {
+    const extra = cartExtras?.[key]
+    const baseId = extra ? extra.baseId : key
+    return baseId === itemId ? sum + qty : sum
+  }, 0)
+}
+
 const HearthMenu = forwardRef(function HearthMenu(
-  { itemsByCategory, categoryOrder, categoryBnMap, cart, onAdd, onRemove, onOpenDetail, hasFloatingCart },
+  { itemsByCategory, categoryOrder, categoryBnMap, cart, cartExtras, onAdd, onRemove, onOpenDetail, onOpenVariants, hasFloatingCart },
   ref,
 ) {
   const T = useTokens()
@@ -86,10 +95,11 @@ const HearthMenu = forwardRef(function HearthMenu(
                   <HearthItemCard
                     key={item.id}
                     item={item}
-                    qty={cart[item.id] || 0}
+                    qty={itemTotalQty(item.id, cart, cartExtras)}
                     onAdd={() => onAdd(item.id)}
                     onRemove={() => onRemove(item.id)}
                     onOpenDetail={() => onOpenDetail(item)}
+                    onOpenVariants={onOpenVariants}
                   />
                 ))}
               </div>

@@ -73,6 +73,35 @@ def _icon_key_from_tags(raw: str | None) -> str | None:
     return None
 
 
+def _parse_modifiers(tags_json: str | None) -> dict:
+    """Parse option:label:delta and addon:price:label entries from tags_json."""
+    options: list = []
+    addons: list = []
+    try:
+        tags = json.loads(tags_json or '[]')
+    except (TypeError, ValueError):
+        return {'options': options, 'addons': addons}
+    for tag in (tags if isinstance(tags, list) else []):
+        if not isinstance(tag, str):
+            continue
+        s = tag.strip()
+        if s.lower().startswith('option:'):
+            parts = s.split(':', 2)
+            if len(parts) == 3:
+                try:
+                    options.append({'label': parts[1], 'priceDelta': float(parts[2] or 0)})
+                except ValueError:
+                    pass
+        elif s.lower().startswith('addon:'):
+            parts = s.split(':', 2)
+            if len(parts) == 3:
+                try:
+                    addons.append({'price': float(parts[1] or 0), 'label': parts[2]})
+                except ValueError:
+                    pass
+    return {'options': options, 'addons': addons}
+
+
 def _item_to_dict(item: MenuItem, request: Request, item_index: int = 0) -> dict:
     icon_key = _icon_key_from_tags(item.tags_json) or infer_icon_key(
         item.name,
@@ -81,6 +110,7 @@ def _item_to_dict(item: MenuItem, request: Request, item_index: int = 0) -> dict
     image_url = _rewrite_upload_url(request, item.image_url)
     if not image_url:
         image_url = resolve_placeholder_url(icon_key, item_index, request)
+    mods = _parse_modifiers(item.tags_json)
     data = {
         "id": item.id,
         "name": item.name,
@@ -97,6 +127,8 @@ def _item_to_dict(item: MenuItem, request: Request, item_index: int = 0) -> dict
         "imageUrl": image_url,
         "videoUrl": _rewrite_upload_url(request, item.video_url),
         "iconKey": icon_key,
+        "options": mods["options"],
+        "addons": mods["addons"],
     }
     return data
 

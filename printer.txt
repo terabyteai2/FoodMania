@@ -38,15 +38,15 @@ Prints to: Front Counter / Table Printer
 Purpose: Final financial proof of purchase.
 --------------------------------------------------------------------------------
 ****************************************
-       [ OPTIONAL LOGO IMAGE HERE ]
-              SPICY KITCHEN (Not outlet, restaurant)
-        123 Gulshan Ave, Dhaka (Not outlet, restaurant)
-****************************************
-Date: 2026-06-13   Time: 15:20
+       [ OPTIONAL LOGO IMAGE HERE ] (justify centre)
+         [Restaurant Name] (same font size, justify center)   
+        [Restaurant Address] (If available, subtitle, justify center)
+(line)
+	Date: 2026-06-13   Time: 15:20 (justify centre)
 
-          [ LARGE FONT: # 24 ]
+          #[orderNo.] (justify centre, same font size)
 
-[ DINE-IN ]   Table: T5   Server: Rahim
+[Order_Type_Badge]   Table: T5   Server: [account role, not name]
 ----------------------------------------
 ITEM              QTY  PRICE    TOT
 ----------------------------------------

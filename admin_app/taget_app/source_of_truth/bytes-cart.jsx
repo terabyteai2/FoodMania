@@ -54,7 +54,7 @@ function MenuBrowser({ onAdd, onSub, lines = [] }) {
   const [cat, setCat] = useState('All');
   const [foc, setFoc] = useState(false);
   const [view, setView] = useState('list');
-  const [cols, setCols] = useState(2);
+  const [cols, setCols] = useState(3);
   const [colMenu, setColMenu] = useState(false);
   const counts = useMemo(() => { const c = { All: MENU.length }; CATS.forEach((k) => c[k] = MENU.filter((m) => m.cat === k).length); return c; }, []);
   const countById = useMemo(() => { const m = {}; lines.forEach((l) => m[l.id] = (m[l.id] || 0) + l.qty); return m; }, [lines]);
@@ -103,12 +103,37 @@ function MenuBrowser({ onAdd, onSub, lines = [] }) {
         {['All', ...CATS].map((k) => <button key={k} className={'chip' + (cat === k ? ' active' : '')} onClick={() => setCat(k)}>{k}<span className="ct">{counts[k]}</span></button>)}
       </div>
       <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '0 16px 16px' }}>
-        {groups.map(([gcat, gitems]) => (
-          <div key={gcat} style={{ marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 2px 10px' }}>
-              <span className="eyebrow">{gcat}</span><span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{gitems.length}</span>
-            </div>
-            {view === 'list' ? (
+        {view === 'grid' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + cols + ', 1fr)', gap: 10 }}>
+            {items.map((m) => {
+              const n = countById[m.id] || 0;
+              const off = m.stock === 'no';
+              const thumbH = cols === 2 ? 130 : cols === 3 ? 88 : 64;
+              return (
+                <div key={m.id} className="tile" onClick={() => !off && onAdd(m)} style={{ padding: 8, opacity: off ? .5 : 1, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', borderColor: n > 0 ? 'var(--accent-press)' : 'var(--line)', background: n > 0 ? 'var(--accent-tint)' : 'var(--surface)' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Thumb cat={m.cat} size={thumbH} fill />
+                    {n > 0 && <span className="tab" style={{ position: 'absolute', top: 6, left: 6, minWidth: 22, height: 22, padding: '0 6px', borderRadius: 11, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 12.5, fontWeight: 800, display: 'grid', placeItems: 'center' }}>{n}</span>}
+                    {n > 0 && <button onClick={(e) => { e.stopPropagation(); onSub && onSub(m); }} style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'var(--surface)', boxShadow: '0 1px 3px rgba(20,24,14,.18)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--danger)' }}><Icon name="minus" size={16} sw={2.4} /></button>}
+                    {off && <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 10.5, fontWeight: 700, color: '#fff', background: 'var(--danger)', borderRadius: 5, padding: '3px 6px' }}>86'd</span>}
+                  </div>
+                  <div>
+                    <div className="nm ell2" style={{ fontSize: cols === 4 ? 12.5 : 14, lineHeight: 1.25, minHeight: '2.5em' }}>{m.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
+                      <span style={{ fontSize: cols === 4 ? 12.5 : 14, fontWeight: 700 }} className="tab">{money(m.price)}</span>
+                      {m.stock === 'low' && cols < 4 && <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Low</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          groups.map(([gcat, gitems]) => (
+            <div key={gcat} style={{ marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 2px 10px' }}>
+                <span className="eyebrow">{gcat}</span><span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{gitems.length}</span>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {gitems.map((m) => {
                   const n = countById[m.id] || 0;
@@ -131,35 +156,10 @@ function MenuBrowser({ onAdd, onSub, lines = [] }) {
                   );
                 })}
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + cols + ', 1fr)', gap: 10 }}>
-                {gitems.map((m) => {
-                  const n = countById[m.id] || 0;
-                  const off = m.stock === 'no';
-                  const thumbH = cols === 2 ? 130 : cols === 3 ? 88 : 64;
-                  return (
-                    <div key={m.id} className="tile" onClick={() => !off && onAdd(m)} style={{ padding: 8, opacity: off ? .5 : 1, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', borderColor: n > 0 ? 'var(--accent-press)' : 'var(--line)', background: n > 0 ? 'var(--accent-tint)' : 'var(--surface)' }}>
-                      <div style={{ position: 'relative' }}>
-                        <Thumb cat={m.cat} size={thumbH} />
-                        {n > 0 && <span className="tab" style={{ position: 'absolute', top: 6, left: 6, minWidth: 22, height: 22, padding: '0 6px', borderRadius: 11, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 12.5, fontWeight: 800, display: 'grid', placeItems: 'center' }}>{n}</span>}
-                        {n > 0 && <button onClick={(e) => { e.stopPropagation(); onSub && onSub(m); }} style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'var(--surface)', boxShadow: '0 1px 3px rgba(20,24,14,.18)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--danger)' }}><Icon name="minus" size={16} sw={2.4} /></button>}
-                        {off && <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 10.5, fontWeight: 700, color: '#fff', background: 'var(--danger)', borderRadius: 5, padding: '3px 6px' }}>86'd</span>}
-                      </div>
-                      <div>
-                        <div className="nm ell2" style={{ fontSize: cols === 4 ? 12.5 : 14, lineHeight: 1.25 }}>{m.name}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
-                          <span style={{ fontSize: cols === 4 ? 12.5 : 14, fontWeight: 700 }} className="tab">{money(m.price)}</span>
-                          {m.stock === 'low' && cols < 4 && <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600 }}>Low</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-        {groups.length === 0 && <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px 0', fontSize: 14 }}>No items match “{q}”.</div>}
+            </div>
+          ))
+        )}
+        {items.length === 0 && <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px 0', fontSize: 14 }}>No items match “{q}”.</div>}
       </div>
     </React.Fragment>
   );

@@ -36,6 +36,7 @@ backend/frontend_dist/
 # ---------- Secrets & runtime (never push) ----------
 backend/.env
 platform_admin/.env
+customer_menu/frontend/.env
 platform_admin/.env.*
 backend/uploads/
 backend/In_App_Update_Apk_File/

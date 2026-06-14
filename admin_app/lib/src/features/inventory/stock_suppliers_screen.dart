@@ -197,9 +197,7 @@ class _AddSupplierSheetState extends State<_AddSupplierSheet> {
   Widget build(BuildContext context) {
     final text = widget.text;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
+    return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
         decoration: const BoxDecoration(

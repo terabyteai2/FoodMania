@@ -3629,8 +3629,7 @@ class _StringSegmented extends StatelessWidget {
               child: GestureDetector(
                 onTap: () => onChanged(o.$1),
                 behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
+                child: Container(
                   height: 34,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -4231,8 +4230,7 @@ class _Segmented extends StatelessWidget {
               child: GestureDetector(
                 onTap: () => onChanged(o.$1),
                 behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
+                child: Container(
                   height: 34,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(

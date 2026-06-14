@@ -212,8 +212,7 @@ class _RoleSwitcher extends StatelessWidget {
   Widget _seg(AccountRole role, bool on) {
     return GestureDetector(
       onTap: () => app.setAccountRoleDemo(role),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+      child: Container(
         height: 38,
         alignment: Alignment.center,
         decoration: BoxDecoration(
@@ -431,8 +430,7 @@ class _LanguageCard extends StatelessWidget {
   Widget _langSeg(AppLanguage lang, bool on, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: on ? PosColors.surface : Colors.transparent,

@@ -40,7 +40,7 @@ function PriceTag({ amount }) {
   )
 }
 
-export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetail }) {
+export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetail, onOpenVariants }) {
   const T = useTokens()
   const lang = useLang()
   const primaryName = pick(item, 'name', lang) || item.nameEn || item.name || item.nameBn
@@ -50,6 +50,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
   const description = pick(item, 'description', lang)
   const spice = spiceLevelFor(item)
   const hasImage = !!item.imageUrl
+  const hasModifiers = !!(item.options?.length || item.addons?.length)
 
   return (
     <article
@@ -61,9 +62,9 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
       }}
       style={{
         display: 'grid',
-        gridTemplateColumns: '88px 1fr',
-        gap: 12,
-        padding: 10,
+        gridTemplateColumns: '56px 1fr',
+        gap: 10,
+        padding: 8,
         background: '#2A1F1A',
         borderRadius: 12,
         border: `1px solid ${T.line}`,
@@ -75,7 +76,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
     >
       {/* Image square */}
       <div style={{
-        width: 88, height: 88, borderRadius: 8, overflow: 'hidden',
+        width: 56, height: 56, borderRadius: 7, overflow: 'hidden',
         background: '#1A1410', position: 'relative', flexShrink: 0,
         ...(hasImage ? {
           backgroundImage: `url(${item.imageUrl})`,
@@ -85,7 +86,7 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
         {!hasImage && <MenuFallbackIcon item={item} size={28} />}
         {/* Subtle inner gold hairline */}
         <div aria-hidden="true" style={{
-          position: 'absolute', inset: 0, borderRadius: 8,
+          position: 'absolute', inset: 0, borderRadius: 7,
           boxShadow: 'inset 0 0 0 1px rgba(201,162,75,.20)',
           pointerEvents: 'none',
         }} />
@@ -161,8 +162,37 @@ export default function HearthItemCard({ item, qty, onAdd, onRemove, onOpenDetai
         }}>
           <PriceTag amount={item.price} />
 
-          <div onClick={e => e.stopPropagation()}>
-            {qty === 0 ? (
+          <div
+            onClick={e => { e.stopPropagation(); e.preventDefault() }}
+          >
+            {hasModifiers ? (
+              /* Items with options/addons: "+" always opens modifier sheet.
+                 Show a qty badge when something is already in the cart. */
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {qty > 0 && (
+                  <span style={{
+                    fontFamily: '"Cinzel", serif',
+                    fontSize: 13, fontWeight: 700,
+                    color: '#C9A24B',
+                  }}>{qty}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onOpenVariants && onOpenVariants(item)}
+                  aria-label={`${t('choose', lang)} ${primaryName}`}
+                  style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    border: '1.5px solid #C9A24B',
+                    background: qty > 0 ? 'rgba(232,163,61,.18)' : 'transparent',
+                    color: '#E8A33D',
+                    fontSize: 18, lineHeight: 1, fontWeight: 700,
+                    display: 'grid', placeItems: 'center',
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >+</button>
+              </div>
+            ) : qty === 0 ? (
               <button
                 type="button"
                 onClick={onAdd}

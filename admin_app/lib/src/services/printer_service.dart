@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
@@ -249,6 +250,10 @@ class PrinterService {
   static const int _ticketWidth = 32;
   // Print-speed target: 90 mm/sec (GS ( E density/speed command).
   static const int debugTargetPrintSpeedMmPerSecond = 90;
+  // Extra line feeds after the last printed pixel so the tear-off point clears
+  // the printer housing. ESC d n feeds n lines (≈1 mm each on 58 mm paper).
+  static const int _trailingFeedLines = 10;
+
   static const List<int> _targetPrintSpeed90MmPerSecond = [
     0x1D,
     0x28,
@@ -273,6 +278,8 @@ class PrinterService {
   // grows this set (and its persisted copy) without limit.
   final BoundedStringSet _printedOrderIds = BoundedStringSet(cap: 2000);
   int _printerAttemptSeq = 0;
+  String? _cachedLogoUrl;
+  Uint8List? _cachedLogoBytes;
 
   PrinterRuntimeState get state => _state;
   Stream<PrinterRuntimeState> get stateStream => _stateController.stream;
@@ -944,6 +951,7 @@ class PrinterService {
     String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     String? orderDetailsUrl,
+    String? logoUrl,
   }) async {
     final attemptId = _nextPrinterAttempt('print-bill-${order.id}');
     return _withBusyBool(() async {
@@ -960,6 +968,7 @@ class PrinterService {
         restaurantAddress: restaurantAddress,
         restaurantPhone: restaurantPhone,
         orderDetailsUrl: orderDetailsUrl,
+        logoUrl: logoUrl,
       );
       _logPrinterDiag(
         attemptId,
@@ -1204,6 +1213,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(_trailingFeedLines),
     ];
     _debugPrintRasterResult(order, copyKind: 'kot', byteCount: bytes.length);
     return bytes;
@@ -1213,6 +1223,20 @@ class PrinterService {
   /// reset / feed / cut commands. The bitmap path keeps the on-paper layout
   /// pixel-identical to the in-app preview regardless of printer firmware
   /// language support.
+  Future<Uint8List?> _fetchLogoBytes(String? logoUrl) async {
+    if (logoUrl == null || logoUrl.trim().isEmpty) return null;
+    if (logoUrl == _cachedLogoUrl && _cachedLogoBytes != null) return _cachedLogoBytes;
+    try {
+      final res = await http.get(Uri.parse(logoUrl)).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        _cachedLogoUrl = logoUrl;
+        _cachedLogoBytes = res.bodyBytes;
+        return _cachedLogoBytes;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<Uint8List> _buildBitmapCopyPng(
     OrderModel order, {
     required _ReceiptLabels labels,
@@ -1221,6 +1245,7 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     String? orderDetailsUrl,
+    String? logoUrl,
   }) async {
     final tableRaw = order.serviceType == OrderServiceType.delivery
         ? ''
@@ -1251,6 +1276,7 @@ class PrinterService {
       effectiveTotal: effectiveTotal,
       labels: labels,
     );
+    final logoBytes = await _fetchLogoBytes(logoUrl);
     final data = TicketCopyData(
       restaurantName: resolvedRestaurant,
       outletName: null,
@@ -1290,6 +1316,7 @@ class PrinterService {
       footerText: isDelivery
           ? null
           : labels.pick('Thank you for dining!', 'ধন্যবাদ!'),
+      logoBytes: logoBytes,
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);
@@ -1305,6 +1332,7 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     String? orderDetailsUrl,
+    String? logoUrl,
   }) async {
     final pngBytes = await _buildBitmapCopyPng(
       order,
@@ -1314,6 +1342,7 @@ class PrinterService {
       restaurantAddress: restaurantAddress,
       restaurantPhone: restaurantPhone,
       orderDetailsUrl: orderDetailsUrl,
+      logoUrl: logoUrl,
     );
     final decoded = img.decodePng(pngBytes);
     if (decoded == null) {
@@ -1341,6 +1370,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(_trailingFeedLines),
     ];
     _debugPrintRasterResult(
       order,
@@ -1367,6 +1397,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(_trailingFeedLines),
     ];
   }
 
@@ -1612,6 +1643,7 @@ class PrinterService {
           value: labels.money(_includedVatFor(order, total)),
         ),
       ],
+      footerLines: ['Built by QuickBytes POS'],
     );
   }
 
@@ -1695,6 +1727,7 @@ class PrinterService {
       ],
       footerLines: [
         '${labels.pick('Printed', 'প্রিন্ট')}: ${labels.digits(DateFormat('HH:mm:ss').format(now))}',
+        'Built by QuickBytes POS',
       ],
     );
   }
@@ -2033,9 +2066,13 @@ class PrinterService {
     required String restaurantName,
     String? restaurantSubtitle,
     String? serverName,
+    String? channelValue,
   }) {
     final serviceType = order.serviceType ?? OrderServiceType.dineIn;
     final table = order.tableNo?.trim();
+    final waitingMins = DateTime.now().difference(order.createdAt.toLocal()).inMinutes;
+    final orderId = order.id;
+    final kotSerial = orderId.length >= 6 ? orderId.substring(orderId.length - 6) : orderId;
     return KotTicketData(
       restaurantName: restaurantName,
       restaurantSubtitle: restaurantSubtitle,
@@ -2064,6 +2101,10 @@ class PrinterService {
       noteLabel: labels.pick('Note', 'নোট'),
       serverLabel: labels.pick('Server', 'সার্ভার'),
       serverName: serverName,
+      dateValue: DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal()),
+      channelValue: channelValue,
+      waitingMins: waitingMins,
+      kotSerial: kotSerial,
     );
   }
 

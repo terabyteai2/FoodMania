@@ -8,7 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from config import settings
-from schemas import MenuAddOnCandidate, MenuScanCandidate, MenuSubItem
+from schemas import MenuAddOnCandidate, MenuScanCandidate, MenuSizeVariant, MenuSubItem
 from services.menu_placeholders import ICON_KEY_VOCAB, normalize_icon_key
 
 
@@ -144,6 +144,27 @@ def _menu_scan_schema() -> dict[str, Any]:
                     "required": ["nameEn", "nameBn", "price"],
                 },
             },
+            "sizeVariants": {
+                "type": "array",
+                "description": (
+                    "Pricing tiers when the same item is sold at multiple sizes or "
+                    "portions with different prices (e.g. 'Half ৳180 / Full ৳350', "
+                    "'Small / Large'). Each entry is one size with its own absolute "
+                    "price. When sizeVariants is non-empty, set the item price to the "
+                    "lowest variant price. Leave empty when the item has one standard "
+                    "price."
+                ),
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "nameEn": {"type": "string"},
+                        "nameBn": {"type": "string"},
+                        "price": {"type": "number", "exclusiveMinimum": 0},
+                    },
+                    "required": ["nameEn", "nameBn", "price"],
+                },
+            },
         },
         "required": [
             "nameEn",
@@ -157,6 +178,7 @@ def _menu_scan_schema() -> dict[str, Any]:
             "iconKey",
             "subItems",
             "addOns",
+            "sizeVariants",
         ],
     }
     return {
@@ -203,7 +225,11 @@ def _menu_scan_instructions() -> str:
         "leave subItems empty. "
         "For optional priced extras printed near the item (e.g. 'add cheese +50', "
         "'extra naan ৳20'), fill addOns ({nameEn, nameBn, price}); otherwise "
-        "leave addOns empty. Do not duplicate the main item inside subItems or addOns."
+        "leave addOns empty. Do not duplicate the main item inside subItems or addOns. "
+        "If an item is listed at multiple sizes or portions with different prices "
+        "(e.g. 'Half ৳180 / Full ৳350', 'Small/Large'), set price to the lowest "
+        "variant price and fill sizeVariants with each size and its absolute price; "
+        "otherwise leave sizeVariants empty."
     )
 
 
@@ -337,6 +363,7 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
             "iconKey": icon_key,
             "subItems": _normalize_sub_items(raw.get("subItems")),
             "addOns": _normalize_add_ons(raw.get("addOns")),
+            "sizeVariants": _normalize_size_variants(raw.get("sizeVariants")),
         }
         try:
             items.append(MenuScanCandidate.model_validate(normalized))
@@ -377,6 +404,32 @@ def _normalize_sub_items(raw: Any) -> list[dict[str, str]]:
 
 
 def _normalize_add_ons(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        name_en = str(entry.get("nameEn") or "").strip()
+        if not name_en:
+            continue
+        try:
+            price = float(entry.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if price <= 0:
+            continue
+        out.append(
+            {
+                "nameEn": name_en,
+                "nameBn": str(entry.get("nameBn") or "").strip(),
+                "price": price,
+            }
+        )
+    return out
+
+
+def _normalize_size_variants(raw: Any) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
     out: list[dict[str, Any]] = []

@@ -34,10 +34,12 @@ export default function HearthStorefront({
   info,
   items,
   cart,
+  cartExtras,
   onAdd,
   onRemove,
   onOpenCart,
   onOpenDetail,
+  onOpenVariants,
   initialView = 'hero',
 }) {
   const T = useTokens()
@@ -119,7 +121,7 @@ export default function HearthStorefront({
   }
 
   const count = cartCount(cart)
-  const total = cartTotal(cart, items || [])
+  const total = cartTotal(cart, items || [], cartExtras)
 
   return (
     <div style={{ background: T.bg, color: T.ink, minHeight: '100svh' }}>
@@ -142,9 +144,11 @@ export default function HearthStorefront({
         categoryOrder={order}
         categoryBnMap={bnMap}
         cart={cart}
+        cartExtras={cartExtras}
         onAdd={onAdd}
         onRemove={onRemove}
         onOpenDetail={onOpenDetail}
+        onOpenVariants={onOpenVariants}
         hasFloatingCart={count > 0}
       />
 

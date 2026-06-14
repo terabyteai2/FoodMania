@@ -9,6 +9,7 @@ class ServerConfig {
     this.tableCount = 10,
     this.customerMenuTheme = 'sultans_hearth',
     this.deliveryCharge = 0,
+    this.logoUrl,
   });
 
   final String serverId;
@@ -20,6 +21,7 @@ class ServerConfig {
   final int tableCount;
   final String customerMenuTheme;
   final double deliveryCharge;
+  final String? logoUrl;
 
   ServerConfig copyWith({
     String? serverId,
@@ -31,6 +33,7 @@ class ServerConfig {
     int? tableCount,
     String? customerMenuTheme,
     double? deliveryCharge,
+    Object? logoUrl = _sentinel,
   }) {
     return ServerConfig(
       serverId: serverId ?? this.serverId,
@@ -42,9 +45,12 @@ class ServerConfig {
       tableCount: tableCount ?? this.tableCount,
       customerMenuTheme: customerMenuTheme ?? this.customerMenuTheme,
       deliveryCharge: deliveryCharge ?? this.deliveryCharge,
+      logoUrl: identical(logoUrl, _sentinel) ? this.logoUrl : logoUrl as String?,
     );
   }
 }
+
+const Object _sentinel = Object();
 
 class CloudConfig {
   CloudConfig({

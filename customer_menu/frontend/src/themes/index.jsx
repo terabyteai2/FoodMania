@@ -2,8 +2,8 @@
 // backend/routers/menu.py and customer_menu_themes.dart in the admin app.
 
 import React, { createContext, useContext, useMemo } from 'react'
+import sultansHearthOverrides from './sultans_hearth/index.jsx'
 import {
-  sultansHearthOverrides,
   brickOverrides,
   lanternOverrides,
   marbleOverrides,
@@ -132,9 +132,8 @@ export function resolveOverrides(slug) {
 
 export function themeAssetPaths(slug) {
   const safe = THEMES[slug] ? slug : DEFAULT_THEME_SLUG
-  const basename = safe === 'sultans_hearth' ? 'hearth' : safe
   return {
-    placeholderVideo: `/uploads/template_placeholders/${basename}.mp4`,
-    placeholderImage: `/uploads/template_placeholders/${basename}.png`,
+    placeholderVideo: `/themes/${safe}/hero-placeholder.mp4`,
+    placeholderImage: null,
   }
 }

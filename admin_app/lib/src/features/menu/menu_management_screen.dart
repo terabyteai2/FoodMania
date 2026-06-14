@@ -2052,9 +2052,8 @@ class _SourceMenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final hidden = !available;
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 140),
-      opacity: hidden ? 0.58 : 1,
+    return Opacity(
+      opacity: hidden ? 0.58 : 1.0,
       child: Material(
         color: selected ? PosColors.primarySoft : PosColors.surface,
         borderRadius: BorderRadius.circular(PosRadii.lg),

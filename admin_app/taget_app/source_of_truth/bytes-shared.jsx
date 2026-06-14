@@ -118,10 +118,11 @@ const CAT_TINT = {
   Sides:['#E3EAFC','#3E6FE0','fries'], Salads:['#E4FBC9','#498F18','salad'],
   Beverages:['#E3EAFC','#3E6FE0','drink'], Desserts:['#FBEFCD','#B0760A','dessert'],
 };
-function Thumb({ cat, size = 52, ic }) {
+function Thumb({ cat, size = 52, ic, fill }) {
   const [bg, fg, dic] = CAT_TINT[cat] || ['#ECEFE4', '#7C8270', 'bag'];
+  const box = fill ? { width: '100%', aspectRatio: '1 / 1' } : { width: size, height: size, flexBasis: size };
   return (
-    <div className="thumb" style={{ width: size, height: size, flexBasis: size, background: bg }}>
+    <div className="thumb" style={{ ...box, background: bg }}>
       <Icon name={ic || dic} size={size * 0.5} color={fg} sw={1.6} />
     </div>
   );

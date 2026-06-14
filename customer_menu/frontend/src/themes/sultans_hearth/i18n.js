@@ -65,6 +65,12 @@ export const STRINGS = {
   detectingAddress: { en: 'Detecting address…', bn: 'ঠিকানা শনাক্ত হচ্ছে…' },
   useDetected:      { en: 'Use detected address', bn: 'শনাক্ত ঠিকানা ব্যবহার করুন' },
   retry:            { en: 'Retry',              bn: 'আবার চেষ্টা' },
+  addToOrder:       { en: 'Add to Order',       bn: 'অর্ডারে যোগ করুন' },
+  choose:           { en: 'Choose',             bn: 'বেছে নিন' },
+  optionalExtras:   { en: 'Optional Extras',    bn: 'অতিরিক্ত (ঐচ্ছিক)' },
+  pinOnMap:         { en: 'Pin on map',         bn: 'মানচিত্রে পিন করুন' },
+  confirmLocation:  { en: 'Confirm location',   bn: 'অবস্থান নিশ্চিত করুন' },
+  detectingLocation:{ en: 'Finding your location…', bn: 'অবস্থান খোঁজা হচ্ছে…' },
 }
 
 export function t(key, lang) {

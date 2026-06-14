@@ -1,7 +1,19 @@
 /// A single POS audit-trail event (spec §4.10 Audit / data model `AuditEntry`).
 /// Mirrors `GET /outlets/{id}/pos/audit` — a void / refund / comp / discount
-/// override with who, role, time, amount and reason.
+/// override with who, role, time, amount, reason and the order items involved.
 enum AuditAction { void_, refund, comp, discount, unknown }
+
+class AuditLineItem {
+  const AuditLineItem({required this.name, required this.qty});
+
+  final String name;
+  final int qty;
+
+  factory AuditLineItem.fromJson(Map<String, Object?> j) => AuditLineItem(
+    name: ((j['name'] as String?) ?? '').trim(),
+    qty: (j['qty'] as num?)?.toInt() ?? 1,
+  );
+}
 
 extension AuditActionX on AuditAction {
   String get key {
@@ -76,6 +88,7 @@ class AuditEntry {
     this.orderSerial,
     this.who,
     this.role,
+    this.items = const [],
   });
 
   final String id;
@@ -86,8 +99,10 @@ class AuditEntry {
   final int? orderSerial;
   final String? who;
   final String? role;
+  final List<AuditLineItem> items;
 
   factory AuditEntry.fromJson(Map<String, Object?> json) {
+    final rawItems = json['items'];
     return AuditEntry(
       id: (json['id'] as String?) ?? '',
       action: AuditActionX.parse(json['action'] as String?),
@@ -101,6 +116,17 @@ class AuditEntry {
       orderSerial: (json['orderSerial'] as num?)?.toInt(),
       who: (json['who'] as String?),
       role: (json['role'] as String?),
+      items: rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map(
+                  (e) => AuditLineItem.fromJson(
+                    Map<String, Object?>.from(e),
+                  ),
+                )
+                .where((i) => i.name.isNotEmpty)
+                .toList(growable: false)
+          : const [],
     );
   }
 }

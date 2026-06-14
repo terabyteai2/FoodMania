@@ -326,9 +326,7 @@ class _InviteSheetState extends State<_InviteSheet> {
       AccountRole.waiter,
       if (widget.canInviteManager) AccountRole.manager,
     ];
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
+    return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
         decoration: const BoxDecoration(

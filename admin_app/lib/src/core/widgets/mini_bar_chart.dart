@@ -118,41 +118,31 @@ class _Bar extends StatelessWidget {
                     final maxHeight = barConstraints.maxHeight;
                     return Align(
                       alignment: Alignment.bottomCenter,
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(
-                          begin: 0,
-                          end: ratio.clamp(0, 1).toDouble(),
+                      child: Container(
+                        width: barWidth,
+                        height: (maxHeight * ratio.clamp(0, 1))
+                            .clamp(2.0, maxHeight)
+                            .toDouble(),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              barColor,
+                              barColor.withValues(alpha: 0.55),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: highlight
+                              ? [
+                                  BoxShadow(
+                                    color: color.withValues(alpha: 0.32),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ]
+                              : null,
                         ),
-                        duration: Duration(milliseconds: 700),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, value, _) {
-                          return Container(
-                            width: barWidth,
-                            height: (maxHeight * value)
-                                .clamp(2.0, maxHeight)
-                                .toDouble(),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  barColor,
-                                  barColor.withValues(alpha: 0.55),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: highlight
-                                  ? [
-                                      BoxShadow(
-                                        color: color.withValues(alpha: 0.32),
-                                        blurRadius: 8,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                          );
-                        },
                       ),
                     );
                   },

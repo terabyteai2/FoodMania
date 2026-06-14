@@ -26,26 +26,15 @@ class DashboardCard extends StatefulWidget {
 }
 
 class _DashboardCardState extends State<DashboardCard> {
-  bool _hovering = false;
-  bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 190;
-        return MouseRegion(
-          onEnter: (_) => setState(() => _hovering = true),
-          onExit: (_) => setState(() => _hovering = false),
-          child: AnimatedScale(
-            scale: _pressed ? 0.985 : 1.0,
-            duration: Duration(milliseconds: 110),
-            curve: Curves.easeOut,
-            child: AnimatedContainer(
-              duration: Duration(milliseconds: 180),
+        return Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(PosRadii.lg),
-                boxShadow: _hovering ? PosShadows.glow : PosShadows.card,
+                boxShadow: PosShadows.card,
               ),
               child: Material(
                 color: Colors.transparent,
@@ -55,7 +44,6 @@ class _DashboardCardState extends State<DashboardCard> {
                   clip: true,
                   child: InkWell(
                     onTap: widget.onTap,
-                    onHighlightChanged: (v) => setState(() => _pressed = v),
                     splashColor: PosColors.slate.withValues(alpha: 0.08),
                     highlightColor: PosColors.slate.withValues(alpha: 0.04),
                     child: Padding(
@@ -69,16 +57,10 @@ class _DashboardCardState extends State<DashboardCard> {
                               _IconBox(icon: widget.icon, compact: compact),
                               Spacer(),
                               if (widget.onTap != null)
-                                AnimatedSlide(
-                                  duration: Duration(milliseconds: 220),
-                                  offset: _hovering
-                                      ? Offset(0.18, 0)
-                                      : Offset.zero,
-                                  child: Icon(
-                                    Icons.arrow_forward_rounded,
-                                    color: PosColors.slate,
-                                    size: compact ? 16 : 18,
-                                  ),
+                                Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: PosColors.slate,
+                                  size: compact ? 16 : 18,
                                 ),
                             ],
                           ),
@@ -141,9 +123,7 @@ class _DashboardCardState extends State<DashboardCard> {
                     ),
                   ),
                 ),
-              ),
             ),
-          ),
         );
       },
     );

@@ -2870,6 +2870,13 @@ class PosAppController extends ChangeNotifier {
             : addon.price.toStringAsFixed(2);
         tags.add('addon:$priceStr:${addon.nameEn.trim()}');
       }
+      for (final variant in candidate.sizeVariants) {
+        final delta = variant.price - candidate.price;
+        final deltaStr = delta == delta.roundToDouble()
+            ? delta.toInt().toString()
+            : delta.toStringAsFixed(2);
+        tags.add('option:${variant.nameEn.trim()}:$deltaStr');
+      }
       await saveMenuItem(
         name: candidate.nameEn,
         nameEn: candidate.nameEn,

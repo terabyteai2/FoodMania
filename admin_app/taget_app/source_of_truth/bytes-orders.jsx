@@ -89,21 +89,6 @@ function OrdersScreen() {
     <React.Fragment>
       <Header brand sub="Spice Garden · Dhanmondi" right={<TopActions />} />
 
-      {/* calm summary row */}
-      <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', gap: 10 }}>
-        <div className="card" style={{ flex: 1.4, padding: '12px 14px' }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>On the floor now</div>
-          <div style={{ fontSize: 21, fontWeight: 700, marginTop: 2 }} className="tab">{money(liveRev)}</div>
-        </div>
-        <div className="card" style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-            <span style={{ fontSize: 21, fontWeight: 700, color: pending.length ? 'var(--accent-strong)' : 'var(--ink)' }} className="tab">{pending.length}</span>
-            <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>to accept</span>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginTop: 2 }}>{ongoing.length} ongoing</div>
-        </div>
-      </div>
-
       {/* search + filters */}
       <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', gap: 8 }}>
         <div className="field" style={{ flex: 1 }}>
@@ -127,6 +112,20 @@ function OrdersScreen() {
       </div>
 
       <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '0 16px 90px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+        {/* calm summary row — scrolls away to give the list its full height */}
+        <div style={{ flex: '0 0 auto', display: 'flex', gap: 10 }}>
+          <div className="card" style={{ flex: 1.4, padding: '12px 14px' }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>On the floor now</div>
+            <div style={{ fontSize: 21, fontWeight: 700, marginTop: 2 }} className="tab">{money(liveRev)}</div>
+          </div>
+          <div className="card" style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span style={{ fontSize: 21, fontWeight: 700, color: pending.length ? 'var(--accent-strong)' : 'var(--ink)' }} className="tab">{pending.length}</span>
+              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>to accept</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginTop: 2 }}>{ongoing.length} ongoing</div>
+          </div>
+        </div>
         {list.map((o) => <OrderCard key={o.id} o={o} onClick={() => b.push({ screen: 'orderDetail', orderId: o.id })}
           onAccept={() => { b.setOrderState(o.id, 'accepted'); b.go({ screen: 'printOut', orderId: o.id, kind: 'accept' }); }}
           onReject={() => b.setOrderState(o.id, 'rejected')}

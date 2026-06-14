@@ -339,8 +339,7 @@ class _SegBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
+      child: Container(
         width: width,
         height: height,
         decoration: BoxDecoration(
@@ -548,8 +547,7 @@ class _MenuListRow extends StatelessWidget {
 
     return GestureDetector(
       onTap: off ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: inCart ? PosColors.primarySoft : PosColors.surface,
@@ -778,8 +776,7 @@ class _GridTile extends StatelessWidget {
       onTap: off ? null : onTap,
       child: Opacity(
         opacity: off ? 0.5 : 1.0,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        child: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: inCart ? PosColors.primarySoft : PosColors.surface,

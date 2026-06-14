@@ -26,22 +26,12 @@ class MenuItemCard extends StatefulWidget {
 }
 
 class _MenuItemCardState extends State<MenuItemCard> {
-  bool _hovering = false;
 
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 2);
     final available = widget.item.isAvailable;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 180),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(PosRadii.lg),
-          boxShadow: _hovering ? PosShadows.glow : PosShadows.card,
-        ),
-        child: TfCard(
+    return TfCard(
           color: PosColors.surface,
           padded: false,
           clip: true,
@@ -57,11 +47,7 @@ class _MenuItemCardState extends State<MenuItemCard> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        AnimatedScale(
-                          scale: _hovering ? 1.04 : 1.0,
-                          duration: Duration(milliseconds: 320),
-                          curve: Curves.easeOut,
-                          child: ColorFiltered(
+                        ColorFiltered(
                             colorFilter: ColorFilter.mode(
                               available
                                   ? Colors.transparent
@@ -77,7 +63,6 @@ class _MenuItemCardState extends State<MenuItemCard> {
                               ),
                             ),
                           ),
-                        ),
                         Positioned.fill(
                           child: DecoratedBox(
                             decoration: BoxDecoration(
@@ -219,9 +204,7 @@ class _MenuItemCardState extends State<MenuItemCard> {
               ],
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 

@@ -8,14 +8,16 @@ import HearthCart from './HearthCart.jsx'
 import HearthSuccess from './HearthSuccess.jsx'
 import HearthLoading from './HearthLoading.jsx'
 import HearthError from './HearthError.jsx'
+import HearthModifierSheet from './HearthModifierSheet.jsx'
 
 const sultansHearthOverrides = {
-  Storefront: HearthStorefront,
-  ItemSheet:  HearthItemSheet,
-  Cart:       HearthCart,
-  Success:    HearthSuccess,
-  Loading:    HearthLoading,
-  Error:      HearthError,
+  Storefront:     HearthStorefront,
+  ItemSheet:      HearthItemSheet,
+  Cart:           HearthCart,
+  Success:        HearthSuccess,
+  Loading:        HearthLoading,
+  Error:          HearthError,
+  ModifierSheet:  HearthModifierSheet,
 }
 
 export default sultansHearthOverrides

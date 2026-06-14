@@ -162,8 +162,7 @@ class _SegControl extends StatelessWidget {
       return Expanded(
         child: GestureDetector(
           onTap: () => onChanged(s),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+          child: Container(
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(

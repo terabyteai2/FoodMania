@@ -1378,9 +1378,7 @@ class TfToggle extends StatelessWidget {
           height: 44,
           child: Align(
             alignment: Alignment.center,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
+            child: Container(
               width: 52,
               height: 32,
               padding: const EdgeInsets.all(3),
@@ -1389,9 +1387,7 @@ class TfToggle extends StatelessWidget {
                 borderRadius: BorderRadius.circular(PosRadii.toggle),
                 border: Border.all(color: outlineColor, width: 1),
               ),
-              child: AnimatedAlign(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOut,
+              child: Align(
                 alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
                   width: 26,
@@ -3460,9 +3456,8 @@ class _TfCollapsedSummaryState extends State<TfCollapsedSummary> {
                       ],
                     ),
                   ),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 180),
+                  Transform.rotate(
+                    angle: _open ? 3.14159265 : 0,
                     child: const Icon(
                       Icons.keyboard_arrow_down_rounded,
                       size: 20,

@@ -167,22 +167,14 @@ class _Hoverable extends StatefulWidget {
 }
 
 class _HoverableState extends State<_Hoverable> {
-  bool _hover = false;
-
   @override
   Widget build(BuildContext context) {
     if (widget.onTap == null) return widget.child;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _hover ? 0.99 : 1,
-          duration: const Duration(milliseconds: 60),
-          child: widget.child,
-        ),
+        child: widget.child,
       ),
     );
   }

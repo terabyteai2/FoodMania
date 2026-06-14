@@ -79,8 +79,8 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return AppScope(
       controller: _controller,
-      child: AnimatedBuilder(
-        animation: _controller,
+      child: ListenableBuilder(
+        listenable: _controller,
         builder: (context, _) {
           final uiScale = _controller.uiScale;
           final text = _controller.strings;
@@ -114,10 +114,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
                   child: child ?? SizedBox.shrink(),
                 );
               },
-              home: AnimatedSwitcher(
-                duration: Duration(milliseconds: 320),
-                child: _home(),
-              ),
+              home: _home(),
             ),
           );
         },

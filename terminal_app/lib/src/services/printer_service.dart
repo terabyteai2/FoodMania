@@ -194,6 +194,14 @@ class _ReceiptLabels {
     }
   }
 
+  String formatReceiptDateTime(DateTime dt) {
+    final local = dt.toLocal();
+    final date = DateFormat('yyyy-MM-dd').format(local);
+    final time = DateFormat('HH:mm').format(local);
+    if (!_bn) return 'Date: $date   Time: $time';
+    return digits('তারিখ: $date   সময়: $time');
+  }
+
   String formatDate(DateTime dt) {
     if (!_bn) {
       return DateFormat(
@@ -528,6 +536,7 @@ class PrinterService {
     String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     bool isManagerCopy = false,
+    String? serverRole,
   }) async {
     if (!_hasSelectedSystemPrinter) return false;
     final selected = _state.selectedWindowsQueueName?.trim() ?? '';
@@ -553,6 +562,7 @@ class PrinterService {
         restaurantName: restaurantName ?? 'HYBRID POS',
         restaurantAddress: restaurantAddress,
         restaurantPhone: restaurantPhone,
+        serverRole: serverRole,
       );
       final bitmap = img.decodePng(pngBytes);
       if (bitmap == null) {
@@ -941,6 +951,7 @@ class PrinterService {
     String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     String? orderDetailsUrl,
+    String? serverRole,
   }) async {
     final attemptId = _nextPrinterAttempt('print-bill-${order.id}');
     return _withBusyBool(() async {
@@ -957,6 +968,7 @@ class PrinterService {
         restaurantAddress: restaurantAddress,
         restaurantPhone: restaurantPhone,
         orderDetailsUrl: orderDetailsUrl,
+        serverRole: serverRole,
       );
       _logPrinterDiag(
         attemptId,
@@ -971,6 +983,7 @@ class PrinterService {
           restaurantAddress: restaurantAddress,
           restaurantPhone: restaurantPhone,
           language: language,
+          serverRole: serverRole,
         );
       }
       _debugPrintWriteResult(
@@ -1201,6 +1214,8 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(1),
+      ...generator.cut(),
     ];
     _debugPrintRasterResult(order, copyKind: 'kot', byteCount: bytes.length);
     return bytes;
@@ -1218,11 +1233,13 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     String? orderDetailsUrl,
+    String? serverRole,
+    Uint8List? logoImageBytes,
   }) async {
     final tableRaw = order.serviceType == OrderServiceType.delivery
         ? ''
         : order.tableNo ?? labels.takeaway;
-    final dateText = labels.formatDate(order.createdAt);
+    final dateText = labels.formatReceiptDateTime(order.createdAt);
     final effectiveTotal = _orderTotalFor(order);
     final isDelivery = order.serviceType == OrderServiceType.delivery;
 
@@ -1284,6 +1301,8 @@ class PrinterService {
       footerText: isDelivery
           ? null
           : labels.pick('Thank you for dining!', 'ধন্যবাদ!'),
+      logoImageBytes: logoImageBytes,
+      serverRole: serverRole,
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);
@@ -1299,6 +1318,7 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     String? orderDetailsUrl,
+    String? serverRole,
   }) async {
     final pngBytes = await _buildBitmapCopyPng(
       order,
@@ -1308,6 +1328,7 @@ class PrinterService {
       restaurantAddress: restaurantAddress,
       restaurantPhone: restaurantPhone,
       orderDetailsUrl: orderDetailsUrl,
+      serverRole: serverRole,
     );
     final decoded = img.decodePng(pngBytes);
     if (decoded == null) {
@@ -1335,6 +1356,8 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(1),
+      ...generator.cut(),
     ];
     _debugPrintRasterResult(
       order,
@@ -1361,6 +1384,8 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(1),
+      ...generator.cut(),
     ];
   }
 
@@ -1778,10 +1803,6 @@ class PrinterService {
         buffer.writeln(item.note!.trim());
       }
     }
-    final server = data.serverName?.trim();
-    if (server != null && server.isNotEmpty) {
-      buffer.writeln('${data.serverLabel}: $server');
-    }
     return buffer.toString();
   }
 
@@ -1812,6 +1833,8 @@ class PrinterService {
       restaurantSubtitle: restaurantSubtitle,
       serialLabel: labels.pick('Serial #', 'সিরিয়াল #'),
       serialValue: labels.orderNo(order.displaySequence),
+      dateLabel: labels.pick('Date', 'তারিখ'),
+      dateValue: labels.digits(DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal())),
       timeLabel: labels.pick('Time', 'সময়'),
       timeValue: labels.digits(_formatKotTime(order.createdAt)),
       typeLabel: labels.pick('Type', 'ধরন'),

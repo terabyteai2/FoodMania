@@ -297,6 +297,18 @@ class MenuScanAddOn {
   final double price;
 }
 
+class MenuScanSizeVariant {
+  const MenuScanSizeVariant({
+    required this.nameEn,
+    this.nameBn = '',
+    required this.price,
+  });
+
+  final String nameEn;
+  final String nameBn;
+  final double price;
+}
+
 class MenuScanCandidate {
   const MenuScanCandidate({
     required this.nameEn,
@@ -311,6 +323,7 @@ class MenuScanCandidate {
     this.imageUrl,
     this.subItems = const [],
     this.addOns = const [],
+    this.sizeVariants = const [],
   });
 
   final String nameEn;
@@ -325,6 +338,7 @@ class MenuScanCandidate {
   final String? imageUrl;
   final List<MenuScanSubItem> subItems;
   final List<MenuScanAddOn> addOns;
+  final List<MenuScanSizeVariant> sizeVariants;
 
   static MenuScanCandidate? fromJson(Object? value) {
     if (value is! Map) return null;
@@ -370,6 +384,7 @@ class MenuScanCandidate {
       imageUrl: _text(json['imageUrl']),
       subItems: _parseSubItems(json['subItems']),
       addOns: _parseAddOns(json['addOns']),
+      sizeVariants: _parseSizeVariants(json['sizeVariants']),
     );
   }
 
@@ -403,6 +418,30 @@ class MenuScanCandidate {
       if (price <= 0) continue;
       out.add(
         MenuScanAddOn(
+          nameEn: nameEn,
+          nameBn: _text(m['nameBn']) ?? '',
+          price: price,
+        ),
+      );
+    }
+    return out;
+  }
+
+  static List<MenuScanSizeVariant> _parseSizeVariants(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <MenuScanSizeVariant>[];
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final m = Map<String, Object?>.from(entry);
+      final nameEn = _text(m['nameEn']) ?? '';
+      if (nameEn.isEmpty) continue;
+      final rawPrice = m['price'];
+      final price = rawPrice is num
+          ? rawPrice.toDouble()
+          : double.tryParse(rawPrice?.toString() ?? '') ?? 0;
+      if (price <= 0) continue;
+      out.add(
+        MenuScanSizeVariant(
           nameEn: nameEn,
           nameBn: _text(m['nameBn']) ?? '',
           price: price,

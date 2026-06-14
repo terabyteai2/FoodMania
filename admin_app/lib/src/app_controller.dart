@@ -403,6 +403,19 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLogoUrl(String? url) async {
+    final cleaned = url?.trim().isEmpty == true ? null : url?.trim();
+    if (serverConfig.logoUrl == cleaned) return;
+    serverConfig = serverConfig.copyWith(logoUrl: cleaned);
+    final preferences = await SharedPreferences.getInstance();
+    if (cleaned == null) {
+      await preferences.remove(_logoUrlKey);
+    } else {
+      await preferences.setString(_logoUrlKey, cleaned);
+    }
+    notifyListeners();
+  }
+
   bool get hasAdminBlockingNotice => adminBlockingNotice?.isBlocking == true;
 
   /// Order-triggered printer side effects (auto-print + preflight + alerts).
@@ -506,6 +519,7 @@ class PosAppController extends ChangeNotifier {
         customerMenuTheme:
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
         deliveryCharge: preferences.getDouble(_deliveryChargeKey) ?? 0,
+        logoUrl: preferences.getString(_logoUrlKey),
       );
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
@@ -2808,6 +2822,13 @@ class PosAppController extends ChangeNotifier {
             : addon.price.toStringAsFixed(2);
         tags.add('addon:$priceStr:${addon.nameEn.trim()}');
       }
+      for (final variant in candidate.sizeVariants) {
+        final delta = variant.price - candidate.price;
+        final deltaStr = delta == delta.roundToDouble()
+            ? delta.toInt().toString()
+            : delta.toStringAsFixed(2);
+        tags.add('option:${variant.nameEn.trim()}:$deltaStr');
+      }
       await saveMenuItem(
         name: candidate.nameEn,
         nameEn: candidate.nameEn,
@@ -3712,6 +3733,7 @@ class PosAppController extends ChangeNotifier {
       outletName: outletName,
       language: language,
       orderDetailsUrl: _orderDetailsUrl(order),
+      logoUrl: serverConfig.logoUrl,
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
@@ -4593,6 +4615,7 @@ class PosAppController extends ChangeNotifier {
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
   static final String _deliveryChargeKey = 'local_pos_delivery_charge';
+  static final String _logoUrlKey = 'local_pos_logo_url';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';

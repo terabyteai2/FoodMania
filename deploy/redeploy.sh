@@ -58,7 +58,7 @@ else
 fi
 
 say "Building customer menu frontend"
-npm run build --silent 2>/dev/null || die "Customer menu build failed"
+VITE_MAPBOX_TOKEN="${VITE_MAPBOX_TOKEN:-}" npm run build --silent 2>/dev/null || die "Customer menu build failed"
 cd "${REPO_ROOT}"
 
 say "Installing platform admin dependencies"

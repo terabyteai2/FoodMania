@@ -27,7 +27,7 @@ void showNotificationCenter(
     barrierDismissible: true,
     barrierLabel: text.notificationsTitle,
     barrierColor: Colors.black.withValues(alpha: 0.25),
-    transitionDuration: const Duration(milliseconds: 220),
+    transitionDuration: Duration.zero,
     pageBuilder: (dialogContext, _, _) {
       return Align(
         alignment: Alignment.topCenter,
@@ -46,20 +46,7 @@ void showNotificationCenter(
         ),
       );
     },
-    transitionBuilder: (context, animation, _, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, -1.0),
-          end: Offset.zero,
-        ).animate(curved),
-        child: FadeTransition(opacity: curved, child: child),
-      );
-    },
+    transitionBuilder: (context, a, b, child) => child,
   );
 }
 

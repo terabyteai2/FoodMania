@@ -10,8 +10,7 @@ import {
 
 const API_BASE = ''
 const MENU_REFRESH_MS = 5000
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyARB64Gh6KXFDjL_rZMqAGFlfNNGcuBWKw'
-let googleMapsLoadPromise = null
+export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
 
 // ── PDF receipt generator ─────────────────────────────────────────────────────
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
@@ -255,9 +254,11 @@ function getOutletId() {
   return getRouteContext().outletId
 }
 
-export function cartTotal(cart, items) {
-  return Object.entries(cart).reduce((sum, [id, qty]) => {
-    const item = items.find(i => i.id === id)
+export function cartTotal(cart, items, extras = {}) {
+  return Object.entries(cart).reduce((sum, [key, qty]) => {
+    const extra = extras[key]
+    if (extra) return sum + extra.price * qty
+    const item = items.find(i => i.id === key)
     return sum + (item ? item.price * qty : 0)
   }, 0)
 }
@@ -296,76 +297,6 @@ async function loadJson(path) {
     throw new Error(body?.detail || body?.error || `${res.status} ${res.statusText}: ${path}`)
   }
   return unwrapApi(body)
-}
-
-export function loadGoogleMapsApi() {
-  if (typeof window === 'undefined') {
-    return Promise.reject(new Error('Maps can only load in a browser.'))
-  }
-  if (window.google?.maps?.importLibrary) {
-    return Promise.resolve(window.google.maps)
-  }
-  if (!GOOGLE_MAPS_API_KEY) {
-    return Promise.reject(new Error('Google Maps key is missing.'))
-  }
-  if (googleMapsLoadPromise) return googleMapsLoadPromise
-
-  googleMapsLoadPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-rastarant-google-maps="true"]')
-    const callback = `__rastarantGoogleMapsLoaded_${Date.now()}`
-    const cleanup = () => {
-      try { delete window[callback] } catch { window[callback] = undefined }
-    }
-
-    window[callback] = () => {
-      cleanup()
-      if (window.google?.maps?.importLibrary) resolve(window.google.maps)
-      else {
-        googleMapsLoadPromise = null
-        reject(new Error('Google Maps did not finish loading.'))
-      }
-    }
-
-    if (existing) {
-      existing.addEventListener('load', () => {
-        cleanup()
-        if (window.google?.maps?.importLibrary) resolve(window.google.maps)
-        else {
-          googleMapsLoadPromise = null
-          reject(new Error('Google Maps did not finish loading.'))
-        }
-      }, { once: true })
-      existing.addEventListener('error', () => {
-        cleanup()
-        googleMapsLoadPromise = null
-        existing.remove()
-        reject(new Error('Could not load Google Maps.'))
-      }, { once: true })
-      return
-    }
-
-    const params = new URLSearchParams({
-      key: GOOGLE_MAPS_API_KEY,
-      v: 'weekly',
-      loading: 'async',
-      auth_referrer_policy: 'origin',
-      callback,
-    })
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`
-    script.async = true
-    script.defer = true
-    script.dataset.rastarantGoogleMaps = 'true'
-    script.onerror = () => {
-      cleanup()
-      googleMapsLoadPromise = null
-      script.remove()
-      reject(new Error('Could not load Google Maps.'))
-    }
-    document.head.appendChild(script)
-  })
-
-  return googleMapsLoadPromise
 }
 
 export function getBrowserPosition() {
@@ -432,18 +363,26 @@ export default function App() {
   const outletId = routeContext.outletId
   const tableNo = routeContext.tableNo
   const isTableOrder = routeContext.tableMode
-  const [phase, setPhase]       = useState('loading')
-  const [info, setInfo]         = useState(null)
-  const [items, setItems]       = useState([])
-  const [cart, setCart]         = useState({})
-  const [activeCategory, setCat]= useState('All')
-  const [note, setNote]         = useState('')
-  const [delivery, setDelivery] = useState({ name: '', address: '', mobile: '' })
-  const [submitting, setSub]    = useState(false)
-  const [errorMsg, setErr]      = useState('')
-  const [orderRef, setOrderRef] = useState(null)
-  const [lightbox, setLightbox] = useState(null)
-  const [lastCart, setLastCart] = useState([])
+  const [phase, setPhase]         = useState('loading')
+  const [info, setInfo]           = useState(null)
+  const [items, setItems]         = useState([])
+  const [cart, setCart]           = useState({})
+  const [cartExtras, setCartExtras] = useState({})
+  const [variantSheet, setVariantSheet] = useState(null)
+  const [activeCategory, setCat]  = useState('All')
+  const [note, setNote]           = useState('')
+  const [delivery, setDelivery]   = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('qb_delivery_info') || 'null')
+      if (s?.name || s?.mobile) return { name: s.name || '', address: s.address || '', mobile: s.mobile || '' }
+    } catch {}
+    return { name: '', address: '', mobile: '' }
+  })
+  const [submitting, setSub]      = useState(false)
+  const [errorMsg, setErr]        = useState('')
+  const [orderRef, setOrderRef]   = useState(null)
+  const [lightbox, setLightbox]   = useState(null)
+  const [lastCart, setLastCart]   = useState([])
 
   useEffect(() => {
     if (!outletId) { setPhase('error'); setErr('Invalid menu link.'); return }
@@ -495,48 +434,58 @@ export default function App() {
   const categories = ['All', ...new Set(items.map(i => i.category).filter(Boolean))]
   const visible = activeCategory === 'All' ? items : items.filter(i => i.category === activeCategory)
 
-  function add(id) { setCart(c => ({ ...c, [id]: (c[id] || 0) + 1 })) }
-  function rem(id) {
+  function add(key) { setCart(c => ({ ...c, [key]: (c[key] || 0) + 1 })) }
+  function rem(key) {
     setCart(c => {
       const n = { ...c }
-      if ((n[id] || 0) <= 1) delete n[id]; else n[id]--
+      if ((n[key] || 0) <= 1) {
+        delete n[key]
+        setCartExtras(e => { if (!e[key]) return e; const ne = { ...e }; delete ne[key]; return ne })
+      } else {
+        n[key]--
+      }
       return n
     })
+  }
+  function addWithMods(item, { option, addons = [], qty = 1, effectivePrice }) {
+    const sig = [option?.label, ...addons.map(a => a.label)].filter(Boolean).join(',')
+    const key = sig ? `${item.id}::${sig}` : item.id
+    setCart(c => ({ ...c, [key]: (c[key] || 0) + qty }))
+    if (sig) {
+      setCartExtras(e => ({ ...e, [key]: { baseId: item.id, price: effectivePrice, modsLabel: sig } }))
+    }
   }
 
   async function placeOrder() {
     setSub(true)
     if (outletId === '__demo__') {
       await new Promise(r => setTimeout(r, 800))
-      const demoCartItems = Object.entries(cart).map(([id, qty]) => {
-        const item = items.find(i => i.id === id)
-        return { name: item.name, qty, price: item.price }
+      const demoCartItems = Object.entries(cart).map(([key, qty]) => {
+        const extra = cartExtras[key]
+        const item = extra ? items.find(i => i.id === extra.baseId) : items.find(i => i.id === key)
+        return { name: item?.name || key, qty, price: extra?.price ?? item?.price ?? 0 }
       })
       setLastCart(demoCartItems)
-      setOrderRef({ serialNumber: Math.floor(Math.random() * 90) + 10, total: cartTotal(cart, items), orderId: 'demo-order-001', notes: note || null })
+      setOrderRef({ serialNumber: Math.floor(Math.random() * 90) + 10, total: cartTotal(cart, items, cartExtras), orderId: 'demo-order-001', notes: note || null })
       setPhase('success')
       setSub(false)
       return
     }
     try {
-      const lang = new URLSearchParams(window.location.search).get('lang') === 'bn'
-        ? 'bn'
-        : 'en'
-      const orderItems = Object.entries(cart).map(([id, qty]) => {
-        const item = items.find(i => i.id === id)
+      const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
+      const orderItems = Object.entries(cart).map(([key, qty]) => {
+        const extra = cartExtras[key]
+        const baseItem = extra ? items.find(i => i.id === extra.baseId) : items.find(i => i.id === key)
+        const name = localizedItemName(baseItem, lang) + (extra?.modsLabel ? ` (${extra.modsLabel})` : '')
         return {
-          menuItemId: id,
-          name: localizedItemName(item, lang),
+          menuItemId: extra?.baseId ?? key,
+          name,
           qty,
-          price: item.price,
+          price: extra?.price ?? baseItem?.price ?? 0,
         }
       })
       const payload = isTableOrder
-        ? {
-            items: orderItems,
-            orderType: 'dine_in',
-            tableNo,
-          }
+        ? { items: orderItems, orderType: 'dine_in', tableNo }
         : {
             items: orderItems,
             note: note || null,
@@ -553,10 +502,16 @@ export default function App() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || data.error || 'Order failed')
       const orderData = unwrapApi(data)
-      setLastCart(Object.entries(cart).map(([id, qty]) => {
-        const item = items.find(i => i.id === id)
-        return { name: localizedItemName(item, lang), qty, price: item.price }
-      }))
+      if (!isTableOrder) {
+        try {
+          localStorage.setItem('qb_delivery_info', JSON.stringify({
+            name: delivery.name.trim(),
+            mobile: delivery.mobile.trim(),
+            address: delivery.address.trim(),
+          }))
+        } catch {}
+      }
+      setLastCart(orderItems.map(oi => ({ name: oi.name, qty: oi.qty, price: oi.price })))
       setOrderRef(orderData)
       setPhase('success')
     } catch (e) { alert(e.message || 'Could not place order.') }
@@ -585,7 +540,7 @@ export default function App() {
   } else if (phase === 'cart') {
     body = overrides ? (
       <overrides.Cart
-        cart={cart} items={items} note={note} onNote={setNote}
+        cart={cart} cartExtras={cartExtras} items={items} note={note} onNote={setNote}
         delivery={delivery} onDelivery={setDelivery}
         onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
         onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
@@ -599,17 +554,14 @@ export default function App() {
         isTableOrder={isTableOrder} tableNo={tableNo} />
     )
   } else if (overrides) {
-    // For themes that ship a single-page Storefront (e.g. Hearth),
-    // 'welcome' and 'menu' phases both render the same scrollable
-    // surface — the only difference is whether to land at the menu
-    // anchor on mount.
     body = (
       <>
         <overrides.Storefront
-          info={info} items={items} cart={cart}
+          info={info} items={items} cart={cart} cartExtras={cartExtras}
           onAdd={add} onRemove={rem}
           onOpenCart={() => setPhase('cart')}
           onOpenDetail={item => setLightbox({ item })}
+          onOpenVariants={item => setVariantSheet(item)}
           initialView={phase === 'menu' ? 'menu' : 'hero'}
         />
         {lightbox && (
@@ -619,6 +571,13 @@ export default function App() {
             onAdd={() => add(lightbox.item.id)}
             onRemove={() => rem(lightbox.item.id)}
             onClose={() => setLightbox(null)}
+          />
+        )}
+        {variantSheet && overrides.ModifierSheet && (
+          <overrides.ModifierSheet
+            item={variantSheet}
+            onClose={() => setVariantSheet(null)}
+            onAddWithMods={(item, opts) => { addWithMods(item, opts); setVariantSheet(null) }}
           />
         )}
       </>
@@ -1575,9 +1534,6 @@ function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
           {isLoading ? 'Checking' : hasError ? 'Retry' : 'Refresh'}
         </button>
       </div>
-      {geo.position && (
-        <AddressMapPreview position={geo.position} />
-      )}
       {hasAddress && !addressMatches && (
         <button
           type="button"
@@ -1598,75 +1554,6 @@ function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
         >
           Use detected address
         </button>
-      )}
-    </div>
-  )
-}
-
-function AddressMapPreview({ position }) {
-  const T = useTokens()
-  const mapRef = useRef(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    setFailed(false)
-
-    async function renderMap() {
-      try {
-        await loadGoogleMapsApi()
-        const { Map } = await window.google.maps.importLibrary('maps')
-        if (cancelled || !mapRef.current) return
-        new Map(mapRef.current, {
-          center: position,
-          zoom: 17,
-          disableDefaultUI: true,
-          gestureHandling: 'none',
-          keyboardShortcuts: false,
-          clickableIcons: false,
-        })
-      } catch {
-        if (!cancelled) setFailed(true)
-      }
-    }
-
-    renderMap()
-    return () => { cancelled = true }
-  }, [position.lat, position.lng])
-
-  return (
-    <div style={{
-      height: 118,
-      position: 'relative',
-      borderTop: `1px solid ${T.line}`,
-      background: T.bgWarm,
-      overflow: 'hidden',
-    }}>
-      {failed ? (
-        <div style={{
-          height: '100%',
-          display: 'grid',
-          placeItems: 'center',
-          color: T.inkFaint,
-          fontSize: 12,
-        }}>Map preview unavailable</div>
-      ) : (
-        <>
-          <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
-          <div style={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            width: 16,
-            height: 16,
-            borderRadius: 999,
-            background: T.ember,
-            border: '2px solid #fff',
-            boxShadow: '0 6px 18px rgba(0,0,0,.35)',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-          }} />
-        </>
       )}
     </div>
   )
