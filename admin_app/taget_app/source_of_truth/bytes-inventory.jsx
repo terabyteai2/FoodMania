@@ -6,95 +6,126 @@
 
 function stockKind(it) { const r = it.qty / it.par; return r >= 0.6 ? 'ok' : r >= 0.3 ? 'low' : 'no'; }
 function coverDays(it) { return it.used7 > 0 ? Math.round(it.qty / it.used7 * 7) : 99; }
+/* believable per-item daily usage derived from the 7-day figure (deterministic, demo only) */
+function usedToday(it) { const seed = it.id.split('').reduce((s, c) => s + c.charCodeAt(0), 0); const j = 0.78 + (seed % 7) * 0.06; return Math.max(1, Math.round(it.used7 / 7 * j)); }
+
+const SORT_LABELS = { low: 'Low stock first', qty: 'Quantity', value: 'Value', name: 'A–Z', cover: 'Cover days' };
 
 function InventoryScreen() {
   const b = useBytes();
-  const [sort, setSort] = useState('value');
-  const [dir, setDir] = useState(-1);
+  const [view, setView] = useState('stock');   // 'stock' | 'used'
+  const [sort, setSort] = useState('low');      // default: most depleted on top
+  const [dir, setDir] = useState(1);            // low/name/cover ascend by default
   const [adv, setAdv] = useState(false);
-  const setSorted = (key) => { if (sort === key) setDir(-dir); else { setSort(key); setDir(key === 'name' ? 1 : -1); } };
+  const [showSort, setShowSort] = useState(false);
+  const ascByDefault = { name: 1, low: 1, cover: 1 };
+  const pickSort = (key) => { setSort(key); setDir(ascByDefault[key] || -1); setShowSort(false); };
   const val = (it) => it.qty * it.cost;
   const sorted = [...b.inventory].sort((a, c) => {
+    if (view === 'used') return usedToday(c) - usedToday(a);   // biggest usage first
     let r;
     if (sort === 'name') r = a.name.localeCompare(c.name);
     else if (sort === 'qty') r = a.qty - c.qty;
     else if (sort === 'value') r = val(a) - val(c);
     else if (sort === 'cover') r = coverDays(a) - coverDays(c);
-    else r = (a.qty / a.par) - (c.qty / c.par);
+    else r = (a.qty / a.par) - (c.qty / c.par);                // 'low'
     return r * dir;
   });
   const lowCount = b.inventory.filter((i) => stockKind(i) !== 'ok').length;
   const value = b.inventory.reduce((s, i) => s + i.qty * i.cost, 0);
-  const openRow = (it) => b.push({ screen: adv ? 'itemDetail' : 'stockIn', itemId: it.id });
-
-  const Caret = ({ k }) => sort === k ? <Icon name={dir < 0 ? 'chevd' : 'chevu'} size={12} color="var(--accent-strong)" sw={2.4} style={{ display: 'inline-block' }} /> : null;
-  const HCell = ({ k, label, w, left }) => (
-    <button onClick={() => setSorted(k)} style={{ width: w, flex: w ? '0 0 ' + w + 'px' : 1, textAlign: left ? 'left' : 'right', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: left ? 'flex-start' : 'flex-end', gap: 3, font: 'inherit' }}>
-      <span className="eyebrow" style={{ fontSize: 10.5, color: sort === k ? 'var(--accent-strong)' : 'var(--muted)' }}>{label}</span><Caret k={k} />
-    </button>
-  );
-  const HCellL = ({ k, label, w }) => (
-    <button onClick={() => setSorted(k)} style={{ width: w, flex: '0 0 ' + w + 'px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 3, font: 'inherit' }}>
-      <span className="eyebrow" style={{ fontSize: 10.5, color: sort === k ? 'var(--accent-strong)' : 'var(--muted)' }}>{label}</span><Caret k={k} />
-    </button>
-  );
+  const usedVal = b.inventory.reduce((s, i) => s + usedToday(i) * i.cost, 0);
+  const topMover = [...b.inventory].sort((a, c) => usedToday(c) - usedToday(a))[0];
+  const showCover = adv && view === 'stock';
+  const heroW = showCover ? 64 : 92;
+  const openRow = (it) => b.push({ screen: (view === 'used' || adv) ? 'itemDetail' : 'stockIn', itemId: it.id });
+  const sortOpts = ['low', 'qty', 'value', 'name'].concat(adv ? ['cover'] : []);
 
   return (
     <React.Fragment>
       <Header brand={false} title={b.t('title.stock')} sub={b.inventory.length + ' items'} big right={<TopActions />} />
 
-      {/* summary strip */}
+      {/* summary strip — swaps with the view */}
       <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', gap: 10 }}>
-        <div className="card" style={{ flex: 1, padding: '12px 14px' }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Stock value</div>
-          <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }} className="tab">{money(value)}</div>
-        </div>
-        <div onClick={() => setSorted('low')} className="card" style={{ flex: 1, padding: '12px 14px', cursor: 'pointer', borderColor: sort === 'low' ? 'var(--accent-tint-2)' : 'var(--line)', background: sort === 'low' ? 'var(--accent-tint)' : 'var(--surface)' }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Below par</div>
-          <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2, color: lowCount ? 'var(--warning)' : 'var(--ink)' }} className="tab">{lowCount} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>items</span></div>
-        </div>
+        {view === 'stock' ? (
+          <React.Fragment>
+            <div className="card" style={{ flex: 1, padding: '12px 14px' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Stock value</div>
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }} className="tab">{money(value)}</div>
+            </div>
+            <div onClick={() => pickSort('low')} className="card" style={{ flex: 1, padding: '12px 14px', cursor: 'pointer', borderColor: sort === 'low' ? 'var(--accent-tint-2)' : 'var(--line)', background: sort === 'low' ? 'var(--accent-tint)' : 'var(--surface)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Below par</div>
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2, color: lowCount ? 'var(--warning)' : 'var(--ink)' }} className="tab">{lowCount} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>items</span></div>
+            </div>
+          </React.Fragment>
+        ) : (
+          <React.Fragment>
+            <div className="card" style={{ flex: 1, padding: '12px 14px' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Used today</div>
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }} className="tab">{money(usedVal)}</div>
+            </div>
+            <div className="card" style={{ flex: 1, padding: '12px 14px' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Top item</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 3 }} className="ell">{topMover.name}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 500, marginTop: 1 }}>{usedToday(topMover)} {topMover.unit} today</div>
+            </div>
+          </React.Fragment>
+        )}
       </div>
 
-      {/* advanced toggle */}
-      <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span className="eyebrow">Inventory</span>
-        <AdvToggle on={adv} onChange={setAdv} label={b.t('word.advanced')} />
+      {/* view toggle + advanced */}
+      <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div className="seg lime" style={{ flex: '0 0 auto', width: 224 }}>
+          <button className={view === 'stock' ? 'active' : ''} onClick={() => setView('stock')}>In stock</button>
+          <button className={view === 'used' ? 'active' : ''} onClick={() => setView('used')}>Used today</button>
+        </div>
+        {view === 'stock' && <AdvToggle on={adv} onChange={setAdv} label={b.t('word.advanced')} />}
       </div>
 
-      {/* white ranked table */}
+      {/* stock table — qty is the hero, value is demoted under the name */}
       <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '0 16px 16px' }}>
         <div className="card" style={{ padding: '4px 15px 10px' }}>
-          {/* header row — Qty is the rightmost column, left-justified so the numbers align */}
+          {/* header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0 9px', borderBottom: '1.5px solid var(--line-2)' }}>
-            <span style={{ width: 14, flex: '0 0 14px' }} />
-            <HCell k="name" label="ITEM" left />
-            {adv && <HCell k="cover" label="COVER" w={50} />}
-            <HCell k="value" label="VALUE" w={adv ? 62 : 76} />
-            <HCellL k="qty" label="QTY" w={adv ? 62 : 70} />
+            <span style={{ width: 10, flex: '0 0 10px' }} />
+            <span className="eyebrow" style={{ flex: 1, fontSize: 10.5 }}>Item</span>
+            {showCover && <span className="eyebrow" style={{ width: 46, flex: '0 0 46px', textAlign: 'right', fontSize: 10.5 }}>Cover</span>}
+            {view === 'stock' ? (
+              <button onClick={() => setShowSort(true)} style={{ width: heroW, flex: '0 0 ' + heroW + 'px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3, font: 'inherit' }}>
+                <span className="eyebrow" style={{ fontSize: 10.5, color: 'var(--ink-2)' }}>On hand</span><Icon name="chevd" size={11} color="var(--muted)" sw={2.4} />
+              </button>
+            ) : (
+              <span className="eyebrow" style={{ width: heroW, flex: '0 0 ' + heroW + 'px', textAlign: 'right', fontSize: 10.5 }}>Used today</span>
+            )}
           </div>
           {sorted.map((it, i) => {
             const k = stockKind(it);
             const cv = coverDays(it);
+            const ut = usedToday(it);
+            const last = i === sorted.length - 1;
             return (
-              <div key={it.id} onClick={() => openRow(it)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', cursor: 'pointer', borderBottom: i === sorted.length - 1 ? 'none' : '1px solid var(--line)' }}>
-                {/* single, fixed-width status indicator — keeps every column perfectly aligned */}
-                <span style={{ width: 14, flex: '0 0 14px', display: 'grid', placeItems: 'center' }}>
-                  {k !== 'ok' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: k === 'low' ? 'var(--warning)' : 'var(--danger)' }} />}
+              <div key={it.id} onClick={() => openRow(it)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', cursor: 'pointer', borderBottom: last ? 'none' : '1px solid var(--line)' }}>
+                {/* status lane — fixed width keeps the hero column aligned */}
+                <span style={{ width: 10, flex: '0 0 10px', display: 'grid', placeItems: 'center' }}>
+                  {view === 'stock' && k !== 'ok' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: k === 'low' ? 'var(--warning)' : 'var(--danger)' }} />}
                 </span>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: i === 0 ? 'var(--accent-strong)' : 'var(--placeholder)', flex: '0 0 auto', width: 14, textAlign: 'right' }} className="tab">{i + 1}</span>
-                  <span style={{ fontSize: 14.5, fontWeight: 600 }} className="ell">{it.name}</span>
+                {/* name + demoted secondary value */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600 }} className="ell">{it.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginTop: 2 }} className="ell">{view === 'stock' ? money(it.qty * it.cost) : money(ut * it.cost) + ' used'}</div>
                 </div>
-                {adv && <div style={{ width: 50, flex: '0 0 50px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: cv <= 2 ? 'var(--danger)' : cv <= 5 ? 'var(--warning)' : 'var(--ink-2)' }} className="tab">{cv >= 99 ? '—' : cv + 'd'}</div>}
-                <div style={{ width: adv ? 62 : 76, flex: '0 0 ' + (adv ? 62 : 76) + 'px', textAlign: 'right', fontSize: 14, fontWeight: 700 }} className="tab">{money(it.qty * it.cost)}</div>
-                <div style={{ width: adv ? 62 : 70, flex: '0 0 ' + (adv ? 62 : 70) + 'px', textAlign: 'left', fontSize: 14.5, fontWeight: 700, color: k === 'no' ? 'var(--danger)' : k === 'low' ? 'var(--warning)' : 'var(--ink)' }} className="tab">{it.qty}<span style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 600 }}> {it.unit}</span></div>
+                {showCover && <div style={{ width: 46, flex: '0 0 46px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: cv <= 2 ? 'var(--danger)' : cv <= 5 ? 'var(--warning)' : 'var(--ink-2)' }} className="tab">{cv >= 99 ? '—' : cv + 'd'}</div>}
+                {/* hero number */}
+                <div style={{ width: heroW, flex: '0 0 ' + heroW + 'px', textAlign: 'right' }} className="tab">
+                  <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.01em', color: view === 'used' ? 'var(--ink)' : k === 'no' ? 'var(--danger)' : k === 'low' ? 'var(--warning)' : 'var(--ink)' }}>{view === 'stock' ? it.qty : ut}</span>
+                  <span style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 600 }}> {it.unit}</span>
+                </div>
               </div>
             );
           })}
         </div>
 
-        {/* advanced drill-downs */}
-        {adv && (
+        {/* advanced drill-downs (stock view only) */}
+        {adv && view === 'stock' && (
           <div style={{ marginTop: 14 }}>
             <div className="eyebrow" style={{ margin: '0 2px 9px' }}>Advanced</div>
             <div onClick={() => b.push({ screen: 'stockTrends' })} className="card" style={{ padding: 14, cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--accent-tint)', borderColor: 'var(--accent-tint-2)' }}>
@@ -124,6 +155,21 @@ function InventoryScreen() {
         <button className="btn btn-ghost btn-lg" style={{ flex: '0 0 auto', width: 132 }} onClick={() => b.push({ screen: 'startCount' })}><Icon name="count" size={19} />{b.t('act.count')}</button>
         <button className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={() => b.push({ screen: 'stockIn', itemId: null })}><Icon name="boxin" size={20} color="var(--accent-ink)" sw={2} />{b.t('act.stockin')}</button>
       </div>
+
+      {/* sort sheet */}
+      <Sheet open={showSort} onClose={() => setShowSort(false)}>
+        <div style={{ padding: '6px 18px 22px' }}>
+          <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 14 }}>Sort stock by</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sortOpts.map((key) => (
+              <button key={key} onClick={() => pickSort(key)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 15px', borderRadius: 'var(--r-md)', border: '1px solid ' + (sort === key ? 'var(--accent-tint-2)' : 'var(--line-2)'), background: sort === key ? 'var(--accent-tint)' : 'var(--surface)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 15, fontWeight: 600, color: sort === key ? 'var(--accent-strong)' : 'var(--ink)' }}>
+                {SORT_LABELS[key]}
+                {sort === key && <Icon name="check2" size={18} sw={2.2} />}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Sheet>
     </React.Fragment>
   );
 }
@@ -344,4 +390,4 @@ function SuppliersScreen() {
   );
 }
 
-Object.assign(window, { InventoryScreen, StockIn, StartCount, ItemDetail, VarianceScreen, SuppliersScreen, stockKind, coverDays });
+Object.assign(window, { InventoryScreen, StockIn, StartCount, ItemDetail, VarianceScreen, SuppliersScreen, stockKind, coverDays, usedToday });

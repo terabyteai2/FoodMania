@@ -4,12 +4,12 @@
 
 const MENU = [
   // Burgers
-  { id:'b1', cat:'Burgers', name:'Beef Smash Burger', desc:'Double patty, cheddar, house sauce', price:380, cost:165, stock:'ok', sold:218, delivery:true, mods:['bsize','baddons'] },
+  { id:'b1', cat:'Burgers', name:'Beef Smash Burger', desc:'Double patty, cheddar, house sauce', price:380, cost:165, stock:'ok', sold:218, delivery:true, mods:['bsize','baddons'], img:'assets/menu/burger.jpg' },
   { id:'b2', cat:'Burgers', name:'Crispy Chicken Burger', desc:'Buttermilk fried, slaw, pickles', price:340, cost:140, stock:'ok', sold:301, delivery:true, mods:['spice','baddons'] },
   { id:'b3', cat:'Burgers', name:'Mushroom Swiss', desc:'Beef, sautéed mushroom, swiss', price:420, cost:185, stock:'low', sold:96, delivery:true, mods:['bsize','baddons'] },
 
   // Rice & Curry
-  { id:'r1', cat:'Rice & Curry', name:'Chicken Biryani', desc:'Basmati, raita, borhani', price:320, cost:120, stock:'ok', sold:512, delivery:true, mods:['portion','rprotein'] },
+  { id:'r1', cat:'Rice & Curry', name:'Chicken Biryani', desc:'Basmati, raita, borhani', price:320, cost:120, stock:'ok', sold:512, delivery:true, mods:['portion','rprotein'], img:'assets/menu/biryani.jpg' },
   { id:'r2', cat:'Rice & Curry', name:'Beef Tehari', desc:'Spiced short-grain, salad', price:300, cost:115, stock:'ok', sold:347, delivery:true, mods:['portion'] },
   { id:'r3', cat:'Rice & Curry', name:'Kacchi Biryani', desc:'Mutton, aloo, signature blend', price:480, cost:230, stock:'ok', sold:289, delivery:true, mods:['portion'] },
   { id:'r4', cat:'Rice & Curry', name:'Vegetable Khichuri', desc:'Lentil rice, fried egg, achar', price:240, cost:80, stock:'ok', sold:134, delivery:true, mods:['portion','rprotein'] },

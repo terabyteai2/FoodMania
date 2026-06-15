@@ -61,6 +61,7 @@ class _TablesScreenState extends State<TablesScreen> {
       showDatePill: false,
       pinHeader: true,
       fillBody: true,
+      removeHorizontalPadding: counterMode,
       child: counterMode
           ? _CounterMode(onNavigateToOrders: widget.onNavigateToOrders)
           : _FullService(

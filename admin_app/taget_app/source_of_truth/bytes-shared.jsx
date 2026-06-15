@@ -118,12 +118,14 @@ const CAT_TINT = {
   Sides:['var(--cat-sides-bg)','var(--cat-sides-fg)','fries'], Salads:['var(--cat-salad-bg)','var(--cat-salad-fg)','salad'],
   Beverages:['var(--cat-bev-bg)','var(--cat-bev-fg)','drink'], Desserts:['var(--cat-dessert-bg)','var(--cat-dessert-fg)','dessert'],
 };
-function Thumb({ cat, size = 52, ic, fill }) {
+function Thumb({ cat, size = 52, ic, fill, img }) {
   const [bg, fg, dic] = CAT_TINT[cat] || ['var(--cat-default-bg)', 'var(--cat-default-fg)', 'bag'];
   const box = fill ? { width: '100%', aspectRatio: '1 / 1' } : { width: size, height: size, flexBasis: size };
   return (
     <div className="thumb" style={{ ...box, background: bg }}>
-      <Icon name={ic || dic} size={size * 0.5} color={fg} sw={1.6} />
+      {img
+        ? <img src={img} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        : <Icon name={ic || dic} size={size * 0.5} color={fg} sw={1.6} />}
     </div>
   );
 }

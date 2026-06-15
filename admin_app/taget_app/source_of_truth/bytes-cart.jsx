@@ -112,7 +112,7 @@ function MenuBrowser({ onAdd, onSub, lines = [] }) {
               return (
                 <div key={m.id} className="tile" onClick={() => !off && onAdd(m)} style={{ padding: 8, opacity: off ? .5 : 1, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', borderColor: n > 0 ? 'var(--accent-press)' : 'var(--line)', background: n > 0 ? 'var(--accent-tint)' : 'var(--surface)' }}>
                   <div style={{ position: 'relative' }}>
-                    <Thumb cat={m.cat} size={thumbH} fill />
+                    <Thumb cat={m.cat} size={thumbH} fill img={m.img} />
                     {n > 0 && <span className="tab" style={{ position: 'absolute', top: 6, left: 6, minWidth: 22, height: 22, padding: '0 6px', borderRadius: 11, background: 'var(--accent)', color: 'var(--accent-ink)', fontSize: 12.5, fontWeight: 800, display: 'grid', placeItems: 'center' }}>{n}</span>}
                     {n > 0 && <button onClick={(e) => { e.stopPropagation(); onSub && onSub(m); }} style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 7, border: 'none', background: 'var(--surface)', boxShadow: '0 1px 3px rgba(20,24,14,.18)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--danger)' }}><Icon name="minus" size={16} sw={2.4} /></button>}
                     {off && <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 10.5, fontWeight: 700, color: '#fff', background: 'var(--danger)', borderRadius: 5, padding: '3px 6px' }}>86'd</span>}
@@ -140,7 +140,7 @@ function MenuBrowser({ onAdd, onSub, lines = [] }) {
                   const off = m.stock === 'no';
                   return (
                     <div className="row" key={m.id} onClick={() => !off && n === 0 && onAdd(m)} style={{ opacity: off ? .5 : 1, cursor: off ? 'default' : 'pointer', borderColor: n > 0 ? 'var(--accent-press)' : 'var(--line)', background: n > 0 ? 'var(--accent-tint)' : 'var(--surface)' }}>
-                      <Thumb cat={m.cat} />
+                      <Thumb cat={m.cat} img={m.img} />
                       <div className="mid">
                         <div className="nm ell">{m.name}</div>
                         <div className="ds ell">{m.desc}</div>

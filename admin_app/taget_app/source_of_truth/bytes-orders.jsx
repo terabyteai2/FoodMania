@@ -78,9 +78,8 @@ function OrdersScreen() {
     }
     return true;
   };
-  const base = filter === 'ongoing' ? ongoing : completed;
-  const list = base.filter(matches);
-  const liveRev = ongoing.reduce((s, o) => s + orderTotal(o.lines, o.discount || 0, orderCharge(o)), 0);
+  // Ongoing is only ever 4-5 orders — no search/filter needed there; both apply to Completed history only.
+  const list = filter === 'completed' ? completed.filter(matches) : ongoing;
   const activeFilters = (range !== 'today' ? 1 : 0) + (source !== 'all' ? 1 : 0);
 
   const billAndComplete = (o) => { b.setOrderState(o.id, 'completed'); b.go({ screen: 'printOut', orderId: o.id, kind: 'complete' }); };
@@ -89,21 +88,16 @@ function OrdersScreen() {
     <React.Fragment>
       <Header brand sub="Spice Garden · Dhanmondi" right={<TopActions />} />
 
-      {/* search + filters */}
-      <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', gap: 8 }}>
-        <div className="field" style={{ flex: 1 }}>
-          <Icon name="search" size={18} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('word.search')} />
-          {q && <button onClick={() => setQ('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted)', display: 'grid', placeItems: 'center' }}><Icon name="x" size={16} /></button>}
-        </div>
-        <button onClick={() => setShowFilters(true)} style={{ width: 48, flex: '0 0 48px', borderRadius: 'var(--r-md)', border: '1px solid ' + (activeFilters ? 'var(--accent-tint-2)' : 'var(--line-2)'), background: activeFilters ? 'var(--accent-tint)' : 'var(--surface)', color: activeFilters ? 'var(--accent-strong)' : 'var(--ink-2)', display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative' }}>
-          <Icon name="filter" size={20} />
-          {activeFilters > 0 && <span className="tab" style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: 'var(--accent-strong)', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'grid', placeItems: 'center', border: '2px solid var(--bg)' }}>{activeFilters}</span>}
-        </button>
-      </div>
-
-      {/* state seg */}
+      {/* slim title row + state seg */}
       <div style={{ flex: '0 0 auto', padding: '0 16px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 24, marginBottom: 11 }}>
+          <span className="eyebrow">{filter === 'ongoing' ? 'On the floor' : 'Order history'}</span>
+          {pending.length > 0 && (
+            <button onClick={() => setFilter('ongoing')} className="badge accent" style={{ height: 24, border: 'none', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+              <span className="bd" style={{ background: 'var(--accent-ink)' }} />{pending.length} to accept
+            </button>
+          )}
+        </div>
         <div className="seg">
           {[['ongoing', t('word.ongoing'), ongoing.length], ['completed', t('word.completed'), completed.length]].map(([id, label, n]) => (
             <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}<span style={{ marginLeft: 6, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: filter === id ? 'var(--accent)' : 'var(--surface-3)', color: filter === id ? 'var(--accent-ink)' : 'var(--muted)', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} className="tab">{n}</span></button>
@@ -111,21 +105,22 @@ function OrdersScreen() {
         </div>
       </div>
 
-      <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '0 16px 90px', display: 'flex', flexDirection: 'column', gap: 11 }}>
-        {/* calm summary row — scrolls away to give the list its full height */}
-        <div style={{ flex: '0 0 auto', display: 'flex', gap: 10 }}>
-          <div className="card" style={{ flex: 1.4, padding: '12px 14px' }}>
-            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>On the floor now</div>
-            <div style={{ fontSize: 21, fontWeight: 700, marginTop: 2 }} className="tab">{money(liveRev)}</div>
+      {/* search + filters — only surface in completed history */}
+      {filter === 'completed' && (
+        <div style={{ flex: '0 0 auto', padding: '0 16px 12px', display: 'flex', gap: 8 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <Icon name="search" size={18} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('word.search')} />
+            {q && <button onClick={() => setQ('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted)', display: 'grid', placeItems: 'center' }}><Icon name="x" size={16} /></button>}
           </div>
-          <div className="card" style={{ flex: 1, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span style={{ fontSize: 21, fontWeight: 700, color: pending.length ? 'var(--accent-strong)' : 'var(--ink)' }} className="tab">{pending.length}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>to accept</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginTop: 2 }}>{ongoing.length} ongoing</div>
-          </div>
+          <button onClick={() => setShowFilters(true)} style={{ width: 48, flex: '0 0 48px', borderRadius: 'var(--r-md)', border: '1px solid ' + (activeFilters ? 'var(--accent-tint-2)' : 'var(--line-2)'), background: activeFilters ? 'var(--accent-tint)' : 'var(--surface)', color: activeFilters ? 'var(--accent-strong)' : 'var(--ink-2)', display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative' }}>
+            <Icon name="filter" size={20} />
+            {activeFilters > 0 && <span className="tab" style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: 'var(--accent-strong)', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'grid', placeItems: 'center', border: '2px solid var(--bg)' }}>{activeFilters}</span>}
+          </button>
         </div>
+      )}
+
+      <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '4px 16px 90px', display: 'flex', flexDirection: 'column', gap: 11 }}>
         {list.map((o) => <OrderCard key={o.id} o={o} onClick={() => b.push({ screen: 'orderDetail', orderId: o.id })}
           onAccept={() => { b.setOrderState(o.id, 'accepted'); b.go({ screen: 'printOut', orderId: o.id, kind: 'accept' }); }}
           onReject={() => b.setOrderState(o.id, 'rejected')}
@@ -133,8 +128,8 @@ function OrdersScreen() {
           onBill={() => billAndComplete(o)} />)}
         {list.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '52px 20px', fontSize: 14 }}>
-            <div style={{ width: 54, height: 54, borderRadius: 14, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', margin: '0 auto 14px', color: 'var(--placeholder)' }}><Icon name={q || activeFilters ? 'search' : filter === 'ongoing' ? 'receipt' : 'check2'} size={26} /></div>
-            {q || activeFilters ? 'No orders match.' : filter === 'ongoing' ? 'No ongoing orders.' : 'No completed orders yet.'}
+            <div style={{ width: 54, height: 54, borderRadius: 14, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', margin: '0 auto 14px', color: 'var(--placeholder)' }}><Icon name={filter === 'completed' && (q || activeFilters) ? 'search' : filter === 'ongoing' ? 'receipt' : 'check2'} size={26} /></div>
+            {filter === 'completed' && (q || activeFilters) ? 'No orders match.' : filter === 'ongoing' ? 'No ongoing orders.' : 'No completed orders yet.'}
           </div>
         )}
       </div>

@@ -19,6 +19,8 @@ function ControlTower({ tabMode }) {
   );
   const orders = b.orders;
   const pending = orders.filter((o) => o.state === 'pending');
+  const ongoing = orders.filter((o) => o.state === 'pending' || o.state === 'accepted');
+  const floorRev = ongoing.reduce((s, o) => s + orderTotal(o.lines, o.discount || 0, orderCharge(o)), 0);
   const slowest = [...pending].sort((a, c) => c.mins - a.mins)[0];
   const lowStock = b.inventory.filter((i) => stockKind(i) !== 'ok');
   const liveRev = orders.reduce((s, o) => s + orderTotal(o.lines, 0, orderCharge(o)), 0);
@@ -37,7 +39,22 @@ function ControlTower({ tabMode }) {
         <AdvToggle on={adv} onChange={setAdv} label={b.t('word.advanced')} />
       </div>
       <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '0 16px 16px' }}>
-        {/* alerts */}
+        {/* floor snapshot — live revenue + orders to accept (relocated from Orders home) */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          <div className="card" style={{ flex: 1.4, padding: '13px 14px' }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>On the floor now</div>
+            <div style={{ fontSize: 23, fontWeight: 700, marginTop: 3, letterSpacing: '-.02em' }} className="tab">{money(floorRev)}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 500, marginTop: 4 }}>{ongoing.length} ongoing orders</div>
+          </div>
+          <div className="card" style={{ flex: 1, padding: '13px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ fontSize: 23, fontWeight: 700, color: pending.length ? 'var(--accent-strong)' : 'var(--ink)' }} className="tab">{pending.length}</span>
+              <span style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 600 }}>to accept</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 500, marginTop: 4 }}>{pending.length ? 'needs attention' : 'all caught up'}</div>
+          </div>
+        </div>
+
         {(slowest || lowStock.length > 0) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
             {slowest && slowest.mins >= 3 && (

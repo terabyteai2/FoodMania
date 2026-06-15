@@ -15,6 +15,7 @@ class AppScaffold extends StatelessWidget {
     this.pinHeader = false,
     this.fillBody = false,
     this.centerHeader = false,
+    this.removeHorizontalPadding = false,
     this.headerWidget,
     super.key,
   });
@@ -32,6 +33,10 @@ class AppScaffold extends StatelessWidget {
   /// a [CustomScrollView]. Required for tabbed pages (e.g. Stock).
   final bool fillBody;
   final bool centerHeader;
+
+  /// When true (and [fillBody] is also true), skip the horizontal padding
+  /// so nested content controls its own padding. Used e.g. in counter mode.
+  final bool removeHorizontalPadding;
 
   /// When set, replaces the default title/actions header entirely. The widget
   /// is responsible for its own padding. Use [AppPageHeader] for tab roots.
@@ -64,15 +69,17 @@ class AppScaffold extends StatelessWidget {
                             ),
                       Expanded(
                         child: fillBody
-                            ? Padding(
-                                padding: EdgeInsets.fromLTRB(
-                                  _horizontalPadding(context),
-                                  0,
-                                  _horizontalPadding(context),
-                                  0,
-                                ),
-                                child: child,
-                              )
+                            ? removeHorizontalPadding
+                                ? child
+                                : Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                      _horizontalPadding(context),
+                                      0,
+                                      _horizontalPadding(context),
+                                      0,
+                                    ),
+                                    child: child,
+                                  )
                             : CustomScrollView(
                                 slivers: [
                                   SliverPadding(

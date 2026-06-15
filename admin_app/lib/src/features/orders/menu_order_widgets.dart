@@ -788,20 +788,6 @@ class _AddBtn extends StatelessWidget {
 
 // ── Grid-mode tile ──
 
-const _categoryTintBg = <String, Color>{
-  'Burgers': Color(0xFFFBEFCD),
-  'Pizza': Color(0xFFFBE3E2),
-  'Rice & Curry': Color(0xFFE4FBC9),
-  'Kebab': Color(0xFFFBE3E2),
-  'Sides': Color(0xFFE3EAFC),
-  'Salads': Color(0xFFE4FBC9),
-  'Beverages': Color(0xFFE3EAFC),
-  'Desserts': Color(0xFFFBEFCD),
-};
-
-Color _catBg(String category) =>
-    _categoryTintBg[category] ?? const Color(0xFFECEFE4);
-
 class _GridTile extends StatelessWidget {
   const _GridTile({
     required this.item,
@@ -851,7 +837,6 @@ class _GridTile extends StatelessWidget {
                 height: 54,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: _catBg(item.category),
                   borderRadius: BorderRadius.circular(PosRadii.card),
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -859,7 +844,7 @@ class _GridTile extends StatelessWidget {
                   children: [
                     Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(8),
+                        padding: EdgeInsets.zero,
                         child: ItemImage(
                           url: item.imageUrl ?? '',
                           iconKey: iconKey,
@@ -1045,24 +1030,13 @@ class CartFooter extends StatelessWidget {
     final text = AppScope.of(context).strings;
     final hasItems = cart.isNotEmpty;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        border: const Border(top: BorderSide(color: PosColors.line)),
-        boxShadow: PosShadows.bar,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: _ReviewButton(
-            count: totalQty,
-            subtotal: total,
-            label: text.reviewOrder,
-            enabled: hasItems && onSubmit != null,
-            onPressed: onSubmit,
-          ),
-        ),
+    return TfStickyCTA(
+      child: _ReviewButton(
+        count: totalQty,
+        subtotal: total,
+        label: text.reviewOrder,
+        enabled: hasItems && onSubmit != null,
+        onPressed: onSubmit,
       ),
     );
   }
@@ -1085,59 +1059,67 @@ class _ReviewButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.5,
-      child: GestureDetector(
-        onTap: enabled ? onPressed : null,
-        child: Container(
-          height: 44,
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            color: PosColors.primary,
-            borderRadius: BorderRadius.circular(PosRadii.card),
-          ),
-          child: Row(
-            children: [
-              // Count badge
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF14180E).withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                alignment: Alignment.center,
-                child: TfText(
-                  tfFormatNumber(context, count),
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.accentInk,
-                    fontFeatures: [FontFeature.tabularFigures()],
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: Material(
+        color: enabled ? PosColors.primary : PosColors.line,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(PosRadii.md),
+              border: Border.all(
+                color: enabled ? Colors.transparent : PosColors.line,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: enabled
+                        ? const Color(0xFF14180E).withValues(alpha: 0.18)
+                        : PosColors.muted.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: TfText(
+                    tfFormatNumber(context, count),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: enabled ? PosColors.accentInk : PosColors.muted,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              TfText(
-                label,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: PosColors.accentInk,
+                const SizedBox(width: 8),
+                TfText(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? PosColors.accentInk : PosColors.muted,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              TfText(
-                tfFormatCurrency(context, subtotal),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: PosColors.accentInk,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                const Spacer(),
+                TfText(
+                  tfFormatCurrency(context, subtotal),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: enabled ? PosColors.accentInk : PosColors.muted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
