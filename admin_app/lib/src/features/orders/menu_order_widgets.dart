@@ -858,15 +858,18 @@ class _GridTile extends StatelessWidget {
                 child: Stack(
                   children: [
                     Center(
-                      child: ItemImage(
-                        url: item.imageUrl ?? '',
-                        iconKey: iconKey,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: ItemImage(
+                          url: item.imageUrl ?? '',
+                          iconKey: iconKey,
+                        ),
                       ),
                     ),
                     if (inCart) ...[
                       Positioned(
                         top: 6,
-                        left: 6,
+                        right: 6,
                         child: Container(
                           constraints: const BoxConstraints(minWidth: 22),
                           height: 22,
@@ -889,7 +892,7 @@ class _GridTile extends StatelessWidget {
                       ),
                       Positioned(
                         top: 6,
-                        right: 6,
+                        left: 6,
                         child: GestureDetector(
                           onTap: onDecrement,
                           child: Container(
