@@ -3080,7 +3080,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _custPhoneCtrl = TextEditingController();
   final _custAddrCtrl = TextEditingController();
   String _query = '';
-  MenuLayoutMode _menuLayoutMode = MenuLayoutMode.list;
+  MenuLayoutMode _menuLayoutMode = MenuLayoutMode.grid;
   int _gridCols = 3;
   OrderModel? _createdOrder;
   bool _creating = false;

@@ -97,6 +97,14 @@ function InventoryScreen() {
         {adv && (
           <div style={{ marginTop: 14 }}>
             <div className="eyebrow" style={{ margin: '0 2px 9px' }}>Advanced</div>
+            <div onClick={() => b.push({ screen: 'stockTrends' })} className="card" style={{ padding: 14, cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, background: 'var(--accent-tint)', borderColor: 'var(--accent-tint-2)' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--accent)', display: 'grid', placeItems: 'center', flex: '0 0 38px' }}><Icon name="chart" size={20} color="var(--accent-ink)" /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700 }}>Stock over time</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 1 }} className="ell">Value, usage, cover &amp; spend across periods</div>
+              </div>
+              <Icon name="chev" size={18} color="var(--accent-strong)" />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[['variance', 'Daily variance', 'variance', 'Expected vs counted'], ['suppliers', 'Suppliers', 'truck', b.suppliers.length + ' active']].map(([scr, label, ic, hint]) => (
                 <div key={scr} onClick={() => b.push({ screen: scr })} className="card" style={{ padding: 13, cursor: 'pointer' }}>

@@ -1,11 +1,11 @@
 {
-    "name": "REs Admin",
-    "short_name": "REs Admin",
+    "name": "QuickBytes",
+    "short_name": "QuickBytes",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Restaurant POS admin and local server app.",
+    "description": "QuickBytes — Restaurant POS",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

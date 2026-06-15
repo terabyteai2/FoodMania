@@ -1,9 +1,31 @@
 /* ============================================================
-   Bytes POS — root: store, navigation, routing
+   QuickBytes POS — root: store, navigation, responsive shell
    ============================================================ */
 const BytesCtx = createContext(null);
 const useBytes = () => useContext(BytesCtx);
 window.useBytes = useBytes;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "device": "phone",
+  "density": "comfortable"
+}/*EDITMODE-END*/;
+
+/* screen registries (single source of routing truth) */
+const PUSH_REG = {
+  orderDetail: OrderDetail, orderBuild: OrderBuild, review: ReviewScreen, deliveryInfo: DeliveryInfo, printOut: PrintOut,
+  itemEdit: ItemEdit, menu: MenuManageScreen, stockIn: StockIn, startCount: StartCount, itemDetail: ItemDetail, variance: VarianceScreen, suppliers: SuppliersScreen, stockTrends: StockTrendsScreen,
+  analytics: AnalyticsScreen, tower: ControlTower, messages: MessagesScreen, chatThread: ChatThread,
+  categoryAll: CategoryAllScreen, productsAll: ProductsAllScreen, salesTable: SalesTableScreen,
+  settings: SettingsScreen, deliveryAreas: DeliveryAreasScreen, discountPresets: DiscountPresetsScreen, themePicker: ThemePicker, staff: StaffScreen, audit: AuditScreen,
+};
+const TAB_REG = { orders: OrdersScreen, tables: TablesScreen, inventory: InventoryScreen, more: MoreScreen, analytics: AnalyticsScreen, tower: ControlTower };
+/* tabs that use a list→detail two-pane layout on wide surfaces */
+const MD_TABS = ['orders', 'tables', 'inventory'];
+const EMPTY_DETAIL = {
+  orders: { icon: 'receipt', title: 'No order selected', sub: 'Pick an order from the list to view, accept or print it.' },
+  tables: { icon: 'table', title: 'No table selected', sub: 'Tap a table or order to manage the floor.' },
+  inventory: { icon: 'box', title: 'No item selected', sub: 'Tap an item to see usage and adjustment history.' },
+};
 
 let _oid = 100;
 function App() {
@@ -21,6 +43,11 @@ function App() {
   const [tab, setTabRaw] = useState('orders');
   const [nav, setNav] = useState([]);
   const t = useMemo(() => makeT(lang), [lang]);
+  const _qs = (typeof location !== 'undefined') ? new URLSearchParams(location.search) : new URLSearchParams();
+  const _defaults = { ...TWEAK_DEFAULTS };
+  if (_qs.get('device')) _defaults.device = _qs.get('device');
+  if (_qs.get('density')) _defaults.density = _qs.get('density');
+  const [tw, setTweak] = useTweaks(_defaults);
 
   const setTab = (tb) => { setNav([]); setTabRaw(tb); };
   const switchRole = (r) => {
@@ -65,30 +92,59 @@ function App() {
     getOrder, startOrder, addOrderLine, setOrderLineQty, removeOrderLine, setOrderState, setOrderDiscount, setOrderInfo, sendChat, readChat, markNotifsRead, markNotifRead, addStaff, toggleStaff,
   };
 
-  const pendingCount = orders.filter((o) => o.state === 'pending').length;
+  return (
+    <BytesCtx.Provider value={store}>
+      <Shell device={tw.device} density={tw.density} />
+      <TweaksPanel>
+        <TweakSection label="Preview" />
+        <TweakSelect label="Device" value={tw.device}
+          options={Object.keys(DEVICES).map((k) => ({ value: k, label: DEVICES[k].label }))}
+          onChange={(v) => setTweak('device', v)} />
+        <TweakRadio label="Density" value={tw.density}
+          options={['comfortable', 'cozy', 'compact']}
+          onChange={(v) => setTweak('density', v)} />
+      </TweaksPanel>
+    </BytesCtx.Provider>
+  );
+}
+
+/* ── responsive shell: device frame + adaptive chrome + panes ── */
+function Shell({ device, density }) {
+  const b = useBytes();
+  const appRef = useRef(null);
+  const size = useSize(appRef);
+  const dev = DEVICES[device] || DEVICES.phone;
+  const w = size.w || (device === 'fill' ? (typeof window !== 'undefined' ? window.innerWidth : 412) : dev.w);
+  const mode = modeFor(w);
+  const top = b.nav[b.nav.length - 1];
+  const pendingCount = b.orders.filter((o) => o.state === 'pending').length;
+
+  const screenEl = (f) => { const S = PUSH_REG[f.screen]; return S ? <S {...f} /> : <div style={{ padding: 20 }}>Unknown screen</div>; };
+  const tabEl = (tb) => { const T = TAB_REG[tb]; return T ? <T tabMode /> : null; };
 
   let body;
-  const top = nav[nav.length - 1];
-  if (top) {
-    const S = {
-      orderDetail: OrderDetail, orderBuild: OrderBuild, review: ReviewScreen, deliveryInfo: DeliveryInfo, printOut: PrintOut,
-      itemEdit: ItemEdit, menu: MenuManageScreen, stockIn: StockIn, startCount: StartCount, itemDetail: ItemDetail, variance: VarianceScreen, suppliers: SuppliersScreen,
-      analytics: AnalyticsScreen, tower: ControlTower, messages: MessagesScreen, chatThread: ChatThread,
-      categoryAll: CategoryAllScreen, productsAll: ProductsAllScreen, salesTable: SalesTableScreen,
-      settings: SettingsScreen, deliveryAreas: DeliveryAreasScreen, discountPresets: DiscountPresetsScreen, themePicker: ThemePicker, staff: StaffScreen, audit: AuditScreen,
-    }[top.screen];
-    body = S ? <S {...top} /> : <div style={{ padding: 20 }}>?</div>;
-  } else {
-    const T = { orders: OrdersScreen, tables: TablesScreen, inventory: InventoryScreen, more: MoreScreen, analytics: AnalyticsScreen, tower: ControlTower }[tab];
+  if (mode === 'wide' && MD_TABS.includes(b.tab)) {
     body = (
       <React.Fragment>
-        <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>{T ? <T tabMode /> : null}</div>
-        <TabBar tab={tab} setTab={setTab} badge={pendingCount} role={role} t={t} />
+        <div className="pane pane--master">{tabEl(b.tab)}</div>
+        <div className="pane pane--detail">{top ? screenEl(top) : <EmptyDetail {...EMPTY_DETAIL[b.tab]} />}</div>
       </React.Fragment>
     );
+  } else {
+    const single = top ? screenEl(top) : tabEl(b.tab);
+    body = <div className={'pane pane--single' + (mode !== 'compact' ? ' pane--wide' : '')}>{single}</div>;
   }
 
-  return <BytesCtx.Provider value={store}><Phone>{body}</Phone></BytesCtx.Provider>;
+  return (
+    <LayoutCtx.Provider value={{ mode, width: w }}>
+      <DeviceFrame device={device} density={density} appRef={appRef}>
+        {dev.frame === 'phone' && <StatusBar />}
+        <NavRail role={b.role} tab={b.tab} setTab={b.setTab} badge={pendingCount} t={b.t} />
+        <div className="app-body">{body}</div>
+        <div className="app-bottomnav"><TabBar tab={b.tab} setTab={b.setTab} badge={pendingCount} role={b.role} t={b.t} /></div>
+      </DeviceFrame>
+    </LayoutCtx.Provider>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);

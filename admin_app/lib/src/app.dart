@@ -25,7 +25,6 @@ import 'features/auth/staff_invite_screen.dart';
 import 'features/setup/tenant_setup_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
-import 'features/splash/splash_screen.dart';
 import 'features/system/admin_blocking_notice_screen.dart';
 import 'features/tables/tables_screen.dart';
 import 'features/tower/control_tower_screen.dart';
@@ -39,8 +38,7 @@ class LocalPosApp extends StatefulWidget {
 
 class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   late final PosAppController _controller;
-  late final Future<void> _bootFuture;
-  bool _showSplash = true;
+  bool _bootDone = false;
   bool _showIntro = false;
   int _initialShellIndex = 0;
 
@@ -49,7 +47,15 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _controller = PosAppController();
-    _bootFuture = _controller.initialize();
+    _controller.initialize().then((_) {
+      if (mounted) {
+        setState(() {
+          _bootDone = true;
+          _showIntro = !_controller.hasSeenIntro;
+          _initialShellIndex = _defaultShellIndex();
+        });
+      }
+    });
   }
 
   @override
@@ -134,18 +140,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   }
 
   Widget _home() {
-    if (_showSplash) {
-      return SplashScreen(
-        bootFuture: _bootFuture,
-        onFinished: () {
-          setState(() {
-            _showSplash = false;
-            _showIntro = !_controller.hasSeenIntro;
-            _initialShellIndex = _defaultShellIndex();
-          });
-        },
-      );
-    }
+    if (!_bootDone) return const SizedBox.shrink();
     final blockingNotice = _controller.adminBlockingNotice;
     if (blockingNotice?.isBlocking == true) {
       return AdminBlockingNoticeScreen(

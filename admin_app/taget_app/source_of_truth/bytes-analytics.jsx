@@ -140,9 +140,9 @@ function AnalyticsScreen({ tabMode }) {
         </div>
       </div>
 
-      <div className="scrollY noscroll" style={{ flex: 1, minHeight: 0, padding: '0 16px 24px' }}>
+      <div className="scrollY noscroll dash-grid" style={{ flex: 1, minHeight: 0, padding: '0 16px 24px' }}>
         {/* hero — accent wash */}
-        <div style={{ borderRadius: 'var(--r-lg)', padding: 16, marginBottom: 12, background: 'var(--accent-tint)', border: '1px solid var(--accent-tint-2)' }}>
+        <div className="dash-span" style={{ borderRadius: 'var(--r-lg)', padding: 16, marginBottom: 12, background: 'var(--accent-tint)', border: '1px solid var(--accent-tint-2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-strong)' }}>{tfLabel} · Net sales</div>
@@ -345,7 +345,7 @@ function AnalyticsScreen({ tabMode }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 9.5, color: 'var(--placeholder)' }}><span>11 AM</span><span>4 PM</span><span>8 PM</span><span>12 AM</span></div>
         </div>
 
-        <div style={{ textAlign: 'center', color: 'var(--placeholder)', fontSize: 11.5, padding: '6px 0 0' }}>VAT-inclusive · synced 7:42 PM</div>
+        <div className="dash-span" style={{ textAlign: 'center', color: 'var(--placeholder)', fontSize: 11.5, padding: '6px 0 0' }}>VAT-inclusive · synced 7:42 PM</div>
       </div>
 
       {/* filters sheet */}

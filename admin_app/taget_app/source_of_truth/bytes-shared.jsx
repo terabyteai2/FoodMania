@@ -113,13 +113,13 @@ function Wordmark({ size = 19, sub }) {
 
 /* ---------- category visual ---------- */
 const CAT_TINT = {
-  Burgers:['#FBEFCD','#B0760A','burger'], Pizza:['#FBE3E2','#D43A3F','pizza'],
-  'Rice & Curry':['#E4FBC9','#498F18','rice'], Kebab:['#FBE3E2','#B0760A','kebab'],
-  Sides:['#E3EAFC','#3E6FE0','fries'], Salads:['#E4FBC9','#498F18','salad'],
-  Beverages:['#E3EAFC','#3E6FE0','drink'], Desserts:['#FBEFCD','#B0760A','dessert'],
+  Burgers:['var(--cat-burger-bg)','var(--cat-burger-fg)','burger'], Pizza:['var(--cat-pizza-bg)','var(--cat-pizza-fg)','pizza'],
+  'Rice & Curry':['var(--cat-rice-bg)','var(--cat-rice-fg)','rice'], Kebab:['var(--cat-kebab-bg)','var(--cat-kebab-fg)','kebab'],
+  Sides:['var(--cat-sides-bg)','var(--cat-sides-fg)','fries'], Salads:['var(--cat-salad-bg)','var(--cat-salad-fg)','salad'],
+  Beverages:['var(--cat-bev-bg)','var(--cat-bev-fg)','drink'], Desserts:['var(--cat-dessert-bg)','var(--cat-dessert-fg)','dessert'],
 };
 function Thumb({ cat, size = 52, ic, fill }) {
-  const [bg, fg, dic] = CAT_TINT[cat] || ['#ECEFE4', '#7C8270', 'bag'];
+  const [bg, fg, dic] = CAT_TINT[cat] || ['var(--cat-default-bg)', 'var(--cat-default-fg)', 'bag'];
   const box = fill ? { width: '100%', aspectRatio: '1 / 1' } : { width: size, height: size, flexBasis: size };
   return (
     <div className="thumb" style={{ ...box, background: bg }}>
@@ -130,12 +130,12 @@ function Thumb({ cat, size = 52, ic, fill }) {
 
 /* ---------- channel meta ---------- */
 const CHANNELS = {
-  storefront:['globe', 'Website', '#3E6FE0', '#E3EAFC'],
-  chatbot:['chat', 'Messenger', '#3E6FE0', '#E3EAFC'],
-  waiter:['users', 'Waiter', '#7C8270', '#ECEFE4'],
-  qr:['qr', 'Table QR', '#B0760A', '#FBEFCD'],
-  counter:['store', 'Counter', '#498F18', '#E4FBC9'],
-  manager:['user', 'Manager', '#14180E', '#ECEFE4'],
+  storefront:['globe', 'Website', 'var(--ch-web)', 'var(--ch-web-soft)'],
+  chatbot:['chat', 'Messenger', 'var(--ch-msgr)', 'var(--ch-msgr-soft)'],
+  waiter:['users', 'Waiter', 'var(--ch-waiter)', 'var(--ch-waiter-soft)'],
+  qr:['qr', 'Table QR', 'var(--ch-qr)', 'var(--ch-qr-soft)'],
+  counter:['store', 'Counter', 'var(--ch-counter)', 'var(--ch-counter-soft)'],
+  manager:['user', 'Manager', 'var(--ch-manager)', 'var(--ch-manager-soft)'],
 };
 
 function Toggle({ on, onChange }) { return <div className={'toggle' + (on ? ' on' : '')} onClick={() => onChange(!on)}><div className="knob" /></div>; }
@@ -162,9 +162,9 @@ function Status({ kind, children }) { return <span className={'status ' + kind}>
 /* ---------- status bar ---------- */
 function StatusBar() {
   return (
-    <div style={{ height: 34, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', position: 'relative', flex: '0 0 34px', background: 'var(--bg)' }}>
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }} className="tab">7:42</span>
-      <div style={{ position: 'absolute', left: '50%', top: 9, transform: 'translateX(-50%)', width: 9, height: 9, borderRadius: 9, background: '#0c0f09' }} />
+    <div className="app-statusbar">
+      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--fw-semibold)', color: 'var(--ink)' }} className="tab">7:42</span>
+      <div style={{ position: 'absolute', left: '50%', top: 9, transform: 'translateX(-50%)', width: 9, height: 9, borderRadius: 9, background: 'var(--statusdot)' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink)' }}>
         <Icon name="wifi" size={15} sw={1.6} />
         <svg width="22" height="12" viewBox="0 0 22 12"><rect x="0.5" y="1.5" width="18" height="9" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none" /><rect x="2" y="3" width="13" height="6" rx="1" fill="currentColor" /><rect x="20" y="4" width="1.5" height="4" rx="1" fill="currentColor" /></svg>
@@ -173,21 +173,99 @@ function StatusBar() {
   );
 }
 
-/* ---------- phone frame ---------- */
-function Phone({ children }) {
+/* ============================================================
+   Responsive shell — device presets, layout context, adaptive
+   device frame + nav rail. The whole app adapts from a single
+   container: phone (bottom nav) → tablet/terminal (side rail,
+   master-detail). Driven by container queries + tokens.
+   ============================================================ */
+const DEVICES = {
+  handheld: { label: 'Handheld 5″', w: 360, h: 740, frame: 'phone' },
+  phone:    { label: 'Phone',       w: 412, h: 892, frame: 'phone' },
+  phablet:  { label: 'Phablet',     w: 480, h: 1000, frame: 'phone' },
+  tab7:     { label: 'Tablet 7″',   w: 600, h: 940, frame: 'tablet' },
+  terminal: { label: 'POS terminal',w: 600, h: 1024, frame: 'tablet' },
+  tablet:   { label: 'Tablet 8″',   w: 768, h: 1024, frame: 'tablet' },
+  tablet10: { label: 'Tablet 10″',  w: 834, h: 1112, frame: 'tablet' },
+  fill:     { label: 'Fill screen', w: 0,   h: 0,    frame: 'none' },
+};
+const modeFor = (w) => (w >= 720 ? 'wide' : w >= 600 ? 'rail' : 'compact');
+
+const LayoutCtx = createContext({ mode: 'compact', width: 412 });
+const useLayout = () => useContext(LayoutCtx);
+
+function useSize(ref) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current; if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((es) => { const r = es[0].contentRect; setSize({ w: Math.round(r.width), h: Math.round(r.height) }); });
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
+  return size;
+}
+
+/* desk + scaled bezel that hosts the app container */
+function DeviceFrame({ device, density, appRef, children }) {
+  const dev = DEVICES[device] || DEVICES.phone;
+  const deskRef = useRef(null);
+  const desk = useSize(deskRef);
+  const fill = dev.frame === 'none';
+  const pad = dev.frame === 'phone' ? 6 : dev.frame === 'tablet' ? 11 : 0;
+  let scrW, scrH, scale = 1;
+  if (fill) { scrW = desk.w ? desk.w - 24 : '100%'; scrH = desk.h ? desk.h - 24 : '100%'; }
+  else {
+    scrW = dev.w; scrH = dev.h;
+    if (desk.w && desk.h) scale = Math.min(1, (desk.w * 0.98) / (dev.w + pad * 2), (desk.h * 0.96) / (dev.h + pad * 2)) || 1;
+  }
+  const phoneframe = dev.frame === 'phone';
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#E4E7DF', display: 'grid', placeItems: 'center', padding: '22px 0',
-      backgroundImage: 'radial-gradient(120% 80% at 50% 0%, #EEF0EA 0%, #DADDD2 80%)' }}>
-      <div style={{ position: 'relative', height: 'min(872px, calc(100vh - 36px))', width: 'calc(min(872px, calc(100vh - 36px)) * 410 / 872)', minWidth: 0, flex: '0 0 auto', background: '#11140d',
-        borderRadius: 44, padding: 6, boxShadow: '0 30px 70px rgba(40,46,30,.28), 0 0 0 1px rgba(0,0,0,.04)' }}>
-        <div className="bytes-root" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: 37, overflow: 'hidden', background: 'var(--bg)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <StatusBar />
-          <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>{children}</div>
-          <div style={{ flex: '0 0 auto', height: 22, display: 'grid', placeItems: 'center', background: 'var(--surface)' }}>
-            <div style={{ width: 120, height: 5, borderRadius: 3, background: 'var(--ink)', opacity: .26 }} />
+    <div className="bytes-desk" ref={deskRef}>
+      <div className="dev-scaler" style={{ transform: 'scale(' + scale + ')', transformOrigin: 'center center' }}>
+        <div className={'dev-bezel ' + (fill ? 'none' : dev.frame)}>
+          <div className="dev-screen" style={{ width: scrW, height: scrH }}>
+            <div className="bytes-app bytes-root" ref={appRef} data-density={density} {...(phoneframe ? { 'data-phoneframe': '1' } : {})}>
+              {children}
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* vertical navigation rail — replaces the bottom bar on tablet/terminal */
+function NavRail({ role = 'manager', tab, setTab, badge, t = (k) => k }) {
+  const tabs = NAV_BY_ROLE[role] || NAV_BY_ROLE.manager;
+  return (
+    <nav className="app-rail">
+      <div className="rail-brand">
+        <Mark size={32} />
+        <div className="rb-text">
+          <div style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--fw-black)', letterSpacing: 'var(--ls-tighter)', lineHeight: 1, color: 'var(--ink)' }}><span style={{ fontWeight: 'var(--fw-semibold)' }}>Quick</span>Bytes</div>
+        </div>
+      </div>
+      {tabs.map(([id, key, ic]) => {
+        const on = tab === id;
+        return (
+          <button key={id} className={'rail-item' + (on ? ' active' : '')} onClick={() => setTab(id)}>
+            <span className="ri-ic"><Icon name={ic} size={21} sw={on ? 2 : 1.7} color={on ? 'var(--accent-ink)' : 'currentColor'} /></span>
+            <span className="ri-label">{t(key)}</span>
+            {id === 'orders' && badge > 0 && <span className="ri-badge tab">{badge}</span>}
+          </button>
+        );
+      })}
+      <div className="rail-spacer" />
+    </nav>
+  );
+}
+
+/* placeholder for the detail pane when nothing is selected */
+function EmptyDetail({ icon = 'receipt', title = 'Nothing selected', sub = '' }) {
+  return (
+    <div className="detail-empty">
+      <div className="de-ic"><Icon name={icon} size={30} /></div>
+      <div className="de-t">{title}</div>
+      {sub && <div className="de-s" style={{ maxWidth: 240 }}>{sub}</div>}
     </div>
   );
 }
@@ -315,6 +393,7 @@ function Sheet({ open, onClose, children }) {
 }
 
 Object.assign(window, {
-  TK, money, money1, kfmt, Icon, Mark, Wordmark, Thumb, Toggle, AdvToggle, Qty, Status, StatusBar, Phone, Header, BarBtn, TopActions, TabBar, Sheet,
+  TK, money, money1, kfmt, Icon, Mark, Wordmark, Thumb, Toggle, AdvToggle, Qty, Status, StatusBar, Header, BarBtn, TopActions, TabBar, Sheet,
+  DEVICES, modeFor, LayoutCtx, useLayout, useSize, DeviceFrame, NavRail, EmptyDetail, NAV_BY_ROLE,
   CAT_TINT, CHANNELS, useState, useRef, useEffect, useMemo, createContext, useContext,
 });

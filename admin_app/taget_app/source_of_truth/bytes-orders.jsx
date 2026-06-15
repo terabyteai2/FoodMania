@@ -19,7 +19,7 @@ function OrderCard({ o, onClick, onAccept, onReject, onKOT, onBill }) {
   const pend = o.state === 'pending';
   const done = o.state === 'completed';
   return (
-    <div className="tile" onClick={onClick} style={{ padding: 14, opacity: done ? .82 : 1, borderColor: pend ? '#EAD9A8' : 'var(--line)' }}>
+    <div className="tile" onClick={onClick} style={{ padding: 14, opacity: done ? .82 : 1, borderColor: pend ? 'var(--warning-line)' : 'var(--line)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
         <ChannelDot channel={o.channel} />
         <div style={{ flex: 1, minWidth: 0 }}>

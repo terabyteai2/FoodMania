@@ -821,6 +821,7 @@ class AppStrings {
   String get howManyPeople => isBn ? 'কতজন অতিথি?' : 'How many people?';
   String get continueAction => isBn ? 'চালিয়ে যান' : 'Continue';
   String get reviewAction => isBn ? 'রিভিউ' : 'Review';
+  String get reviewOrder => isBn ? 'অর্ডার পর্যালোচনা' : 'Review order';
   String get sendToKitchen => isBn ? 'অর্ডার তৈরি করুন' : 'Create order';
   String get printOnly => isBn ? 'শুধু প্রিন্ট' : 'Print only';
   String get kitchenNote => isBn ? 'রান্নাঘরের নোট' : 'Kitchen note';

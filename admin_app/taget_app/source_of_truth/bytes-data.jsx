@@ -352,4 +352,91 @@ function seedSuppliers() {
   ];
 }
 
-Object.assign(window, { MENU, CATS, MODS, TABLES, UNITS, makeLine, lineUnit, lineTotal, modSummary, seedOrders, seedInventory, ANALYTICS, seedChats, seedNotifs, seedStaff, seedAudit, seedSuppliers, DELIVERY_AREAS, DISCOUNT_PRESETS, MENU_THEMES, SHIFTS, TERMINALS, SHIFT_SHARE, TERMINAL_SHARE, STAFF_SHARE, ANALYTICS_STAFF, SERVICE_TYPES, ACCT_RATIOS, acctBreakdown, buildSalesRows });
+/* ---- inventory trends (owner: whole-stockroom health over time) ----
+   Read-only series for the "Stock over time" screen. Latest points are
+   pinned to the live snapshot (value ৳53,399 · 4 below par · ~3.3d cover)
+   so the trend lands exactly where the Stock screen reads today.
+   `flow` metrics (usage, stock-in) headline the PERIOD TOTAL; level
+   metrics (value, below-par, cover) headline the LATEST point. ---- */
+const STOCK_TREND_METRICS = [
+  { id:'value',    label:'Stock value',    short:'Value',     kind:'money', flow:false, icon:'box' },
+  { id:'usage',    label:'Consumption',    short:'Usage',     kind:'units', flow:true,  icon:'flame' },
+  { id:'stockin',  label:'Stock-in spend', short:'Stock-in',  kind:'money', flow:true,  icon:'boxin' },
+  { id:'belowpar', label:'Below par',      short:'Below par', kind:'count', flow:false, icon:'warn' },
+  { id:'cover',    label:'Days of cover',  short:'Cover',     kind:'days',  flow:false, icon:'clock' },
+];
+
+function _srng(seed){ let s=(seed>>>0)||1; return ()=>{ s=(Math.imul(s,1664525)+1013904223)>>>0; return s/4294967296; }; }
+
+/* 30 daily points, oldest→newest, last pinned to live snapshot */
+const _stk30 = (() => {
+  const N=30, value=[], usage=[], stockin=[], belowpar=[], cover=[];
+  const r=_srng(20240607);
+  for (let i=0;i<N;i++){
+    const wd=(i+3)%7, weekend=wd===5||wd===6;
+    value.push(Math.round(49800 + 3700*Math.sin((i+2)/4.6) + (r()-0.5)*2600));
+    usage.push(Math.round(110 + (weekend?40:0) + 22*Math.sin(i/3) + (r()-0.5)*20));
+    const deliv = i%4===1;
+    stockin.push(deliv ? Math.round(17000 + r()*27000) : Math.round(r()*2100));
+    belowpar.push(Math.max(1, Math.min(7, Math.round(3.7 + 1.5*Math.sin(i/3.4) + (r()-0.5)*1.5))));
+    cover.push(Math.round((3.4 + 0.7*Math.sin((i+1)/4) + (r()-0.5)*0.7)*10)/10);
+  }
+  value[N-1]=53399; usage[N-1]=126; belowpar[N-1]=4; cover[N-1]=3.3;
+  if (stockin[N-2] < 5000) stockin[N-2]=24800;
+  return { value, usage, stockin, belowpar, cover };
+})();
+
+/* intraday (today): per-hour flow for usage/stock-in, level snapshots otherwise */
+const _stkToday = {
+  labels:['11a','12','1','2','3','4','5','6','7'],
+  value:   [57600,57100,56300,55500,54800,54200,53800,53500,53399],
+  usage:   [6,16,19,14,15,18,16,14,8],
+  stockin: [0,38600,0,0,0,0,0,0,0],
+  belowpar:[2,2,3,3,3,4,4,4,4],
+  cover:   [4.1,4.0,3.8,3.7,3.5,3.4,3.4,3.3,3.3],
+};
+
+/* 12 weekly points for the Custom horizon, oldest→newest (flow = per-week) */
+const _stkWeek = (() => {
+  const N=12, value=[], usage=[], stockin=[], belowpar=[], cover=[];
+  const r=_srng(515);
+  for (let i=0;i<N;i++){
+    value.push(Math.round(49500 + 3200*Math.sin(i/2.4) + (r()-0.5)*3000));
+    usage.push(Math.round(820 + 90*Math.sin(i/2) + (r()-0.5)*120));
+    stockin.push(Math.round(96000 + 30000*Math.sin(i/2.6) + (r()-0.5)*40000));
+    belowpar.push(Math.max(1, Math.min(7, Math.round(3.8 + 1.2*Math.sin(i/2.2) + (r()-0.5)*1.4))));
+    cover.push(Math.round((3.4 + 0.6*Math.sin(i/2.5) + (r()-0.5)*0.6)*10)/10);
+  }
+  value[N-1]=53399; usage[N-1]=873; belowpar[N-1]=4; cover[N-1]=3.3;
+  return { value, usage, stockin, belowpar, cover };
+})();
+
+const STOCK_TREND_CUSTOM = [ ['4w','Last 4 weeks',4], ['8w','Last 8 weeks',8], ['12w','Last 12 weeks',12], ['q','This quarter',12] ];
+
+function _stkStats(vals){
+  const peak=Math.max(...vals), low=Math.min(...vals);
+  const total=vals.reduce((s,v)=>s+v,0), avg=total/vals.length;
+  return { peak, low, total, avg };
+}
+
+function stockTrend(metric, tf, customKey){
+  let vals, labels;
+  if (tf==='today'){ vals=_stkToday[metric]; labels=_stkToday.labels; }
+  else if (tf==='week'){ vals=_stk30[metric].slice(-7); labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; }
+  else if (tf==='custom'){
+    const n=(STOCK_TREND_CUSTOM.find(c=>c[0]===customKey)||STOCK_TREND_CUSTOM[2])[2];
+    vals=_stkWeek[metric].slice(-n);
+    const L=vals.length, mid=Math.floor(L/2);
+    labels=vals.map((_,i)=> i===1 ? (n+'w') : (i===mid ? (Math.round(n/2)+'w') : (i===L-2 ? 'now' : '')));
+  } else {
+    vals=_stk30[metric];
+    labels=vals.map((_,i)=> i===2?'30d':(i===11?'20d':(i===20?'10d':(i===27?'now':''))));
+  }
+  const st=_stkStats(vals);
+  const deliveries = metric==='stockin' ? vals.filter(v=>v>3000).length : 0;
+  const def = STOCK_TREND_METRICS.find(m=>m.id===metric);
+  const headline = def.flow ? st.total : vals[vals.length-1];
+  return { vals, labels, ...st, deliveries, headline, def };
+}
+
+Object.assign(window, { MENU, CATS, MODS, TABLES, UNITS, makeLine, lineUnit, lineTotal, modSummary, seedOrders, seedInventory, ANALYTICS, seedChats, seedNotifs, seedStaff, seedAudit, seedSuppliers, DELIVERY_AREAS, DISCOUNT_PRESETS, MENU_THEMES, SHIFTS, TERMINALS, SHIFT_SHARE, TERMINAL_SHARE, STAFF_SHARE, ANALYTICS_STAFF, SERVICE_TYPES, ACCT_RATIOS, acctBreakdown, buildSalesRows, STOCK_TREND_METRICS, STOCK_TREND_CUSTOM, stockTrend });

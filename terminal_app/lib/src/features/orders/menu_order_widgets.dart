@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
+import 'widgets/menu_line_customizer.dart';
 
 /* ============================================================
    QuickBytes POS — Shared menu-order widgets (add-items step).
@@ -69,7 +70,7 @@ class MenuStep extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(PosSpacing.s14, PosSpacing.s10, PosSpacing.s14, PosSpacing.s2),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
           child: Row(
             children: [
               Expanded(
@@ -98,7 +99,7 @@ class MenuStep extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: PosSpacing.s8),
+              const SizedBox(width: 8),
               _ViewToggle(
                 mode: layoutMode,
                 cols: gridCols,
@@ -117,6 +118,8 @@ class MenuStep extends StatelessWidget {
         Expanded(
           child: _MenuContent(
             items: visibleItems,
+            categories: categories,
+            selectedCategory: selectedCategory,
             cart: cart,
             mode: layoutMode,
             gridCols: gridCols,
@@ -182,7 +185,7 @@ class _ViewToggleState extends State<_ViewToggle> {
               color: Colors.transparent,
               child: Container(
                 width: 122,
-                padding: const EdgeInsets.all(PosSpacing.s4),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: PosColors.surface,
                   border: Border.all(color: PosColors.lineStrong),
@@ -201,8 +204,8 @@ class _ViewToggleState extends State<_ViewToggle> {
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          vertical: PosSpacing.s9,
-                          horizontal: PosSpacing.s10,
+                          vertical: 9,
+                          horizontal: 10,
                         ),
                         decoration: BoxDecoration(
                           color: sel
@@ -219,12 +222,12 @@ class _ViewToggleState extends State<_ViewToggle> {
                                   ? PosColors.accentStrong
                                   : PosColors.inkSoft,
                             ),
-                            const SizedBox(width: PosSpacing.s8),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 '$n columns',
                                 style: TextStyle(
-                                  fontSize: PosFont.f13_5,
+                                  fontSize: 13.5,
                                   fontWeight: FontWeight.w600,
                                   color: sel
                                       ? PosColors.accentStrong
@@ -272,7 +275,7 @@ class _ViewToggleState extends State<_ViewToggle> {
     final colMenuOpen = _overlay != null;
 
     return Container(
-      padding: const EdgeInsets.all(PosSpacing.s3),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: PosColors.surfaceSunk,
         border: Border.all(color: PosColors.line),
@@ -288,7 +291,7 @@ class _ViewToggleState extends State<_ViewToggle> {
             height: 38,
             onTap: () => widget.onModeChanged(MenuLayoutMode.list),
           ),
-          const SizedBox(width: PosSpacing.s2),
+          const SizedBox(width: 2),
           _SegBtn(
             icon: Icons.grid_view_rounded,
             active: isGrid && !colMenuOpen,
@@ -300,7 +303,7 @@ class _ViewToggleState extends State<_ViewToggle> {
             },
           ),
           if (isGrid) ...[
-            const SizedBox(width: PosSpacing.s2),
+            const SizedBox(width: 2),
             _SegBtn(
               key: _colBtnKey,
               label: '${widget.cols}',
@@ -346,7 +349,7 @@ class _SegBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: active ? PosColors.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(PosRadii.sm),
-          boxShadow: active ? PosShadows.lift : const [],
+          boxShadow: active ? [BoxShadow(color: Color(0x0D14180E), blurRadius: 16, offset: Offset(0, 6))] : const [],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -355,7 +358,7 @@ class _SegBtn extends StatelessWidget {
               Text(
                 label!,
                 style: TextStyle(
-                  fontSize: PosFont.f13,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: active ? PosColors.primaryDark : PosColors.muted,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -397,9 +400,9 @@ class CategoryChips extends StatelessWidget {
       height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: PosSpacing.s16, top: PosSpacing.s4, right: PosSpacing.s16),
+        padding: const EdgeInsets.only(left: 16, top: 4, right: 16),
         itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: PosSpacing.s10),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
           final cat = categories[i];
           final sel = cat == selected;
@@ -417,11 +420,13 @@ class CategoryChips extends StatelessWidget {
   }
 }
 
-// ── Menu content (flat list or grid, no category headers) ──
+// ── Menu content (grouped list or grid) ──
 
 class _MenuContent extends StatelessWidget {
   const _MenuContent({
     required this.items,
+    required this.categories,
+    required this.selectedCategory,
     required this.cart,
     required this.mode,
     required this.gridCols,
@@ -430,6 +435,8 @@ class _MenuContent extends StatelessWidget {
   });
 
   final List<MenuItem> items;
+  final List<String> categories;
+  final String selectedCategory;
   final Map<String, int> cart;
   final MenuLayoutMode mode;
   final int gridCols;
@@ -445,7 +452,7 @@ class _MenuContent extends StatelessWidget {
             child: Center(
               child: TfText(
                 AppScope.of(context).strings.noItemsInCategory,
-                style: TextStyle(color: PosColors.muted),
+                style: const TextStyle(color: PosColors.muted),
               ),
             ),
           ),
@@ -453,35 +460,72 @@ class _MenuContent extends StatelessWidget {
       );
     }
 
-    const padding = EdgeInsets.fromLTRB(PosSpacing.s16, PosSpacing.s8, PosSpacing.s16, PosSpacing.s16);
+    const padding = EdgeInsets.fromLTRB(16, 12, 16, 16);
 
     if (mode == MenuLayoutMode.list) {
+      // Build category groups: when 'All', group by each category in order;
+      // when a specific category is selected, one group with that header.
+      final groups = <(String, List<MenuItem>)>[];
+      if (selectedCategory == 'All') {
+        for (final cat in categories) {
+          if (cat == 'All') continue;
+          final group = items.where((i) => i.category == cat).toList();
+          if (group.isNotEmpty) groups.add((cat, group));
+        }
+      } else {
+        groups.add((selectedCategory, items));
+      }
+
+      const eyebrowStyle = TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+        color: PosColors.muted,
+      );
+
       return CustomScrollView(
         slivers: [
           SliverPadding(
             padding: padding,
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => Padding(
-                  padding: i < items.length - 1 ? const EdgeInsets.only(bottom: PosSpacing.s10) : EdgeInsets.zero,
-                  child: _MenuListRow(
-                    item: items[i],
-                    qty: cart[items[i].id] ?? 0,
-                    onTap: () => onTap(items[i]),
-                    onDecrement: () => onDecrement(items[i].id),
+              delegate: SliverChildListDelegate([
+                for (final (cat, catItems) in groups) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(cat.toUpperCase(), style: eyebrowStyle),
+                        Text(
+                          '${catItems.length}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: PosColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                childCount: items.length,
-              ),
+                  for (int i = 0; i < catItems.length; i++) ...[
+                    _MenuListRow(
+                      item: catItems[i],
+                      qty: cart[catItems[i].id] ?? 0,
+                      onTap: () => onTap(catItems[i]),
+                      onDecrement: () => onDecrement(catItems[i].id),
+                    ),
+                    SizedBox(height: i < catItems.length - 1 ? 10 : 18),
+                  ],
+                ],
+              ]),
             ),
           ),
         ],
       );
     }
 
-    // Grid mode — mainAxisExtent calculated from fixed content heights
-    final thumbH = gridCols == 2 ? 130.0 : gridCols == 3 ? 88.0 : 64.0;
-    final mainAxisExtent = gridCols == 2 ? 220.0 : gridCols == 3 ? 192.0 : 162.0;
+    // Fixed card height: 54 image + 8 gap + ~58 text + 16 padding (8 each side).
+    const mainAxisExtent = 136.0;
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -498,7 +542,6 @@ class _MenuContent extends StatelessWidget {
                 item: items[i],
                 qty: cart[items[i].id] ?? 0,
                 cols: gridCols,
-                thumbH: thumbH,
                 onTap: () => onTap(items[i]),
                 onDecrement: () => onDecrement(items[i].id),
               ),
@@ -542,7 +585,7 @@ class _MenuListRow extends StatelessWidget {
       onTap: off ? null : onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(PosSpacing.s12),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: inCart ? PosColors.primarySoft : PosColors.surface,
           border: Border.all(
@@ -564,7 +607,7 @@ class _MenuListRow extends StatelessWidget {
                   child: ItemImage(url: item.imageUrl ?? '', iconKey: iconKey),
                 ),
               ),
-              const SizedBox(width: PosSpacing.s12),
+              const SizedBox(width: 12),
               // Mid
               Expanded(
                 child: Column(
@@ -576,18 +619,18 @@ class _MenuListRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: PosFont.f15,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     if (item.description.isNotEmpty) ...[
-                      const SizedBox(height: PosSpacing.s2),
+                      const SizedBox(height: 2),
                       TfText(
                         item.description,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: PosFont.f13,
+                          fontSize: 13,
                           color: PosColors.muted,
                         ),
                       ),
@@ -596,7 +639,7 @@ class _MenuListRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: PosSpacing.s8),
+              const SizedBox(width: 8),
               // Trail
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -605,17 +648,17 @@ class _MenuListRow extends StatelessWidget {
                   TfText(
                     tfFormatCurrency(context, item.price),
                     style: const TextStyle(
-                      fontSize: PosFont.f17,
+                      fontSize: 17,
                       fontWeight: FontWeight.w700,
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
-                  const SizedBox(height: PosSpacing.s8),
+                  const SizedBox(height: 8),
                   if (off)
                     Text(
                       "86'd",
                       style: TextStyle(
-                        fontSize: PosFont.f11_5,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w700,
                         color: PosColors.danger,
                       ),
@@ -654,7 +697,7 @@ class _QtyStepperInline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(PosSpacing.s3),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: PosColors.surfaceSunk,
         borderRadius: BorderRadius.circular(PosRadii.md),
@@ -663,20 +706,20 @@ class _QtyStepperInline extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _StepperBtn(icon: Icons.remove_rounded, onTap: onDecrement),
-          const SizedBox(width: PosSpacing.s2),
+          const SizedBox(width: 2),
           SizedBox(
             width: 30,
             child: TfText(
               tfFormatNumber(context, qty),
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: PosFont.f14,
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ),
-          const SizedBox(width: PosSpacing.s2),
+          const SizedBox(width: 2),
           _StepperBtn(icon: Icons.add_rounded, onTap: onIncrement),
         ],
       ),
@@ -736,12 +779,25 @@ class _AddBtn extends StatelessWidget {
 
 // ── Grid-mode tile ──
 
+const _categoryTintBg = <String, Color>{
+  'Burgers': Color(0xFFFBEFCD),
+  'Pizza': Color(0xFFFBE3E2),
+  'Rice & Curry': Color(0xFFE4FBC9),
+  'Kebab': Color(0xFFFBE3E2),
+  'Sides': Color(0xFFE3EAFC),
+  'Salads': Color(0xFFE4FBC9),
+  'Beverages': Color(0xFFE3EAFC),
+  'Desserts': Color(0xFFFBEFCD),
+};
+
+Color _catBg(String category) =>
+    _categoryTintBg[category] ?? const Color(0xFFECEFE4);
+
 class _GridTile extends StatelessWidget {
   const _GridTile({
     required this.item,
     required this.qty,
     required this.cols,
-    required this.thumbH,
     required this.onTap,
     required this.onDecrement,
   });
@@ -749,7 +805,6 @@ class _GridTile extends StatelessWidget {
   final MenuItem item;
   final int qty;
   final int cols;
-  final double thumbH;
   final VoidCallback onTap;
   final VoidCallback onDecrement;
 
@@ -764,15 +819,13 @@ class _GridTile extends StatelessWidget {
       name: item.name,
       category: item.category,
     );
-    final textSize = cols == 4 ? 12.5 : 14.0;
 
     return GestureDetector(
       onTap: off ? null : onTap,
       child: Opacity(
         opacity: off ? 0.5 : 1.0,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.all(PosSpacing.s8),
+        child: Container(
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: inCart ? PosColors.primarySoft : PosColors.surface,
             border: Border.all(
@@ -784,113 +837,123 @@ class _GridTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Image section
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(PosRadii.md),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: thumbH,
+              // Image section — category tint bg, centered
+              Container(
+                height: 54,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: _catBg(item.category),
+                  borderRadius: BorderRadius.circular(PosRadii.card),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    Center(
                       child: ItemImage(
                         url: item.imageUrl ?? '',
                         iconKey: iconKey,
                       ),
                     ),
-                  ),
-                  if (inCart) ...[
-                    // Minus button — top-LEFT
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: GestureDetector(
-                        onTap: onDecrement,
+                    if (inCart) ...[
+                      Positioned(
+                        top: 6,
+                        left: 6,
                         child: Container(
-                          width: 24,
-                          height: 24,
+                          constraints: const BoxConstraints(minWidth: 22),
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           decoration: BoxDecoration(
-                            color: PosColors.surface,
-                            borderRadius: BorderRadius.circular(PosRadii.md),
-                            boxShadow: PosShadows.chip,
+                            color: PosColors.primary,
+                            borderRadius: BorderRadius.circular(11),
                           ),
-                          child: Icon(
-                            Icons.remove_rounded,
-                            size: 16,
+                          alignment: Alignment.center,
+                          child: TfText(
+                            tfFormatNumber(context, qty),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: PosColors.accentInk,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: GestureDetector(
+                          onTap: onDecrement,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: PosColors.surface,
+                              borderRadius: BorderRadius.circular(PosRadii.md),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x2E14180E),
+                                  blurRadius: 3,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.remove_rounded,
+                              size: 16,
+                              color: PosColors.danger,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (off)
+                      Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 3,
+                            horizontal: 6,
+                          ),
+                          decoration: BoxDecoration(
                             color: PosColors.danger,
+                            borderRadius: BorderRadius.circular(PosRadii.sm),
+                          ),
+                          child: const Text(
+                            "86'd",
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    // Count badge — top-RIGHT
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 22),
-                        height: 22,
-                        padding: const EdgeInsets.symmetric(horizontal: PosSpacing.s6),
-                        decoration: BoxDecoration(
-                          color: PosColors.primary,
-                          borderRadius: BorderRadius.circular(PosRadii.xl),
-                        ),
-                        alignment: Alignment.center,
-                        child: TfText(
-                          tfFormatNumber(context, qty),
-                          style: const TextStyle(
-                            fontSize: PosFont.f12_5,
-                            fontWeight: FontWeight.w800,
-                            color: PosColors.accentInk,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
-                  if (off)
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: PosSpacing.s3,
-                          horizontal: PosSpacing.s6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: PosColors.danger,
-                          borderRadius: BorderRadius.circular(PosRadii.sm),
-                        ),
-                        child: const Text(
-                          "86'd",
-                          style: TextStyle(
-                            fontSize: PosFont.f10_5,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
-              const SizedBox(height: PosSpacing.s8),
-              // Text section
+              const SizedBox(height: 8),
+              // Name
               TfText(
                 item.localizedName(app.language),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: textSize,
-                  fontWeight: FontWeight.w600,
+                  fontSize: cols == 4 ? 12.0 : 13.0,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.primaryDark,
                   height: 1.25,
                 ),
               ),
-              const SizedBox(height: PosSpacing.s3),
+              const Spacer(),
+              // Price
               TfText(
                 tfFormatCurrency(context, item.price),
-                style: TextStyle(
-                  fontSize: textSize,
+                style: const TextStyle(
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  height: 1.25,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -979,14 +1042,501 @@ class CartFooter extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: PosSpacing.s16, vertical: PosSpacing.s12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: _ReviewButton(
             count: totalQty,
             subtotal: total,
-            label: text.isBn ? 'অর্ডার পর্যালোচনা' : 'Review order',
+            label: text.reviewOrder,
             enabled: hasItems && onSubmit != null,
             onPressed: onSubmit,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Mobile item modifier sheet ──
+
+Future<DesktopMenuLineSelection?> showMobileItemSheet(
+  BuildContext context, {
+  required MenuItem item,
+}) {
+  return showModalBottomSheet<DesktopMenuLineSelection>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+      child: _MobileItemSheet(item: item),
+    ),
+  );
+}
+
+class _MobileItemSheet extends StatefulWidget {
+  const _MobileItemSheet({required this.item});
+  final MenuItem item;
+
+  @override
+  State<_MobileItemSheet> createState() => _MobileItemSheetState();
+}
+
+class _MobileItemSheetState extends State<_MobileItemSheet> {
+  int _qty = 1;
+  int _selectedOptionIdx = 0;
+  final Set<int> _selectedAddOnIdxs = {};
+  bool _noteOpen = false;
+  final _noteCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  List<MenuOption> get _options => widget.item.extras.options;
+  List<MenuAddOn> get _addOns => widget.item.extras.addOns;
+  bool get _hasOptions => _options.isNotEmpty;
+  bool get _hasAddOns => _addOns.isNotEmpty;
+
+  double get _unitPrice {
+    final base = widget.item.price;
+    final optDelta = _hasOptions ? _options[_selectedOptionIdx].priceDelta : 0.0;
+    final addOnTotal = _selectedAddOnIdxs.fold<double>(
+      0,
+      (sum, i) => sum + _addOns[i].price,
+    );
+    return (base + optDelta + addOnTotal).clamp(0, double.infinity);
+  }
+
+  double get _lineTotal => _unitPrice * _qty;
+
+  DesktopMenuLineSelection _buildSelection() {
+    final note =
+        _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
+    final DesktopMenuOption opt;
+    if (_hasOptions) {
+      final o = _options[_selectedOptionIdx];
+      opt = DesktopMenuOption(label: o.name, priceDelta: o.priceDelta);
+    } else {
+      opt = const DesktopMenuOption(label: '');
+    }
+    final addOns = [
+      for (int i = 0; i < _addOns.length; i++)
+        if (_selectedAddOnIdxs.contains(i)) _addOns[i],
+    ];
+    return DesktopMenuLineSelection(
+      item: widget.item,
+      option: opt,
+      addOns: addOns,
+      qty: _qty,
+      note: note,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final isBn = app.strings.isBn;
+    final extras = widget.item.extras;
+    final iconKey = resolveMenuIconKey(
+      iconKey: extras.iconKey,
+      name: widget.item.name,
+      category: widget.item.category,
+    );
+
+    const eyebrowStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.6,
+      color: PosColors.muted,
+    );
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.94,
+      ),
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.xl)),
+        boxShadow: PosShadows.raised,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Grab handle
+          Container(
+            width: 38,
+            height: 4,
+            margin: const EdgeInsets.only(top: 9, bottom: 2),
+            decoration: BoxDecoration(
+              color: PosColors.lineStrong,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header: thumb + name/desc + close X
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 14),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(PosRadii.md),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: ItemImage(
+                      url: widget.item.imageUrl ?? '',
+                      iconKey: iconKey,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.item.localizedName(app.language),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.18,
+                        ),
+                      ),
+                      if (widget.item.description.isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          widget.item.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: PosColors.muted,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      border: Border.all(color: PosColors.lineStrong),
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: PosColors.ink2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable body: options, add-ons, note
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Options section (single-select radio)
+                  if (_hasOptions) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          isBn ? 'অপশন' : 'OPTIONS',
+                          style: eyebrowStyle,
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: PosColors.surfaceSunk,
+                            borderRadius: BorderRadius.circular(PosRadii.xs),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            isBn ? 'আবশ্যিক' : 'Required',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: PosColors.ink2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 9),
+                    for (int i = 0; i < _options.length; i++) ...[
+                      _OptionBtn(
+                        label: _options[i].name,
+                        priceDelta: _options[i].priceDelta,
+                        selected: _selectedOptionIdx == i,
+                        isRadio: true,
+                        onTap: () => setState(() => _selectedOptionIdx = i),
+                      ),
+                      if (i < _options.length - 1) const SizedBox(height: 8),
+                    ],
+                  ],
+                  // Add-ons section (multi-select checkbox)
+                  if (_hasAddOns) ...[
+                    if (_hasOptions) const SizedBox(height: 18),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          isBn ? 'এক্সট্রা' : 'ADD-ONS',
+                          style: eyebrowStyle,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isBn ? 'ঐচ্ছিক' : 'Optional',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: PosColors.mutedSoft,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 9),
+                    for (int i = 0; i < _addOns.length; i++) ...[
+                      _OptionBtn(
+                        label: _addOns[i].name,
+                        priceDelta: _addOns[i].price,
+                        selected: _selectedAddOnIdxs.contains(i),
+                        isRadio: false,
+                        onTap: () => setState(() {
+                          if (_selectedAddOnIdxs.contains(i)) {
+                            _selectedAddOnIdxs.remove(i);
+                          } else {
+                            _selectedAddOnIdxs.add(i);
+                          }
+                        }),
+                      ),
+                      if (i < _addOns.length - 1) const SizedBox(height: 8),
+                    ],
+                  ],
+                  // Note section: collapsed "Add a kitchen note" link or textarea
+                  const SizedBox(height: 18),
+                  if (!_noteOpen)
+                    GestureDetector(
+                      onTap: () => setState(() => _noteOpen = true),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.notes_rounded,
+                              size: 18,
+                              color: PosColors.accentStrong,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isBn
+                                  ? 'রান্নাঘরের নোট যোগ করুন'
+                                  : 'Add a kitchen note',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: PosColors.accentStrong,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Text(
+                      isBn ? 'রান্নাঘরের নোট' : 'KITCHEN NOTE',
+                      style: eyebrowStyle,
+                    ),
+                    const SizedBox(height: 9),
+                    TextField(
+                      controller: _noteCtrl,
+                      autofocus: true,
+                      maxLines: null,
+                      minLines: 2,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: isBn
+                            ? 'যেমন: ঝাল ছাড়া, কম তেল'
+                            : 'e.g. no onion, less spicy',
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+          // Bottom action bar: qty stepper + "Add to order {price}" button
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: PosColors.surface,
+              border: Border(top: BorderSide(color: PosColors.line)),
+              boxShadow: PosShadows.bar,
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                child: Row(
+                  children: [
+                    _QtyStepperInline(
+                      qty: _qty,
+                      onDecrement: () {
+                        if (_qty > 1) setState(() => _qty--);
+                      },
+                      onIncrement: () => setState(() => _qty++),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                            Navigator.pop(context, _buildSelection()),
+                        child: Container(
+                          height: 52,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: PosColors.primary,
+                            borderRadius: BorderRadius.circular(PosRadii.md),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  isBn
+                                      ? 'অর্ডারে যোগ করুন'
+                                      : 'Add to order',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: PosColors.accentInk,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                tfFormatCurrency(context, _lineTotal),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: PosColors.accentInk,
+                                  fontFeatures: [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Option / add-on selection button (radio or checkbox style) ──
+
+class _OptionBtn extends StatelessWidget {
+  const _OptionBtn({
+    required this.label,
+    required this.priceDelta,
+    required this.selected,
+    required this.isRadio,
+    required this.onTap,
+  });
+
+  final String label;
+  final double priceDelta;
+  final bool selected;
+  final bool isRadio;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? PosColors.primarySoft : PosColors.surface,
+          border: Border.all(
+            color: selected ? PosColors.primaryDeep : PosColors.lineStrong,
+          ),
+          borderRadius: BorderRadius.circular(PosRadii.md),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: isRadio ? BoxShape.circle : BoxShape.rectangle,
+                borderRadius: isRadio ? null : BorderRadius.circular(PosRadii.sm),
+                border: Border.all(
+                  color: selected
+                      ? PosColors.accentStrong
+                      : PosColors.lineStrong,
+                  width: 2,
+                ),
+                color: selected ? PosColors.primary : Colors.transparent,
+              ),
+              child: selected
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 12,
+                      color: PosColors.accentInk,
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.primaryDark,
+                ),
+              ),
+            ),
+            if (priceDelta > 0.005) ...[
+              const SizedBox(width: 8),
+              Text(
+                '+${tfFormatCurrency(context, priceDelta)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.accentStrong,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1017,7 +1567,7 @@ class _ReviewButton extends StatelessWidget {
         child: Container(
           height: 44,
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: PosSpacing.s18),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
             color: PosColors.primary,
             borderRadius: BorderRadius.circular(PosRadii.md),
@@ -1036,18 +1586,18 @@ class _ReviewButton extends StatelessWidget {
                 child: TfText(
                   tfFormatNumber(context, count),
                   style: const TextStyle(
-                    fontSize: PosFont.f12_5,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: PosColors.accentInk,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ),
-              const SizedBox(width: PosSpacing.s8),
+              const SizedBox(width: 8),
               TfText(
                 label,
                 style: const TextStyle(
-                  fontSize: PosFont.f15,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: PosColors.accentInk,
                 ),
@@ -1056,7 +1606,7 @@ class _ReviewButton extends StatelessWidget {
               TfText(
                 tfFormatCurrency(context, subtotal),
                 style: const TextStyle(
-                  fontSize: PosFont.f15,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: PosColors.accentInk,
                   fontFeatures: [FontFeature.tabularFigures()],

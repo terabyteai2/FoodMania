@@ -467,7 +467,7 @@ class _MenuContent extends StatelessWidget {
       );
     }
 
-    const padding = EdgeInsets.fromLTRB(16, 0, 16, 16);
+    const padding = EdgeInsets.fromLTRB(16, 12, 16, 16);
 
     if (mode == MenuLayoutMode.list) {
       // Build category groups: when 'All', group by each category in order;
@@ -533,10 +533,8 @@ class _MenuContent extends StatelessWidget {
       );
     }
 
-    // Grid mode — mainAxisExtent accounts for thumb + 8 gap + name minHeight +
-    // 3 gap + price text + 16 total vertical padding (8 each side).
-    final thumbH = gridCols == 2 ? 130.0 : gridCols == 3 ? 88.0 : 64.0;
-    final mainAxisExtent = gridCols == 2 ? 226.0 : gridCols == 3 ? 184.0 : 153.0;
+    // Fixed card height: 54 image + 8 gap + ~58 text + 16 padding (8 each side).
+    const mainAxisExtent = 136.0;
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -553,7 +551,6 @@ class _MenuContent extends StatelessWidget {
                 item: items[i],
                 qty: cart[items[i].id] ?? 0,
                 cols: gridCols,
-                thumbH: thumbH,
                 onTap: () => onTap(items[i]),
                 onDecrement: () => onDecrement(items[i].id),
               ),
@@ -791,12 +788,25 @@ class _AddBtn extends StatelessWidget {
 
 // ── Grid-mode tile ──
 
+const _categoryTintBg = <String, Color>{
+  'Burgers': Color(0xFFFBEFCD),
+  'Pizza': Color(0xFFFBE3E2),
+  'Rice & Curry': Color(0xFFE4FBC9),
+  'Kebab': Color(0xFFFBE3E2),
+  'Sides': Color(0xFFE3EAFC),
+  'Salads': Color(0xFFE4FBC9),
+  'Beverages': Color(0xFFE3EAFC),
+  'Desserts': Color(0xFFFBEFCD),
+};
+
+Color _catBg(String category) =>
+    _categoryTintBg[category] ?? const Color(0xFFECEFE4);
+
 class _GridTile extends StatelessWidget {
   const _GridTile({
     required this.item,
     required this.qty,
     required this.cols,
-    required this.thumbH,
     required this.onTap,
     required this.onDecrement,
   });
@@ -804,7 +814,6 @@ class _GridTile extends StatelessWidget {
   final MenuItem item;
   final int qty;
   final int cols;
-  final double thumbH;
   final VoidCallback onTap;
   final VoidCallback onDecrement;
 
@@ -819,7 +828,6 @@ class _GridTile extends StatelessWidget {
       name: item.name,
       category: item.category,
     );
-    final textSize = cols == 4 ? 12.5 : 14.0;
 
     return GestureDetector(
       onTap: off ? null : onTap,
@@ -838,123 +846,123 @@ class _GridTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Image section
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(PosRadii.card),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: thumbH,
+              // Image section — category tint bg, centered
+              Container(
+                height: 54,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: _catBg(item.category),
+                  borderRadius: BorderRadius.circular(PosRadii.card),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    Center(
                       child: ItemImage(
                         url: item.imageUrl ?? '',
                         iconKey: iconKey,
                       ),
                     ),
-                  ),
-                  if (inCart) ...[
-                    // Count badge — top-LEFT (lime pill)
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 22),
-                        height: 22,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        decoration: BoxDecoration(
-                          color: PosColors.primary,
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        alignment: Alignment.center,
-                        child: TfText(
-                          tfFormatNumber(context, qty),
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            color: PosColors.accentInk,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Minus button — top-RIGHT (surface card + danger icon)
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: GestureDetector(
-                        onTap: onDecrement,
+                    if (inCart) ...[
+                      Positioned(
+                        top: 6,
+                        left: 6,
                         child: Container(
-                          width: 24,
-                          height: 24,
+                          constraints: const BoxConstraints(minWidth: 22),
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           decoration: BoxDecoration(
-                            color: PosColors.surface,
-                            borderRadius: BorderRadius.circular(PosRadii.md),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x2E14180E),
-                                blurRadius: 3,
-                                offset: Offset(0, 1),
-                              ),
-                            ],
+                            color: PosColors.primary,
+                            borderRadius: BorderRadius.circular(11),
                           ),
-                          child: const Icon(
-                            Icons.remove_rounded,
-                            size: 16,
+                          alignment: Alignment.center,
+                          child: TfText(
+                            tfFormatNumber(context, qty),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: PosColors.accentInk,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: GestureDetector(
+                          onTap: onDecrement,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: PosColors.surface,
+                              borderRadius: BorderRadius.circular(PosRadii.md),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x2E14180E),
+                                  blurRadius: 3,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.remove_rounded,
+                              size: 16,
+                              color: PosColors.danger,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (off)
+                      Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 3,
+                            horizontal: 6,
+                          ),
+                          decoration: BoxDecoration(
                             color: PosColors.danger,
+                            borderRadius: BorderRadius.circular(PosRadii.sm),
+                          ),
+                          child: const Text(
+                            "86'd",
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
-                  if (off)
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 3,
-                          horizontal: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: PosColors.danger,
-                          borderRadius: BorderRadius.circular(PosRadii.sm),
-                        ),
-                        child: const Text(
-                          "86'd",
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
               const SizedBox(height: 8),
-              // Name with minHeight so all tiles align consistently (2.5em equiv)
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: cols == 4 ? 39.0 : 44.0,
-                ),
-                child: TfText(
-                  item.localizedName(app.language),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: textSize,
-                    fontWeight: FontWeight.w600,
-                    height: 1.25,
-                  ),
+              // Name — 14/600, --ink
+              TfText(
+                item.localizedName(app.language),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: cols == 4 ? 12.0 : 13.0,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.primaryDark,
+                  height: 1.25,
                 ),
               ),
-              const SizedBox(height: 3),
+              const Spacer(),
+              // Price — 14/700 tabular, --ink
               TfText(
                 tfFormatCurrency(context, item.price),
-                style: TextStyle(
-                  fontSize: textSize,
+                style: const TextStyle(
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: PosColors.primaryDark,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ],

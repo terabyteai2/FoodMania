@@ -45,7 +45,7 @@ function TablesScreen() {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--muted)' }}><span style={{ width: 9, height: 9, borderRadius: 3, border: '1.5px solid var(--line-2)' }} />{TABLES.length - occupied} free</span>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 10 }}>
             {TABLES.map((tb) => {
               const o = orderForTable(tb.id);
               const seated = !!o;
