@@ -3081,7 +3081,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _custAddrCtrl = TextEditingController();
   String _query = '';
   MenuLayoutMode _menuLayoutMode = MenuLayoutMode.list;
-  int _gridCols = 4;
+  int _gridCols = 3;
   OrderModel? _createdOrder;
   bool _creating = false;
   bool _printingKot = false;
@@ -3231,16 +3231,17 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 
   Future<void> _tap(MenuItem item) async {
     HapticFeedback.lightImpact();
-    final selections = desktopMenuNeedsCustomization(item)
-        ? await showDesktopMenuLineCustomizerLines(
-            context,
-            item: item,
-            isBn: AppScope.of(context).strings.isBn,
-          )
-        : [desktopRegularMenuLine(item)];
-    if (selections == null || selections.isEmpty || !mounted) return;
+    final List<DesktopMenuLineSelection>? selections;
+    if (desktopMenuNeedsCustomization(item)) {
+      final result = await showMobileItemSheet(context, item: item);
+      if (result == null || !mounted) return;
+      selections = [result];
+    } else {
+      selections = [desktopRegularMenuLine(item)];
+    }
+    if (!mounted) return;
     setState(() {
-      for (final selection in selections) {
+      for (final selection in selections!) {
         final index = _cartLines.indexWhere(
           (line) => line.lineKey == selection.lineKey,
         );

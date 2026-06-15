@@ -28,6 +28,7 @@ export default function HearthHero({ info, onSeeMenu }) {
     (info?.galleryImages && info.galleryImages[0]) ||
     placeholder.placeholderImage
   const videoUrl = info?.videoUrl || placeholder.placeholderVideo
+  console.log('[HearthHero] info?.videoUrl:', info?.videoUrl, '| placeholderVideo:', placeholder?.placeholderVideo, '| resolved videoUrl:', videoUrl)
 
   // Lazy-load video after first paint via IntersectionObserver.
   useEffect(() => {

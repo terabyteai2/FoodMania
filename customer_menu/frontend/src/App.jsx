@@ -662,9 +662,11 @@ function WelcomeScreen({ info, onEnter }) {
   const hasBanner = !hasVideo && !hasGallery && !!info?.bannerUrl
   const hasPlaceholder = !hasVideo && !hasGallery && !hasBanner
   const hasMedia = hasVideo || hasGallery || hasBanner || hasPlaceholder
+  console.log('[WelcomeScreen] info?.videoUrl:', info?.videoUrl, '| hasVideo:', hasVideo, '| hasPlaceholder:', hasPlaceholder, '| placeholderAssets:', placeholderAssets)
 
   const placeholderPoster = hasPlaceholder ? (info?.bannerUrl || info?.galleryImages?.[0] || placeholderAssets.placeholderImage) : null
   const placeholderVideoUrl = hasPlaceholder ? placeholderAssets.placeholderVideo : null
+  console.log('[WelcomeScreen] placeholderPoster:', placeholderPoster, '| placeholderVideoUrl:', placeholderVideoUrl)
 
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return

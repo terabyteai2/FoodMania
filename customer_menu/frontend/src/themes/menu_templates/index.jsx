@@ -16,8 +16,10 @@ const INTER = '"Inter", "Hind Siliguri", system-ui, sans-serif'
 
 function themeAssetPaths(slug) {
   const basename = slug === 'sultans_hearth' ? 'hearth' : slug
+  const videoPath = `/uploads/template_placeholders/${basename}.mp4`
+  console.log('[menu_templates/themeAssetPaths] slug:', slug, '| basename:', basename, '| placeholderVideo:', videoPath, '| placeholderImage:', `/uploads/template_placeholders/${basename}.png`)
   return {
-    placeholderVideo: `/uploads/template_placeholders/${basename}.mp4`,
+    placeholderVideo: videoPath,
     placeholderImage: `/uploads/template_placeholders/${basename}.png`,
   }
 }
@@ -109,6 +111,7 @@ function makeOverrides(C) {
     const assets = themeAssetPaths(C.slug)
     const posterUrl = info?.bannerUrl || info?.galleryImages?.[0] || assets.placeholderImage
     const videoUrl = info?.videoUrl || assets.placeholderVideo
+    console.log('[menu_templates/Hero] info?.videoUrl:', info?.videoUrl, '| assets.placeholderVideo:', assets?.placeholderVideo, '| resolved videoUrl:', videoUrl, '| posterUrl:', posterUrl)
     const name = info?.restaurantNameEn || info?.restaurantName || 'Restaurant'
     const nameBn = info?.restaurantNameBn
     const outlet = info?.outletName || info?.outletNameEn || 'Dine-in menu'

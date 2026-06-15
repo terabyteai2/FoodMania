@@ -132,8 +132,10 @@ export function resolveOverrides(slug) {
 
 export function themeAssetPaths(slug) {
   const safe = THEMES[slug] ? slug : DEFAULT_THEME_SLUG
+  const videoPath = `/themes/${safe}/hero-placeholder.mp4`
+  console.log('[themeAssetPaths] slug:', slug, '| safe:', safe, '| placeholderVideo:', videoPath)
   return {
-    placeholderVideo: `/themes/${safe}/hero-placeholder.mp4`,
+    placeholderVideo: videoPath,
     placeholderImage: null,
   }
 }
