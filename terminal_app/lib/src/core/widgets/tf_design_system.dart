@@ -2236,7 +2236,8 @@ class TfTabs extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.sm),
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line, width: 1),
       ),
       child: Row(
         children: List.generate(items.length, (i) {
@@ -2248,18 +2249,14 @@ class TfTabs extends StatelessWidget {
           return Expanded(
             child: Material(
               color: selected ? PosColors.surface : Colors.transparent,
-              borderRadius: BorderRadius.circular(PosRadii.xs),
+              borderRadius: BorderRadius.circular(PosRadii.sm),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () => onChanged(i),
                 child: Container(
                   height: 38,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(PosRadii.xs),
-                    border: Border.all(
-                      color: selected ? PosColors.line : Colors.transparent,
-                      width: 1,
-                    ),
+                    borderRadius: BorderRadius.circular(PosRadii.sm),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -2267,7 +2264,7 @@ class TfTabs extends StatelessWidget {
                       TfText(
                         text,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: selected
                               ? FontWeight.w700
                               : FontWeight.w600,
@@ -2283,7 +2280,7 @@ class TfTabs extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: selected
-                                ? PosColors.surfaceSunk
+                                ? PosColors.primary
                                 : PosColors.surface3,
                             borderRadius: BorderRadius.circular(PosRadii.chip),
                           ),
@@ -2292,7 +2289,9 @@ class TfTabs extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: PosColors.muted,
+                              color: selected
+                                  ? PosColors.accentInk
+                                  : PosColors.muted,
                             ),
                           ),
                         ),

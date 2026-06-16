@@ -221,7 +221,12 @@ class PosAppController extends ChangeNotifier {
     cap: kAlertSetCap,
   );
   bool? _lastInternetOnline;
+  bool _lastIsSyncing = false;
   bool _coalesceNextOrderAlertBatch = false;
+  /// Chat conversations already surfaced while in manager-help state.
+  final BoundedStringSet _alertedNeedsHelpChatIds = BoundedStringSet(
+    cap: kAlertSetCap,
+  );
   Timer? _databaseChangeDebounce;
   Timer? _adminBlockingNoticePollTimer;
   bool _handlingDatabaseChange = false;
@@ -621,8 +626,13 @@ class PosAppController extends ChangeNotifier {
           if (error.contains('internet unavailable')) {
             _lastInternetOnline = false;
           }
+          final syncFinished = _lastIsSyncing && !state.isSyncing;
+          _lastIsSyncing = state.isSyncing;
           syncState = state;
           notifyListeners();
+          if (syncFinished) {
+            unawaited(_syncChatEscalationNotifications({}));
+          }
         }),
       );
       _subscriptions.add(
@@ -2237,8 +2247,9 @@ class PosAppController extends ChangeNotifier {
     final type = event['type']?.toString() ?? '';
     final data = event['data'];
     if (type == 'chat_updated') {
-      _chatEventController.add(event);
-      return;
+        _chatEventController.add(event);
+        unawaited(_syncChatEscalationNotifications(event));
+        return;
     }
     if (type == 'admin_blocking_notice_changed' && data is Map) {
       unawaited(
@@ -2261,6 +2272,104 @@ class PosAppController extends ChangeNotifier {
         AppUpdateInfo.fromJson(Map<String, Object?>.from(data)),
       ),
     );
+  }
+
+  String? _chatConversationIdFromEvent(Map<String, Object?> event) {
+    final data = event['data'];
+    if (data is! Map) return null;
+    final value =
+        data['conversationId'] ??
+        data['conversation_id'] ??
+        data['chatId'] ??
+        data['id'];
+    final id = value?.toString().trim() ?? '';
+    return id.isEmpty ? null : id;
+  }
+
+  Future<void> _syncChatEscalationNotifications(
+    Map<String, Object?> event,
+  ) async {
+    if (!canMessages || !isCloudReady || !cloudConfig.canSync) return;
+    final changedConversationId = _chatConversationIdFromEvent(event);
+
+    // Fast path: extract escalation info directly from the WS event payload
+    // so the notification fires instantly without waiting on an HTTP fetchChats
+    // call that could race with the backend's DB commit.
+    if (changedConversationId != null &&
+        !_alertedNeedsHelpChatIds.contains(changedConversationId)) {
+      final eventData = event['data'];
+      if (eventData is Map) {
+        final status =
+            (eventData['status'] as String?)?.trim().toLowerCase();
+        if (status == 'needs') {
+          _alertedNeedsHelpChatIds.add(changedConversationId);
+          final name =
+              (eventData['name'] as String?)?.trim() ?? 'Messenger customer';
+          final reason = (eventData['reason'] as String?)?.trim();
+          final lastMsg =
+              (eventData['lastUserMessage'] as String?)?.trim();
+          final detail = (reason?.isNotEmpty ?? false)
+              ? reason!
+              : (lastMsg ?? '');
+          final body = detail.isNotEmpty
+              ? '$name: $detail'
+              : '$name needs help in Messenger.';
+          await addNotification(
+            type: PosNotificationType.system,
+            title: 'Chatbot needs you',
+            body: body,
+            actionTarget: 'messages',
+            orderId: changedConversationId,
+          );
+        }
+      }
+    }
+
+    // Fallback: fetch all chats and process (handles cleanup and catches
+    // any escalated chats not covered by the fast path, e.g. periodic sync).
+    try {
+      final chats = await fetchChats();
+      final activeNeedsIds = <String>{};
+      for (final chat in chats) {
+        final chatId = chat.id.trim();
+        if (chatId.isEmpty) continue;
+        if (chat.needsAttention) {
+          activeNeedsIds.add(chatId);
+          if (changedConversationId != null &&
+              changedConversationId != chatId) {
+            continue;
+          }
+          if (_alertedNeedsHelpChatIds.contains(chatId)) continue;
+          _alertedNeedsHelpChatIds.add(chatId);
+          await addNotification(
+            type: PosNotificationType.system,
+            title: 'Chatbot needs you',
+            body: _chatEscalationNotificationBody(chat),
+            actionTarget: 'messages',
+            orderId: chatId,
+          );
+        }
+      }
+      final alertedIds = _alertedNeedsHelpChatIds.toList(growable: false);
+      for (final id in alertedIds) {
+        if (!activeNeedsIds.contains(id)) {
+          _alertedNeedsHelpChatIds.remove(id);
+        }
+      }
+    } catch (error) {
+      debugPrint('[QB-CHAT] escalation notification sync failed: $error');
+    }
+  }
+
+  String _chatEscalationNotificationBody(ChatThread chat) {
+    final name = chat.name.trim().isNotEmpty
+        ? chat.name.trim()
+        : 'Messenger customer';
+    final detail = (chat.reason ?? '').trim().isNotEmpty
+        ? chat.reason!.trim()
+        : (chat.lastUserMessage ?? '').trim();
+    if (detail.isNotEmpty) return '$name: $detail';
+    return '$name needs help in Messenger.';
   }
 
   Future<void> checkForAppUpdate({bool quiet = true}) async {
@@ -3726,6 +3835,7 @@ class PosAppController extends ChangeNotifier {
           payload: actionTarget,
           type: type,
           playSound: soundOn,
+          actionTarget: actionTarget,
         ),
       );
     }
@@ -3903,6 +4013,8 @@ class PosAppController extends ChangeNotifier {
         return 'sounds/pending_order.wav';
       case PosNotificationType.acceptedOrder:
         return 'sounds/accepted_order.wav';
+      case PosNotificationType.system:
+        return 'sounds/chatbot_alert.wav';
       default:
         return null;
     }

@@ -42,7 +42,7 @@ class AppPageHeader extends StatelessWidget {
     final text = app.strings;
     final outletName = app.outletName.trim();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [

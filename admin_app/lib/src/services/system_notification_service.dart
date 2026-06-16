@@ -26,6 +26,7 @@ class SystemNotificationService {
   static const String _pendingChannelId = 'pos_pending_orders_v2';
   static const String _acceptedChannelId = 'pos_accepted_orders_v2';
   static const String _defaultChannelId = 'pos_orders_default_v2';
+  static const String _chatChannelId = 'pos_chat_alerts_v2';
 
   /// Legacy channel IDs — deleted on upgrade so sound settings reset cleanly.
   static const _legacyChannelIds = <String>[
@@ -36,6 +37,7 @@ class SystemNotificationService {
 
   static const String _pendingSoundRes = 'pending_order';
   static const String _acceptedSoundRes = 'accepted_order';
+  static const String _chatSoundRes = 'chatbot_alert';
 
   static const String _kFallbackDefaultSoundUri =
       'content://settings/system/notification_sound';
@@ -178,6 +180,14 @@ class SystemNotificationService {
       sound: const RawResourceAndroidNotificationSound(_acceptedSoundRes),
     );
 
+    await _createChannel(
+      android,
+      id: _chatChannelId,
+      name: 'Messenger alerts',
+      description: 'Sound plays when a customer chat needs your attention.',
+      sound: const RawResourceAndroidNotificationSound(_chatSoundRes),
+    );
+
     AndroidNotificationSound? defaultSound;
     if (effectiveDefaultSoundUri.isNotEmpty) {
       defaultSound = UriAndroidNotificationSound(effectiveDefaultSoundUri);
@@ -215,7 +225,16 @@ class SystemNotificationService {
     }
   }
 
-  AndroidNotificationSound? _androidSoundForType(PosNotificationType type) {
+  bool _isChatType(PosNotificationType type, String? actionTarget) =>
+      type == PosNotificationType.system && actionTarget == 'messages';
+
+  AndroidNotificationSound? _androidSoundForType(
+    PosNotificationType type, [
+    String? actionTarget,
+  ]) {
+    if (_isChatType(type, actionTarget)) {
+      return const RawResourceAndroidNotificationSound(_chatSoundRes);
+    }
     switch (type) {
       case PosNotificationType.pendingOrder:
         return const RawResourceAndroidNotificationSound(_pendingSoundRes);
@@ -233,16 +252,17 @@ class SystemNotificationService {
     String? payload,
     PosNotificationType type = PosNotificationType.system,
     bool playSound = true,
+    String? actionTarget,
   }) async {
     if (!_ready) {
       await initialize();
       if (!_ready) return;
     }
 
-    final channelId = _channelIdForType(type);
-    final channelName = _channelNameForType(type);
-    final iosSound = _iosSoundForType(type);
-    final androidSound = playSound ? _androidSoundForType(type) : null;
+    final channelId = _channelIdForType(type, actionTarget);
+    final channelName = _channelNameForType(type, actionTarget);
+    final iosSound = _iosSoundForType(type, actionTarget);
+    final androidSound = playSound ? _androidSoundForType(type, actionTarget) : null;
 
     final androidDetails = AndroidNotificationDetails(
       channelId,
@@ -280,7 +300,8 @@ class SystemNotificationService {
     }
   }
 
-  String _channelIdForType(PosNotificationType type) {
+  String _channelIdForType(PosNotificationType type, [String? actionTarget]) {
+    if (_isChatType(type, actionTarget)) return _chatChannelId;
     switch (type) {
       case PosNotificationType.pendingOrder:
         return _pendingChannelId;
@@ -291,7 +312,8 @@ class SystemNotificationService {
     }
   }
 
-  String _channelNameForType(PosNotificationType type) {
+  String _channelNameForType(PosNotificationType type, [String? actionTarget]) {
+    if (_isChatType(type, actionTarget)) return 'Messenger alerts';
     switch (type) {
       case PosNotificationType.pendingOrder:
         return 'Pending order alerts';
@@ -302,7 +324,13 @@ class SystemNotificationService {
     }
   }
 
-  String _channelDescriptionForType(PosNotificationType type) {
+  String _channelDescriptionForType(
+    PosNotificationType type, [
+    String? actionTarget,
+  ]) {
+    if (_isChatType(type, actionTarget)) {
+      return 'Sound plays when a customer chat needs your attention.';
+    }
     switch (type) {
       case PosNotificationType.pendingOrder:
         return 'Sound plays when a new order needs attention.';
@@ -313,7 +341,8 @@ class SystemNotificationService {
     }
   }
 
-  String? _iosSoundForType(PosNotificationType type) {
+  String? _iosSoundForType(PosNotificationType type, [String? actionTarget]) {
+    if (_isChatType(type, actionTarget)) return 'chatbot_alert.wav';
     switch (type) {
       case PosNotificationType.pendingOrder:
         return 'pending_order.wav';
