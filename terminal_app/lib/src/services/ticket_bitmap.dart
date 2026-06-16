@@ -269,7 +269,8 @@ class TicketBitmapRenderer {
   }
 
   static Future<Uint8List> render(TicketCopyData data) async {
-    final logoRows = data.logoImageBytes != null ? 90 : 0;
+    debugPrint('[QB-LOGO] render logoImageBytes=${data.logoImageBytes != null ? "${data.logoImageBytes!.length}B" : "null"}');
+    final logoRows = data.logoImageBytes != null ? 152 : 0;
     final dynamicRows = data.items.length * 58;
     final optionalRows =
         (data.restaurantSubtitle?.trim().isNotEmpty == true ? 82 : 0) +
@@ -622,11 +623,13 @@ class TicketBitmapRenderer {
     Uint8List bytes,
     double y,
   ) async {
+    debugPrint('[QB-LOGO] _drawLogoCentered bytes=${bytes.length}');
     try {
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final image = frame.image;
-      const maxH = 72.0;
+      debugPrint('[QB-LOGO] _drawLogoCentered decoded img=${image.width}x${image.height}');
+      const maxH = 144.0;
       final scale = maxH / image.height;
       final w = image.width * scale;
       final src = Rect.fromLTWH(
@@ -636,10 +639,12 @@ class TicketBitmapRenderer {
         image.height.toDouble(),
       );
       final dst = Rect.fromLTWH((_width - w) / 2, y, w, maxH);
+      debugPrint('[QB-LOGO] _drawLogoCentered draw at ${((_width - w) / 2).round()},${y.round()} size ${w.round()}x$maxH');
       canvas.drawImageRect(image, src, dst, Paint());
       image.dispose();
       return y + maxH + 6;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[QB-LOGO] _drawLogoCentered error="$e"');
       return y;
     }
   }

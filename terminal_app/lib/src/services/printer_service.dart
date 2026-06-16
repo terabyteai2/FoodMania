@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -199,6 +200,8 @@ class PrinterService {
   // grows this set (and its persisted copy) without limit.
   final BoundedStringSet _printedOrderIds = BoundedStringSet(cap: 2000);
   int _printerAttemptSeq = 0;
+  String? _cachedLogoUrl;
+  Uint8List? _cachedLogoBytes;
 
   PrinterRuntimeState get state => _state;
   Stream<PrinterRuntimeState> get stateStream => _stateController.stream;
@@ -413,10 +416,13 @@ class PrinterService {
     AppLanguage language = AppLanguage.en,
     String? orderDetailsUrl,
     String? serverRole,
+    String? logoUrl,
   }) async {
     final attemptId = _nextPrinterAttempt('print-bill-${order.id}');
+    debugPrint('[QB-LOGO] printCustomerInvoice called logoUrl="$logoUrl"');
     return _withBusyBool(() async {
       final labels = _ReceiptLabels(language);
+      final logoImageBytes = await _fetchLogoBytes(logoUrl);
       final pngBytes = await _buildBitmapCopyPng(
         order,
         labels: labels,
@@ -426,6 +432,7 @@ class PrinterService {
         restaurantPhone: restaurantPhone,
         orderDetailsUrl: orderDetailsUrl,
         serverRole: serverRole,
+        logoImageBytes: logoImageBytes,
       );
       _logPrinterDiag(
         attemptId,
@@ -595,6 +602,31 @@ class PrinterService {
       serverName: serverName,
     );
     return TicketBitmapRenderer.renderKot(data);
+  }
+
+  Future<Uint8List?> _fetchLogoBytes(String? logoUrl) async {
+    if (logoUrl == null || logoUrl.trim().isEmpty) {
+      debugPrint('[QB-LOGO] _fetchLogoBytes logoUrl=null|empty -> skip');
+      return null;
+    }
+    if (logoUrl == _cachedLogoUrl && _cachedLogoBytes != null) {
+      debugPrint('[QB-LOGO] _fetchLogoBytes cache HIT url="$logoUrl" bytes=${_cachedLogoBytes!.length}');
+      return _cachedLogoBytes;
+    }
+    debugPrint('[QB-LOGO] _fetchLogoBytes downloading url="$logoUrl"');
+    try {
+      final res = await http.get(Uri.parse(logoUrl)).timeout(const Duration(seconds: 5));
+      debugPrint('[QB-LOGO] _fetchLogoBytes status=${res.statusCode} contentLength=${res.bodyBytes.length}');
+      if (res.statusCode == 200) {
+        _cachedLogoUrl = logoUrl;
+        _cachedLogoBytes = res.bodyBytes;
+        debugPrint('[QB-LOGO] _fetchLogoBytes cached url="$logoUrl" bytes=${_cachedLogoBytes!.length}');
+        return _cachedLogoBytes;
+      }
+    } catch (e) {
+      debugPrint('[QB-LOGO] _fetchLogoBytes error="$e"');
+    }
+    return null;
   }
 
   /// Build one printable copy entirely as a bitmap (PNG). The bitmap path

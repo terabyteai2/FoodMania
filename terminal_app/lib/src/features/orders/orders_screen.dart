@@ -45,62 +45,62 @@ Future<void> openNewOrderForm(
   final tier = TierScope.of(context);
   final counterMode = tier == BusinessTier.simple;
 
-  final created = await Navigator.of(context).push<bool>(
-    PageRouteBuilder(
-      fullscreenDialog: true,
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
-      pageBuilder: (_, _, _) => _NewOrderPage(
-        menuItems: menuItems,
-        itemPopularity: app.itemPopularity,
-        tableCount: tableCount,
-        dineInOpenOrders: dineInOpenOrders,
-        counterMode: counterMode,
-        initialMenuItemId: initialMenuItemId,
-        initialMenuItemQuantities: initialMenuItemQuantities,
-        initialCartLines: initialCartLines,
-        initialServiceType: initialServiceType,
-        initialTableNo: initialTableNo,
-        startAtMenu: startAtMenu,
-        startAtReview: startAtReview,
-        onCreateOrder: (result) async {
-          final order = await app.createManualOrder(
-            requestedItems: result.items,
-            tableNo: result.tableNo,
-            note: result.note,
-            serviceType: result.serviceType,
-            customerName: result.customerName,
-            paymentMethod: null,
-          );
-          // Delivery contact details aren't part of createManualOrder; persist
-          // them right after so the KOT/bill and order card show recipient info.
-          if (result.serviceType == OrderServiceType.delivery &&
-              ((result.deliveryAddress ?? '').isNotEmpty ||
-                  (result.mobileNumber ?? '').isNotEmpty ||
-                  (result.customerName ?? '').isNotEmpty)) {
-            await app.updateOrderDetails(
-              order.id,
-              serviceType: OrderServiceType.delivery,
+  String? result;
+  do {
+    result = await Navigator.of(context).push<String?>(
+      PageRouteBuilder(
+        fullscreenDialog: true,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, _, _) => _NewOrderPage(
+          menuItems: menuItems,
+          itemPopularity: app.itemPopularity,
+          tableCount: tableCount,
+          dineInOpenOrders: dineInOpenOrders,
+          counterMode: counterMode,
+          initialMenuItemId: initialMenuItemId,
+          initialMenuItemQuantities: initialMenuItemQuantities,
+          initialCartLines: initialCartLines,
+          initialServiceType: initialServiceType,
+          initialTableNo: initialTableNo,
+          startAtMenu: startAtMenu,
+          startAtReview: startAtReview,
+          onCreateOrder: (result) async {
+            final order = await app.createManualOrder(
+              requestedItems: result.items,
+              tableNo: result.tableNo,
+              note: result.note,
+              serviceType: result.serviceType,
               customerName: result.customerName,
-              deliveryAddress: result.deliveryAddress,
-              mobileNumber: result.mobileNumber,
+              paymentMethod: null,
             );
-          }
-          final shouldPrint =
-              app.orderPrinterSideEffectsEnabled &&
-              app.isManager &&
-              !app.printerState.autoPrintEnabled &&
-              app.printerState.hasDetectedPrinter &&
-              !app.printerService.hasPrintedOrder(order.id);
-          if (shouldPrint) {
-            await app.printOrderTicket(order);
-          }
-          return order;
-        },
+            if (result.serviceType == OrderServiceType.delivery &&
+                ((result.deliveryAddress ?? '').isNotEmpty ||
+                    (result.mobileNumber ?? '').isNotEmpty ||
+                    (result.customerName ?? '').isNotEmpty)) {
+              await app.updateOrderDetails(
+                order.id,
+                serviceType: OrderServiceType.delivery,
+                customerName: result.customerName,
+                deliveryAddress: result.deliveryAddress,
+                mobileNumber: result.mobileNumber,
+              );
+            }
+            final shouldPrint =
+                app.orderPrinterSideEffectsEnabled &&
+                app.isManager &&
+                !app.printerState.autoPrintEnabled &&
+                app.printerState.hasDetectedPrinter &&
+                !app.printerService.hasPrintedOrder(order.id);
+            if (shouldPrint) {
+              await app.printOrderTicket(order);
+            }
+            return order;
+          },
+        ),
       ),
-    ),
-  );
-  if (created == true) onCreated?.call();
+    );
+  } while (result == 'newOrder');
 }
 
 Future<void> openOrderCreatedPage(
@@ -132,28 +132,6 @@ class OrderCreatedPage extends StatefulWidget {
 }
 
 class _OrderCreatedPageState extends State<OrderCreatedPage> {
-  bool _printingKot = false;
-
-  Future<void> _printKot() async {
-    if (_printingKot) return;
-    setState(() => _printingKot = true);
-    final app = AppScope.of(context);
-    final ok = await app.printOrderTicket(widget.order);
-    if (!mounted) return;
-    setState(() => _printingKot = false);
-    if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-          content: TfText(
-            app.strings.ticketPrinted(widget.order.displaySequence),
-          ),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,8 +153,7 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
                 order: widget.order,
                 serviceLabel: widget.serviceLabel,
                 total: widget.order.total,
-                printingKot: _printingKot,
-                onPrintKot: () => unawaited(_printKot()),
+                onNewOrder: () => Navigator.pop(context),
                 onDone: () => Navigator.pop(context),
               ),
             ),
@@ -3035,7 +3012,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   int _gridCols = 3;
   OrderModel? _createdOrder;
   bool _creating = false;
-  bool _printingKot = false;
+  Timer? _closeTimer;
   final _discountCtrl = TextEditingController();
 
   @override
@@ -3089,6 +3066,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 
   @override
   void dispose() {
+    _closeTimer?.cancel();
     _pageCtrl.dispose();
     _searchCtrl.dispose();
     _noteCtrl.dispose();
@@ -3106,9 +3084,20 @@ class _NewOrderPageState extends State<_NewOrderPage> {
       _custAddrCtrl.text.trim().isNotEmpty;
 
   void _goToStep(int index) {
+    _closeTimer?.cancel();
     if (index < 0 || index >= _totalSteps) return;
     setState(() => _step = index);
     _pageCtrl.jumpToPage(index);
+    if (index == 3) {
+      _closeTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) Navigator.pop(context, 'done');
+      });
+    }
+  }
+
+  void _onNewOrder() {
+    _closeTimer?.cancel();
+    Navigator.pop(context, 'newOrder');
   }
 
   void _selectTableAndAdvance(String table) {
@@ -3296,25 +3285,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     }
   }
 
-  Future<void> _printCreatedKot() async {
-    final order = _createdOrder;
-    if (order == null || _printingKot) return;
-    setState(() => _printingKot = true);
-    final app = AppScope.of(context);
-    final ok = await app.printOrderTicket(order);
-    if (!mounted) return;
-    setState(() => _printingKot = false);
-    if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 72),
-          content: TfText(app.strings.ticketPrinted(order.displaySequence)),
-        ),
-      );
-    }
-  }
-
   String get _tableLabel {
     if (_source == OrderServiceType.takeaway) return 'Parcel';
     if (_source == OrderServiceType.delivery) return 'Delivery';
@@ -3407,11 +3377,8 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     order: _createdOrder,
                     serviceLabel: _tableLabel,
                     total: _total,
-                    printingKot: _printingKot,
-                    onPrintKot: _createdOrder == null
-                        ? null
-                        : () => unawaited(_printCreatedKot()),
-                    onDone: () => Navigator.pop(context),
+                    onNewOrder: _onNewOrder,
+                    onDone: () => Navigator.pop(context, 'done'),
                   ),
                 ],
               ),
@@ -4247,16 +4214,14 @@ class _OrderCreatedStep extends StatelessWidget {
     required this.order,
     required this.serviceLabel,
     required this.total,
-    required this.printingKot,
-    required this.onPrintKot,
+    this.onNewOrder,
     required this.onDone,
   });
 
   final OrderModel? order;
   final String serviceLabel;
   final double total;
-  final bool printingKot;
-  final VoidCallback? onPrintKot;
+  final VoidCallback? onNewOrder;
   final VoidCallback onDone;
 
   @override
@@ -4364,24 +4329,25 @@ class _OrderCreatedStep extends StatelessWidget {
             children: [
               Expanded(
                 child: TfButton(
-                  key: const ValueKey('created-order-kot'),
-                  label: printingKot ? '...' : 'KOT',
-                  icon: printingKot ? null : Icons.soup_kitchen_outlined,
+                  key: const ValueKey('created-order-home'),
+                  label: 'Home',
+                  labelBn: 'হোম',
+                  icon: Icons.home_outlined,
                   variant: TfButtonVariant.paper,
                   size: TfButtonSize.lg,
-                  onPressed: printingKot ? null : onPrintKot,
+                  onPressed: onDone,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: TfButton(
-                  key: const ValueKey('created-order-home'),
-                  label: 'Done',
-                  labelBn: 'সম্পন্ন',
-                  icon: Icons.home_outlined,
+                  key: const ValueKey('created-order-new'),
+                  label: 'New order',
+                  labelBn: 'নতুন অর্ডার',
+                  icon: Icons.add_rounded,
                   variant: TfButtonVariant.dark,
                   size: TfButtonSize.lg,
-                  onPressed: onDone,
+                  onPressed: onNewOrder,
                 ),
               ),
             ],

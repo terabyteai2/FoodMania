@@ -1,3 +1,7 @@
+class _Sentinel {
+  const _Sentinel();
+}
+
 class ServerConfig {
   ServerConfig({
     required this.serverId,
@@ -53,7 +57,7 @@ class ServerConfig {
     );
   }
 
-  static final Object _sentinel = Object();
+  static const _sentinel = _Sentinel();
 }
 
 class CloudConfig {

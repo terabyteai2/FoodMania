@@ -2711,7 +2711,11 @@ class PosAppController extends ChangeNotifier {
       outletName: result.outletName,
       publicSlug: result.publicSlug ?? serverConfig.publicSlug,
       tableCount: result.tableCount,
+      logoUrl: result.logoUrl,
+      logoBitmapUrl: result.logoBitmapUrl,
     );
+    _logoBitmapUrl = result.logoBitmapUrl;
+    debugPrint('[QB-LOGO] _applyAdminLoginResult logoUrl="${result.logoUrl}" logoBitmapUrl="${result.logoBitmapUrl}"');
     cloudConfig = cloudConfig.copyWith(
       baseUrl: resolvedBase,
       enabled: true,
@@ -3720,6 +3724,21 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLogoBitmapUrl(String? url) async {
+    final cleaned = url?.trim().isEmpty == true ? null : url?.trim();
+    debugPrint('[QB-LOGO] setLogoBitmapUrl input="$url" cleaned="$cleaned" current="$_logoBitmapUrl"');
+    if (_logoBitmapUrl == cleaned) return;
+    _logoBitmapUrl = cleaned;
+    serverConfig = serverConfig.copyWith(logoBitmapUrl: cleaned);
+    final prefs = await SharedPreferences.getInstance();
+    if (cleaned == null) {
+      await prefs.remove(_logoBitmapUrlKey);
+    } else {
+      await prefs.setString(_logoBitmapUrlKey, cleaned);
+    }
+    notifyListeners();
+  }
+
   Future<bool> testPrinter() async {
     final ok = await printerService.testPrint(
       restaurantName: restaurantName,
@@ -3796,12 +3815,15 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printCustomerInvoice(OrderModel order) async {
+    final usedUrl = _logoBitmapUrl ?? serverConfig.logoUrl;
+    debugPrint('[QB-LOGO] printCustomerInvoice _logoBitmapUrl="$_logoBitmapUrl" logoUrl="${serverConfig.logoUrl}" usedUrl="$usedUrl"');
     final ok = await printerService.printCustomerInvoice(
       order,
       restaurantName: restaurantName,
       outletName: outletName,
       language: language,
       orderDetailsUrl: _orderDetailsUrl(order),
+      logoUrl: usedUrl,
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
@@ -4557,7 +4579,11 @@ class PosAppController extends ChangeNotifier {
       restaurantName: tenant.restaurantName,
       outletName: tenant.outletName,
       tableCount: tenant.tableCount,
+      logoUrl: tenant.logoUrl,
+      logoBitmapUrl: tenant.logoBitmapUrl,
     );
+    _logoBitmapUrl = tenant.logoBitmapUrl;
+    debugPrint('[QB-LOGO] bootstrap logoUrl="${tenant.logoUrl}" logoBitmapUrl="${tenant.logoBitmapUrl}"');
     // /tenants/bootstrap returns a token that only carries outlet_id. If the
     // user is already logged in, their existing token also carries account_id
     // (required by manager-only endpoints like /admin/staff). Keep the
@@ -4692,6 +4718,8 @@ class PosAppController extends ChangeNotifier {
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
   static final String _deliveryChargeKey = 'local_pos_delivery_charge';
+  static final String _logoUrlKey = 'local_pos_logo_url';
+  static final String _logoBitmapUrlKey = 'local_pos_logo_bitmap_url';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';
