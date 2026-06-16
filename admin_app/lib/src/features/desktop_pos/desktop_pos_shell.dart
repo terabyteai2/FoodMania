@@ -310,8 +310,14 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
               onTap: _openPrinterSettings,
             ),
           ],
-          child: SettingsScreen(
-            receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
+          // SettingsScreen no longer brings its own Scaffold/scroll view (it's
+          // embedded content now, shared with the mobile Settings tab), so
+          // this desktop chrome provides the scroll container itself.
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: SettingsScreen(
+              receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
+            ),
           ),
         );
     }

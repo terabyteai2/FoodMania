@@ -22,20 +22,22 @@ class MoreScreen extends StatelessWidget {
   const MoreScreen({
     required this.onNavigateToOrders,
     this.onNavigateToTarget,
+    this.receiptPrinterOpenRequest = 0,
     super.key,
   });
 
   final VoidCallback onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+  final int receiptPrinterOpenRequest;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
     return AppScaffold(
-      title: text.moreTab,
+      title: text.settingsTab,
       headerWidget: AppPageHeader(
-        title: text.moreTab,
+        title: text.settingsTab,
         onNavigateToOrders: onNavigateToOrders,
         onNavigateToTarget: onNavigateToTarget,
       ),
@@ -66,6 +68,16 @@ class MoreScreen extends StatelessWidget {
           ],
           const SizedBox(height: 20),
           _LanguageCard(app: app, text: text),
+          // The rest of Settings (My restaurant details, Device, Admin,
+          // Account for managers; a reduced set for waiters) is embedded
+          // directly here — no separate page/route. SettingsScreen already
+          // self-gates its content by role (app.isManager inside it).
+          const SizedBox(height: 20),
+          SettingsScreen(
+            onNavigateToOrders: onNavigateToOrders,
+            onNavigateToTarget: onNavigateToTarget,
+            receiptPrinterOpenRequest: receiptPrinterOpenRequest,
+          ),
           const SizedBox(height: 24),
         ],
       ),
@@ -267,13 +279,6 @@ class _ManageGroup extends StatelessWidget {
         Icons.fact_check_outlined,
         text.auditTrail,
         const AuditScreen(),
-      );
-    }
-    if (app.canManageSettings) {
-      add(
-        Icons.settings_outlined,
-        text.settings,
-        SettingsScreen(onNavigateToOrders: onNavigateToOrders),
       );
     }
 

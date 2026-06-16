@@ -23,6 +23,7 @@ class TfGlobalTopBar extends StatelessWidget {
     this.onNavigateToTarget,
     this.extraActions = const [],
     this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 10),
+    this.showTrailing = true,
     super.key,
   });
 
@@ -41,6 +42,11 @@ class TfGlobalTopBar extends StatelessWidget {
   final List<Widget> extraActions;
 
   final EdgeInsetsGeometry padding;
+
+  /// Whether to render the notification bell + account-avatar dropdown.
+  /// Defaults to true; set false for screens (e.g. Settings) that already
+  /// surface those controls inline and don't need them duplicated up top.
+  final bool showTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +68,13 @@ class TfGlobalTopBar extends StatelessWidget {
       padding: padding,
       trailing: [
         ...extraActions,
-        HeaderNotificationBell(
-          onNavigateToOrders: onNavigateToOrders ?? () {},
-          onNavigateToTarget: onNavigateToTarget,
-        ),
-        const _AvatarDropdown(),
+        if (showTrailing) ...[
+          HeaderNotificationBell(
+            onNavigateToOrders: onNavigateToOrders ?? () {},
+            onNavigateToTarget: onNavigateToTarget,
+          ),
+          const _AvatarDropdown(),
+        ],
       ],
     );
   }

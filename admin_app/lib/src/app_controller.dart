@@ -263,7 +263,6 @@ class PosAppController extends ChangeNotifier {
   String? lastBkashTransactionId;
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
-  double uiScale = 1.06;
   BusinessTier businessTier = BusinessTier.standard;
   String? lastError;
   bool demoManagerLoginEnabled = false;
@@ -279,7 +278,6 @@ class PosAppController extends ChangeNotifier {
   String _accountPassword = '';
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
-  bool varianceTrackingEnabled = false;
 
   /// Counter (quick-sell) service mode — manager+ toggle in More. When on, the
   /// Tables tab becomes a tap-to-ring quick-sell grid instead of the FOH map.
@@ -353,18 +351,6 @@ class PosAppController extends ChangeNotifier {
   /// Manager must pick a plan and receive activation before using the app.
   bool get mustCompleteOnboardingPayment =>
       isManager && needsOnboardingPayment && subscriptionState != 'paid';
-
-  String get uiScaleLabel {
-    final text = strings;
-    if (uiScale <= 0.88) return text.compact;
-    if (uiScale >= 0.98) return text.large;
-    return text.comfortable;
-  }
-
-  // Alias so widgets can compare without importing controller constants.
-  static const double kCompactScale = 0.84;
-  static const double kComfortableScale = 0.92;
-  static const double kLargeScale = 1.02;
 
   // App is ready to use as soon as the restaurant has a name.
   // Cloud sync is optional and configured separately.
@@ -491,9 +477,6 @@ class PosAppController extends ChangeNotifier {
             )
           : deviceLanguage;
       themePreference = AppThemePreference.white;
-      uiScale = (preferences.getDouble(_uiScaleKey) ?? 1.06)
-          .clamp(minUiScale, maxUiScale)
-          .toDouble();
       businessTier = BusinessTier.fromString(
         preferences.getString(_businessTierKey),
       );
@@ -515,6 +498,7 @@ class PosAppController extends ChangeNotifier {
             ? storedRestaurantName
             : storedOutletName,
         publicSlug: preferences.getString(_publicSlugKey) ?? '',
+        outletPhone: preferences.getString(_outletPhoneKey) ?? '',
         tableCount: preferences.getInt(_tableCountKey) ?? 10,
         customerMenuTheme:
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
@@ -564,8 +548,6 @@ class PosAppController extends ChangeNotifier {
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
       notificationSoundPath =
           preferences.getString(_notificationSoundPathKey) ?? '';
-      varianceTrackingEnabled =
-          preferences.getBool(_varianceTrackingEnabledKey) ?? false;
       counterModeEnabled = preferences.getBool(_counterModeEnabledKey) ?? false;
       _dismissedAppUpdateVersionCode =
           preferences.getInt(_dismissedAppUpdateVersionCodeKey) ?? 0;
@@ -1410,6 +1392,52 @@ class PosAppController extends ChangeNotifier {
     });
   }
 
+  /// Updates the restaurant's display name and/or its customer-facing contact
+  /// phone (distinct from the account holder's own phone). Either argument can
+  /// be omitted to leave that field untouched.
+  Future<bool> updateRestaurantProfile({
+    String? restaurantName,
+    String? phone,
+  }) async {
+    return _runBusy(() async {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final data = await cloudApiService.updateOutletProfile(
+        restaurantName: restaurantName,
+        phone: phone,
+      );
+      serverConfig = serverConfig.copyWith(
+        restaurantName: data['restaurantName']?.toString().trim().isNotEmpty == true
+            ? data['restaurantName'].toString().trim()
+            : serverConfig.restaurantName,
+        outletPhone: data['outletPhone']?.toString() ?? serverConfig.outletPhone,
+      );
+      await _persistSettings();
+    });
+  }
+
+  /// Self-edit of the account holder's own display name (shown in More/Settings
+  /// as "Name"). Distinct from `updateRestaurantProfile`'s restaurant name.
+  Future<bool> updateAccountDisplayName(String displayName) async {
+    return _runBusy(() async {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      final data = await cloudApiService.updateAccountDisplayName(displayName);
+      final account = data['account'] is Map
+          ? Map<String, Object?>.from(data['account'] as Map)
+          : <String, Object?>{};
+      accountDisplayName =
+          account['displayName']?.toString().trim().isNotEmpty == true
+          ? account['displayName'].toString().trim()
+          : displayName.trim();
+      await _persistAccountAuth();
+    });
+  }
+
   Future<void> loadFacebookChatbotConfig() async {
     if (!cloudConfig.canSync) return;
     facebookChatbotLoading = true;
@@ -1517,48 +1545,6 @@ class PosAppController extends ChangeNotifier {
         orderingEnabled: orderingEnabled,
       );
       facebookChatbotError = null;
-    });
-  }
-
-  Future<bool> wipeCurrentRestaurant({required String confirmation}) async {
-    final outletId = serverConfig.outletId.trim();
-    if (!isManager) {
-      lastError = 'Only managers can wipe restaurant data.';
-      notifyListeners();
-      return false;
-    }
-    if (!isCloudReady || !cloudConfig.canSync || outletId.isEmpty) {
-      lastError = 'Cloud sync must be connected before wiping restaurant data.';
-      notifyListeners();
-      return false;
-    }
-    if (confirmation.trim() != outletId) {
-      lastError = 'Type the outlet ID exactly to confirm.';
-      notifyListeners();
-      return false;
-    }
-
-    return _runBusy(() async {
-      cloudApiService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      await cloudApiService.wipeCurrentOutlet(confirmation: outletId);
-      await database.clearLocalData();
-      syncService.resetCloudPullState();
-      menuItems = [];
-      orders = [];
-      notifications = [];
-      syncEvents = [];
-      inventoryItems = [];
-      dashboardSummary = null;
-      dashboardSummaryError = null;
-      inventorySummary = null;
-      inventorySummaryError = null;
-      _clearOrderAlertTracking();
-      await _prepareNewRestaurantIdentity();
-      await _clearWipedRestaurantPrefs();
-      unawaited(cloudRealtimeService.disconnect());
     });
   }
 
@@ -1691,14 +1677,6 @@ class PosAppController extends ChangeNotifier {
       showDevOtpHint = false;
     }
     notifyListeners();
-  }
-
-  Future<Map<String, Object?>> loadLiveDiagnostics() async {
-    cloudApiService.configure(
-      cloudConfig: cloudConfig,
-      serverConfig: serverConfig,
-    );
-    return cloudApiService.testHealth();
   }
 
   Future<bool> loginAsDemoManager() async {
@@ -2224,60 +2202,6 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_deviceTokenKey);
   }
 
-  Future<void> _clearWipedRestaurantPrefs() async {
-    isLoggedIn = false;
-    hasSeenIntro = false;
-    needsOnboardingPayment = false;
-    pendingOnboardingLanding = false;
-    pendingHeroMediaSetup = false;
-    bkashPaymentVerified = false;
-    subscriptionState = 'none';
-    trialEndsAt = null;
-    selectedSubscriptionPlan = '';
-    lastBkashPaymentId = null;
-    lastBkashTransactionId = null;
-    accountId = '';
-    accountEmail = '';
-    accountUsername = '';
-    accountDisplayName = '';
-    accountRole = AccountRole.manager;
-    _accountPassword = '';
-    phoneSignupToken = null;
-    verifiedPhoneDisplay = null;
-    pendingStaffInvite = null;
-    serverConfig = serverConfig.copyWith(
-      restaurantName: '',
-      outletName: '',
-      publicSlug: '',
-      tableCount: 10,
-    );
-    cloudConfig = cloudConfig.copyWith(deviceToken: '');
-
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_accountLoggedInKey, false);
-    await preferences.remove(_seenIntroKey);
-    await preferences.remove(_restaurantNameKey);
-    await preferences.remove(_outletNameKey);
-    await preferences.remove(_publicSlugKey);
-    await preferences.remove(_restaurantIdKey);
-    await preferences.remove(_outletIdKey);
-    await preferences.remove(_deviceTokenKey);
-    await preferences.remove(_accountIdKey);
-    await preferences.remove(_accountEmailKey);
-    await preferences.remove(_accountUsernameKey);
-    await preferences.remove(_accountDisplayNameKey);
-    await preferences.remove(_accountRoleKey);
-    await preferences.remove(_accountPasswordKey);
-    await preferences.remove(_selectedPlanKey);
-    await preferences.remove(_subscriptionStateKey);
-    await preferences.remove(_trialEndsAtKey);
-    await preferences.remove(_bkashPaymentVerifiedKey);
-    await preferences.remove(_bkashPaymentIdKey);
-    await preferences.remove(_bkashTransactionIdKey);
-    await preferences.remove(_needsOnboardingPaymentKey);
-    await preferences.setInt(_tableCountKey, 10);
-  }
-
   String _mergePublicApiBaseUrl(String? fromServer, String fallback) {
     final raw = fromServer?.trim() ?? '';
     if (raw.isEmpty) return fallback;
@@ -2602,6 +2526,7 @@ class PosAppController extends ChangeNotifier {
       restaurantName: result.restaurantName,
       outletName: result.outletName,
       publicSlug: result.publicSlug ?? serverConfig.publicSlug,
+      outletPhone: result.outletPhone ?? serverConfig.outletPhone,
       tableCount: result.tableCount,
     );
     cloudConfig = cloudConfig.copyWith(
@@ -2861,26 +2786,6 @@ class PosAppController extends ChangeNotifier {
       skippedDuplicateCount: skipped,
       scanResult: scanResult,
     );
-  }
-
-  Future<OrderHistoryImportResult> importOrderHistoryCsv({
-    required List<int> bytes,
-    required String fileName,
-  }) async {
-    if (!isManager) {
-      throw Exception('Only managers can import order history.');
-    }
-    if (!cloudConfig.canSync) {
-      throw Exception('Order history import needs an online cloud connection.');
-    }
-    cloudApiService.configure(
-      cloudConfig: cloudConfig,
-      serverConfig: serverConfig,
-    );
-    final result = await cloudApiService.importOrderHistoryCsv(bytes, fileName);
-    await _syncWithFreshTenantToken();
-    await reloadData();
-    return result;
   }
 
   String _menuScanDuplicateKey(String name, String category) {
@@ -3380,51 +3285,6 @@ class PosAppController extends ChangeNotifier {
     return _runBusy(syncService.retryFailed);
   }
 
-  Future<bool> pushRestaurantInfo({
-    required String title,
-    required String phone,
-    required String email,
-    required String address,
-    required String website,
-    required String description,
-  }) async {
-    return _runBusy(() async {
-      final payload = <String, Object?>{
-        'serverId': serverConfig.serverId,
-        'restaurantId': serverConfig.restaurantId,
-        'outletId': serverConfig.outletId,
-        'restaurantName': serverConfig.restaurantName,
-        'outletName': serverConfig.outletName,
-        'infoTitle': title.trim(),
-        'phone': phone.trim(),
-        'email': email.trim(),
-        'address': address.trim(),
-        'website': website.trim(),
-        'description': description.trim(),
-        'updatedAt': DateTime.now().toIso8601String(),
-      };
-      await database.queueServerConfigSync(
-        serverId: serverConfig.serverId,
-        payload: payload,
-      );
-      syncService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      if (cloudConfig.canSync) {
-        await syncService.syncNow();
-      }
-    });
-  }
-
-  Future<void> updateUiScale(double value) async {
-    final next = value.clamp(minUiScale, maxUiScale).toDouble();
-    if ((uiScale - next).abs() < 0.001) return;
-    uiScale = next;
-    notifyListeners();
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setDouble(_uiScaleKey, uiScale);
-  }
 
   Future<void> setBusinessTier(BusinessTier tier) async {
     if (businessTier == tier) return;
@@ -3899,16 +3759,6 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setVarianceTrackingEnabled(bool value) async {
-    if (varianceTrackingEnabled == value) return;
-    varianceTrackingEnabled = value;
-    notifyListeners();
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_varianceTrackingEnabledKey, value);
-    if (value) {
-      unawaited(refreshInventorySummary());
-    }
-  }
 
   Future<void> setCounterModeEnabled(bool value) async {
     if (counterModeEnabled == value) return;
@@ -4413,12 +4263,12 @@ class PosAppController extends ChangeNotifier {
     await preferences.setString(_outletIdKey, serverConfig.outletId);
     await preferences.setString(_serverIdKey, serverConfig.serverId);
     await preferences.setString(_publicSlugKey, serverConfig.publicSlug);
+    await preferences.setString(_outletPhoneKey, serverConfig.outletPhone);
     await preferences.setString(_cloudApiUrlKey, cloudConfig.baseUrl);
     await preferences.setBool(_cloudSyncEnabledKey, cloudConfig.enabled);
     await preferences.setString(_deviceTokenKey, cloudConfig.deviceToken);
     await preferences.setString(_languageKey, language.code);
     await preferences.setString(_themePreferenceKey, themePreference.code);
-    await preferences.setDouble(_uiScaleKey, uiScale);
     await preferences.setInt(
       _autoSyncIntervalKey,
       cloudConfig.autoSyncIntervalSeconds,
@@ -4576,13 +4426,13 @@ class PosAppController extends ChangeNotifier {
   static final String _outletNameKey = 'local_pos_outlet_name';
   static final String _serverIdKey = 'local_pos_server_id';
   static final String _publicSlugKey = 'local_pos_public_slug';
+  static final String _outletPhoneKey = 'local_pos_outlet_phone';
   static final String _restaurantIdKey = 'local_pos_restaurant_id';
   static final String _outletIdKey = 'local_pos_outlet_id';
   static final String _cloudApiUrlKey = 'local_pos_cloud_api_url';
   static final String _deviceTokenKey = 'local_pos_device_token';
   static final String _cloudSyncEnabledKey = 'local_pos_cloud_sync_enabled';
   static final String _autoSyncIntervalKey = 'local_pos_auto_sync_interval';
-  static final String _uiScaleKey = 'local_pos_ui_scale';
   static final String _businessTierKey = 'local_pos_business_tier';
   static final String _quickSellMenuItemIdsKey =
       'local_pos_quick_sell_menu_item_ids';
@@ -4606,8 +4456,6 @@ class PosAppController extends ChangeNotifier {
       'local_pos_notification_sound_enabled';
   static final String _notificationSoundPathKey =
       'local_pos_notification_sound_path';
-  static final String _varianceTrackingEnabledKey =
-      'local_pos_variance_tracking_enabled';
   static final String _dismissedAppUpdateVersionCodeKey =
       'local_pos_dismissed_app_update_version_code';
   static final String _adminBlockingNoticeKey =
@@ -4621,6 +4469,4 @@ class PosAppController extends ChangeNotifier {
       'local_pos_needs_onboarding_payment';
   static final String _selectedPlanKey = 'local_pos_selected_subscription_plan';
   static final String _trialEndsAtKey = 'local_pos_trial_ends_at';
-  static double minUiScale = 0.78;
-  static double maxUiScale = 1.18;
 }

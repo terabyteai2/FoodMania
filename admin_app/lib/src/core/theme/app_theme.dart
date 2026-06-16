@@ -182,17 +182,15 @@ class PosGradients {
 }
 
 class AppTheme {
-  static ThemeData dark({double uiScale = 1.0}) =>
-      _build(uiScale: uiScale, dark: true);
+  static ThemeData dark() => _build(dark: true);
 
-  static ThemeData light({double uiScale = 1.0}) {
+  static ThemeData light() {
     PosColors.setTone(PosThemeTone.light);
-    return _build(uiScale: uiScale, dark: false);
+    return _build(dark: false);
   }
 
-  static ThemeData _build({required double uiScale, required bool dark}) {
-    final scale = uiScale.clamp(0.78, 1.08).toDouble();
-    double s(double value) => (value * scale).toDouble();
+  static ThemeData _build({required bool dark}) {
+    double s(double value) => value;
 
     // Dark overrides (design_rules.md §2)
     final bg = dark ? const Color(0xFF0E120D) : PosColors.background;

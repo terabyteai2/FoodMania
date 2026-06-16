@@ -62,10 +62,9 @@ class AppStrings {
   String get orders => isBn ? 'অর্ডার' : 'Orders';
   String get reports => isBn ? 'রিপোর্ট' : 'Reports';
   String get sync => isBn ? 'সিঙ্ক' : 'Sync';
-  String get settings => isBn ? 'সেটিংস' : 'Settings';
 
   // ── QuickBytes navigation + More hub ──────────────────────────────────────
-  String get moreTab => isBn ? 'আরও' : 'More';
+  String get settingsTab => isBn ? 'সেটিংস' : 'Settings';
   String get liveTab => isBn ? 'লাইভ' : 'Live';
   String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
   String get stockTab => isBn ? 'স্টক' : 'Stock';
@@ -115,16 +114,7 @@ class AppStrings {
   String get secureTenant => isBn ? 'সুরক্ষিত টেন্যান্ট' : 'Secure tenant';
   String get tokenVerified => isBn ? 'টোকেন ভেরিফাইড' : 'Token verified';
 
-  String get compact => isBn ? 'কমপ্যাক্ট' : 'Compact';
-  String get comfortable => isBn ? 'কমফোর্টেবল' : 'Comfortable';
-  String get large => isBn ? 'বড়' : 'Large';
-
-  String get settingsSubtitle => isBn
-      ? 'রেস্টুরেন্ট প্রোফাইল, ক্লাউড আইডেন্টিটি ও সিঙ্ক সেটিংস।'
-      : 'Restaurant profile, cloud identity, and sync settings.';
   String get languageLabel => isBn ? 'ভাষা' : 'Language';
-  String get languageSubtitle =>
-      isBn ? 'অ্যাপের ভাষা নির্বাচন করুন।' : 'Choose app display language.';
   String get themeMode => isBn ? 'থিম মোড' : 'Theme mode';
   String get themeModeSubtitle => isBn
       ? 'পুরো অ্যাপ কালো, সাদা বা ডিভাইস মোডে দেখান।'
@@ -135,13 +125,6 @@ class AppStrings {
   String get appLanguage => isBn ? 'অ্যাপ ভাষা' : 'App language';
   String get bangla => 'বাংলা';
   String get english => 'English';
-  String get displaySize => isBn ? 'ডিসপ্লে সাইজ' : 'Display Size';
-  String get displaySizeSubtitle => isBn
-      ? 'কাউন্টার, ট্যাবলেট বা বড় লেখার জন্য পুরো অ্যাপ ছোট-বড় করুন।'
-      : 'Adjust the whole app for compact counters, tablets, or large text comfort.';
-  String scaleLabel(String label, int percent) =>
-      isBn ? '$label - ${_n(percent)}%' : '$label - $percent%';
-
   String get customerMenuTheme =>
       isBn ? 'কাস্টমার মেনু থিম' : 'Customer Menu Theme';
   String get customerMenuThemeSubtitle => isBn
@@ -195,19 +178,8 @@ class AppStrings {
   String get messengerSettingsSaved =>
       isBn ? 'Messenger সেটিংস সেভ হয়েছে' : 'Messenger settings saved';
 
-  String get restaurantSection => isBn ? 'রেস্টুরেন্ট' : 'Restaurant';
-  String get restaurantSubtitle =>
-      isBn ? 'এই আউটলেটের পাবলিক পরিচয়।' : 'Public identity for this outlet.';
   String get restaurantName => isBn ? 'রেস্টুরেন্টের নাম' : 'Restaurant name';
   String get outletName => isBn ? 'আউটলেটের নাম' : 'Outlet name';
-  String get restaurantId => isBn ? 'রেস্টুরেন্ট ID' : 'Restaurant ID';
-  String get outletId => isBn ? 'আউটলেট ID' : 'Outlet ID';
-  String get restaurantIdHelper => isBn
-      ? 'ক্লাউড থেকে অটো তৈরি হয়।'
-      : 'Created automatically by the cloud.';
-  String get outletIdHelper => isBn
-      ? 'কাস্টমার ওয়েব অ্যাপের সাথে এই ID শেয়ার করুন।'
-      : 'Share this ID with the customer web app.';
 
   String get tableQrCodes => isBn ? 'সব QR কোড' : 'All QR Codes';
   String get tableQrSubtitle => isBn
@@ -283,12 +255,6 @@ class AppStrings {
       isBn ? 'প্রিন্টার কানেক্ট করুন' : 'Connect Printer';
   String get settingsAllQrCodes => isBn ? 'সব QR কোড' : 'All QR Codes';
   String get settingsWebsiteTheme => isBn ? 'ওয়েবসাইট থিম' : 'Website Theme';
-  String get settingsRestaurantDetails =>
-      isBn ? 'রেস্টুরেন্টের বিস্তারিত' : 'Restaurant Details';
-  String get settingsEmployeeAccountManagement =>
-      isBn ? 'কর্মচারী অ্যাকাউন্ট ম্যানেজমেন্ট' : 'Employee Account Management';
-  String get settingsImportSellsData =>
-      isBn ? 'বিক্রির ডাটা ইমপোর্ট' : 'Import Sales Data';
   String get settingsSetTableNumbers =>
       isBn ? 'টেবিল সংখ্যা সেট করুন' : 'Set Table Numbers';
   String get settingsLogOut => isBn ? 'লগ আউট' : 'Log Out';
@@ -314,11 +280,6 @@ class AppStrings {
       : 'When a cloud/manual order arrives, the kitchen ticket prints automatically and the confirmation modal is skipped — ideal for fast-paced cafes.';
   String get refreshPairedPrinters =>
       isBn ? 'কাছের ডিভাইস স্ক্যান' : 'Scan for devices';
-  String get liveDiagnostics =>
-      isBn ? 'লাইভ ডায়াগনস্টিকস' : 'Live diagnostics';
-  String get liveDiagnosticsSubtitle => isBn
-      ? 'ক্লাউড, ডাটাবেজ, Facebook, চ্যাটবট ও লোকাল সিঙ্ক পরীক্ষা করুন।'
-      : 'Check cloud, database, Facebook, chatbot, and local sync readiness.';
   String get refresh => isBn ? 'রিফ্রেশ' : 'Refresh';
   String get testPrint => isBn ? 'টেস্ট প্রিন্ট' : 'Test print';
   String get printerDiagnostics =>
@@ -366,68 +327,35 @@ class AppStrings {
   String get clearCacheSubtitle => isBn
       ? 'এই ডিভাইসের ক্যাশড মেনু, অর্ডার ও সিঙ্ক তালিকা ক্লিয়ার করুন।'
       : 'Clear cached menu, orders, and sync queue from this device.';
-  String get importOrderHistory =>
-      isBn ? 'অর্ডার হিস্টরি ইমপোর্ট' : 'Import order history';
-  String get importOrderHistorySubtitle => isBn
-      ? 'পুরনো POS থেকে CSV এক্সপোর্ট আপলোড করুন।'
-      : 'Upload a CSV export from an older POS.';
-  String get importOrderHistoryCsv => isBn ? 'CSV' : 'CSV';
-  String get importOrderHistoryLoading => isBn ? 'ইমপোর্ট হচ্ছে' : 'Importing';
-  String orderHistoryImportSuccess(int imported, int skipped, String detail) {
-    final skippedText = skipped > 0
-        ? (isBn ? ', ${_n(skipped)} স্কিপ হয়েছে।' : ', $skipped skipped.')
-        : (isBn ? '।' : '.');
-    final detailText = detail.trim().isEmpty ? '' : ' ${detail.trim()}';
-    return isBn
-        ? '${_n(imported)}টি পুরনো অর্ডার ইমপোর্ট হয়েছে$skippedText$detailText'
-        : '$imported historical orders imported$skippedText$detailText';
-  }
-
-  String orderHistoryImportFailed(Object error) => isBn
-      ? 'অর্ডার হিস্টরি ইমপোর্ট ব্যর্থ হয়েছে: $error'
-      : 'Order history import failed: $error';
-  String get yourRestaurantInfo =>
-      isBn ? 'আপনার রেস্টুরেন্ট তথ্য' : 'Your Restaurant Info';
-  String get yourRestaurantInfoSubtitle => isBn
-      ? 'পাবলিক যোগাযোগ তথ্য ক্লাউডে সিঙ্ক করুন।'
-      : 'Sync public restaurant contact details to cloud.';
   String get aboutUs => isBn ? 'আমাদের সম্পর্কে' : 'About Us';
   String get privacyPolicy => isBn ? 'প্রাইভেসি পলিসি' : 'Privacy Policy';
   String get logOut => isBn ? 'লগ আউট' : 'Log out';
   String get logOutSubtitle => isBn
       ? 'এই ডিভাইসে লগইন স্ক্রিনে ফিরে যান।'
       : 'Return to the login screen on this device.';
-  String get staffAccounts => isBn ? 'স্টাফ অ্যাকাউন্ট' : 'Staff accounts';
-  String get staffAccountsSubtitle => isBn
-      ? 'স্টাফের মোবাইল নম্বর যোগ করুন। তারা OTP দিয়ে যোগ দেবে।'
-      : 'Add staff mobile numbers. They join via phone OTP.';
-  String get storeGroup => isBn ? 'স্টোর' : 'Store';
   String get deviceGroup => isBn ? 'ডিভাইস' : 'Device';
   String get adminGroup => isBn ? 'অ্যাডমিন' : 'Admin';
   String get dangerZoneGroup => isBn ? 'ডেঞ্জার জোন' : 'Danger Zone';
-  String get wipeRestaurantData =>
-      isBn ? 'রেস্টুরেন্ট ডাটা মুছুন' : 'Wipe restaurant data';
-  String get wipeRestaurantDataSubtitle => isBn
-      ? 'ক্লাউড DB, মিডিয়া এবং এই ডিভাইসের ক্যাশ মুছে ফেলুন।'
-      : 'Delete cloud DB data, media, and this device cache.';
-  String get wipeRestaurantDialogTitle =>
-      isBn ? 'সব রেস্টুরেন্ট ডাটা মুছবেন?' : 'Wipe all restaurant data?';
-  String wipeRestaurantDialogMessage(String outletId) => isBn
-      ? 'এই কাজটি ফিরিয়ে আনা যাবে না। মেনু, অর্ডার, ইনভেন্টরি, স্টাফ, মিডিয়া এবং ক্লাউড রেকর্ড মুছে যাবে। নিশ্চিত করতে আউটলেট ID লিখুন: ${_digits(outletId)}'
-      : 'This cannot be undone. Menu, orders, inventory, staff, media, and cloud records will be deleted. Type the outlet ID to confirm: $outletId';
-  String get typeOutletIdToConfirm =>
-      isBn ? 'নিশ্চিত করতে আউটলেট ID লিখুন' : 'Type outlet ID to confirm';
-  String get wipeRestaurantConfirm => isBn ? 'সব ডাটা মুছুন' : 'Wipe all data';
-  String get wipeRestaurantSuccess => isBn
-      ? 'রেস্টুরেন্ট ডাটা মুছে ফেলা হয়েছে।'
-      : 'Restaurant data has been wiped.';
-  String wipeRestaurantFailed(Object error) => isBn
-      ? 'রেস্টুরেন্ট ডাটা মুছতে পারেনি: $error'
-      : 'Could not wipe restaurant data: $error';
-  String get wipeRequiresCloud => isBn
-      ? 'ক্লাউড কানেকশন ছাড়া রেস্টুরেন্ট ডাটা মুছা যাবে না।'
-      : 'Cloud connection is required to wipe restaurant data.';
-
+  String get myRestaurantDetailsGroup =>
+      isBn ? 'আমার রেস্টুরেন্টের তথ্য' : 'My restaurant details';
+  String get accountHolderName => isBn ? 'নাম' : 'Name';
+  String get accountHolderNameSubtitle =>
+      isBn ? 'অ্যাকাউন্ট হোল্ডারের নাম' : 'Account holder name';
+  String get restaurantNameFieldSubtitle =>
+      isBn ? 'গ্রাহকদের কাছে দেখানো নাম' : 'Shown to customers';
+  String get restaurantPhoneLabel =>
+      isBn ? 'রেস্টুরেন্টের ফোন' : 'Restaurant phone';
+  String get restaurantPhoneSubtitle => isBn
+      ? 'গ্রাহকদের জন্য যোগাযোগের নম্বর (আপনার নিজের নম্বর নয়)'
+      : 'Customer-facing contact number (not your own phone)';
+  String get websiteUrlLabel => isBn ? 'ওয়েবসাইট URL' : 'Website URL';
+  String get websiteUrlSubtitle =>
+      isBn ? 'আপনার গ্রাহক মেনু লিংক' : 'Your customer menu link';
+  String get websiteImageVideoTitle =>
+      isBn ? 'ওয়েবসাইটের ছবি/ভিডিও' : 'Website image/video';
+  String get setUpLabel => isBn ? 'সেট আপ করুন' : 'Set up';
+  String get urlNameTooShort =>
+      isBn ? 'URL নাম কমপক্ষে ৩ অক্ষরের হতে হবে।' : 'URL name must be at least 3 characters.';
   // Orders
   String get newOrder => isBn ? 'নতুন অর্ডার' : 'New order';
   String get createNewOrder =>
@@ -623,26 +551,8 @@ class AppStrings {
       isBn ? 'আজকে কোনো অর্ডার নেই।' : 'No orders yet today.';
 
   // Staff management
-  String get deleteStaff => isBn ? 'স্টাফ মুছুন' : 'Remove staff';
-  String get deleteStaffConfirm =>
-      isBn ? 'এই স্টাফকে সরাতে চান?' : 'Remove this staff member?';
-  String get staffAdded => isBn ? 'স্টাফ যোগ হয়েছে।' : 'Staff added.';
-  String get staffRemoved => isBn ? 'স্টাফ সরানো হয়েছে।' : 'Staff removed.';
   String get noStaffYet =>
       isBn ? 'এখনো কোনো স্টাফ নেই।' : 'No staff added yet.';
-  String get addStaffPhone => isBn ? 'স্টাফ যোগ করুন' : 'Add staff';
-  String get staffPhoneNumber =>
-      isBn ? 'স্টাফের মোবাইল নম্বর' : 'Staff mobile number';
-  String get inviteStatusPending => isBn ? 'অপেক্ষমান' : 'Pending';
-  String get inviteStatusDeclined => isBn ? 'প্রত্যাখ্যাত' : 'Declined';
-  String get nameOptional => isBn ? 'নাম (ঐচ্ছিক)' : 'Name (optional)';
-  String get activeStatus => isBn ? 'সক্রিয়' : 'Active';
-  String get disabledStatus => isBn ? 'অক্ষম' : 'Disabled';
-  String get pushToCloud => isBn ? 'ক্লাউডে পাঠান' : 'Push To Cloud';
-  String get contactPhone => isBn ? 'ফোন' : 'Phone';
-  String get contactEmail => isBn ? 'ইমেইল' : 'Email';
-  String get contactAddress => isBn ? 'ঠিকানা' : 'Address';
-  String get website => isBn ? 'ওয়েবসাইট' : 'Website';
   String get description => isBn ? 'বর্ণনা' : 'Description';
   String get detailsPushed => isBn
       ? 'রেস্টুরেন্ট তথ্য সিঙ্ক তালিকায় যোগ হয়েছে'
@@ -1096,7 +1006,6 @@ class AppStrings {
       : 'Image saved locally. It will sync when cloud is ready.';
 
   // ── Hero media ─────────────────────────────────────────────────────────────
-  String get heroMediaTitle => isBn ? 'হিরো মিডিয়া' : 'Hero Media';
   String get heroMediaSubtitle => isBn
       ? 'কাস্টমার মেনু পেজের ফটো ও ভিডিও'
       : 'Photos & video on the customer menu page';
@@ -1353,6 +1262,17 @@ class AppStrings {
   String get belowPar => isBn ? 'পার-এর নিচে' : 'Below par';
   String belowParItems(int count) =>
       isBn ? '${_n(count)} টি আইটেম' : '$count items';
+  // Stock over time (spec §4.7 advanced)
+  String get stockOverTime => isBn ? 'সময়ের সাথে স্টক' : 'Stock over time';
+  String get wholeInventoryHealth =>
+      isBn ? 'সম্পূর্ণ ইনভেন্টরির অবস্থা' : 'Whole-inventory health';
+  String get allMeasures => isBn ? 'সব পরিমাপ' : 'All measures';
+  String get daysOfCover => isBn ? 'কভারের দিন' : 'Days of cover';
+  String get noTrendData => isBn
+      ? 'প্রবণতা দেখানোর মতো যথেষ্ট ইতিহাস এখনও নেই।'
+      : 'Not enough history yet to show a trend.';
+  String get endOfDaySnapshots =>
+      isBn ? 'দিনশেষের স্ন্যাপশট' : 'End-of-day snapshots';
   String get advanced => isBn ? 'অ্যাডভান্সড' : 'Advanced';
   String get advancedSection => isBn ? 'অ্যাডভান্সড' : 'Advanced';
   String get colValue => isBn ? 'মূল্য' : 'VALUE';
@@ -1394,16 +1314,6 @@ class AppStrings {
       ? 'AI স্ক্যান থেকে পরিমাণ বসানো হয়েছে'
       : 'AI scan filled matching counts';
   String get dailyReport => isBn ? 'দৈনিক রিপোর্ট' : 'Daily report';
-  String get inventorySettings =>
-      isBn ? 'ইনভেন্টরি সেটিংস' : 'Inventory settings';
-  String get inventorySettingsSubtitle => isBn
-      ? 'ভ্যারিয়েন্স ট্র্যাকিং চালু/বন্ধ করুন'
-      : 'Turn variance tracking on or off';
-  String get varianceTracking =>
-      isBn ? 'ভ্যারিয়েন্স ট্র্যাকিং' : 'Variance tracking';
-  String get varianceTrackingHint => isBn
-      ? 'POS বিক্রির সাথে গণনাকৃত ব্যবহারের তুলনা করুন এবং অব্যাখ্যাত ক্ষতি দেখান।'
-      : 'Compare counted usage against POS sales and surface unexplained loss.';
   String get colTodayIn => isBn ? 'আজ ইন' : 'IN TODAY';
   String get colTodayOut => isBn ? 'আজ আউট' : 'OUT TODAY';
   String get usedTodayValue => isBn ? 'আজকের ব্যবহার' : 'Used today';

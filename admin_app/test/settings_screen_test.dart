@@ -6,8 +6,13 @@ import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/core/localization/app_strings.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
 import 'package:local_pos/src/features/settings/settings_screen.dart';
+import 'package:local_pos/src/models/account_role.dart';
 import 'package:local_pos/src/models/server_config.dart';
 
+/// SettingsScreen no longer brings its own Scaffold/scroll view — it's
+/// embedded content now (shared by the mobile Settings tab and the desktop
+/// POS shell), so the test harness provides the scroll container, the same
+/// way MoreScreen's AppScaffold does in the real app.
 Widget _scoped(PosAppController controller, Widget child) {
   return AppScope(
     controller: controller,
@@ -22,7 +27,9 @@ Widget _scoped(PosAppController controller, Widget child) {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: AppTheme.light(),
-      home: child,
+      home: Scaffold(
+        body: SingleChildScrollView(padding: const EdgeInsets.all(12), child: child),
+      ),
     ),
   );
 }
@@ -32,66 +39,27 @@ void main() {
     final en = AppStrings.of(AppLanguage.en);
     final bn = AppStrings.of(AppLanguage.bn);
 
+    expect(en.myRestaurantDetailsGroup, 'My restaurant details');
     expect(en.deviceGroup, 'Device');
-    expect(en.storeGroup, 'Store');
     expect(en.adminGroup, 'Admin');
     expect(en.accountGroup, 'Account');
+    expect(en.settingsTab, 'Settings');
     expect(en.todayLabel, 'Today');
+    expect(bn.myRestaurantDetailsGroup, 'আমার রেস্টুরেন্টের তথ্য');
     expect(bn.deviceGroup, 'ডিভাইস');
-    expect(bn.storeGroup, 'স্টোর');
     expect(bn.adminGroup, 'অ্যাডমিন');
     expect(bn.accountGroup, 'অ্যাকাউন্ট');
+    expect(bn.settingsTab, 'সেটিংস');
     expect(bn.todayLabel, 'আজকে');
   });
 
-  testWidgets('language selector lives in settings', (tester) async {
+  testWidgets('settings shows Facebook chatbot setup row', (tester) async {
     final controller = PosAppController()..language = AppLanguage.en;
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
-    await tester.scrollUntilVisible(
-      find.text('Language'),
-      180,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Language'), findsOneWidget);
-    await tester.tap(find.text('Language'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Choose app display language.'), findsOneWidget);
-    expect(find.text('বাংলা'), findsOneWidget);
-    expect(find.text('English'), findsWidgets);
-
-    controller.dispose();
-  });
-
-  testWidgets('import sales data setting is localized in Bangla', (
-    tester,
-  ) async {
-    final controller = PosAppController()..language = AppLanguage.bn;
-
-    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
-
-    expect(find.text('বিক্রির ডাটা ইমপোর্ট'), findsOneWidget);
-    expect(
-      find.text('পুরনো POS থেকে CSV এক্সপোর্ট আপলোড করুন।'),
-      findsOneWidget,
-    );
-    expect(find.text('Import Sales Data'), findsNothing);
-
-    controller.dispose();
-  });
-
-  testWidgets('settings shows Facebook chatbot setup with its logo', (
-    tester,
-  ) async {
-    final controller = PosAppController()..language = AppLanguage.en;
-
-    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
-
-    expect(find.text('ChatBot'), findsOneWidget);
-    expect(find.byIcon(Icons.facebook), findsOneWidget);
+    expect(find.text('Facebook Messenger bot'), findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
     expect(
       find.text(
         'Answer menu questions and take delivery orders from Messenger.',
@@ -108,6 +76,12 @@ void main() {
     final controller = PosAppController()..language = AppLanguage.en;
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+    await tester.scrollUntilVisible(
+      find.text('Connect Printer'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Connect Printer'));
     await tester.pumpAndSettle();
 
@@ -119,47 +93,95 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('manager settings follow the requested visible order', (
-    tester,
-  ) async {
-    final controller = PosAppController()
-      ..language = AppLanguage.en
-      ..demoManagerLoginEnabled = true;
+  testWidgets(
+    'manager settings follow the requested visible order, '
+    'with restaurant identity fields up top and no Restaurant/Restaurant '
+    'Details detour',
+    (tester) async {
+      final controller = PosAppController()
+        ..language = AppLanguage.en
+        ..demoManagerLoginEnabled = true;
 
-    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+      await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
-    const expected = [
-      'ChatBot',
-      'Connect Printer',
-      'Language',
-      'All QR Codes',
-      'Hero Media',
-      'Website Theme',
-      'Restaurant Details',
-      'Reports',
-      'Employee Account Management',
-      'Import Sales Data',
-      'Set Table Numbers',
-      'About Us',
-      'Privacy Policy',
-      'Log Out',
-    ];
-    final textValues = tester
-        .widgetList<Text>(find.byType(Text))
-        .map((widget) => widget.data)
-        .whereType<String>()
-        .toList(growable: false);
-    final positions = [for (final label in expected) textValues.indexOf(label)];
+      const expected = [
+        'Name',
+        'Restaurant name',
+        'Restaurant phone',
+        'Website URL',
+        'Restaurant Logo',
+        'Set Table Numbers',
+        'All QR Codes',
+        'Website image/video',
+        'Website Theme',
+        'ChatBot',
+        'Connect Printer',
+        'Reports',
+        'About Us',
+        'Privacy Policy',
+        'Log Out',
+      ];
+      final textValues = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((widget) => widget.data)
+          .whereType<String>()
+          .toList(growable: false);
+      final positions = [
+        for (final label in expected) textValues.indexOf(label),
+      ];
 
-    expect(positions, everyElement(greaterThanOrEqualTo(0)));
-    expect(positions, orderedEquals([...positions]..sort()));
-    expect(find.text('Inventory settings'), findsNothing);
-    expect(find.text('Display Size'), findsNothing);
-    expect(find.text('Wipe restaurant data'), findsNothing);
-    expect(find.text('Diagnostics'), findsNothing);
+      expect(positions, everyElement(greaterThanOrEqualTo(0)));
+      expect(positions, orderedEquals([...positions]..sort()));
+      // The old "Restaurant Details" sub-page and the deferred "Restaurant"
+      // entry are both gone — their fields live in the flat list above now.
+      expect(find.text('Restaurant Details'), findsNothing);
+      expect(find.text('Employee Account Management'), findsNothing);
+      expect(find.text('Inventory settings'), findsNothing);
+      expect(find.text('Display Size'), findsNothing);
+      expect(find.text('Wipe restaurant data'), findsNothing);
+      expect(find.text('Diagnostics'), findsNothing);
 
-    controller.dispose();
-  });
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'tapping a restaurant identity row opens a bottom sheet, not a page',
+    (tester) async {
+      final controller = PosAppController()
+        ..language = AppLanguage.en
+        ..serverConfig = ServerConfig(
+          serverId: 'server-1',
+          restaurantId: 'restaurant-1',
+          outletId: 'outlet-1',
+          restaurantName: 'Cafe One',
+          outletName: 'Cafe One',
+        );
+
+      await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+      await tester.tap(find.text('Restaurant name'));
+      await tester.pumpAndSettle();
+
+      // A bottom sheet (not a pushed AppScaffold page) with the current
+      // value pre-filled and a Save action.
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Cafe One'), findsOneWidget);
+      expect(find.text('Save'), findsOneWidget);
+      // No back button / new page chrome — the underlying settings list is
+      // still in the tree behind the sheet.
+      expect(find.text('Restaurant Logo'), findsOneWidget);
+
+      // Clearing the field and saving surfaces the required-field validator
+      // without ever leaving the sheet or hitting the network.
+      await tester.enterText(find.widgetWithText(TextField, 'Cafe One'), '');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Required'), findsOneWidget);
+      expect(find.byType(BottomSheet), findsOneWidget);
+
+      controller.dispose();
+    },
+  );
 
   testWidgets('about us and privacy policy use Terafoods copy', (tester) async {
     final controller = PosAppController()..language = AppLanguage.en;
@@ -206,49 +228,10 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets(
-    'restaurant details hides account identity and duplicate heading',
-    (tester) async {
-      final controller = PosAppController()
-        ..language = AppLanguage.en
-        ..serverConfig = ServerConfig(
-          serverId: 'server-1',
-          restaurantId: 'restaurant-1',
-          outletId: 'outlet-1',
-          restaurantName: 'Cafe One',
-          outletName: 'Cafe One',
-        );
-
-      await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
-      await tester.scrollUntilVisible(
-        find.text('Restaurant Details'),
-        180,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.ensureVisible(find.text('Restaurant Details'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Restaurant Details'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Your Restaurant Info'), findsOneWidget);
-      expect(find.text('Account Identity'), findsNothing);
-      expect(find.text('Restaurant name'), findsOneWidget);
-
-      controller.dispose();
-    },
-  );
-
   testWidgets('reports page exposes a top-left back button', (tester) async {
     final controller = PosAppController()..language = AppLanguage.en;
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
-    await tester.scrollUntilVisible(
-      find.text('Reports'),
-      180,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(find.text('Reports'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Reports'));
     await tester.pumpAndSettle();
 
@@ -279,6 +262,27 @@ void main() {
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
     expect(find.text('Wipe restaurant data'), findsNothing);
+
+    controller.dispose();
+  });
+
+  testWidgets('staff (non-manager) settings keep the reduced set, no '
+      'restaurant identity fields', (tester) async {
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..setAccountRoleDemo(AccountRole.waiter);
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+
+    expect(find.text('Restaurant name'), findsNothing);
+    expect(find.text('Website URL'), findsNothing);
+    expect(find.text('Connect Printer'), findsOneWidget);
+    expect(find.text('All QR Codes'), findsOneWidget);
+    expect(find.text('About Us'), findsOneWidget);
+    expect(find.text('Log Out'), findsOneWidget);
+    // Language now lives only in More's own inline toggle, not duplicated
+    // here.
+    expect(find.text('Language'), findsNothing);
 
     controller.dispose();
   });

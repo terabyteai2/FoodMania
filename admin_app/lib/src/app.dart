@@ -23,7 +23,6 @@ import 'features/orders/orders_screen.dart';
 import 'features/onboarding/subscription_screen.dart';
 import 'features/auth/staff_invite_screen.dart';
 import 'features/setup/tenant_setup_screen.dart';
-import 'features/settings/settings_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
 import 'features/system/admin_blocking_notice_screen.dart';
 import 'features/tables/tables_screen.dart';
@@ -88,7 +87,6 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
       child: ListenableBuilder(
         listenable: _controller,
         builder: (context, _) {
-          final uiScale = _controller.uiScale;
           final text = _controller.strings;
           final tone = _resolveTone(_controller.themePreference);
           PosColors.setTone(tone);
@@ -106,7 +104,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              theme: AppTheme.light(uiScale: uiScale),
+              theme: AppTheme.light(),
               themeMode: ThemeMode.light,
               builder: (context, child) {
                 final mediaQuery = MediaQuery.of(context);
@@ -325,10 +323,10 @@ class _MainShellState extends State<MainShell> {
         Icons.grid_on_rounded,
       ),
       _AppTab.more => _Destination(
-        text.moreTab,
-        text.moreTab,
-        Icons.more_horiz_rounded,
-        Icons.more_horiz_rounded,
+        text.settingsTab,
+        text.settingsTab,
+        Icons.settings_outlined,
+        Icons.settings_rounded,
       ),
     };
   }
@@ -373,6 +371,7 @@ class _MainShellState extends State<MainShell> {
       (_) => MoreScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
+        receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
       ),
     ];
 
@@ -480,22 +479,15 @@ class _MainShellState extends State<MainShell> {
         );
         return;
       case PosNotificationTarget.receiptPrinter:
+        // Settings (incl. receipt printer) is now embedded in the Settings
+        // tab (formerly "More") rather than a pushed page — select the tab
+        // and bump the request counter to auto-open the printer sub-page.
+        // _selectTab's own setState picks up the incremented value below.
         _receiptPrinterOpenRequest++;
-        _pushScreen(
-          SettingsScreen(
-            onNavigateToOrders: () => _selectTab(_AppTab.orders),
-            onNavigateToTarget: _navigateNotificationTarget,
-            receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
-          ),
-        );
+        _selectTab(_AppTab.more);
         return;
       case PosNotificationTarget.settings:
-        _pushScreen(
-          SettingsScreen(
-            onNavigateToOrders: () => _selectTab(_AppTab.orders),
-            onNavigateToTarget: _navigateNotificationTarget,
-          ),
-        );
+        _selectTab(_AppTab.more);
         return;
       case PosNotificationTarget.messages:
         // Chatbot-escalation notifications route to the Messages inbox (mgr+).

@@ -6,6 +6,7 @@ class ServerConfig {
     required this.restaurantName,
     required this.outletName,
     this.publicSlug = '',
+    this.outletPhone = '',
     this.tableCount = 10,
     this.customerMenuTheme = 'sultans_hearth',
     this.deliveryCharge = 0,
@@ -18,6 +19,9 @@ class ServerConfig {
   final String restaurantName;
   final String outletName;
   final String publicSlug;
+  // Restaurant contact phone (Outlet.phone on the backend) — distinct from the
+  // account holder's own phone. Empty string = "not configured" (null-safe invariant).
+  final String outletPhone;
   final int tableCount;
   final String customerMenuTheme;
   final double deliveryCharge;
@@ -30,6 +34,7 @@ class ServerConfig {
     String? restaurantName,
     String? outletName,
     String? publicSlug,
+    String? outletPhone,
     int? tableCount,
     String? customerMenuTheme,
     double? deliveryCharge,
@@ -42,6 +47,7 @@ class ServerConfig {
       restaurantName: restaurantName ?? this.restaurantName,
       outletName: outletName ?? this.outletName,
       publicSlug: publicSlug ?? this.publicSlug,
+      outletPhone: outletPhone ?? this.outletPhone,
       tableCount: tableCount ?? this.tableCount,
       customerMenuTheme: customerMenuTheme ?? this.customerMenuTheme,
       deliveryCharge: deliveryCharge ?? this.deliveryCharge,

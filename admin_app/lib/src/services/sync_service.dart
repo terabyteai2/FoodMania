@@ -402,9 +402,6 @@ class SyncService {
       case 'order_items':
         await _cloudApi.pushOrderItems(_orderFromPayload(payload));
         return;
-      case 'server_config':
-        await _cloudApi.registerDevice();
-        return;
       case 'pos_settings':
         await _cloudApi.pushDesktopPosSettings(payload);
         return;

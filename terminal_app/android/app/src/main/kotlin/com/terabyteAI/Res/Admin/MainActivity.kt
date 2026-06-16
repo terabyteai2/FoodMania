@@ -31,9 +31,8 @@ import com.facebook.FacebookSdk
 import com.facebook.login.LoginBehavior
 import com.facebook.login.LoginManager
 import com.facebook.login.LoginResult
-import com.sunmi.peripheral.printer.InnerPrinterCallback
-import com.sunmi.peripheral.printer.InnerPrinterManager
-import com.sunmi.peripheral.printer.SunmiPrinterService
+import android.content.ServiceConnection
+import woyou.aidlservice.jiuiv5.IWoyouService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -96,17 +95,24 @@ class MainActivity : FlutterActivity() {
     private var sunmiRebindScheduled = false
     private var destroyed = false
     private val mainHandler = Handler(Looper.getMainLooper())
-    @Volatile private var sunmiPrinterService: SunmiPrinterService? = null
+    @Volatile private var sunmiPrinterService: IWoyouService? = null
 
-    private val sunmiPrinterCallback = object : InnerPrinterCallback() {
-        override fun onConnected(service: SunmiPrinterService) {
-            sunmiPrinterService = service
-            sunmiBinding = false
-            sunmiBound = true
-            printerLog("SUNMI service connected hasPrinter=${hasSunmiPrinter()}")
+    private val sunmiServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: android.content.ComponentName, binder: android.os.IBinder) {
+            try {
+                sunmiPrinterService = IWoyouService.Stub.asInterface(binder)
+                sunmiBinding = false
+                sunmiBound = true
+                printerLog("SUNMI service connected")
+            } catch (error: Exception) {
+                sunmiPrinterService = null
+                sunmiBinding = false
+                sunmiBound = false
+                printerLog("SUNMI asInterface failed", error)
+            }
         }
 
-        override fun onDisconnected() {
+        override fun onServiceDisconnected(name: android.content.ComponentName) {
             sunmiPrinterService = null
             sunmiBinding = false
             sunmiBound = false
@@ -415,8 +421,7 @@ class MainActivity : FlutterActivity() {
         mainHandler.removeCallbacksAndMessages(null)
         if (sunmiBound || sunmiBinding) {
             try {
-                InnerPrinterManager.getInstance()
-                    .unBindService(applicationContext, sunmiPrinterCallback)
+                unbindService(sunmiServiceConnection)
             } catch (error: Exception) {
                 printerLog("SUNMI unbind failed", error)
             }
@@ -436,8 +441,11 @@ class MainActivity : FlutterActivity() {
         }
         return try {
             sunmiBinding = true
-            val requested = InnerPrinterManager.getInstance()
-                .bindService(applicationContext, sunmiPrinterCallback)
+            val intent = Intent().apply {
+                action = "woyou.aidlservice.jiuiv5.IWoyouService"
+                setPackage("woyou.aidlservice.jiuiv5")
+            }
+            val requested = bindService(intent, sunmiServiceConnection, Context.BIND_AUTO_CREATE)
             sunmiBound = requested
             sunmiBinding = requested
             printerLog("SUNMI bind requested=$requested")
@@ -461,18 +469,9 @@ class MainActivity : FlutterActivity() {
 
     private fun hasSunmiPrinter(): Boolean {
         ensureSunmiPrinterBound()
-        val service = sunmiPrinterService ?: run {
-            printerLog("SUNMI hasPrinter=false service=disconnected")
-            return false
-        }
-        return try {
-            val available = InnerPrinterManager.getInstance().hasPrinter(service)
-            printerLog("SUNMI hasPrinter=$available service=connected")
-            available
-        } catch (error: Exception) {
-            printerLog("SUNMI hasPrinter failed", error)
-            false
-        }
+        val connected = sunmiPrinterService != null
+        printerLog("SUNMI hasPrinter=$connected service=${if (connected) "connected" else "disconnected"}")
+        return connected
     }
 
     private fun printSunmiPrinterBytes(bytes: ByteArray): Boolean {
@@ -489,6 +488,9 @@ class MainActivity : FlutterActivity() {
             service.sendRAWData(bytes, null)
             printerLog("SUNMI printBytes submitted bytes=${bytes.size}")
             true
+        } catch (error: android.os.RemoteException) {
+            printerLog("SUNMI printBytes failed bytes=${bytes.size}", error)
+            false
         } catch (error: Exception) {
             printerLog("SUNMI printBytes failed bytes=${bytes.size}", error)
             false

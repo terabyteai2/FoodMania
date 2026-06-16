@@ -52,6 +52,9 @@ class Outlet(Base):
     pos_daily_sales_target: Mapped[float | None] = mapped_column(
         Numeric(10, 2), nullable=True
     )
+    # Restaurant contact phone shown to customers; nullable, not OTP-validated, not
+    # unique — distinct from AdminAccount.phone (the account holder's own login phone).
+    phone: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="outlets")

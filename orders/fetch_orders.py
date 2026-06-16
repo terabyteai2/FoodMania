@@ -8,7 +8,7 @@ SSL_CTX = ssl.create_default_context()
 
 BASE_URL = ("https://restrogreen.quicklyservices.com/sales/order?page={}&paymentModeId=0&appUserId=0"
             "&orderStatusId=&serviceType=&discountType=&search_text="
-            "&startDate=01%2F06%2F2026+&endDate=+15%2F06%2F2026"
+            "&startDate=01%2F01%2F2023+&endDate=+16%2F06%2F2026"
             "&shiftIds=&terminalIds=&outletId=0&selectedDeliveryService=")
 
 HEADERS = {
@@ -17,7 +17,7 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://restrogreen.quicklyservices.com/sales/order",
-    "Cookie": "_ga_H552KMV4HY=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; _ga=GA1.1.1339033776.1781087525; _ga_7TLVG33KDY=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; _ga_7QM96ZWJ26=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; _ga_R9LS46HJ70=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; _ga_XL443ZG4J5=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; _ga_NKCRY9EMNH=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; _ga_1XXLF0BDKL=GS2.1.s1781087524$o1$g1$t1781087536$j48$l0$h0; XSRF-TOKEN=eyJpdiI6InRZRHVSR1ZhNVVkdjN6YjByaU9lNnc9PSIsInZhbHVlIjoiUHltd2NaVWJuZEdUdFpBSzhISVpCcnJKemxzOTlubXhOSkR2M0VxRlRGYVJuWUNPVFRsVFRIQldtaHdjREEzWWZEU0NHNnhocUdZR2p6Z211RHNIQitCelEveG5iYnhFWnhpQmZ2OGdMQi9acWVoSTc5YTM1QUpFWGhhbmVUN2IiLCJtYWMiOiIyYTUyYmJjODgwZGE2MmFiY2FkMzk2NmRmYjQwNDM4ZTdjOGI1MTkyZGM0NzRjM2JjOTZiOGM2OWY2ZmEyZTA4IiwidGFnIjoiIn0%3D; restaurant_session=eyJpdiI6InFWTUh3Ukc2M05pOURxa2IrRElFbVE9PSIsInZhbHVlIjoiOWJ1d3JLNFJ2Tk9qR3JPdXFnczZBdXovT2V3ZWV6UXpvdnlPdEN3QkVnVzI1SytXTWZ6N2Rwczl2bkczY0pmcTNxN1NGbktVVjFHeWRuT0ZKN3UrOXdlOXFXanUxY0FLUlJpNGdieHpvbmtXN0ZqejNVL1NpdjkzOEdCb3R2U28iLCJtYWMiOiIwZjkyZTc5YWJiYjc5ZjliZmI5ZTgwNGE1OTNmOTM2ZmMyY2Y1NTRkMDNjYTZmYmU5YWRiMDAxMWIxZjFhZDNkIiwidGFnIjoiIn0%3D; _ga_SBRBMK34SQ=GS2.1.s1781503806$o4$g1$t1781504011$j15$l0$h0",
+    "Cookie": "XSRF-TOKEN=eyJpdiI6ImVNV1JSWmR6djZiMUZBcEtUaW4rQVE9PSIsInZhbHVlIjoiQ0xTRk02eTN2V3daNnRjdXhCNXdXNlNvTC8rdmYrMjN5WTRVTjNJTkd1QXpjajRXMU91eEZnaU9uN25sRkRnUGQ4YXh1bUtpcnljYjdTVjBLUTVZVEhqdWtWVDZLd3FIT2tHS1QrdUdIclp0SWFNUHFRZG9Od1pzNFYrM01sOTgiLCJtYWMiOiI1ZTM5OGMwNmNlODcyY2UyYmFmN2JiOTMyODFiYzRhYTY4YzU5OWRlODk5OTRhMTgxOTg4MjcxMDJjZjUwZmRlIiwidGFnIjoiIn0%3D; restaurant_session=eyJpdiI6InIvSHZqNWJEZ3c2MzdkRFV5b1pHd3c9PSIsInZhbHVlIjoiaDE5Ym1ZRGhtVVZqcHdnQlNraXVPdFBuaWVaU3YwWHQwM0FKak16VDhGUWVDYkdTOWUxMVQrdTlaUXNncnFxV2VNd05JSkdHVW81emZscTZybkJ0eHhFNGd6ODZUdEtVMzJOVUowTHRjVzNsVmp4NllJbzRUam5MUk44Tjh1SkwiLCJtYWMiOiJmNjI0YmMxYmJiY2ZhMDA1OWQxYzRmN2NiMzU0MzQwNWZmNGQ0YTFkMGQ3MDMwNmE2YzRiYWViZTAzNGUzNzZlIiwidGFnIjoiIn0%3D",
     "Upgrade-Insecure-Requests": "1",
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
@@ -168,14 +168,17 @@ def parse_orders(html: str) -> list[dict]:
 
 def main():
     all_orders = []
-    total_pages = 8
+    page = 1
 
-    for page in range(1, total_pages + 1):
-        print(f"Fetching page {page}/{total_pages}...", file=sys.stderr)
+    while True:
+        print(f"Fetching page {page}...", file=sys.stderr)
         html = fetch_page(page)
         orders = parse_orders(html)
+        if not orders:
+            break
         print(f"  Found {len(orders)} orders", file=sys.stderr)
         all_orders.extend(orders)
+        page += 1
 
     csv_path = "/home/dev/Documents/GitHub/FoodMania/orders/orders.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:

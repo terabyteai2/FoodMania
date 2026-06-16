@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,14 +9,10 @@ import 'dart:convert';
 
 import '../../app_controller.dart';
 import '../../app_scope.dart';
-import 'ordering_settings_screen.dart';
-import '../../core/enums/business_tier.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/tf_design_system.dart';
-import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/facebook_chatbot_config.dart';
 import '../../models/pos_notification.dart';
 import 'package:image_picker/image_picker.dart';
@@ -47,52 +42,17 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final GlobalKey<FormState> _restaurantInfoFormKey = GlobalKey<FormState>();
-  final TextEditingController _restaurantController = TextEditingController();
-  final TextEditingController _publicSlugController = TextEditingController();
-  final TextEditingController _cloudUrlController = TextEditingController();
-  final TextEditingController _restaurantIdController = TextEditingController();
-  final TextEditingController _outletIdController = TextEditingController();
-  final TextEditingController _syncIntervalController = TextEditingController();
-  final TextEditingController _infoTitleController = TextEditingController();
-  final TextEditingController _infoPhoneController = TextEditingController();
-  final TextEditingController _infoEmailController = TextEditingController();
-  final TextEditingController _infoAddressController = TextEditingController();
-  final TextEditingController _infoWebsiteController = TextEditingController();
-  final TextEditingController _infoDescriptionController =
-      TextEditingController();
   final TextEditingController _settingsSearchController =
       TextEditingController();
   final MenuImageService _imageService = MenuImageService();
   bool _savingLogo = false;
-  Timer? _autoSaveDebounce;
-  bool _cloudSyncEnabled = false;
-  bool _importingOrderHistory = false;
-  double _displayScale = 1.0;
   bool _hydrated = false;
   int _handledReceiptPrinterOpenRequest = 0;
-
-  bool get _showDeferredSettings => true;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_hydrated) return;
-    final app = AppScope.of(context);
-    _restaurantController.text = app.serverConfig.restaurantName;
-    _publicSlugController.text = app.serverConfig.publicSlug;
-    _cloudUrlController.text = app.cloudConfig.baseUrl;
-    _restaurantIdController.text = app.serverConfig.restaurantId;
-    _outletIdController.text = app.serverConfig.outletId;
-    _syncIntervalController.text = app.cloudConfig.autoSyncIntervalSeconds
-        .toString();
-    _cloudSyncEnabled = app.cloudConfig.enabled;
-    _displayScale = app.uiScale;
-    _restaurantController.addListener(_scheduleAutoSave);
-    _cloudUrlController.addListener(_scheduleAutoSave);
-    _outletIdController.addListener(_scheduleAutoSave);
-    _syncIntervalController.addListener(_scheduleAutoSave);
     _hydrated = true;
     _openRequestedReceiptPrinterIfNeeded();
   }
@@ -118,19 +78,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _autoSaveDebounce?.cancel();
-    _restaurantController.dispose();
-    _publicSlugController.dispose();
-    _cloudUrlController.dispose();
-    _restaurantIdController.dispose();
-    _outletIdController.dispose();
-    _syncIntervalController.dispose();
-    _infoTitleController.dispose();
-    _infoPhoneController.dispose();
-    _infoEmailController.dispose();
-    _infoAddressController.dispose();
-    _infoWebsiteController.dispose();
-    _infoDescriptionController.dispose();
     _settingsSearchController.dispose();
     super.dispose();
   }
@@ -143,6 +90,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Staff users get a minimal settings list; managers get the full set.
     final groups = app.isManager
         ? [
+            _SettingsGroupData(
+              label: text.myRestaurantDetailsGroup,
+              items: [
+                _SettingActionData(
+                  title: text.accountHolderName,
+                  subtitle: text.accountHolderNameSubtitle,
+                  icon: Icons.person_outline_rounded,
+                  trailing: app.accountDisplayName.trim().isEmpty
+                      ? text.setUpLabel
+                      : app.accountDisplayName,
+                  onTap: () => _editAccountHolderName(app, text),
+                ),
+                _SettingActionData(
+                  title: text.restaurantName,
+                  subtitle: text.restaurantNameFieldSubtitle,
+                  icon: Icons.storefront_outlined,
+                  trailing: app.serverConfig.restaurantName.trim().isEmpty
+                      ? text.setUpLabel
+                      : app.serverConfig.restaurantName,
+                  onTap: () => _editRestaurantName(app, text),
+                ),
+                _SettingActionData(
+                  title: text.restaurantPhoneLabel,
+                  subtitle: text.restaurantPhoneSubtitle,
+                  icon: Icons.call_outlined,
+                  trailing: app.serverConfig.outletPhone.trim().isEmpty
+                      ? text.setUpLabel
+                      : app.serverConfig.outletPhone,
+                  onTap: () => _editRestaurantPhone(app, text),
+                ),
+                _SettingActionData(
+                  title: text.websiteUrlLabel,
+                  subtitle: text.websiteUrlSubtitle,
+                  icon: Icons.link_rounded,
+                  trailing: app.serverConfig.publicSlug.trim().isEmpty
+                      ? text.setUpLabel
+                      : '${app.serverConfig.publicSlug}.quickbytes.buzz',
+                  onTap: () => _editWebsiteUrl(app, text),
+                ),
+                _SettingActionData(
+                  title: text.heroLogoTitle,
+                  subtitle: text.heroLogoSubtitle,
+                  icon: Icons.image_outlined,
+                  trailing: _savingLogo
+                      ? (text.isBn ? 'আপলোড হচ্ছে...' : 'Uploading...')
+                      : null,
+                  onTap: _savingLogo ? null : _openRestaurantLogoUpload,
+                ),
+                _SettingActionData(
+                  title: text.settingsSetTableNumbers,
+                  subtitle: text.tablesSubtitle,
+                  icon: Icons.table_restaurant_outlined,
+                  trailing: text.tableCountLabel(app.serverConfig.tableCount),
+                  onTap: _openTableSettings,
+                ),
+                _SettingActionData(
+                  title: text.settingsAllQrCodes,
+                  subtitle: text.tableQrSubtitle,
+                  icon: Icons.qr_code_rounded,
+                  onTap: _openQrCodes,
+                ),
+                _SettingActionData(
+                  title: text.websiteImageVideoTitle,
+                  subtitle: text.heroMediaSubtitle,
+                  icon: Icons.photo_library_outlined,
+                  onTap: _openHeroMedia,
+                ),
+                _SettingActionData(
+                  title: text.settingsWebsiteTheme,
+                  subtitle: text.customerMenuThemeSubtitle,
+                  icon: Icons.palette_outlined,
+                  trailing: resolveCustomerMenuTheme(
+                    app.serverConfig.customerMenuTheme,
+                  ).displayName(isBn: text.isBn),
+                  onTap: _openCustomerMenuTheme,
+                ),
+              ],
+            ),
             _SettingsGroupData(
               label: text.deviceGroup,
               items: [
@@ -163,72 +188,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : text.connect,
                   onTap: _openReceiptPrinter,
                 ),
-                _SettingActionData(
-                  title: text.orderingSettings,
-                  subtitle: text.orderingSettingsSubtitle,
-                  icon: Icons.receipt_long_outlined,
-                  onTap: _openOrderingSettings,
-                ),
-                _SettingActionData(
-                  title: text.liveDiagnostics,
-                  subtitle: text.liveDiagnosticsSubtitle,
-                  icon: Icons.monitor_heart_outlined,
-                  onTap: _openLiveDiagnostics,
-                ),
-                _SettingActionData(
-                  title: text.languageLabel,
-                  subtitle: text.languageSubtitle,
-                  icon: Icons.translate_rounded,
-                  trailing: app.language.label,
-                  onTap: _openLanguageSettings,
-                ),
-                _SettingActionData(
-                  title: text.settingsAllQrCodes,
-                  subtitle: text.tableQrSubtitle,
-                  icon: Icons.qr_code_rounded,
-                  onTap: _openQrCodes,
-                ),
-              ],
-            ),
-            _SettingsGroupData(
-              label: text.storeGroup,
-              items: [
-                _SettingActionData(
-                  title: text.heroMediaTitle,
-                  subtitle: text.heroMediaSubtitle,
-                  icon: Icons.photo_library_outlined,
-                  onTap: _openHeroMedia,
-                ),
-                _SettingActionData(
-                  title: text.heroLogoTitle,
-                  subtitle: text.heroLogoSubtitle,
-                  icon: Icons.storefront_outlined,
-                  trailing: _savingLogo
-                      ? (text.isBn ? 'আপলোড হচ্ছে...' : 'Uploading...')
-                      : null,
-                  onTap: _savingLogo ? null : _openRestaurantLogoUpload,
-                ),
-                _SettingActionData(
-                  title: text.settingsWebsiteTheme,
-                  subtitle: text.customerMenuThemeSubtitle,
-                  icon: Icons.palette_outlined,
-                  trailing: resolveCustomerMenuTheme(
-                    app.serverConfig.customerMenuTheme,
-                  ).displayName(isBn: text.isBn),
-                  onTap: _openCustomerMenuTheme,
-                ),
-                _SettingActionData(
-                  title: text.settingsRestaurantDetails,
-                  subtitle: text.yourRestaurantInfoSubtitle,
-                  icon: Icons.business_outlined,
-                  onTap: _openYourRestaurantInfo,
-                ),
-                _SettingActionData(
-                  title: 'Business Mode',
-                  subtitle: app.businessTier.displayName,
-                  icon: _tierIcon(app.businessTier),
-                  onTap: () => _showBusinessModeSelector(context, app),
-                ),
               ],
             ),
             _SettingsGroupData(
@@ -239,28 +198,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: text.reportsSubtitle,
                   icon: Icons.assessment_outlined,
                   onTap: _openReports,
-                ),
-                _SettingActionData(
-                  title: text.settingsEmployeeAccountManagement,
-                  subtitle: text.staffAccountsSubtitle,
-                  icon: Icons.groups_2_outlined,
-                  onTap: _openStaffAccounts,
-                ),
-                _SettingActionData(
-                  title: text.settingsImportSellsData,
-                  subtitle: text.importOrderHistorySubtitle,
-                  icon: Icons.upload_file_outlined,
-                  trailing: _importingOrderHistory
-                      ? text.importOrderHistoryLoading
-                      : text.importOrderHistoryCsv,
-                  onTap: _importingOrderHistory ? null : _importOrderHistory,
-                ),
-                _SettingActionData(
-                  title: text.settingsSetTableNumbers,
-                  subtitle: text.tablesSubtitle,
-                  icon: Icons.table_restaurant_outlined,
-                  trailing: text.tableCountLabel(app.serverConfig.tableCount),
-                  onTap: _openTableSettings,
                 ),
               ],
             ),
@@ -290,39 +227,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _confirmLogout,
                   danger: true,
                 ),
-                if (_showDeferredSettings) ...[
-                  _SettingActionData(
-                    title: text.restaurantSection,
-                    subtitle: text.restaurantSubtitle,
-                    icon: Icons.storefront_outlined,
-                    trailing: app.serverConfig.restaurantName.trim().isEmpty
-                        ? 'Setup'
-                        : app.serverConfig.restaurantName,
-                    onTap: _openRestaurantInfo,
-                  ),
-                  _SettingActionData(
-                    title: text.inventorySettings,
-                    subtitle: text.inventorySettingsSubtitle,
-                    icon: Icons.inventory_2_outlined,
-                    trailing: app.varianceTrackingEnabled
-                        ? (text.isBn ? 'চালু' : 'On')
-                        : (text.isBn ? 'বন্ধ' : 'Off'),
-                    onTap: _openInventorySettings,
-                  ),
-                  _SettingActionData(
-                    title: text.displaySize,
-                    subtitle: app.uiScaleLabel,
-                    icon: Icons.tune_rounded,
-                    onTap: _openDisplaySettings,
-                  ),
-                  _SettingActionData(
-                    title: text.wipeRestaurantData,
-                    subtitle: text.wipeRestaurantDataSubtitle,
-                    icon: Icons.delete_forever_rounded,
-                    onTap: _confirmWipeRestaurant,
-                    danger: true,
-                  ),
-                ],
               ],
             ),
           ]
@@ -339,13 +243,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? text.connected
                       : text.connect,
                   onTap: _openReceiptPrinter,
-                ),
-                _SettingActionData(
-                  title: text.languageLabel,
-                  subtitle: text.languageSubtitle,
-                  icon: Icons.translate_rounded,
-                  trailing: app.language.label,
-                  onTap: _openLanguageSettings,
                 ),
               ],
             ),
@@ -389,60 +286,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .where((group) => group.items.isNotEmpty)
         .toList(growable: false);
 
-    return Scaffold(
-      backgroundColor: PosColors.background,
-      body: SafeArea(
-        child: CustomScrollView(
-          physics: BouncingScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(12, 14, 12, 18),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TfGlobalTopBar(
-                      title: text.settings,
-                      subtitle: text.isBn
-                          ? 'সেটিংস · v2.2.1'
-                          : 'Settings · v2.2.1',
-                      onNavigateToOrders: widget.onNavigateToOrders,
-                      onNavigateToTarget: widget.onNavigateToTarget,
-                    ),
-                    SizedBox(height: 14),
-                    TfSearchField(
-                      controller: _settingsSearchController,
-                      hintText: text.searchSettingsHint,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    SizedBox(height: 12),
-                    if (visibleGroups.isEmpty)
-                      TfEmptyState(
-                        icon: Icons.search_off_rounded,
-                        title: text.noSettingsFound,
-                        message: text.tryDifferentSearch,
-                      )
-                    else
-                      for (var i = 0; i < visibleGroups.length; i++) ...[
-                        TfSectionHeader(label: visibleGroups[i].label),
-                        SizedBox(height: 7),
-                        _SettingsGroupCard(items: visibleGroups[i].items),
-                        if (i < visibleGroups.length - 1) SizedBox(height: 14),
-                      ],
-                    if (_showDeferredSettings &&
-                        app.demoManagerLoginEnabled) ...[
-                      SizedBox(height: 14),
-                      TfSectionHeader(label: 'Diagnostics'),
-                      SizedBox(height: 7),
-                      _DiagnosticsCard(app: app),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
+    // Embedded directly in MoreScreen (the renamed Settings tab) — no
+    // standalone page/Scaffold of its own, so there's no extra navigation to
+    // get here and no duplicate top bar under More's own AppPageHeader.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TfSearchField(
+          controller: _settingsSearchController,
+          hintText: text.searchSettingsHint,
+          onChanged: (_) => setState(() {}),
         ),
-      ),
+        SizedBox(height: 12),
+        if (visibleGroups.isEmpty)
+          TfEmptyState(
+            icon: Icons.search_off_rounded,
+            title: text.noSettingsFound,
+            message: text.tryDifferentSearch,
+          )
+        else
+          for (var i = 0; i < visibleGroups.length; i++) ...[
+            TfSectionHeader(label: visibleGroups[i].label),
+            SizedBox(height: 7),
+            _SettingsGroupCard(items: visibleGroups[i].items),
+            if (i < visibleGroups.length - 1) SizedBox(height: 14),
+          ],
+        if (app.demoManagerLoginEnabled) ...[
+          SizedBox(height: 14),
+          TfSectionHeader(label: 'Diagnostics'),
+          SizedBox(height: 7),
+          _DiagnosticsCard(app: app),
+        ],
+      ],
     );
   }
 
@@ -455,18 +330,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           initialCount: app.serverConfig.tableCount,
           onSave: (count) => app.updateTableCount(count),
           text: text,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openInventorySettings() async {
-    final text = AppScope.of(context).strings;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: text.inventorySettings,
-          child: _InventorySettingsCard(text: text),
         ),
       ),
     );
@@ -506,210 +369,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _openDisplaySettings() async {
+  /// Shared "tap a button, edit one value in a bottom sheet, save, return
+  /// immediately" pattern — modeled on menu_management_screen.dart's
+  /// _DeliveryChargeSheet. Used for the four "My restaurant details" identity
+  /// fields so none of them push a separate page.
+  Future<void> _editSingleField({
+    required String title,
+    required String label,
+    required String initialValue,
+    required String saveLabel,
+    required Future<bool> Function(String value) onSave,
+    String? hint,
+    String? helperText,
+    String? suffixText,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String value)? validator,
+  }) async {
+    final value = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SingleFieldEditSheet(
+        title: title,
+        label: label,
+        initialValue: initialValue,
+        saveLabel: saveLabel,
+        hint: hint,
+        helperText: helperText,
+        suffixText: suffixText,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        validator: validator,
+      ),
+    );
+    if (value == null || !mounted) return;
     final app = AppScope.of(context);
     final text = app.strings;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: text.displaySize,
-          child: StatefulBuilder(
-            builder: (ctx, setLocal) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DisplaySizeCard(
-                    value: _displayScale,
-                    label: AppScope.of(ctx).uiScaleLabel,
-                    text: text,
-                    onChanged: (value) {
-                      setState(() => _displayScale = value);
-                      setLocal(() {});
-                    },
-                    onChangeEnd: _updateDisplayScale,
-                    onPreset: (value) {
-                      setState(() => _displayScale = value);
-                      setLocal(() {});
-                      _updateDisplayScale(value);
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await onSave(value);
+    if (!mounted) return;
+    setState(() {});
+    messenger.showSnackBar(
+      SnackBar(content: TfText(ok ? text.detailsPushed : (app.lastError ?? text.saveFailed))),
     );
   }
 
-  void _showBusinessModeSelector(BuildContext context, PosAppController app) {
-    final selectedTier = app.businessTier;
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-                child: TfText(
-                  'Business Mode',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.slate,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Divider(color: PosColors.lineStrong),
-              for (final tier in BusinessTier.values)
-                InkWell(
-                  onTap: () {
-                    app.setBusinessTier(tier);
-                    Navigator.pop(context);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _tierIcon(tier),
-                          color: PosColors.primaryDark,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TfText(
-                            tier.displayName,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: tier == selectedTier
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: PosColors.slate,
-                            ),
-                          ),
-                        ),
-                        if (tier == selectedTier)
-                          const Icon(
-                            Icons.check_rounded,
-                            color: PosColors.primaryDark,
-                            size: 20,
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
+  Future<void> _editAccountHolderName(PosAppController app, AppStrings text) {
+    return _editSingleField(
+      title: text.accountHolderName,
+      label: text.accountHolderName,
+      initialValue: app.accountDisplayName,
+      saveLabel: text.save,
+      validator: (value) => value.trim().isEmpty ? text.requiredField : null,
+      onSave: (value) => app.updateAccountDisplayName(value),
     );
   }
 
-  IconData _tierIcon(BusinessTier tier) {
-    return switch (tier) {
-      BusinessTier.simple => Icons.storefront_outlined,
-      BusinessTier.standard => Icons.local_cafe_outlined,
-      BusinessTier.advanced => Icons.restaurant_outlined,
-      BusinessTier.enterprise => Icons.account_tree_outlined,
-    };
-  }
-
-  Future<void> _openLanguageSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const _LanguageSettingsPage()),
+  Future<void> _editRestaurantName(PosAppController app, AppStrings text) {
+    return _editSingleField(
+      title: text.restaurantName,
+      label: text.restaurantName,
+      initialValue: app.serverConfig.restaurantName,
+      saveLabel: text.save,
+      validator: (value) => value.trim().isEmpty ? text.requiredField : null,
+      onSave: (value) => app.updateRestaurantProfile(restaurantName: value),
     );
   }
 
-  Future<void> _openRestaurantInfo() async {
-    final text = AppScope.of(context).strings;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: text.restaurantSection,
-          child: Form(
-            key: _formKey,
-            child: _SectionCard(
-              title: text.restaurantSection,
-              subtitle: text.restaurantSubtitle,
-              icon: Icons.storefront_outlined,
-              children: [
-                TextFormField(
-                  controller: _restaurantController,
-                  decoration: InputDecoration(
-                    labelText: text.restaurantName,
-                    prefixIcon: Icon(Icons.restaurant_outlined),
-                  ),
-                  validator: _required,
-                ),
-                SizedBox(height: 10),
-                TextFormField(
-                  controller: _publicSlugController,
-                  decoration: InputDecoration(
-                    labelText: 'Customer URL',
-                    prefixIcon: Icon(Icons.link_rounded),
-                    helperText: 'https://name.quickbytes.buzz',
-                    suffixText: '.quickbytes.buzz',
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
-                    TextInputFormatter.withFunction((oldValue, newValue) {
-                      return newValue.copyWith(
-                        text: newValue.text.toLowerCase(),
-                        selection: newValue.selection,
-                      );
-                    }),
-                  ],
-                ),
-                SizedBox(height: 10),
-                PrimaryButton(
-                  label: 'Save customer URL',
-                  icon: Icons.check_rounded,
-                  busy: AppScope.of(context).busy,
-                  onPressed: AppScope.of(context).busy
-                      ? null
-                      : () => _savePublicUrl(context),
-                ),
-                SizedBox(height: 10),
-                _ResponsiveFields(
-                  children: [
-                    TextFormField(
-                      controller: _restaurantIdController,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: text.restaurantId,
-                        prefixIcon: Icon(Icons.badge_outlined),
-                        helperText: text.restaurantIdHelper,
-                      ),
-                      validator: _required,
-                    ),
-                    TextFormField(
-                      controller: _outletIdController,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: text.outletId,
-                        prefixIcon: Icon(Icons.pin_drop_outlined),
-                        helperText: text.outletIdHelper,
-                      ),
-                      validator: _required,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+  Future<void> _editRestaurantPhone(PosAppController app, AppStrings text) {
+    return _editSingleField(
+      title: text.restaurantPhoneLabel,
+      label: text.restaurantPhoneLabel,
+      initialValue: app.serverConfig.outletPhone,
+      saveLabel: text.save,
+      hint: '01XXXXXXXXX',
+      keyboardType: TextInputType.phone,
+      onSave: (value) => app.updateRestaurantProfile(phone: value),
+    );
+  }
+
+  Future<void> _editWebsiteUrl(PosAppController app, AppStrings text) {
+    return _editSingleField(
+      title: text.websiteUrlLabel,
+      label: text.websiteUrlLabel,
+      initialValue: app.serverConfig.publicSlug,
+      saveLabel: text.save,
+      helperText: 'https://name.quickbytes.buzz',
+      suffixText: '.quickbytes.buzz',
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
+        TextInputFormatter.withFunction((oldValue, newValue) {
+          return newValue.copyWith(
+            text: newValue.text.toLowerCase(),
+            selection: newValue.selection,
+          );
+        }),
+      ],
+      validator: (value) =>
+          value.trim().length < 3 ? text.urlNameTooShort : null,
+      onSave: (value) => app.updatePublicMenuUrl(value),
     );
   }
 
@@ -758,55 +517,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const ReportsScreen()));
   }
 
-  Future<void> _importOrderHistory() async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    try {
-      final picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['csv'],
-        withData: true,
-      );
-      if (picked == null || picked.files.isEmpty || !mounted) return;
-      final file = picked.files.single;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        throw Exception(
-          text.isBn
-              ? 'নির্বাচিত CSV ফাইল পড়া যায়নি।'
-              : 'Could not read the selected CSV file.',
-        );
-      }
-
-      setState(() => _importingOrderHistory = true);
-      final result = await app.importOrderHistoryCsv(
-        bytes: bytes,
-        fileName: file.name,
-      );
-      if (!mounted) return;
-      final skipped = result.duplicateOrders + result.skippedRows;
-      final detail = result.errors.isEmpty ? '' : ' ${result.errors.first}';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: TfText(
-            text.orderHistoryImportSuccess(
-              result.importedOrders,
-              skipped,
-              detail,
-            ),
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: TfText(text.orderHistoryImportFailed(error))),
-      );
-    } finally {
-      if (mounted) setState(() => _importingOrderHistory = false);
-    }
-  }
-
   Future<void> _openReceiptPrinter() async {
     final app = AppScope.of(context);
     final text = app.strings;
@@ -836,36 +546,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _openLiveDiagnostics() async {
-    final app = AppScope.of(context);
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: app.strings.liveDiagnostics,
-          child: _LiveDiagnosticsCard(app: app),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openOrderingSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const OrderingSettingsScreen()),
-    );
-  }
-
-  Future<void> _openStaffAccounts() async {
-    final app = AppScope.of(context);
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: 'Staff accounts',
-          child: _StaffAccountsCard(app: app),
-        ),
-      ),
-    );
-  }
-
   Future<void> _confirmLogout() async {
     final text = AppScope.of(context).strings;
     TfConfirmSheet.show(
@@ -877,114 +557,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         await AppScope.of(context).logOut();
       },
-    );
-  }
-
-  Future<void> _confirmWipeRestaurant() async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final outletId = app.serverConfig.outletId.trim();
-    if (!app.cloudConfig.canSync || outletId.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText(text.wipeRequiresCloud)));
-      return;
-    }
-    final wiped = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) =>
-          _WipeRestaurantDialog(app: app, text: text, outletId: outletId),
-    );
-    if (!mounted || wiped != true) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: TfText(text.wipeRestaurantSuccess)));
-  }
-
-  Future<void> _openYourRestaurantInfo() async {
-    final app = AppScope.of(context);
-    _infoTitleController.text = app.serverConfig.restaurantName;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) {
-          final a = AppScope.of(context);
-          final t = a.strings;
-          return _SettingsSectionPage(
-            title: t.yourRestaurantInfo,
-            child: Form(
-              key: _restaurantInfoFormKey,
-              child: _SectionCard(
-                title: t.yourRestaurantInfo,
-                icon: Icons.business_outlined,
-                showHeader: false,
-                children: [
-                  TextFormField(
-                    controller: _infoTitleController,
-                    decoration: InputDecoration(
-                      labelText: t.restaurantName,
-                      prefixIcon: Icon(Icons.store_mall_directory_outlined),
-                    ),
-                    validator: _required,
-                  ),
-                  SizedBox(height: 10),
-                  _ResponsiveFields(
-                    children: [
-                      TextFormField(
-                        controller: _infoPhoneController,
-                        decoration: InputDecoration(
-                          labelText: t.contactPhone,
-                          prefixIcon: Icon(Icons.phone_outlined),
-                        ),
-                      ),
-                      TextFormField(
-                        controller: _infoEmailController,
-                        decoration: InputDecoration(
-                          labelText: t.contactEmail,
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 10),
-                  TextFormField(
-                    controller: _infoAddressController,
-                    decoration: InputDecoration(
-                      labelText: t.contactAddress,
-                      prefixIcon: Icon(Icons.location_on_outlined),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  TextFormField(
-                    controller: _infoWebsiteController,
-                    decoration: InputDecoration(
-                      labelText: t.website,
-                      prefixIcon: Icon(Icons.language_outlined),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  TextFormField(
-                    controller: _infoDescriptionController,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration: InputDecoration(
-                      labelText: t.description,
-                      alignLabelWithHint: true,
-                      prefixIcon: Icon(Icons.notes_outlined),
-                    ),
-                  ),
-                  SizedBox(height: 14),
-                  TfButton(
-                    label: t.pushToCloud,
-                    icon: Icons.cloud_upload_outlined,
-                    onPressed: _pushRestaurantInfo,
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 
@@ -1010,86 +582,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-  }
-
-  void _scheduleAutoSave() {
-    if (!_hydrated) return;
-    _autoSaveDebounce?.cancel();
-    _autoSaveDebounce = Timer(Duration(milliseconds: 450), _saveSilently);
-  }
-
-  Future<void> _saveSilently() async {
-    if (!mounted) return;
-    if (!_isValidAutoSavePayload()) return;
-    final app = AppScope.of(context);
-    await app.saveSettings(
-      restaurantName: _restaurantController.text,
-      cloudApiUrl: _cloudUrlController.text,
-      restaurantId: _restaurantIdController.text,
-      outletId: _outletIdController.text,
-      cloudSyncEnabled: _cloudSyncEnabled,
-      autoSyncIntervalSeconds: int.parse(_syncIntervalController.text),
-    );
-  }
-
-  Future<void> _pushRestaurantInfo() async {
-    if (!_restaurantInfoFormKey.currentState!.validate()) return;
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final messenger = ScaffoldMessenger.of(context);
-    final ok = await app.pushRestaurantInfo(
-      title: _infoTitleController.text,
-      phone: _infoPhoneController.text,
-      email: _infoEmailController.text,
-      address: _infoAddressController.text,
-      website: _infoWebsiteController.text,
-      description: _infoDescriptionController.text,
-    );
-    if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: TfText(
-          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _savePublicUrl(BuildContext context) async {
-    final app = AppScope.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    final slug = _publicSlugController.text.trim().toLowerCase();
-    if (slug.length < 3) {
-      messenger.showSnackBar(
-        SnackBar(content: TfText('URL name must be at least 3 characters.')),
-      );
-      return;
-    }
-    final ok = await app.updatePublicMenuUrl(slug);
-    if (!mounted) return;
-    _publicSlugController.text = app.serverConfig.publicSlug;
-    messenger.showSnackBar(
-      SnackBar(
-        content: TfText(
-          ok
-              ? 'Customer URL saved: https://${app.serverConfig.publicSlug}.quickbytes.buzz'
-              : app.lastError ?? 'Could not save customer URL.',
-        ),
-      ),
-    );
-    setState(() {});
-  }
-
-  bool _isValidAutoSavePayload() {
-    if (_restaurantController.text.trim().isEmpty) return false;
-    final seconds = int.tryParse(_syncIntervalController.text.trim());
-    if (seconds == null || seconds < 10) return false;
-    return true;
-  }
-
-  Future<void> _updateDisplayScale(double value) async {
-    final app = AppScope.of(context);
-    await app.updateUiScale(value);
   }
 
   Future<void> _refreshPrinters() async {
@@ -1308,12 +800,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return message;
   }
 
-  String? _required(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return AppScope.of(context).strings.requiredField;
-    }
-    return null;
-  }
 }
 
 Widget _settingsCard({
@@ -1492,6 +978,121 @@ class _SettingsSectionPage extends StatelessWidget {
       showBackButton: true,
       child: child,
     );
+  }
+}
+
+/// Single-text-field bottom sheet — edit one value, save, return immediately
+/// (no separate page). Modeled on menu_management_screen.dart's
+/// _DeliveryChargeSheet. Used by the four "My restaurant details" identity
+/// fields (Name, Restaurant Name, Phone, Website URL).
+class _SingleFieldEditSheet extends StatefulWidget {
+  const _SingleFieldEditSheet({
+    required this.title,
+    required this.label,
+    required this.initialValue,
+    required this.saveLabel,
+    this.hint,
+    this.helperText,
+    this.suffixText,
+    this.keyboardType,
+    this.inputFormatters,
+    this.validator,
+  });
+
+  final String title;
+  final String label;
+  final String initialValue;
+  final String saveLabel;
+  final String? hint;
+  final String? helperText;
+  final String? suffixText;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? Function(String value)? validator;
+
+  @override
+  State<_SingleFieldEditSheet> createState() => _SingleFieldEditSheetState();
+}
+
+class _SingleFieldEditSheetState extends State<_SingleFieldEditSheet> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: PosColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.card)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TfText(
+                  widget.title,
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TfField(
+                  label: widget.label,
+                  controller: _controller,
+                  hint: widget.hint,
+                  hintHelper: widget.helperText,
+                  suffix: widget.suffixText != null
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: TfText(
+                            widget.suffixText!,
+                            style: const TextStyle(color: PosColors.muted, fontSize: 13),
+                          ),
+                        )
+                      : null,
+                  keyboardType: widget.keyboardType,
+                  inputFormatters: widget.inputFormatters,
+                  errorText: _error,
+                  autofocus: true,
+                ),
+                const SizedBox(height: 14),
+                TfButton(label: widget.saveLabel, icon: Icons.check_rounded, onPressed: _save),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _save() {
+    final value = _controller.text.trim();
+    final error = widget.validator?.call(value);
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    Navigator.of(context).pop(value);
   }
 }
 
@@ -2038,132 +1639,18 @@ class _FacebookInfoRow extends StatelessWidget {
   }
 }
 
-class _WipeRestaurantDialog extends StatefulWidget {
-  const _WipeRestaurantDialog({
-    required this.app,
-    required this.text,
-    required this.outletId,
-  });
-
-  final PosAppController app;
-  final AppStrings text;
-  final String outletId;
-
-  @override
-  State<_WipeRestaurantDialog> createState() => _WipeRestaurantDialogState();
-}
-
-class _WipeRestaurantDialogState extends State<_WipeRestaurantDialog> {
-  final TextEditingController _controller = TextEditingController();
-  bool _submitting = false;
-  String? _error;
-
-  bool get _matches => _controller.text.trim() == widget.outletId;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _wipe() async {
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    final ok = await widget.app.wipeCurrentRestaurant(
-      confirmation: _controller.text,
-    );
-    if (!mounted) return;
-    if (ok) {
-      Navigator.of(context).pop(true);
-      return;
-    }
-    setState(() {
-      _submitting = false;
-      _error = widget.text.wipeRestaurantFailed(
-        widget.app.lastError ?? widget.text.somethingWentWrong,
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: TfText(widget.text.wipeRestaurantDialogTitle),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TfText(
-              widget.text.wipeRestaurantDialogMessage(widget.outletId),
-              style: const TextStyle(color: PosColors.muted, height: 1.45),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _controller,
-              enabled: !_submitting,
-              decoration: InputDecoration(
-                labelText: widget.text.typeOutletIdToConfirm,
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              TfText(
-                _error!,
-                style: const TextStyle(color: PosColors.danger, fontSize: 12),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        SizedBox(
-          width: 118,
-          child: TfButton(
-            label: widget.text.cancel,
-            variant: TfButtonVariant.paper,
-            fullWidth: true,
-            onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          ),
-        ),
-        SizedBox(
-          width: 150,
-          child: TfButton(
-            label: widget.text.wipeRestaurantConfirm,
-            variant: TfButtonVariant.dark,
-            fullWidth: true,
-            busy: _submitting,
-            onPressed: !_matches || _submitting ? null : _wipe,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
     required this.icon,
     required this.children,
     this.subtitle,
-    this.showHeader = true,
   });
 
   final String title;
   final String? subtitle;
   final IconData icon;
   final List<Widget> children;
-  final bool showHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -2174,7 +1661,7 @@ class _SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (showHeader) ...[
+            ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -2214,220 +1701,6 @@ class _SectionCard extends StatelessWidget {
             ...children,
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _InventorySettingsCard extends StatelessWidget {
-  const _InventorySettingsCard({required this.text});
-
-  final AppStrings text;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    return _SectionCard(
-      title: text.inventorySettings,
-      subtitle: text.inventorySettingsSubtitle,
-      icon: Icons.inventory_2_outlined,
-      children: [
-        SwitchListTile.adaptive(
-          value: app.varianceTrackingEnabled,
-          contentPadding: EdgeInsets.zero,
-          onChanged: (value) => app.setVarianceTrackingEnabled(value),
-          title: TfText(
-            text.varianceTracking,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: PosColors.slate,
-            ),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: TfText(
-              text.varianceTrackingHint,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: PosColors.muted,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DisplaySizeCard extends StatelessWidget {
-  const _DisplaySizeCard({
-    required this.value,
-    required this.label,
-    required this.text,
-    required this.onChanged,
-    required this.onChangeEnd,
-    required this.onPreset,
-  });
-
-  final double value;
-  final String label;
-  final AppStrings text;
-  final ValueChanged<double> onChanged;
-  final ValueChanged<double> onChangeEnd;
-  final ValueChanged<double> onPreset;
-
-  @override
-  Widget build(BuildContext context) {
-    final percent = (value * 100).round();
-    return _settingsCard(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: PosColors.background,
-                    borderRadius: BorderRadius.circular(PosRadii.md),
-                    border: Border.all(color: PosColors.lineStrong),
-                  ),
-                  child: Icon(
-                    Icons.fit_screen_rounded,
-                    color: PosColors.slate,
-                    size: 20,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TfText(
-                        text.displaySize,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      SizedBox(height: 3),
-                      TfText(
-                        text.displaySizeSubtitle,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                _ScalePill(label: label, percent: percent),
-              ],
-            ),
-            SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _PresetChip(
-                  label: text.compact,
-                  selected: value <= 0.88,
-                  onTap: () => onPreset(0.84),
-                ),
-                _PresetChip(
-                  label: text.comfortable,
-                  selected: value > 0.88 && value < 0.98,
-                  onTap: () => onPreset(0.92),
-                ),
-                _PresetChip(
-                  label: text.large,
-                  selected: value >= 0.98,
-                  onTap: () => onPreset(1.02),
-                ),
-              ],
-            ),
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(Icons.remove_rounded, color: PosColors.muted, size: 18),
-                Expanded(
-                  child: Slider(
-                    value: value.clamp(
-                      PosAppController.minUiScale,
-                      PosAppController.maxUiScale,
-                    ),
-                    min: PosAppController.minUiScale,
-                    max: PosAppController.maxUiScale,
-                    divisions: 16,
-                    label: '$percent%',
-                    onChanged: onChanged,
-                    onChangeEnd: onChangeEnd,
-                  ),
-                ),
-                Icon(Icons.add_rounded, color: PosColors.muted, size: 18),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LanguageCard extends StatelessWidget {
-  const _LanguageCard({
-    required this.selected,
-    required this.text,
-    required this.onChanged,
-  });
-
-  final AppLanguage selected;
-  final AppStrings text;
-  final ValueChanged<AppLanguage> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionCard(
-      title: text.languageLabel,
-      subtitle: text.languageSubtitle,
-      icon: Icons.translate_rounded,
-      children: [
-        SegmentedButton<AppLanguage>(
-          segments: [
-            ButtonSegment<AppLanguage>(
-              value: AppLanguage.bn,
-              label: Text(text.bangla),
-              icon: TfText('অ'),
-            ),
-            ButtonSegment<AppLanguage>(
-              value: AppLanguage.en,
-              label: Text(text.english),
-              icon: TfText('A'),
-            ),
-          ],
-          selected: {selected},
-          showSelectedIcon: true,
-          onSelectionChanged: (values) => onChanged(values.first),
-        ),
-      ],
-    );
-  }
-}
-
-class _LanguageSettingsPage extends StatelessWidget {
-  const _LanguageSettingsPage();
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    return _SettingsSectionPage(
-      title: text.languageLabel,
-      child: _LanguageCard(
-        selected: app.language,
-        text: text,
-        onChanged: app.updateLanguage,
       ),
     );
   }
@@ -2559,88 +1832,6 @@ class _CustomerMenuThemePreview extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ScalePill extends StatelessWidget {
-  const _ScalePill({required this.label, required this.percent});
-
-  final String label;
-  final int percent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: PosColors.background,
-        borderRadius: BorderRadius.circular(PosRadii.pill),
-        border: Border.all(color: PosColors.lineStrong),
-      ),
-      child: TfText(
-        '$label - $percent%',
-        style: TextStyle(
-          color: PosColors.slate,
-          fontWeight: FontWeight.w500,
-          fontSize: 11.4,
-          letterSpacing: 0,
-        ),
-      ),
-    );
-  }
-}
-
-class _PresetChip extends StatelessWidget {
-  const _PresetChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return TfChip(
-      label: label,
-      active: selected,
-      leading: selected ? const Icon(Icons.check_rounded) : null,
-      onTap: onTap,
-    );
-  }
-}
-
-class _ResponsiveFields extends StatelessWidget {
-  const _ResponsiveFields({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 640) {
-          return Column(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) SizedBox(height: 10),
-                children[i],
-              ],
-            ],
-          );
-        }
-        return Row(
-          children: [
-            for (var i = 0; i < children.length; i++) ...[
-              if (i > 0) SizedBox(width: 12),
-              Expanded(child: children[i]),
-            ],
-          ],
-        );
-      },
     );
   }
 }
@@ -3005,175 +2196,6 @@ class _SystemPrinterQueueDialogState extends State<_SystemPrinterQueueDialog> {
   }
 }
 
-class _LiveDiagnosticsCard extends StatefulWidget {
-  const _LiveDiagnosticsCard({required this.app});
-
-  final PosAppController app;
-
-  @override
-  State<_LiveDiagnosticsCard> createState() => _LiveDiagnosticsCardState();
-}
-
-class _LiveDiagnosticsCardState extends State<_LiveDiagnosticsCard> {
-  late Future<Map<String, Object?>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = widget.app.loadLiveDiagnostics();
-  }
-
-  void _refresh() {
-    setState(() => _future = widget.app.loadLiveDiagnostics());
-  }
-
-  Map<String, Object?> _map(Object? value) {
-    return value is Map ? Map<String, Object?>.from(value) : const {};
-  }
-
-  String _label(String en, String bn) {
-    return widget.app.strings.isBn ? bn : en;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final text = widget.app.strings;
-    return FutureBuilder<Map<String, Object?>>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return _SectionCard(
-            title: text.liveDiagnostics,
-            subtitle: snapshot.error.toString(),
-            icon: Icons.cloud_off_outlined,
-            children: [
-              TfButton(
-                label: text.refresh,
-                icon: Icons.refresh_rounded,
-                onPressed: _refresh,
-              ),
-            ],
-          );
-        }
-        final envelope = _map(snapshot.data);
-        final data = _map(envelope['data']);
-        final diagnostics = _map(data['diagnostics']);
-        final database = _map(diagnostics['database']);
-        final storage = _map(diagnostics['storage']);
-        final sms = _map(diagnostics['sms']);
-        final facebook = _map(diagnostics['facebook']);
-        final chatbot = _map(diagnostics['chatbotAi']);
-        final realtime = _map(diagnostics['realtime']);
-        final sync = widget.app.syncState;
-        return _SectionCard(
-          title: text.liveDiagnostics,
-          subtitle: text.liveDiagnosticsSubtitle,
-          icon: Icons.monitor_heart_outlined,
-          children: [
-            _DiagnosticStatusRow(
-              label: _label('Cloud API', 'ক্লাউড API'),
-              ok: data['status'] == 'ok',
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Database', 'ডাটাবেজ'),
-              ok: database['ok'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Writable media storage', 'মিডিয়া স্টোরেজ'),
-              ok: storage['ok'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('SMS provider', 'SMS প্রোভাইডার'),
-              ok: sms['ok'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Facebook OAuth', 'Facebook OAuth'),
-              ok: facebook['oauthReady'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label(
-                'Facebook Android app redirect',
-                'Facebook Android অ্যাপ রিডাইরেক্ট',
-              ),
-              ok: facebook['nativeAndroidReady'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Facebook webhook', 'Facebook webhook'),
-              ok: facebook['webhookReady'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Chatbot AI provider', 'Chatbot AI প্রোভাইডার'),
-              ok: chatbot['ok'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Realtime updates', 'তাৎক্ষণিক আপডেট'),
-              ok: realtime['enabled'] == true,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Local printer', 'লোকাল প্রিন্টার'),
-              ok: widget.app.printerState.connected,
-            ),
-            _DiagnosticStatusRow(
-              label: _label('Local sync queue', 'লোকাল সিঙ্ক তালিকা'),
-              ok: sync.failedCount == 0,
-              detail: _label(
-                '${sync.pendingCount} অপেক্ষমান, ${sync.failedCount} ব্যর্থ',
-                '${sync.pendingCount} pending, ${sync.failedCount} failed',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TfButton(
-              label: text.refresh,
-              icon: Icons.refresh_rounded,
-              onPressed: _refresh,
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _DiagnosticStatusRow extends StatelessWidget {
-  const _DiagnosticStatusRow({
-    required this.label,
-    required this.ok,
-    this.detail,
-  });
-
-  final String label;
-  final bool ok;
-  final String? detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        children: [
-          Icon(
-            ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
-            color: ok ? PosColors.success : PosColors.danger,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: TfText(label)),
-          if (detail != null)
-            TfText(
-              detail!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PrinterDeviceTile extends StatelessWidget {
   const _PrinterDeviceTile({
     required this.printer,
@@ -3483,7 +2505,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return Scaffold(
-      appBar: AppBar(title: TfText(text.heroMediaTitle), centerTitle: false),
+      appBar: AppBar(title: TfText(text.websiteImageVideoTitle), centerTitle: false),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -3747,161 +2769,6 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
 
 // ─── Table Settings Page ──────────────────────────────────────────────────────
 
-// ─── Connection URLs Page ─────────────────────────────────────────────────────
-
-class _ConnectionUrlsPage extends StatefulWidget {
-  const _ConnectionUrlsPage({
-    required this.urlController,
-    required this.outletIdController,
-  });
-
-  final TextEditingController urlController;
-  final TextEditingController outletIdController;
-
-  @override
-  State<_ConnectionUrlsPage> createState() => _ConnectionUrlsPageState();
-}
-
-class _ConnectionUrlsPageState extends State<_ConnectionUrlsPage> {
-  @override
-  void initState() {
-    super.initState();
-    widget.urlController.addListener(_rebuild);
-    widget.outletIdController.addListener(_rebuild);
-  }
-
-  @override
-  void dispose() {
-    widget.urlController.removeListener(_rebuild);
-    widget.outletIdController.removeListener(_rebuild);
-    super.dispose();
-  }
-
-  void _rebuild() => setState(() {});
-
-  String get _menuUrl {
-    final app = AppScope.of(context);
-    final slug = app.serverConfig.publicSlug.trim().toLowerCase();
-    if (slug.isNotEmpty &&
-        RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$').hasMatch(slug)) {
-      return 'https://$slug.quickbytes.buzz';
-    }
-    final base = widget.urlController.text.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final outlet = widget.outletIdController.text.trim();
-    if (base.isEmpty || outlet.isEmpty) return '';
-    return '$base/menu/$outlet';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final menuUrl = _menuUrl;
-    return _SettingsSectionPage(
-      title: 'Server & Menu URLs',
-      child: _SectionCard(
-        title: 'Connection Settings',
-        subtitle: 'Tunnel URL, outlet ID, and customer menu link',
-        icon: Icons.link_rounded,
-        children: [
-          TfText('Server URL', style: Theme.of(context).textTheme.titleSmall),
-          SizedBox(height: 6),
-          TextField(
-            controller: widget.urlController,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            decoration: InputDecoration(
-              hintText: 'https://your-tunnel.trycloudflare.com',
-              prefixIcon: Icon(Icons.dns_rounded),
-            ),
-          ),
-          SizedBox(height: 16),
-          TfText('Outlet ID', style: Theme.of(context).textTheme.titleSmall),
-          SizedBox(height: 6),
-          TextField(
-            controller: widget.outletIdController,
-            autocorrect: false,
-            decoration: InputDecoration(
-              hintText: 'outlet UUID',
-              prefixIcon: Icon(Icons.pin_drop_outlined),
-              helperText:
-                  'Auto-generated. Only change if re-registering the outlet.',
-            ),
-          ),
-          SizedBox(height: 20),
-          TfText(
-            'Customer Menu URL',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          SizedBox(height: 6),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: BoxDecoration(
-              color: menuUrl.isEmpty
-                  ? PosColors.background
-                  : PosColors.primarySoft,
-              borderRadius: BorderRadius.circular(PosRadii.md),
-              border: Border.all(
-                color: menuUrl.isEmpty
-                    ? PosColors.lineStrong.withValues(alpha: 0.48)
-                    : PosColors.primary.withValues(alpha: 0.50),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TfText(
-                    menuUrl.isEmpty
-                        ? 'Set server URL and outlet ID above'
-                        : menuUrl,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: menuUrl.isEmpty
-                          ? PosColors.muted
-                          : PosColors.primaryDark,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                if (menuUrl.isNotEmpty) ...[
-                  SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(Icons.copy_rounded, size: 18),
-                    tooltip: 'Copy URL',
-                    style: IconButton.styleFrom(
-                      foregroundColor: PosColors.primaryDark,
-                      backgroundColor: PosColors.primary.withValues(
-                        alpha: 0.20,
-                      ),
-                      minimumSize: Size(36, 36),
-                    ),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: menuUrl));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: TfText('Menu URL copied')),
-                      );
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-          SizedBox(height: 10),
-          TfText(
-            'Share this link with customers to let them view your menu.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Table Settings Page ──────────────────────────────────────────────────────
-
 class _TableSettingsPage extends StatefulWidget {
   const _TableSettingsPage({
     required this.initialCount,
@@ -4042,212 +2909,6 @@ class _TableSettingsPageState extends State<_TableSettingsPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _StaffAccountsCard extends StatefulWidget {
-  const _StaffAccountsCard({required this.app});
-
-  final PosAppController app;
-
-  @override
-  State<_StaffAccountsCard> createState() => _StaffAccountsCardState();
-}
-
-class _StaffAccountsCardState extends State<_StaffAccountsCard> {
-  final _phoneController = TextEditingController();
-  final _nameController = TextEditingController();
-  late Future<List<Map<String, Object?>>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = widget.app.loadStaffAccounts();
-  }
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
-    return TfCard(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              labelText: text.staffPhoneNumber,
-              hintText: '01XXXXXXXXX',
-              prefixIcon: Icon(Icons.phone_android_rounded),
-            ),
-          ),
-          SizedBox(height: 10),
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: text.nameOptional,
-              prefixIcon: Icon(Icons.badge_outlined),
-            ),
-          ),
-          SizedBox(height: 12),
-          PrimaryButton(
-            label: text.addStaffPhone,
-            icon: Icons.person_add_alt_1_rounded,
-            busy: widget.app.busy,
-            onPressed: widget.app.busy ? null : _add,
-          ),
-          SizedBox(height: 18),
-          FutureBuilder<List<Map<String, Object?>>>(
-            future: _future,
-            builder: (context, snapshot) {
-              final staff = snapshot.data ?? const <Map<String, Object?>>[];
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-              if (staff.isEmpty) {
-                return Padding(
-                  padding: EdgeInsets.symmetric(vertical: 18),
-                  child: Center(child: TfText(text.noStaffYet)),
-                );
-              }
-              return Column(
-                children: staff
-                    .map((account) {
-                      final staffId = account['id']?.toString() ?? '';
-                      final isActive = account['isActive'] != false;
-                      final inviteStatus =
-                          account['inviteStatus']?.toString() ?? '';
-                      final statusLabel = inviteStatus == 'pending'
-                          ? text.inviteStatusPending
-                          : inviteStatus == 'declined'
-                          ? text.inviteStatusDeclined
-                          : isActive
-                          ? text.activeStatus
-                          : text.disabledStatus;
-                      final statusColor = inviteStatus == 'pending'
-                          ? PosColors.warning
-                          : inviteStatus == 'declined' || !isActive
-                          ? PosColors.muted
-                          : PosColors.success;
-                      final phone =
-                          account['phone']?.toString() ??
-                          account['email']?.toString() ??
-                          '';
-                      return ListTile(
-                        leading: Icon(Icons.badge_rounded),
-                        title: TfText(
-                          account['displayName']?.toString().isNotEmpty == true
-                              ? account['displayName'].toString()
-                              : phone,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: TfText(
-                          phone,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TfText(
-                              statusLabel,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_outline_rounded,
-                                color: PosColors.danger,
-                                size: 20,
-                              ),
-                              tooltip: text.deleteStaff,
-                              onPressed: widget.app.busy
-                                  ? null
-                                  : () => _confirmDelete(
-                                      context,
-                                      staffId,
-                                      account['phone']?.toString() ??
-                                          account['email']?.toString() ??
-                                          '',
-                                    ),
-                            ),
-                          ],
-                        ),
-                      );
-                    })
-                    .toList(growable: false),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _add() async {
-    final text = AppScope.of(context).strings;
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) return;
-    final ok = await widget.app.addStaffPhone(
-      phone,
-      displayName: _nameController.text,
-    );
-    if (!mounted) return;
-    if (ok) {
-      _phoneController.clear();
-      _nameController.clear();
-      setState(() => _future = widget.app.loadStaffAccounts());
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: TfText(
-          ok ? text.staffAdded : widget.app.lastError ?? 'Could not add staff.',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    String staffId,
-    String email,
-  ) async {
-    final text = AppScope.of(context).strings;
-    TfConfirmSheet.show(
-      context,
-      title: text.deleteStaff,
-      description: '${text.deleteStaffConfirm}\n\n$email',
-      confirmLabel: text.deleteStaff,
-      isDanger: true,
-      onConfirm: () async {
-        if (!mounted) return;
-        final ok = await widget.app.removeStaffAccount(staffId);
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: TfText(
-              ok
-                  ? text.staffRemoved
-                  : widget.app.lastError ?? 'Could not remove staff.',
-            ),
-          ),
-        );
-        if (ok) setState(() => _future = widget.app.loadStaffAccounts());
-      },
     );
   }
 }

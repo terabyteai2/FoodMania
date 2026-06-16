@@ -106,6 +106,15 @@ class PublicSlugUpdateRequest(BaseModel):
     publicSlug: str
 
 
+class OutletProfileUpdateRequest(BaseModel):
+    restaurantName: str | None = None
+    phone: str | None = None
+
+
+class DisplayNameUpdateRequest(BaseModel):
+    displayName: str
+
+
 class OutletWipeRequest(BaseModel):
     confirmation: str = Field(min_length=1)
 

@@ -963,23 +963,6 @@ class LocalDatabaseService {
     return order;
   }
 
-  Future<void> queueServerConfigSync({
-    required String serverId,
-    required Map<String, Object?> payload,
-  }) async {
-    final db = await _db;
-    await db.transaction((txn) async {
-      await _insertSyncEvent(
-        txn,
-        entityType: 'server_config',
-        entityId: serverId,
-        action: 'update',
-        payload: payload,
-      );
-    });
-    _emitChange();
-  }
-
   Future<List<SyncEvent>> getSyncEvents({
     Set<SyncStatus>? statuses,
     int limit = 80,

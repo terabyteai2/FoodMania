@@ -50,8 +50,10 @@ from models import (
 from schemas import (
     AdminCreateRequest,
     AdminLoginRequest,
+    DisplayNameUpdateRequest,
     GoogleAdminAuthRequest,
     OnboardingPlanRequest,
+    OutletProfileUpdateRequest,
     OutletWipeRequest,
     PhoneCompleteManagerSignupRequest,
     PhoneSendOtpRequest,
@@ -241,6 +243,7 @@ async def _auth_payload(
         "outletId": outlet.id,
         "restaurantName": restaurant.name,
         "outletName": outlet.name,
+        "outletPhone": outlet.phone,
         "publicSlug": outlet.public_slug,
         "customerMenuUrl": _public_menu_url(outlet.public_slug),
         "tableCount": outlet.table_count if outlet.table_count is not None else 10,
@@ -1046,6 +1049,50 @@ async def update_public_url(
     outlet.public_slug = slug
     await db.commit()
     return ok({"publicSlug": slug, "customerMenuUrl": _public_menu_url(slug)})
+
+
+@router.patch("/admin/outlet-profile")
+async def update_outlet_profile(
+    body: OutletProfileUpdateRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    manager = await _current_account(payload, db, require_manager=True)
+    outlet = (
+        await db.execute(select(Outlet).where(Outlet.id == manager.outlet_id))
+    ).scalar_one()
+    restaurant = (
+        await db.execute(select(Restaurant).where(Restaurant.id == outlet.restaurant_id))
+    ).scalar_one()
+    if body.restaurantName is not None:
+        name = body.restaurantName.strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Restaurant name can't be empty.",
+            )
+        restaurant.name = name
+    if body.phone is not None:
+        # Plain trim only: this is a customer-facing contact number, not the OTP-
+        # validated/unique AdminAccount.phone, so it doesn't go through normalize_bd_phone.
+        outlet.phone = body.phone.strip() or None
+    await db.commit()
+    return ok({"restaurantName": restaurant.name, "outletPhone": outlet.phone})
+
+
+@router.patch("/admin/me")
+async def update_my_account(
+    body: DisplayNameUpdateRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    # Self-edit only — touches the caller's own row, so it deliberately doesn't run
+    # the owner/manager-editing-*other*-accounts checks in update_staff below.
+    account = await _current_account(payload, db)
+    account.display_name = body.displayName.strip() or None
+    await db.commit()
+    await db.refresh(account)
+    return ok({"account": _account_dict(account)})
 
 
 @router.post("/admin/outlets/{outlet_id}/wipe")

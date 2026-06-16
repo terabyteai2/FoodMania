@@ -308,6 +308,8 @@ async def _ensure_pos_columns(conn) -> None:
         ("pos_discount_presets", json_type),
         # Nullable, no default/backfill: NULL = "not configured" (null-safe invariant).
         ("pos_daily_sales_target", "NUMERIC(10, 2)"),
+        # Nullable, no default/backfill: restaurant contact phone (null-safe invariant).
+        ("phone", "VARCHAR"),
     ]
     order_columns = [
         ("shift_id", "VARCHAR"),

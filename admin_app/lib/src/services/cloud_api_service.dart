@@ -208,6 +208,7 @@ class AdminLoginResult {
     required this.deviceToken,
     required this.tableCount,
     this.publicSlug,
+    this.outletPhone,
     this.customerMenuUrl,
     this.publicApiBaseUrl,
     this.hasAppAccess = false,
@@ -226,6 +227,7 @@ class AdminLoginResult {
   final String deviceToken;
   final int tableCount;
   final String? publicSlug;
+  final String? outletPhone;
   final String? customerMenuUrl;
   final String? publicApiBaseUrl;
   final bool hasAppAccess;
@@ -250,6 +252,7 @@ class AdminLoginResult {
       deviceToken: TenantBootstrapResult._required(data, 'deviceToken'),
       tableCount: TenantBootstrapResult._tableCount(data['tableCount']),
       publicSlug: TenantBootstrapResult._optional(data['publicSlug']),
+      outletPhone: TenantBootstrapResult._optional(data['outletPhone']),
       customerMenuUrl: TenantBootstrapResult._optional(data['customerMenuUrl']),
       publicApiBaseUrl: TenantBootstrapResult._optional(
         data['publicApiBaseUrl'],
@@ -958,22 +961,44 @@ class CloudApiService {
     return data;
   }
 
-  Future<Map<String, Object?>> wipeCurrentOutlet({
-    required String confirmation,
+  Future<Map<String, Object?>> updateOutletProfile({
+    String? restaurantName,
+    String? phone,
   }) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/admin/outlets/${config.outletId}/wipe');
+    final uri = _uri('/admin/outlet-profile');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
     final response = await _sendJson(
-      'POST',
+      'PATCH',
       uri,
-      body: {'confirmation': confirmation.trim()},
+      body: {
+        if (restaurantName != null) 'restaurantName': restaurantName.trim(),
+        if (phone != null) 'phone': phone.trim(),
+      },
     );
-    return response['data'] is Map
+    final data = response['data'] is Map
         ? Map<String, Object?>.from(response['data'] as Map)
         : response;
+    return data;
+  }
+
+  Future<Map<String, Object?>> updateAccountDisplayName(
+    String displayName,
+  ) async {
+    final uri = _uri('/admin/me');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson(
+      'PATCH',
+      uri,
+      body: {'displayName': displayName.trim()},
+    );
+    final data = response['data'] is Map
+        ? Map<String, Object?>.from(response['data'] as Map)
+        : response;
+    return data;
   }
 
   Future<FacebookChatbotConfig> fetchFacebookChatbotConfig() async {
@@ -1409,56 +1434,6 @@ class CloudApiService {
       );
     }
     return result;
-  }
-
-  Future<OrderHistoryImportResult> importOrderHistoryCsv(
-    List<int> bytes,
-    String fileName,
-  ) async {
-    final config = _requireServerConfig();
-    final uri = _uri('/outlets/${config.outletId}/orders/history/import');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    if (bytes.isEmpty) {
-      throw CloudApiException('Choose a non-empty CSV export.');
-    }
-
-    final request = http.MultipartRequest('POST', uri)
-      ..headers['Accept'] = 'application/json'
-      ..headers.addAll(CloudDefaults.ngrokBrowserBypassHeaders(uri))
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: fileName.trim().isEmpty ? 'order-history.csv' : fileName,
-          contentType: MediaType('text', 'csv'),
-        ),
-      );
-    if (_cloudConfig.deviceToken.trim().isNotEmpty) {
-      request.headers['Authorization'] =
-          'Bearer ${_cloudConfig.deviceToken.trim()}';
-    }
-
-    final streamed = await request.send().timeout(const Duration(seconds: 180));
-    final body = await streamed.stream.bytesToString();
-    final decoded = _decodeCloudJsonBody(body, uri);
-    final payload = decoded is Map
-        ? Map<String, Object?>.from(decoded)
-        : <String, Object?>{'data': decoded};
-    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-      final detail = payload['detail'];
-      final message =
-          payload['error']?.toString() ??
-          (detail is String
-              ? detail
-              : detail is Map
-              ? detail['message']?.toString()
-              : null) ??
-          'Order history import failed: HTTP ${streamed.statusCode}';
-      throw CloudApiException(message);
-    }
-    return OrderHistoryImportResult.fromJson(payload);
   }
 
   Future<List<String>> uploadOutletImage(String dataUrl) async {
