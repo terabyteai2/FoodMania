@@ -50,6 +50,7 @@ def order_to_dict(order: Order) -> dict:
         "billingSnapshot": order.billing_snapshot or {},
         "kotBatches": order.kot_batches or [],
         "settledAt": order.settled_at.isoformat() if order.settled_at else None,
+        "orderDate": order.order_date.isoformat() if order.order_date else None,
         "createdAt": order.created_at.isoformat(),
         "updatedAt": order.updated_at.isoformat(),
     }
@@ -158,9 +159,18 @@ async def create_delivery_order(
         else 0,
     )
     now = datetime.now(timezone.utc)
+    today = now.date()
+    max_serial = await db.execute(
+        select(func.coalesce(func.max(Order.serial_number), 0))
+        .where(Order.outlet_id == outlet.id, Order.order_date == today)
+    )
+    next_serial = (max_serial.scalar() or 0) + 1
+
     order = Order(
         id=str(uuid.uuid4()),
         outlet_id=outlet.id,
+        serial_number=next_serial,
+        order_date=today,
         source=source,
         status="pending",
         total_amount=totals["total"],
@@ -181,13 +191,6 @@ async def create_delivery_order(
         updated_at=now,
     )
     db.add(order)
-    await db.commit()
-    await db.refresh(order)
-
-    count_res = await db.execute(
-        select(func.count()).select_from(Order).where(Order.outlet_id == outlet.id)
-    )
-    order.serial_number = count_res.scalar() or 1
     await db.commit()
     await db.refresh(order)
 

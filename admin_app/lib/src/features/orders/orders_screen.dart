@@ -133,6 +133,15 @@ class OrderCreatedPage extends StatefulWidget {
 
 class _OrderCreatedPageState extends State<OrderCreatedPage> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(AppScope.of(context).playWizardSuccessSound());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -3291,6 +3300,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _creating = false;
       });
       _goToStep(3);
+      unawaited(AppScope.of(context).playWizardSuccessSound());
     } catch (error) {
       if (!mounted) return;
       setState(() => _creating = false);

@@ -35,9 +35,9 @@ class SystemNotificationService {
     'pos_orders_default',
   ];
 
-  static const String _pendingSoundRes = 'pending_order';
-  static const String _acceptedSoundRes = 'accepted_order';
-  static const String _chatSoundRes = 'chatbot_alert';
+  static const String _pendingSoundRes = 'order_pending_request';
+  static const String _acceptedSoundRes = 'general_notification';
+  static const String _chatSoundRes = 'chatbot_needs_you';
 
   static const String _kFallbackDefaultSoundUri =
       'content://settings/system/notification_sound';
@@ -342,12 +342,12 @@ class SystemNotificationService {
   }
 
   String? _iosSoundForType(PosNotificationType type, [String? actionTarget]) {
-    if (_isChatType(type, actionTarget)) return 'chatbot_alert.wav';
+    if (_isChatType(type, actionTarget)) return 'chatbot_needs_you.wav';
     switch (type) {
       case PosNotificationType.pendingOrder:
-        return 'pending_order.wav';
+        return 'order_pending_request.wav';
       case PosNotificationType.acceptedOrder:
-        return 'accepted_order.wav';
+        return 'general_notification.wav';
       default:
         return null;
     }

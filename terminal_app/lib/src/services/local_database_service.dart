@@ -521,6 +521,7 @@ class LocalDatabaseService {
         id: orderId,
         orderNo: _buildOrderNumber(now),
         sequenceNo: await _nextOrderSequence(txn),
+        orderDate: DateTime.now(),
         customerName: _cleanNullable(customerName),
         tableNo: _cleanNullable(tableNo),
         note: _cleanNullable(note),
@@ -1233,6 +1234,7 @@ class LocalDatabaseService {
         syncStatus TEXT NOT NULL DEFAULT 'synced',
         version INTEGER NOT NULL DEFAULT 1,
         sequenceNo INTEGER NOT NULL,
+        orderDate TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )
@@ -1613,6 +1615,7 @@ class LocalDatabaseService {
       'version INTEGER NOT NULL DEFAULT 1',
     );
     await _addColumnIfMissing(db, 'orders', 'sequenceNo', 'sequenceNo INTEGER');
+    await _addColumnIfMissing(db, 'orders', 'orderDate', 'orderDate TEXT');
     await _addColumnIfMissing(
       db,
       'orders',
@@ -1840,8 +1843,10 @@ class LocalDatabaseService {
   }
 
   Future<int> _nextOrderSequence(DatabaseExecutor db) async {
+    final today = DateTime.now().toIso8601String().substring(0, 10);
     final rows = await db.rawQuery(
-      'SELECT COALESCE(MAX(sequenceNo), 0) + 1 AS nextSequence FROM orders',
+      'SELECT COALESCE(MAX(sequenceNo), 0) + 1 AS nextSequence FROM orders WHERE orderDate = ?',
+      [today],
     );
     final value = rows.first['nextSequence'];
     return value is num ? value.toInt() : 1;

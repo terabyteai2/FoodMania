@@ -9,6 +9,9 @@ QuickBytes backend DB. The pipeline has two stages:
 2. **Migrate** — read the CSV, match each line item to existing `menu_items`, and insert
    into the `orders` table.
 
+> **Important:** Serial numbers now **reset daily** per outlet. Each day's orders
+> start at `#1`. See [Daily Serial Reset](#daily-serial-reset) below.
+
 ---
 
 ## Stage 1 — Fetch (`fetch_orders.py`)
@@ -72,18 +75,40 @@ PostgreSQL on the VPS (localhost-only):
 
 ### Key Tables
 
-#### `orders`
+## Daily Serial Reset
 
-| Column | Type | Notes |
+Serial numbers are **per-outlet, per-day**. Each day's first order gets `serial_number = 1`,
+the second gets `2`, and so on. This is enforced in three places:
+
+| Layer | How it works |
+|---|---|
+| **Backend `POST /outlets/{id}/orders`** | Computes `MAX(serial_number) + 1 WHERE outlet_id=? AND order_date=today` server-side |
+| **Backend `POST /customer/{id}/orders`** | Same server-side daily `MAX + 1` logic |
+| **Admin app (offline POS)** | `_nextOrderSequence()` queries `MAX(sequenceNo) + 1 WHERE orderDate = today` from local SQLite |
+| **Migration script** | Groups CSV rows by date and assigns `#1, #2, #3...` per day |
+
+The `order_date` column (DATE) scopes the sequence. Existing rows backfilled via
+`UPDATE orders SET order_date = created_at::date WHERE order_date IS NULL`.
+
+### Collision safety
+
+- Backend is **authoritative** — even if the admin app sends a client-computed serial,
+  the backend recalculates and returns the correct daily value during sync.
+- UUID `id` remains the globally unique tracking key.
+
+---
+
+#### `orders`
 |---|---|---|
 | `id` | VARCHAR PK | UUID generated at insert |
 | `outlet_id` | VARCHAR FK | Target outlet UUID |
-| `serial_number` | INTEGER | From `order_no` in CSV |
-| `source` | VARCHAR | Set to `"imported"` for migrated rows |
-| `status` | VARCHAR | `completed` or `deleted` (mapped from CSV) |
+| `serial_number` | INTEGER | Per-day serial (resets to 1 each day) |
+| `order_date` | DATE | Date scoping the serial (e.g. `2026-06-15`), derived from `created_at` |
+| `source` | VARCHAR | Set to `"manual"` for migrated rows |
+| `status` | VARCHAR | `completed` or `rejected` (mapped from CSV) |
 | `total_amount` | NUMERIC(10,2) | From CSV `total` column |
 | `subtotal` | NUMERIC(10,2) | Sum of line-item prices |
-| `service_type` | VARCHAR | `dine_in`, `delivery`, `takeaway` |
+| `service_type` | VARCHAR | `dine_in`, `delivery`, `parcel` |
 | `table_no` | VARCHAR | From CSV `table_info` |
 | `items` | JSONB | Array of line-item objects (see below) |
 | `discount_label` | VARCHAR | e.g. `"Staff Discount"` |
@@ -139,9 +164,13 @@ PostgreSQL on the VPS (localhost-only):
 
 ### Deduplication
 
-Before inserting, the script checks `existing_serials` — a set of `serial_number` values
-already present for the outlet. Any CSV row whose `order_no` is already in the DB is
-skipped.
+Before inserting, the script clears all existing orders for the outlet
+(`DELETE FROM orders WHERE outlet_id = ?`), so each run is a clean re-import.
+Serial numbers are assigned sequentially per-day starting from `1`.
+
+If you need to **append** without clearing, the script pre-seeds `day_serials` from
+existing rows via `SELECT order_date, MAX(serial_number) FROM orders GROUP BY order_date`,
+so new orders continue from the last serial of each day.
 
 ### Running
 
@@ -158,14 +187,15 @@ The script uses the backend's `.venv` Python which has `asyncpg` installed. It c
 the local PostgreSQL instance and inserts orders one at a time (not batched — 16K orders
 takes a few minutes).
 
-### Verified Output (June 2026 run)
+### Verified Output (June 2026 run — with daily serial reset)
 
 ```
 Total CSV rows:      16768
-Inserted:            16616
+Inserted:            16616 (daily serials #1..N per order_date)
 Skipped (duplicate):  152
 
-Completed: 16680 | Deleted: 74 | Others-category items: 25 unmatched names
+Completed: 16680 | Rejected: 74 (mapped from CSV "Deleted")
+Others-category items: 25 unmatched names
 ```
 
 ## Troubleshooting

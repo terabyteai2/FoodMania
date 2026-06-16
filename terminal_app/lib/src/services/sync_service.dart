@@ -439,6 +439,7 @@ class SyncService {
     final orderPayloads = await _cloudApi.pullOrders(
       since: since,
       limit: since == null ? 500 : null,
+      orderDate: DateTime.now(),
     );
     final inventoryBundle = await _cloudApi.pullInventory(since: since);
     var imported = 0;

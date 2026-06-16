@@ -61,7 +61,8 @@ class TicketCopyData {
     this.paymentLine,
     this.qrCaption,
     this.footerText,
-    this.logoBytes,
+    this.logoImageBytes,
+    this.serverRole,
   });
 
   final String restaurantName;
@@ -91,7 +92,8 @@ class TicketCopyData {
   final String? paymentLine;
   final String? qrCaption;
   final String? footerText;
-  final Uint8List? logoBytes;
+  final Uint8List? logoImageBytes;
+  final String? serverRole;
 }
 
 class KotLineItem {
@@ -114,6 +116,8 @@ class KotTicketData {
     this.restaurantSubtitle,
     required this.serialLabel,
     required this.serialValue,
+    required this.dateLabel,
+    required this.dateValue,
     required this.timeLabel,
     required this.timeValue,
     required this.typeLabel,
@@ -125,16 +129,14 @@ class KotTicketData {
     this.tableLabel,
     this.tableValue,
     this.serverName,
-    this.dateValue,
-    this.channelValue,
-    this.waitingMins,
-    this.kotSerial,
   });
 
   final String restaurantName;
   final String? restaurantSubtitle;
   final String serialLabel;
   final String serialValue;
+  final String dateLabel;
+  final String dateValue;
   final String timeLabel;
   final String timeValue;
   final String typeLabel;
@@ -146,10 +148,6 @@ class KotTicketData {
   final String noteLabel;
   final String serverLabel;
   final String? serverName;
-  final String? dateValue;
-  final String? channelValue;
-  final int? waitingMins;
-  final String? kotSerial;
 }
 
 class UtilityTicketSection {
@@ -205,16 +203,8 @@ class TicketBitmapRenderer {
     final hasTable =
         data.tableLabel?.trim().isNotEmpty == true &&
         data.tableValue?.trim().isNotEmpty == true;
-    final hasServer = data.serverName?.trim().isNotEmpty == true;
-    final hasChannel = data.channelValue?.trim().isNotEmpty == true;
-    final hasWaiting = (data.waitingMins ?? 0) > 1;
     final height =
-        (420 +
-                dynamicRows +
-                noteRows +
-                (hasTable ? 30 : 0) +
-                ((hasServer || hasChannel) ? 30 : 0) +
-                (hasWaiting ? 30 : 0))
+        (336 + dynamicRows + noteRows + (hasTable ? 30 : 0))
             .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -224,7 +214,6 @@ class TicketBitmapRenderer {
     );
 
     var y = 0.0;
-    // Title
     y = _text(
       canvas,
       'KITCHEN ORDER',
@@ -234,87 +223,25 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
     y = _rule(canvas, y + 8);
-
-    // Date + Time row
-    final dateStr = data.dateValue?.trim() ?? '';
-    final timeStr = data.timeValue.trim();
-    if (dateStr.isNotEmpty) {
-      y = _text(
-        canvas,
-        'Date: $dateStr   Time: $timeStr',
-        y + 4,
-        fontSize: 22,
-        align: TextAlign.center,
-      );
-    } else {
-      y = _text(
-        canvas,
-        '${data.timeLabel}: $timeStr',
-        y + 4,
-        fontSize: 22,
-        align: TextAlign.center,
-      );
-    }
-
-    // Serial hero
-    y = _text(
-      canvas,
-      data.serialValue,
-      y + 8,
-      fontSize: 72,
-      weight: FontWeight.w800,
-      align: TextAlign.center,
-    );
-
-    // Service type box
-    y = _serviceBox(canvas, data.typeValue.toUpperCase(), y + 4);
-
-    // Table
+    y = _row(canvas, '${data.serialLabel}:', data.serialValue, y, fontSize: 26);
+    y = _row(canvas, '${data.dateLabel}:', data.dateValue, y, fontSize: 26);
+    y = _row(canvas, '${data.timeLabel}:', data.timeValue, y, fontSize: 26);
+    y = _row(canvas, '${data.typeLabel}:', data.typeValue, y, fontSize: 26);
     if (hasTable) {
-      y = _text(
+      y = _row(
         canvas,
-        '${data.tableLabel!.trim()}: ${data.tableValue!.trim()}',
-        y + 4,
-        fontSize: 24,
-        align: TextAlign.center,
+        '${data.tableLabel!.trim()}:',
+        data.tableValue!.trim(),
+        y,
+        fontSize: 26,
       );
     }
-
-    // Server + Channel row
-    if (hasServer || hasChannel) {
-      final server = data.serverName?.trim() ?? '';
-      final channel = data.channelValue?.trim() ?? '';
-      final parts = <String>[];
-      if (server.isNotEmpty) parts.add('${data.serverLabel}: $server');
-      if (channel.isNotEmpty) parts.add('Channel: $channel');
-      y = _text(
-        canvas,
-        parts.join('   '),
-        y + 2,
-        fontSize: 22,
-        align: TextAlign.center,
-      );
-    }
-
-    // Waiting time
-    if (hasWaiting) {
-      y = _text(
-        canvas,
-        '(Waiting ${data.waitingMins}m)',
-        y + 2,
-        fontSize: 22,
-        align: TextAlign.center,
-      );
-    }
-
     y = _rule(canvas, y + 8);
-
-    // Items
+    y = _text(canvas, data.itemsLabel, y, fontSize: 28, weight: FontWeight.w700);
     for (final item in data.items) {
       y = _kotItemRow(canvas, item, y);
     }
 
-    // Notes
     final notedItems = [
       for (final item in data.items)
         if (item.note?.trim().isNotEmpty == true) item,
@@ -333,23 +260,6 @@ class TicketBitmapRenderer {
       }
     }
 
-    // Footer: "Printed: HH:MM | KOT# xxxxxx"
-    y = _rule(canvas, y + 8);
-    final now = DateTime.now();
-    final printedTime =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-    final kotRef = data.kotSerial?.trim();
-    final footerLine = kotRef != null && kotRef.isNotEmpty
-        ? 'Printed: $printedTime | KOT# $kotRef'
-        : 'Printed: $printedTime';
-    y = _text(
-      canvas,
-      footerLine,
-      y + 4,
-      fontSize: 20,
-      align: TextAlign.center,
-    );
-
     final picture = recorder.endRecording();
     final image = await picture.toImage(_width.toInt(), y.ceil());
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -360,9 +270,9 @@ class TicketBitmapRenderer {
   }
 
   static Future<Uint8List> render(TicketCopyData data) async {
-    debugPrint('[QB-LOGO] render logoBytes=${data.logoBytes != null ? "${data.logoBytes!.length}B" : "null"}');
+    debugPrint('[QB-LOGO] render logoImageBytes=${data.logoImageBytes != null ? "${data.logoImageBytes!.length}B" : "null"}');
+    final logoRows = data.logoImageBytes != null ? 152 : 0;
     final dynamicRows = data.items.length * 58;
-    final logoRows = data.logoBytes != null ? 96 : 0;
     final optionalRows =
         (data.restaurantSubtitle?.trim().isNotEmpty == true ? 82 : 0) +
         (data.customerName?.trim().isNotEmpty == true ? 32 : 0) +
@@ -371,10 +281,10 @@ class TicketBitmapRenderer {
         (data.note?.trim().isNotEmpty == true ? 80 : 0);
     final summaryRows = data.summaryRows.length * 34;
     final paymentRows = data.paymentLine?.trim().isNotEmpty == true ? 42 : 0;
-    final qrRows = data.orderDetailsUrl?.trim().isNotEmpty == true ? 168 : 0;
+    final qrRows = data.orderDetailsUrl?.trim().isNotEmpty == true ? 195 : 0;
     final footerRows = data.footerText?.trim().isNotEmpty == true ? 38 : 0;
     final height =
-        (490 + logoRows + dynamicRows + optionalRows + summaryRows + paymentRows + qrRows + footerRows)
+        (420 + logoRows + dynamicRows + optionalRows + summaryRows + paymentRows + qrRows + footerRows)
             .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -384,13 +294,11 @@ class TicketBitmapRenderer {
     );
 
     var y = 0.0;
-
-    // Logo (optional)
-    if (data.logoBytes != null) {
-      y = await _drawLogoCentered(canvas, data.logoBytes!, y + 8);
+    // 1. Logo (optional)
+    if (data.logoImageBytes != null) {
+      y = await _drawLogoCentered(canvas, data.logoImageBytes!, y + 8);
     }
-
-    // Restaurant name + subtitle (header block)
+    // 2. Restaurant name
     y = _text(
       canvas,
       data.restaurantName,
@@ -399,6 +307,7 @@ class TicketBitmapRenderer {
       weight: FontWeight.w700,
       align: TextAlign.center,
     );
+    // 3. Restaurant address / subtitle
     final restaurantSubtitle = data.restaurantSubtitle?.trim();
     if (restaurantSubtitle != null && restaurantSubtitle.isNotEmpty) {
       y = _text(
@@ -409,29 +318,38 @@ class TicketBitmapRenderer {
         align: TextAlign.center,
       );
     }
-
-    // Date line
-    y = _text(canvas, data.dateLine, y + 4, fontSize: 20, align: TextAlign.center);
-
-    // Order number hero
+    // 4. Rule separator
+    y = _rule(canvas, y + 6);
+    // 5. Date + Time line
+    y = _text(
+      canvas,
+      data.dateLine,
+      y + 6,
+      fontSize: 20,
+      align: TextAlign.center,
+    );
+    // 6. Order number
     y = _text(
       canvas,
       data.orderNumberDisplay,
       y + 8,
-      fontSize: 82,
-      weight: FontWeight.w700,
+      fontSize: 72,
+      weight: FontWeight.w900,
       align: TextAlign.center,
     );
-
-    // Service type box
-    y = _serviceBox(canvas, data.orderTypeLabel.toUpperCase(), y + 4);
-
-    // Table / source line
-    if (data.tableLine.trim().isNotEmpty) {
-      y = _text(canvas, data.tableLine, y + 2, fontSize: 18, align: TextAlign.center);
-    }
-
-    // Customer / delivery info
+    // 7. Service type / table / server role — all centered
+    final isDineIn =
+        data.orderTypeLabel.toUpperCase().contains('DINE');
+    y = _serviceMetaRow(
+      canvas,
+      data.orderTypeLabel.toUpperCase(),
+      isDineIn ? data.tableLine : '',
+      data.serverRole,
+      y + 6,
+    );
+    // 8. Ornament before items
+    y = _ornament(canvas, y + 8);
+    // 9. Customer delivery info
     if (data.customerName?.trim().isNotEmpty == true) {
       y = _text(
         canvas,
@@ -454,21 +372,11 @@ class TicketBitmapRenderer {
       );
     }
 
-    // Ornament separator before items
-    y = _ornament(canvas, y + 8);
-
-    // Item column header
-    y = _itemHeader(canvas, y + 4);
-    y = _rule(canvas, y + 2);
-
-    // Items
     for (final item in data.items) {
       y = _itemRow(canvas, item, y);
     }
 
     y = _rule(canvas, y + 8);
-
-    // Summary rows
     if (data.summaryRows.isEmpty) {
       y = _row(
         canvas,
@@ -490,8 +398,6 @@ class TicketBitmapRenderer {
         );
       }
     }
-
-    // Payment line
     if (data.paymentLine?.trim().isNotEmpty == true) {
       y = _rule(canvas, y + 8);
       y = _text(
@@ -503,8 +409,6 @@ class TicketBitmapRenderer {
         align: TextAlign.center,
       );
     }
-
-    // Note
     if (data.note?.trim().isNotEmpty == true) {
       y = _text(
         canvas,
@@ -513,25 +417,27 @@ class TicketBitmapRenderer {
         fontSize: 21,
       );
     }
-
-    // QR code
     final qrUrl = data.orderDetailsUrl?.trim();
     if (qrUrl != null && qrUrl.isNotEmpty) {
       y = _ornament(canvas, y + 8);
       y = _drawQrCentered(canvas, qrUrl, y + 4);
       y = _text(
         canvas,
-        data.qrCaption?.trim().isNotEmpty == true
-            ? data.qrCaption!.trim()
-            : 'SCAN FOR LIVE ORDER DETAILS',
+        'Scan this QR to track your order',
         y + 6,
         fontSize: 17,
         weight: FontWeight.w700,
         align: TextAlign.center,
       );
+      y = _text(
+        canvas,
+        'Developed by QuickBytes POS',
+        y + 2,
+        fontSize: 15,
+        weight: FontWeight.w500,
+        align: TextAlign.center,
+      );
     }
-
-    // Thank you / footer
     if (data.footerText?.trim().isNotEmpty == true) {
       y = _text(
         canvas,
@@ -542,16 +448,6 @@ class TicketBitmapRenderer {
         align: TextAlign.center,
       );
     }
-
-    // Always: "Built by QuickBytes POS"
-    y = _text(
-      canvas,
-      'Built by QuickBytes POS',
-      y + 8,
-      fontSize: 18,
-      weight: FontWeight.w500,
-      align: TextAlign.center,
-    );
 
     final picture = recorder.endRecording();
     final image = await picture.toImage(_width.toInt(), y.ceil());
@@ -669,77 +565,89 @@ class TicketBitmapRenderer {
     return png.buffer.asUint8List();
   }
 
-  static Future<double> _drawLogoCentered(Canvas canvas, Uint8List bytes, double y) async {
+  static double _serviceMetaRow(
+    Canvas canvas,
+    String serviceType,
+    String tableLine,
+    String? serverRole,
+    double y,
+  ) {
+    const badgeFontSize = 18.0;
+    const hPad = 8.0;
+    const vPad = 5.0;
+    const gap = 7.0;
+    const radius = 4.0;
+
+    final labels = <String>[serviceType];
+    if (tableLine.trim().isNotEmpty) labels.add(tableLine.trim());
+    if (serverRole?.trim().isNotEmpty == true) labels.add(serverRole!.trim());
+
+    final painters = labels
+        .map(
+          (t) =>
+              _painter(t, fontSize: badgeFontSize, weight: FontWeight.w600, maxLines: 1)
+                ..layout(maxWidth: _width - (_padding * 2)),
+        )
+        .toList();
+
+    final badgeHeight = painters[0].height + vPad * 2;
+    final totalWidth =
+        painters.fold<double>(0, (s, p) => s + p.width + hPad * 2) +
+        gap * (labels.length - 1);
+    var x = (_width - totalWidth) / 2;
+
+    for (final p in painters) {
+      final bw = p.width + hPad * 2;
+      final rect = Rect.fromLTWH(x, y, bw, badgeHeight);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(radius)),
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(radius)),
+        Paint()
+          ..color = Colors.black
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+      p.paint(canvas, Offset(x + hPad, y + vPad));
+      x += bw + gap;
+    }
+
+    return y + badgeHeight + 8;
+  }
+
+  static Future<double> _drawLogoCentered(
+    Canvas canvas,
+    Uint8List bytes,
+    double y,
+  ) async {
     debugPrint('[QB-LOGO] _drawLogoCentered bytes=${bytes.length}');
     try {
-      final codec = await ui.instantiateImageCodec(bytes, targetHeight: 80);
+      final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
-      final img = frame.image;
-      debugPrint('[QB-LOGO] _drawLogoCentered decoded img=${img.width}x${img.height}');
-      const maxH = 80.0;
-      final aspectRatio = img.width / img.height;
-      final drawH = maxH;
-      final drawW = (drawH * aspectRatio).clamp(1.0, _width - _padding * 2);
-      final left = (_width - drawW) / 2;
-      debugPrint('[QB-LOGO] _drawLogoCentered draw at ${left.round()},${y.round()} size ${drawW.round()}x${drawH.round()}');
-      canvas.drawImageRect(
-        img,
-        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-        Rect.fromLTWH(left, y, drawW, drawH),
-        Paint(),
+      final image = frame.image;
+      debugPrint('[QB-LOGO] _drawLogoCentered decoded img=${image.width}x${image.height}');
+      const maxH = 144.0;
+      final scale = maxH / image.height;
+      final w = image.width * scale;
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        image.width.toDouble(),
+        image.height.toDouble(),
       );
-      return y + maxH + 8;
+      final dst = Rect.fromLTWH((_width - w) / 2, y, w, maxH);
+      debugPrint('[QB-LOGO] _drawLogoCentered draw at ${((_width - w) / 2).round()},${y.round()} size ${w.round()}x$maxH');
+      canvas.drawImageRect(image, src, dst, Paint());
+      image.dispose();
+      return y + maxH + 6;
     } catch (e) {
       debugPrint('[QB-LOGO] _drawLogoCentered error="$e"');
       return y;
     }
-  }
-
-  static double _itemHeader(Canvas canvas, double y) {
-    final totalWidth = _width - (_padding * 2);
-    const amountWidth = 98.0;
-    const qtyWidth = 42.0;
-    const gap = 8.0;
-    final nameWidth = totalWidth - amountWidth - qtyWidth - (gap * 2);
-    final item = _painter('ITEM', fontSize: 18, weight: FontWeight.w700, maxLines: 1)
-      ..layout(maxWidth: nameWidth);
-    final qty = _painter('QTY', fontSize: 18, weight: FontWeight.w700, align: TextAlign.center, maxLines: 1)
-      ..layout(maxWidth: qtyWidth);
-    final amt = _painter('TOTAL', fontSize: 18, weight: FontWeight.w700, align: TextAlign.right, maxLines: 1)
-      ..layout(maxWidth: amountWidth);
-    item.paint(canvas, Offset(_padding, y));
-    qty.paint(canvas, Offset(_padding + nameWidth + gap, y));
-    amt.paint(canvas, Offset(_width - _padding - amt.width, y));
-    return y + item.height + 5;
-  }
-
-  static double _serviceBox(Canvas canvas, String value, double y) {
-    final painter = _painter(
-      value,
-      fontSize: 20,
-      weight: FontWeight.w700,
-      align: TextAlign.center,
-      maxLines: 1,
-    )..layout(maxWidth: _width - (_padding * 2) - 40);
-    final width = painter.width + 34;
-    final height = painter.height + 14;
-    final rect = Rect.fromLTWH((_width - width) / 2, y, width, height);
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(4)),
-      paint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(4)),
-      Paint()
-        ..color = Colors.black
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-    painter.paint(canvas, Offset((_width - painter.width) / 2, y + 7));
-    return y + height + 6;
   }
 
   static double _ornament(Canvas canvas, double y) {
@@ -821,7 +729,12 @@ class TicketBitmapRenderer {
       textAlign: align,
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: _width - (_padding * 2));
-    painter.paint(canvas, Offset(_padding, y));
+    final x = switch (align) {
+      TextAlign.center => (_width - painter.width) / 2,
+      TextAlign.right || TextAlign.end => _width - _padding - painter.width,
+      _ => _padding,
+    };
+    painter.paint(canvas, Offset(x, y));
     return y + painter.height + 5;
   }
 
@@ -897,38 +810,19 @@ class TicketBitmapRenderer {
   }
 
   static double _kotItemRow(Canvas canvas, KotLineItem item, double y) {
-    final totalWidth = _width - (_padding * 2);
-    const qtyWidth = 52.0;
-    const gap = 10.0;
-    final nameWidth = totalWidth - qtyWidth - gap;
-    final qty = _painter(
-      '[${item.qtyText}]',
-      fontSize: 25,
-      weight: FontWeight.w800,
-      align: TextAlign.center,
-      maxLines: 1,
-    )..layout(maxWidth: qtyWidth);
-    final name = _painter(
-      item.name,
+    final left = '${item.qtyText} x ${item.name}';
+    final modifiers = item.modifiers.trim();
+    if (modifiers.isEmpty) {
+      return _text(canvas, left, y, fontSize: 25, weight: FontWeight.w700);
+    }
+    return _row(
+      canvas,
+      left,
+      modifiers,
+      y,
       fontSize: 25,
       weight: FontWeight.w700,
-      maxLines: 2,
-    )..layout(maxWidth: nameWidth);
-    qty.paint(canvas, Offset(_padding, y));
-    name.paint(canvas, Offset(_padding + qtyWidth + gap, y));
-    var rowHeight = qty.height > name.height ? qty.height : name.height;
-    final modifiers = item.modifiers.trim();
-    if (modifiers.isNotEmpty) {
-      final mod = _painter(
-        '+ $modifiers',
-        fontSize: 20,
-        weight: FontWeight.w500,
-        maxLines: 2,
-      )..layout(maxWidth: nameWidth);
-      mod.paint(canvas, Offset(_padding + qtyWidth + gap, y + rowHeight + 2));
-      rowHeight += mod.height + 4;
-    }
-    return y + rowHeight + 10;
+    );
   }
 
   static TextPainter _painter(

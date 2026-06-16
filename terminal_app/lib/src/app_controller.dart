@@ -3829,6 +3829,7 @@ class PosAppController extends ChangeNotifier {
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
       await updateOrderStatus(order.id, OrderStatus.completed);
     }
+    if (ok) unawaited(playBillCompleteSound());
     if (orderPrinterSideEffectsEnabled &&
         !_alertedPrintOrderIds.contains('${order.id}:invoice')) {
       _alertedPrintOrderIds.add('${order.id}:invoice');
@@ -4098,7 +4099,25 @@ class PosAppController extends ChangeNotifier {
     PosNotificationType type = PosNotificationType.pendingOrder,
   }) async {
     if (!notificationSoundEnabled) return;
-    final assetPath = _assetSoundForType(type);
+    await _playAsset(_assetSoundForType(type));
+  }
+
+  /// Chime for a successfully printed bill (order marked completed).
+  Future<void> playBillCompleteSound() async {
+    if (!notificationSoundEnabled) return;
+    await _playAsset('sounds/bill_printed_order_complete.wav');
+  }
+
+  /// Chime for reaching the new-order wizard's success/token screen.
+  Future<void> playWizardSuccessSound() async {
+    if (!notificationSoundEnabled) return;
+    await _playAsset('sounds/order_wizard_created_success.wav');
+  }
+
+  /// Plays [assetPath] via the shared notification player, falling back to
+  /// the system default notification sound / alert tone on any failure or
+  /// when [assetPath] is null (types without a dedicated asset).
+  Future<void> _playAsset(String? assetPath) async {
     try {
       final player = _notificationPlayer ??= AudioPlayer();
       await player.stop();
@@ -4128,11 +4147,11 @@ class PosAppController extends ChangeNotifier {
   String? _assetSoundForType(PosNotificationType type) {
     switch (type) {
       case PosNotificationType.pendingOrder:
-        return 'sounds/pending_order.wav';
+        return 'sounds/order_pending_request.wav';
       case PosNotificationType.acceptedOrder:
-        return 'sounds/accepted_order.wav';
+        return 'sounds/general_notification.wav';
       case PosNotificationType.system:
-        return 'sounds/chatbot_alert.wav';
+        return 'sounds/chatbot_needs_you.wav';
       default:
         return null;
     }

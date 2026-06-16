@@ -1,0 +1,4 @@
+order_no,status,datetime,outlet,service_type,service_number,sale_date,shift,terminal,placed_by,closed_by,table_info,items,discount_type,discount_amount,total
+016771,Completed,16-06-2026 08:28:10 PM,Default Outlet,Delivery,# 4,16-06-2026,Default Shift,Default Terminal,Admin,Admin,,BBQ Pizza 6&quot;+Chicken Pop 6 piece+ Wedges 6 Pieces (qty: 1),,,399.00
+016770,Completed,16-06-2026 04:09:44 PM,Default Outlet,Delivery,# 2,16-06-2026,Default Shift,Default Terminal,Admin,Admin,,BBQ Chicken (qty: 1) + Small (৳199.00),,,199.00
+016769,Completed,16-06-2026 03:43:21 PM,Default Outlet,Dine-in,# 1,16-06-2026,Default Shift,Default Terminal,Admin,Admin,Table 6,BBQ Pizza 9&quot;+ 4 Pieces Lolipop+ Sausage Fry (qty: 1) | Soft Drinks (qty: 2),,,470.00

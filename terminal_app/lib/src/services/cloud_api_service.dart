@@ -1744,11 +1744,15 @@ class CloudApiService {
   Future<List<Map<String, Object?>>> pullOrders({
     DateTime? since,
     int? limit,
+    DateTime? orderDate,
   }) async {
     final config = _requireServerConfig();
     final query = <String, String>{
       if (since != null) 'since': since.toUtc().toIso8601String(),
       if (limit != null) 'limit': '$limit',
+      if (orderDate != null)
+        'order_date':
+            '${orderDate.year}-${orderDate.month.toString().padLeft(2, '0')}-${orderDate.day.toString().padLeft(2, '0')}',
     };
     final uri = _uri(
       '/outlets/${config.outletId}/orders',

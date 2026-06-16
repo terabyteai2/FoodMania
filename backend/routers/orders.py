@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_device_payload, get_current_outlet_id
@@ -120,6 +120,7 @@ async def pull_orders(
     outlet_id: str,
     since: str | None = None,
     limit: int | None = None,
+    order_date: str | None = None,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -128,6 +129,10 @@ async def pull_orders(
     if since:
         dt = _parse_since(since)
         query = query.where(Order.updated_at > dt)
+    if order_date:
+        from datetime import date
+        parsed = date.fromisoformat(order_date)
+        query = query.where(Order.order_date == parsed)
     # Clients pass `limit` on the initial (no-`since`) pull so memory-constrained
     # devices only load the most recent slice of history instead of every order.
     if limit and limit > 0:
@@ -190,10 +195,18 @@ async def push_order(
             )
 
     now = datetime.now(timezone.utc)
+    today = now.date()
+    max_serial = await db.execute(
+        select(func.coalesce(func.max(Order.serial_number), 0))
+        .where(Order.outlet_id == outlet_id, Order.order_date == today)
+    )
+    next_serial = (max_serial.scalar() or 0) + 1
+
     order = Order(
         id=body.id,
         outlet_id=outlet_id,
-        serial_number=body.serialNumber,
+        serial_number=next_serial,
+        order_date=today,
         source=body.source,
         status=status_value,
         total_amount=body.totalAmount,

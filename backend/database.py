@@ -406,6 +406,7 @@ async def _ensure_order_columns(conn) -> None:
         ("customer_name", "TEXT"),
         ("delivery_address", "TEXT"),
         ("mobile_number", "VARCHAR"),
+        ("order_date", "DATE"),
     ]
     if dialect == "sqlite":
         for column, column_type in columns:
@@ -425,6 +426,7 @@ async def _ensure_order_columns(conn) -> None:
     await conn.execute(text("UPDATE orders SET subtotal = total_amount WHERE subtotal IS NULL"))
     await conn.execute(text("UPDATE orders SET vat_rate_percent = 0 WHERE vat_rate_percent IS NULL"))
     await conn.execute(text("UPDATE orders SET vat_amount = 0 WHERE vat_amount IS NULL"))
+    await conn.execute(text("UPDATE orders SET order_date = created_at::date WHERE order_date IS NULL"))
 
 
 async def _ensure_chatbot_columns(conn) -> None:

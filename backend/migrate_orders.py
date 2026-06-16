@@ -14,7 +14,7 @@ import os
 import re
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import openpyxl
 import asyncpg
@@ -387,11 +387,15 @@ async def _import_orders(conn, menu_ids: dict[str, str]):
     with open(CSV_PATH, "r") as f:
         csv_rows = list(csv.DictReader(f))
 
-    existing_max = await conn.fetchval(
-        "SELECT COALESCE(MAX(serial_number), 0) FROM orders WHERE outlet_id=$1",
+    # Seed per-day serial counters from existing DB rows
+    rows = await conn.fetch(
+        "SELECT order_date, MAX(serial_number) AS max_serial FROM orders "
+        "WHERE outlet_id=$1 AND order_date IS NOT NULL GROUP BY order_date",
         OUTLET_ID,
     )
-    next_serial = existing_max + 1
+    day_serials: dict[date, int] = {
+        r["order_date"]: r["max_serial"] for r in rows
+    }
     created = 0
     audit_events = 0
 
@@ -454,32 +458,37 @@ async def _import_orders(conn, menu_ids: dict[str, str]):
             if tm:
                 table_no = tm.group(1)
 
+        # Assign daily serial number
+        order_date = dt.date()
+        day_serials.setdefault(order_date, 0)
+        day_serials[order_date] += 1
+        daily_serial = day_serials[order_date]
+
         oid = str(uuid.uuid4())
         await conn.execute(
             """
             INSERT INTO orders
-                (id, outlet_id, serial_number, source, status,
+                (id, outlet_id, serial_number, order_date, source, status,
                  total_amount, subtotal, service_type, table_no, items,
                  created_by_account_id, created_by_role,
                  discount_label, discount_amount,
                  service_charge_rate_percent, service_charge_amount,
                  billing_snapshot, kot_batches, settled_at, created_at, updated_at)
             VALUES
-                ($1,$2,$3,'manual',$4,
-                 $5,$6,$7,$8,$9::jsonb,
-                 $10,$11,
-                 $12,$13,
+                ($1,$2,$3,$4,'manual',$5,
+                 $6,$7,$8,$9,$10::jsonb,
+                 $11,$12,
+                 $13,$14,
                  0,0,
-                 '{}'::jsonb,'[]'::jsonb,$14,$14,$14)
+                 '{}'::jsonb,'[]'::jsonb,$15,$15,$15)
             """,
-            oid, OUTLET_ID, next_serial, status,
+            oid, OUTLET_ID, daily_serial, order_date, status,
             total, subtotal, service_type, table_no,
             json.dumps(items_json),
             ACCOUNT_ID, ACCOUNT_ROLE,
             discount_type, discount_amt,
             dt,
         )
-        next_serial += 1
         created += 1
 
         # Audit event for rejected orders

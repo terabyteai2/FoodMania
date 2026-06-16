@@ -8,7 +8,7 @@ SSL_CTX = ssl.create_default_context()
 
 BASE_URL = ("https://restrogreen.quicklyservices.com/sales/order?page={}&paymentModeId=0&appUserId=0"
             "&orderStatusId=&serviceType=&discountType=&search_text="
-            "&startDate=01%2F01%2F2023+&endDate=+16%2F06%2F2026"
+            "&startDate=16%2F06%2F2026&endDate=16%2F06%2F2026"
             "&shiftIds=&terminalIds=&outletId=0&selectedDeliveryService=")
 
 HEADERS = {
@@ -180,7 +180,7 @@ def main():
         all_orders.extend(orders)
         page += 1
 
-    csv_path = "/home/dev/Documents/GitHub/FoodMania/orders/orders.csv"
+    csv_path = "/home/dev/Documents/GitHub/FoodMania/orders/orders_june16.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "order_no", "status", "datetime", "outlet", "service_type",

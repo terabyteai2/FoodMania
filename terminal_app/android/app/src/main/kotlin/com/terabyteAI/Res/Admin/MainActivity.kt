@@ -68,7 +68,7 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "playRawNotificationSound" -> {
-                        val resource = call.argument<String>("resource") ?: "pending_order"
+                        val resource = call.argument<String>("resource") ?: "order_pending_request"
                         try {
                             result.success(playRawNotificationSound(resource))
                         } catch (_: Exception) {
@@ -344,14 +344,14 @@ class MainActivity : FlutterActivity() {
             PENDING_CHANNEL_ID,
             "Pending order alerts",
             "Sound plays when a new order needs attention.",
-            R.raw.pending_order,
+            R.raw.order_pending_request,
         )
         createChannel(
             manager,
             ACCEPTED_CHANNEL_ID,
             "Accepted order alerts",
             "Sound plays when an order is accepted.",
-            R.raw.accepted_order,
+            R.raw.general_notification,
         )
         val defaultUri =
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

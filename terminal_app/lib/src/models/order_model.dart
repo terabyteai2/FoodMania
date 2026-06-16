@@ -41,6 +41,7 @@ class OrderModel {
     this.serviceChargeAmount = 0,
     this.billingSnapshot = const {},
     this.kotBatches = const [],
+    this.orderDate,
     this.settledAt,
   }) : subtotal = subtotal ?? total,
        vatRatePercent = vatRatePercent ?? 0,
@@ -78,6 +79,7 @@ class OrderModel {
   final SyncStatus syncStatus;
   final int version;
   final int sequenceNo;
+  final DateTime? orderDate;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -115,6 +117,7 @@ class OrderModel {
     SyncStatus? syncStatus,
     int? version,
     int? sequenceNo,
+    DateTime? orderDate,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool clearCustomerName = false,
@@ -162,6 +165,7 @@ class OrderModel {
       syncStatus: syncStatus ?? this.syncStatus,
       version: version ?? this.version,
       sequenceNo: sequenceNo ?? this.sequenceNo,
+      orderDate: orderDate ?? this.orderDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -186,6 +190,7 @@ class OrderModel {
       'billingSnapshot': jsonEncode(billingSnapshot),
       'kotBatches': jsonEncode(kotBatches),
       'settledAt': settledAt?.toIso8601String(),
+      'orderDate': orderDate?.toIso8601String(),
       'serviceType': serviceType?.value,
       'covers': covers,
       'paymentMethod': paymentMethod?.value,
@@ -223,6 +228,7 @@ class OrderModel {
       'billingSnapshot': billingSnapshot,
       'kotBatches': kotBatches,
       'settledAt': settledAt?.toIso8601String(),
+      'orderDate': orderDate?.toIso8601String(),
       'serviceType': serviceType?.value,
       'covers': covers,
       'paymentMethod': paymentMethod?.value,
@@ -267,6 +273,9 @@ class OrderModel {
       billingSnapshot: _jsonMap(map['billingSnapshot']),
       kotBatches: _jsonMapList(map['kotBatches']),
       settledAt: DateTime.tryParse(map['settledAt']?.toString() ?? ''),
+      orderDate: map['orderDate'] != null
+          ? DateTime.tryParse(map['orderDate'] as String)
+          : null,
       serviceType: OrderServiceType.tryParse(map['serviceType'] as String?),
       covers: _intOrNull(map['covers']),
       paymentMethod: OrderPaymentMethod.tryParse(

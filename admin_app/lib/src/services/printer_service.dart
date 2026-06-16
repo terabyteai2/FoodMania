@@ -952,6 +952,7 @@ class PrinterService {
     AppLanguage language = AppLanguage.en,
     String? orderDetailsUrl,
     String? logoUrl,
+    String? serverRole,
   }) async {
     final attemptId = _nextPrinterAttempt('print-bill-${order.id}');
     debugPrint('[QB-LOGO] printCustomerInvoice called logoUrl="$logoUrl"');
@@ -970,6 +971,7 @@ class PrinterService {
         restaurantPhone: restaurantPhone,
         orderDetailsUrl: orderDetailsUrl,
         logoUrl: logoUrl,
+        serverRole: serverRole,
       );
       _logPrinterDiag(
         attemptId,
@@ -1258,6 +1260,7 @@ class PrinterService {
     String restaurantPhone = '',
     String? orderDetailsUrl,
     String? logoUrl,
+    String? serverRole,
   }) async {
     final tableRaw = order.serviceType == OrderServiceType.delivery
         ? ''
@@ -1329,7 +1332,8 @@ class PrinterService {
       footerText: isDelivery
           ? null
           : labels.pick('Thank you for dining!', 'ধন্যবাদ!'),
-      logoBytes: logoBytes,
+      logoImageBytes: logoBytes,
+      serverRole: serverRole,
     );
 
     final pngBytes = await TicketBitmapRenderer.render(data);
@@ -1346,6 +1350,7 @@ class PrinterService {
     String restaurantPhone = '',
     String? orderDetailsUrl,
     String? logoUrl,
+    String? serverRole,
   }) async {
     final pngBytes = await _buildBitmapCopyPng(
       order,
@@ -1356,6 +1361,7 @@ class PrinterService {
       restaurantPhone: restaurantPhone,
       orderDetailsUrl: orderDetailsUrl,
       logoUrl: logoUrl,
+      serverRole: serverRole,
     );
     final decoded = img.decodePng(pngBytes);
     if (decoded == null) {
@@ -2079,18 +2085,16 @@ class PrinterService {
     required String restaurantName,
     String? restaurantSubtitle,
     String? serverName,
-    String? channelValue,
   }) {
     final serviceType = order.serviceType ?? OrderServiceType.dineIn;
     final table = order.tableNo?.trim();
-    final waitingMins = DateTime.now().difference(order.createdAt.toLocal()).inMinutes;
-    final orderId = order.id;
-    final kotSerial = orderId.length >= 6 ? orderId.substring(orderId.length - 6) : orderId;
     return KotTicketData(
       restaurantName: restaurantName,
       restaurantSubtitle: restaurantSubtitle,
       serialLabel: labels.pick('Serial #', 'সিরিয়াল #'),
       serialValue: labels.orderNo(order.displaySequence),
+      dateLabel: labels.pick('Date', 'তারিখ'),
+      dateValue: labels.digits(DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal())),
       timeLabel: labels.pick('Time', 'সময়'),
       timeValue: labels.digits(_formatKotTime(order.createdAt)),
       typeLabel: labels.pick('Type', 'ধরন'),
@@ -2114,10 +2118,6 @@ class PrinterService {
       noteLabel: labels.pick('Note', 'নোট'),
       serverLabel: labels.pick('Server', 'সার্ভার'),
       serverName: serverName,
-      dateValue: DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal()),
-      channelValue: channelValue,
-      waitingMins: waitingMins,
-      kotSerial: kotSerial,
     );
   }
 
