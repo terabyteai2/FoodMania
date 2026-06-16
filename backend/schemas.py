@@ -236,10 +236,11 @@ class MenuScanCandidate(BaseModel):
 class ReceiptScanCandidate(BaseModel):
     nameEn: str = Field(min_length=1)
     nameBn: str = Field(min_length=1)
-    qty: float = Field(gt=0)
+    qty: float = Field(ge=0)
     unit: str = Field(default="pcs", min_length=1)
-    unitPriceBdt: float = Field(ge=0)
-    totalBdt: float = Field(gt=0)
+    unitPriceBdt: float = Field(ge=0, default=0)
+    totalBdt: float = Field(ge=0, default=0)
+    matchedInventoryItemId: str | None = None
 
 
 # ── Inventory ─────────────────────────────────────────────────────────────────

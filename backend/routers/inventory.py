@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1056,19 +1056,31 @@ async def inventory_daily_report(
     )
 
 
-@router.post("/outlets/{outlet_id}/inventory/receipt/scan")
-async def scan_inventory_receipt(
+@router.post("/outlets/{outlet_id}/inventory/scan")
+async def scan_inventory(
     outlet_id: str,
     files: list[UploadFile] = File(...),
+    category: str | None = Form(default=None),
     payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
+    """Unified inventory scan. Photographs a supplier bill or a stock-count sheet;
+    the LLM classifies it (or honors an explicit `category`) and returns the parsed
+    lines plus the resolved category so the app can route to stock-in or count.
+    """
     _ensure_outlet(str(payload["sub"]), outlet_id)
     await _require_inventory_account(db, outlet_id, payload)
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Select at least one receipt image.",
+            detail="Select at least one image.",
+        )
+
+    requested_category = (category or "").strip().lower() or None
+    if requested_category is not None and requested_category not in {"stock_in", "count"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="category must be stock_in, count, or omitted.",
         )
 
     pages: list[tuple[bytes, str]] = []
@@ -1087,32 +1099,53 @@ async def scan_inventory_receipt(
             )
         pages.append((data, content_type))
 
+    items = (
+        await db.execute(
+            select(InventoryItem).where(
+                InventoryItem.outlet_id == outlet_id,
+                InventoryItem.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    known_items = [
+        {"id": item.id, "name": item.name, "unit": item.unit or "pcs"}
+        for item in items
+    ]
+
     logger.info(
-        "receipt scan request outlet=%s pages=%s bytes=%s",
+        "inventory scan request outlet=%s pages=%s bytes=%s category=%s known=%s",
         outlet_id,
         len(pages),
         sum(len(image_bytes) for image_bytes, _ in pages),
+        requested_category or "auto",
+        len(known_items),
     )
 
     try:
         page_texts = await extract_receipt_page_texts(pages)
-        parsed = await parse_receipt_text(page_texts)
+        parsed = await parse_receipt_text(
+            page_texts,
+            category=requested_category,
+            known_items=known_items,
+        )
     except ReceiptScanError as error:
-        logger.warning("receipt scan failed outlet=%s error=%s", outlet_id, error)
+        logger.warning("inventory scan failed outlet=%s error=%s", outlet_id, error)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(error),
         ) from error
 
     logger.info(
-        "receipt scan parsed outlet=%s provider=%s items=%s warnings=%s",
+        "inventory scan parsed outlet=%s category=%s provider=%s items=%s warnings=%s",
         outlet_id,
+        parsed.category,
         parsed.provider,
         len(parsed.items),
         len(parsed.warnings),
     )
     return ok(
         {
+            "category": parsed.category,
             "items": [item.model_dump() for item in parsed.items],
             "provider": parsed.provider,
             "pageCount": len(pages),

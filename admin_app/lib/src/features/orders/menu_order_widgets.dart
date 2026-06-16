@@ -127,12 +127,7 @@ class MenuStep extends StatelessWidget {
             onDecrement: onDecrement,
           ),
         ),
-        CartFooter(
-          cart: cart,
-          total: total,
-          totalQty: totalQty,
-          onSubmit: onSubmit,
-        ),
+        CartFooter(onSubmit: onSubmit),
       ],
     );
   }
@@ -1014,115 +1009,21 @@ class ItemImage extends StatelessWidget {
 
 class CartFooter extends StatelessWidget {
   const CartFooter({
-    required this.cart,
-    required this.total,
-    required this.totalQty,
     this.onSubmit,
     super.key,
   });
 
-  final Map<String, int> cart;
-  final double total;
-  final int totalQty;
   final VoidCallback? onSubmit;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    final hasItems = cart.isNotEmpty;
-
     return TfStickyCTA(
-      child: _ReviewButton(
-        count: totalQty,
-        subtotal: total,
+      child: TfButton(
         label: text.reviewOrder,
-        enabled: hasItems && onSubmit != null,
+        icon: TfNavIcon.check,
+        size: TfButtonSize.lg,
         onPressed: onSubmit,
-      ),
-    );
-  }
-}
-
-class _ReviewButton extends StatelessWidget {
-  const _ReviewButton({
-    required this.count,
-    required this.subtotal,
-    required this.label,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final int count;
-  final double subtotal;
-  final String label;
-  final bool enabled;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: Material(
-        color: enabled ? PosColors.primary : PosColors.line,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(PosRadii.md),
-              border: Border.all(
-                color: enabled ? Colors.transparent : PosColors.line,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: enabled
-                        ? const Color(0xFF14180E).withValues(alpha: 0.18)
-                        : PosColors.muted.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  alignment: Alignment.center,
-                  child: TfText(
-                    tfFormatNumber(context, count),
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: enabled ? PosColors.accentInk : PosColors.muted,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TfText(
-                  label,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: enabled ? PosColors.accentInk : PosColors.muted,
-                  ),
-                ),
-                const Spacer(),
-                TfText(
-                  tfFormatCurrency(context, subtotal),
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: enabled ? PosColors.accentInk : PosColors.muted,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

@@ -1371,6 +1371,14 @@ class AppStrings {
   String get receiptScanFailed =>
       isBn ? 'রিসিট স্ক্যান ব্যর্থ হয়েছে' : 'Receipt scan failed';
 
+  // Unified inventory scan (bill OR count sheet → auto-routed)
+  String get scanStock => isBn ? 'স্ক্যান' : 'Scan';
+  String get scanStockHint =>
+      isBn ? 'বিল বা গণনার শিট' : 'Bill or count sheet';
+  String get scanningStock => isBn ? 'স্ক্যান হচ্ছে…' : 'Scanning…';
+  String get countScanUnmatched =>
+      isBn ? 'মেলানো যায়নি' : 'Couldn\'t match';
+
   // Daily report
   String get unexplainedVariance =>
       isBn ? 'ব্যাখ্যাহীন ভ্যারিয়েন্স' : 'Unexplained variance';

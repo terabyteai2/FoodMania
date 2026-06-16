@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 _KNOWN_UNITS = {"kg", "gm", "g", "ltr", "l", "ml", "pcs", "pc", "pack", "dozen"}
 
 
+VALID_CATEGORIES = {"stock_in", "count"}
+
+
 class ReceiptScanError(RuntimeError):
     pass
 
@@ -28,6 +31,7 @@ class ReceiptScanParseResult:
     items: list[ReceiptScanCandidate]
     provider: str
     warnings: list[str]
+    category: str
 
 
 @dataclass(frozen=True)
@@ -79,68 +83,145 @@ def _receipt_scan_schema() -> dict[str, Any]:
         "properties": {
             "nameEn": {"type": "string", "description": "Item name in English."},
             "nameBn": {"type": "string", "description": "Item name in Bangla."},
-            "qty": {"type": "number", "description": "Quantity bought (positive number)."},
+            "qty": {"type": "number", "description": "Quantity (positive number)."},
             "unit": {
                 "type": "string",
                 "description": "Lowercase unit: kg, gm, ltr, ml, pcs, pack, dozen.",
             },
             "unitPriceBdt": {
                 "type": "number",
-                "description": "Price per unit in BDT, before discounts. 0 if unknown.",
+                "description": "Price per unit in BDT, before discounts. 0 if unknown or for a count.",
             },
             "totalBdt": {
                 "type": "number",
-                "description": "Line total paid in BDT.",
+                "description": "Line total paid in BDT. 0 for a count.",
+            },
+            "matchedInventoryItemId": {
+                "type": ["string", "null"],
+                "description": (
+                    "For a count, the id of the matching inventory item from the "
+                    "provided known-items list, or null if unsure. Always null for stock_in."
+                ),
             },
         },
-        "required": ["nameEn", "nameBn", "qty", "unit", "unitPriceBdt", "totalBdt"],
+        "required": [
+            "nameEn",
+            "nameBn",
+            "qty",
+            "unit",
+            "unitPriceBdt",
+            "totalBdt",
+            "matchedInventoryItemId",
+        ],
     }
     return {
         "type": "object",
         "additionalProperties": False,
-        "properties": {"items": {"type": "array", "items": item}},
-        "required": ["items"],
+        "properties": {
+            "category": {
+                "type": "string",
+                "enum": ["stock_in", "count"],
+                "description": "Document type: stock_in (supplier bill) or count (stock count sheet).",
+            },
+            "items": {"type": "array", "items": item},
+        },
+        "required": ["category", "items"],
     }
 
 
-def _receipt_scan_instructions() -> str:
+def _category_instructions(category: str | None) -> str:
+    if category == "stock_in":
+        return (
+            "The document is a supplier receipt / purchase bill. Set "
+            '"category" to "stock_in".'
+        )
+    if category == "count":
+        return (
+            "The document is a stock-count / end-of-day count sheet. Set "
+            '"category" to "count".'
+        )
     return (
-        "Return JSON only. Extract inventory line items from a restaurant supplier "
-        "receipt or hand-written bill into the provided schema. The input is "
-        "OCR.space JSON for receipt page photos. Read OCR text from "
-        "ParsedResults[].ParsedText and use OCR JSON as supporting evidence. "
-        "Receipts may contain Bangla, English, vendor names, addresses, phone "
-        "numbers, dates, headers like INVOICE/BILL/RECEIPT, VAT/tax lines, "
-        "discount lines, sub-totals, totals, payment notes, and decorative copy; "
-        "ignore anything that is not a purchasable inventory line item with a "
-        "quantity and a price. Do not include sub-totals, taxes, discounts, "
-        "delivery charges, or grand totals as items. Each line item must have a "
-        "positive numeric quantity, a unit, and a positive numeric total in BDT "
-        "(no currency symbols). Return English and Bangla names in separate "
-        "fields: nameEn, nameBn. nameBn must be Bengali script, not Romanized "
-        "Bangla and never a copy of nameEn. If one language is missing, "
-        "translate or transliterate the missing side. Normalize the unit to one "
-        "of: kg, gm, ltr, ml, pcs, pack, dozen — pick the closest. If "
-        "unitPriceBdt is not printed, compute it as totalBdt / qty (round to "
-        "2 decimals). Merge duplicate sightings of the same item across pages."
+        "Classify the document yourself and set \"category\" accordingly. Use "
+        '"stock_in" when it looks like a supplier receipt or purchase bill — '
+        "it has a vendor name, item prices, and a payable total. Use \"count\" "
+        "when it looks like a stock-count / end-of-day count sheet — a title "
+        "like \"end of day count\", \"stock count\", \"closing stock\", or "
+        "\"daily count\", or a bare checklist of item names against counted "
+        "quantities with no prices."
     )
 
 
-def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
+def _receipt_scan_instructions(category: str | None) -> str:
+    return (
+        "Return JSON only. Extract inventory line items from a photographed "
+        "restaurant document into the provided schema. The input is OCR.space "
+        "JSON for page photos. Read OCR text from ParsedResults[].ParsedText and "
+        "use OCR JSON as supporting evidence. "
+        f"{_category_instructions(category)} "
+        "Pages may contain Bangla, English, vendor names, addresses, phone "
+        "numbers, dates, headers like INVOICE/BILL/RECEIPT, VAT/tax lines, "
+        "discount lines, sub-totals, totals, payment notes, and decorative copy; "
+        "ignore anything that is not an inventory line item. Do not include "
+        "sub-totals, taxes, discounts, delivery charges, or grand totals as "
+        "items. Return English and Bangla names in separate fields: nameEn, "
+        "nameBn. nameBn must be Bengali script, not Romanized Bangla and never a "
+        "copy of nameEn. If one language is missing, translate or transliterate "
+        "the missing side. Normalize the unit to one of: kg, gm, ltr, ml, pcs, "
+        "pack, dozen — pick the closest. "
+        "For category stock_in: each line item must have a positive quantity, a "
+        "unit, and a positive total in BDT (no currency symbols); if unitPriceBdt "
+        "is not printed, compute it as totalBdt / qty (round to 2 decimals); set "
+        "matchedInventoryItemId to null. "
+        "For category count: each line item has a counted quantity (zero is "
+        "allowed) and a unit; set unitPriceBdt and totalBdt to 0; set "
+        "matchedInventoryItemId to the id of the best-matching known inventory "
+        "item, or null if none matches confidently. "
+        "Merge duplicate sightings of the same item across pages."
+    )
+
+
+def _known_items_block(known_items: list[dict[str, Any]] | None) -> str:
+    rows = []
+    for entry in known_items or []:
+        item_id = str(entry.get("id") or "").strip()
+        name = str(entry.get("name") or "").strip()
+        if not item_id or not name:
+            continue
+        unit = str(entry.get("unit") or "").strip()
+        rows.append(f"{item_id} : {name}" + (f" : {unit}" if unit else ""))
+    if not rows:
+        return (
+            "\n\nKNOWN INVENTORY ITEMS: none provided. Leave "
+            "matchedInventoryItemId null for every item."
+        )
+    listing = "\n".join(rows)
+    return (
+        "\n\nKNOWN INVENTORY ITEMS (id : name : unit) — match count items to "
+        f"these ids only:\n{listing}"
+    )
+
+
+def _prompt(
+    page_texts: list[str],
+    *,
+    category: str | None = None,
+    known_items: list[dict[str, Any]] | None = None,
+) -> list[dict[str, str]]:
     pages = "\n\n".join(
-        f"--- OCR.SPACE RECEIPT PAGE {index + 1} JSON ---\n{text.strip()}"
+        f"--- OCR.SPACE PAGE {index + 1} JSON ---\n{text.strip()}"
         for index, text in enumerate(page_texts)
         if text.strip()
     )
     return [
-        {"role": "system", "content": _receipt_scan_instructions()},
+        {"role": "system", "content": _receipt_scan_instructions(category)},
         {
             "role": "user",
             "content": (
-                "Parse these OCR.space JSON receipt pages into JSON with an items "
-                "array. Do not invent items that are not visible in the OCR "
+                "Parse these OCR.space JSON pages into JSON with a category and an "
+                "items array. Do not invent items that are not visible in the OCR "
                 "result. Preserve the page order when practical and merge "
-                "duplicate sightings of the same item.\n\n"
+                "duplicate sightings of the same item."
+                f"{_known_items_block(known_items)}\n\n"
                 f"{pages}"
             ),
         },
@@ -160,11 +241,17 @@ def _response_format(provider: _Provider) -> dict[str, Any]:
     return {"type": "json_object"}
 
 
-def _request_payload(provider: _Provider, page_texts: list[str]) -> dict[str, Any]:
+def _request_payload(
+    provider: _Provider,
+    page_texts: list[str],
+    *,
+    category: str | None = None,
+    known_items: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     payload = {
         "model": provider.model,
         "temperature": 0,
-        "messages": _prompt(page_texts),
+        "messages": _prompt(page_texts, category=category, known_items=known_items),
         "response_format": _response_format(provider),
     }
     if provider.name == "groq":
@@ -235,7 +322,21 @@ def _normalize_unit(value: Any) -> str:
     return normalized
 
 
-def _validated_items(raw_content: str) -> list[ReceiptScanCandidate]:
+def _resolve_category(decoded: Any, requested: str | None) -> str:
+    if requested in VALID_CATEGORIES:
+        return requested
+    llm_category = decoded.get("category") if isinstance(decoded, dict) else None
+    if isinstance(llm_category, str) and llm_category.strip() in VALID_CATEGORIES:
+        return llm_category.strip()
+    return "stock_in"
+
+
+def _validated_items(
+    raw_content: str,
+    *,
+    category: str | None = None,
+    known_ids: set[str] | None = None,
+) -> tuple[str, list[ReceiptScanCandidate]]:
     if not raw_content.strip():
         raise ReceiptScanError("The LLM returned an empty response.")
     try:
@@ -245,6 +346,10 @@ def _validated_items(raw_content: str) -> list[ReceiptScanCandidate]:
     raw_items = decoded.get("items") if isinstance(decoded, dict) else None
     if not isinstance(raw_items, list):
         raise ReceiptScanError("The LLM JSON did not include an items array.")
+
+    resolved = _resolve_category(decoded, category)
+    is_count = resolved == "count"
+    valid_ids = known_ids or set()
 
     items: list[ReceiptScanCandidate] = []
     for raw in raw_items:
@@ -258,14 +363,26 @@ def _validated_items(raw_content: str) -> list[ReceiptScanCandidate]:
             total_f = float(total) if total is not None else 0.0
         except (TypeError, ValueError):
             continue
-        if qty_f <= 0 or total_f <= 0:
-            continue
-        try:
-            unit_price_f = float(unit_price) if unit_price is not None else 0.0
-        except (TypeError, ValueError):
+        if is_count:
+            if qty_f < 0:
+                continue
             unit_price_f = 0.0
-        if unit_price_f <= 0:
-            unit_price_f = round(total_f / qty_f, 2)
+            total_f = 0.0
+        else:
+            if qty_f <= 0 or total_f <= 0:
+                continue
+            try:
+                unit_price_f = float(unit_price) if unit_price is not None else 0.0
+            except (TypeError, ValueError):
+                unit_price_f = 0.0
+            if unit_price_f <= 0:
+                unit_price_f = round(total_f / qty_f, 2)
+        matched_id = raw.get("matchedInventoryItemId")
+        matched_id = (
+            str(matched_id).strip()
+            if is_count and isinstance(matched_id, str) and str(matched_id).strip() in valid_ids
+            else None
+        )
         normalized = {
             "nameEn": str(raw.get("nameEn") or "").strip(),
             "nameBn": str(raw.get("nameBn") or "").strip(),
@@ -273,6 +390,7 @@ def _validated_items(raw_content: str) -> list[ReceiptScanCandidate]:
             "unit": _normalize_unit(raw.get("unit")),
             "unitPriceBdt": unit_price_f,
             "totalBdt": total_f,
+            "matchedInventoryItemId": matched_id,
         }
         if not normalized["nameEn"] and not normalized["nameBn"]:
             continue
@@ -285,15 +403,25 @@ def _validated_items(raw_content: str) -> list[ReceiptScanCandidate]:
         except ValidationError:
             continue
     if not items:
-        raise ReceiptScanError("The LLM returned no valid priced receipt items.")
-    return items
+        raise ReceiptScanError("The LLM returned no valid scan items.")
+    return resolved, items
 
 
-async def parse_receipt_text(page_texts: list[str]) -> ReceiptScanParseResult:
+async def parse_receipt_text(
+    page_texts: list[str],
+    *,
+    category: str | None = None,
+    known_items: list[dict[str, Any]] | None = None,
+) -> ReceiptScanParseResult:
     clean_pages = [text.strip() for text in page_texts if text.strip()]
     if not clean_pages:
-        raise ReceiptScanError("OCR did not find readable receipt text.")
+        raise ReceiptScanError("OCR did not find readable text.")
 
+    known_ids = {
+        str(entry.get("id")).strip()
+        for entry in (known_items or [])
+        if str(entry.get("id") or "").strip()
+    }
     warnings: list[str] = []
     configured = [provider for provider in _providers() if provider.api_key and provider.model]
     if not configured:
@@ -303,10 +431,11 @@ async def parse_receipt_text(page_texts: list[str]) -> ReceiptScanParseResult:
         for provider in configured:
             try:
                 logger.info(
-                    "receipt scan llm request provider=%s model=%s pages=%s",
+                    "receipt scan llm request provider=%s model=%s pages=%s category=%s",
                     provider.name,
                     provider.model,
                     len(clean_pages),
+                    category or "auto",
                 )
                 response = await client.post(
                     provider.url,
@@ -314,20 +443,31 @@ async def parse_receipt_text(page_texts: list[str]) -> ReceiptScanParseResult:
                         "Authorization": f"Bearer {provider.api_key}",
                         "Content-Type": "application/json",
                     },
-                    json=_request_payload(provider, clean_pages),
+                    json=_request_payload(
+                        provider,
+                        clean_pages,
+                        category=category,
+                        known_items=known_items,
+                    ),
                 )
                 response.raise_for_status()
                 decoded = response.json()
-                items = _validated_items(_message_content(decoded))
+                resolved, items = _validated_items(
+                    _message_content(decoded),
+                    category=category,
+                    known_ids=known_ids,
+                )
                 logger.info(
-                    "receipt scan llm parsed provider=%s items=%s",
+                    "receipt scan llm parsed provider=%s category=%s items=%s",
                     provider.name,
+                    resolved,
                     len(items),
                 )
                 return ReceiptScanParseResult(
                     items=items,
                     provider=provider.name,
                     warnings=warnings,
+                    category=resolved,
                 )
             except httpx.HTTPStatusError as error:
                 logger.warning(

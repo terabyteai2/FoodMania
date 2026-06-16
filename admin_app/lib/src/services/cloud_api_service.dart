@@ -2194,14 +2194,18 @@ class CloudApiService {
     return ChatThread.fromJson(Map<String, Object?>.from(data));
   }
 
-  Future<ReceiptScanResult> scanInventoryReceipt(
-    List<MenuScanPageUpload> pages,
-  ) async {
+  /// Unified inventory scan. The backend (LLM) classifies the photographed
+  /// document as a supplier bill or a count sheet — pass [category] to force a
+  /// type, or leave it null to let the backend decide.
+  Future<StockScanResult> scanInventoryStock(
+    List<MenuScanPageUpload> pages, {
+    StockScanCategory? category,
+  }) async {
     final config = _requireServerConfig();
     if (pages.isEmpty) {
-      throw CloudApiException('Select at least one receipt image.');
+      throw CloudApiException('Select at least one image.');
     }
-    final uri = _uri('/outlets/${config.outletId}/inventory/receipt/scan');
+    final uri = _uri('/outlets/${config.outletId}/inventory/scan');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
@@ -2212,6 +2216,9 @@ class CloudApiService {
     if (_cloudConfig.deviceToken.trim().isNotEmpty) {
       request.headers['Authorization'] =
           'Bearer ${_cloudConfig.deviceToken.trim()}';
+    }
+    if (category != null) {
+      request.fields['category'] = category.wire;
     }
     for (final page in pages) {
       request.files.add(
@@ -2239,14 +2246,14 @@ class CloudApiService {
               : detail is Map
               ? detail['message']?.toString()
               : null) ??
-          'Receipt scan failed: HTTP ${streamed.statusCode}';
+          'Scan failed: HTTP ${streamed.statusCode}';
       throw CloudApiException(message);
     }
     final data = payload['data'];
     if (data is! Map) {
-      throw CloudApiException('Receipt scan response was malformed.');
+      throw CloudApiException('Scan response was malformed.');
     }
-    return ReceiptScanResult.fromJson(Map<String, Object?>.from(data));
+    return StockScanResult.fromJson(Map<String, Object?>.from(data));
   }
 
   Future<Map<String, Object?>> _sendJson(

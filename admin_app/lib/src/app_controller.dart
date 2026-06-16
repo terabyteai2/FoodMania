@@ -1189,13 +1189,14 @@ class PosAppController extends ChangeNotifier {
     return cloudApiService.fetchInventoryDailyReport(date: date);
   }
 
-  Future<ReceiptScanResult> scanInventoryReceipt(
-    List<MenuScanPageUpload> pages,
-  ) {
+  Future<StockScanResult> scanInventoryStock(
+    List<MenuScanPageUpload> pages, {
+    StockScanCategory? category,
+  }) {
     if (!isCloudReady) {
       return Future.error(CloudApiException('Cloud sync not configured.'));
     }
-    return cloudApiService.scanInventoryReceipt(pages);
+    return cloudApiService.scanInventoryStock(pages, category: category);
   }
 
   Future<List<AuditEntry>> fetchAuditEvents({int days = 30}) {

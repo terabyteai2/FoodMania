@@ -6,9 +6,17 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_unit.dart';
+import '../../models/receipt_scan.dart';
+import '../../services/cloud_api_service.dart';
+import '../../services/menu_image_service.dart';
 
 class EndOfDayCountScreen extends StatefulWidget {
-  const EndOfDayCountScreen({super.key});
+  const EndOfDayCountScreen({this.initialScan, super.key});
+
+  /// When the user arrives from the unified Inventory-page Scan (the backend
+  /// classified the photo as a count sheet), the parsed lines are passed in so
+  /// matched quantities pre-fill without a second OCR round-trip.
+  final StockScanResult? initialScan;
 
   @override
   State<EndOfDayCountScreen> createState() => _EndOfDayCountScreenState();
@@ -16,7 +24,37 @@ class EndOfDayCountScreen extends StatefulWidget {
 
 class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   final Map<String, TextEditingController> _controllers = {};
+
+  /// inventoryItemId -> counted qty read from a scan (overrides the on-hand
+  /// prefill). Populated from `initialScan` and any in-screen re-scan.
+  final Map<String, double> _scannedQty = {};
+
+  /// Scanned names that didn't match any inventory item — surfaced in a banner,
+  /// never silently dropped or auto-created (hide-don't-fabricate invariant).
+  final List<String> _unmatched = [];
+
   bool _saving = false;
+  bool _scanning = false;
+  final MenuImageService _imageService = MenuImageService();
+
+  @override
+  void initState() {
+    super.initState();
+    _applyScan(widget.initialScan);
+  }
+
+  void _applyScan(StockScanResult? scan) {
+    if (scan == null) return;
+    for (final line in scan.items) {
+      final id = line.matchedInventoryItemId;
+      if (id != null && id.isNotEmpty) {
+        _scannedQty[id] = line.qty;
+      } else {
+        final name = line.nameEn.isNotEmpty ? line.nameEn : line.nameBn;
+        if (name.trim().isNotEmpty) _unmatched.add(name.trim());
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -27,10 +65,51 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   }
 
   TextEditingController _controller(InventoryItem item) =>
-      _controllers.putIfAbsent(
-        item.id,
-        () => TextEditingController(text: item.quantity.toStringAsFixed(1)),
-      );
+      _controllers.putIfAbsent(item.id, () {
+        final seeded = _scannedQty[item.id];
+        return TextEditingController(text: _fmtQty(seeded ?? item.quantity));
+      });
+
+  static String _fmtQty(double value) =>
+      value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1);
+
+  Future<void> _pickAndScan() async {
+    if (_scanning) return;
+    final app = AppScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _scanning = true);
+    try {
+      final page = await _imageService.captureMenuScanPage(pageNumber: 1);
+      if (page == null) {
+        setState(() => _scanning = false);
+        return;
+      }
+      final result = await app.scanInventoryStock([
+        MenuScanPageUpload(
+          bytes: page.bytes,
+          fileName: page.fileName,
+          mimeType: page.mimeType,
+        ),
+      ], category: StockScanCategory.count);
+      setState(() {
+        _scannedQty.clear();
+        _unmatched.clear();
+        _applyScan(result);
+        // Push freshly-scanned counts into any controllers already built.
+        for (final entry in _scannedQty.entries) {
+          _controllers[entry.key]?.text = _fmtQty(entry.value);
+        }
+      });
+    } on CloudApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } on MenuImageException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -55,6 +134,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final text = app.strings;
     return Scaffold(
       backgroundColor: PosColors.background,
       appBar: AppBar(
@@ -78,6 +158,10 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
               style: TextStyle(color: PosColors.primaryDark, fontSize: 14, fontWeight: FontWeight.w400, height: 1.45),
             ),
           ),
+          if (_unmatched.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _UnmatchedBanner(title: text.countScanUnmatched, names: _unmatched),
+          ],
           const SizedBox(height: 16),
           for (final item in app.inventoryItems)
             _CountLine(item: item, controller: _controller(item)),
@@ -91,12 +175,83 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
         ),
         child: SafeArea(
           top: false,
-          child: TfButton(
-            label: 'Save count',
-            busy: _saving,
-            onPressed: _saving ? null : _save,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 130,
+                child: TfButton(
+                  label: _scanning ? text.scanningStock : text.scanStock,
+                  icon: Icons.document_scanner_outlined,
+                  variant: TfButtonVariant.ghost,
+                  size: TfButtonSize.lg,
+                  busy: _scanning,
+                  onPressed: _scanning ? null : _pickAndScan,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: TfButton(
+                  label: 'Save count',
+                  size: TfButtonSize.lg,
+                  busy: _saving,
+                  onPressed: _saving || _scanning ? null : _save,
+                ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _UnmatchedBanner extends StatelessWidget {
+  const _UnmatchedBanner({required this.title, required this.names});
+
+  final String title;
+  final List<String> names;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: PosColors.warningSoft,
+        borderRadius: BorderRadius.circular(PosRadii.card),
+        border: Border.all(color: PosColors.warning),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.help_outline_rounded, size: 19, color: PosColors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TfText(
+                  title,
+                  style: const TextStyle(
+                    color: PosColors.warning,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                TfText(
+                  names.join(', '),
+                  style: const TextStyle(
+                    color: PosColors.slate,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

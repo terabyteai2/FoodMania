@@ -13,9 +13,14 @@ import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 
 class StockInScreen extends StatefulWidget {
-  const StockInScreen({this.preseedItemId, super.key});
+  const StockInScreen({this.preseedItemId, this.initialScan, super.key});
 
   final String? preseedItemId;
+
+  /// When the user arrives here from the unified Inventory-page Scan (the
+  /// backend already classified the photo as a supplier bill), the parsed lines
+  /// are passed in so we skip a second OCR round-trip.
+  final StockScanResult? initialScan;
 
   @override
   State<StockInScreen> createState() => _StockInScreenState();
@@ -33,7 +38,15 @@ class _StockInScreenState extends State<StockInScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.preseedItemId != null) {
+    final scan = widget.initialScan;
+    if (scan != null && scan.items.isNotEmpty) {
+      // Already scanned upstream — seed the editor and light up the scanned
+      // confirm UI without re-running OCR.
+      _scanProvider = scan.provider;
+      for (final line in scan.items) {
+        _lines.add(_StockInLine.fromScan(line));
+      }
+    } else if (widget.preseedItemId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _seedFromItem());
     } else {
       _lines.add(_StockInLine.blank());
@@ -102,7 +115,10 @@ class _StockInScreenState extends State<StockInScreen> {
             ),
           )
           .toList(growable: false);
-      final result = await app.scanInventoryReceipt(uploads);
+      final result = await app.scanInventoryStock(
+        uploads,
+        category: StockScanCategory.stockIn,
+      );
       setState(() {
         _scanProvider = result.provider;
         _lines.removeWhere((line) {

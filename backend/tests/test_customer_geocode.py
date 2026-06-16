@@ -8,7 +8,7 @@ from main import app
 from routers import customer as customer_router
 
 
-class _FakeGoogleResponse:
+class _FakeMapboxResponse:
     def __init__(self, payload):
         self._payload = payload
 
@@ -19,10 +19,10 @@ class _FakeGoogleResponse:
         return self._payload
 
 
-def _mock_google_geocode(monkeypatch, payload):
+def _mock_mapbox_geocode(monkeypatch, payload):
     calls = []
 
-    class FakeGoogleClient:
+    class FakeMapboxClient:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
@@ -34,9 +34,9 @@ def _mock_google_geocode(monkeypatch, payload):
 
         async def get(self, url, params):
             calls.append({"url": url, "params": params, "kwargs": self.kwargs})
-            return _FakeGoogleResponse(payload)
+            return _FakeMapboxResponse(payload)
 
-    monkeypatch.setattr(customer_router.httpx, "AsyncClient", FakeGoogleClient)
+    monkeypatch.setattr(customer_router.httpx, "AsyncClient", FakeMapboxClient)
     return calls
 
 
@@ -56,13 +56,12 @@ async def _create_outlet(client):
 @pytest.mark.asyncio(loop_scope="session")
 async def test_customer_reverse_geocode_returns_address(monkeypatch):
     await create_tables()
-    monkeypatch.setattr(customer_router.settings, "GOOGLE_GEOCODING_API_KEY", "server-key")
-    calls = _mock_google_geocode(
+    monkeypatch.setattr(customer_router.settings, "MAPBOX_ACCESS_TOKEN", "server-token")
+    calls = _mock_mapbox_geocode(
         monkeypatch,
         {
-            "status": "OK",
-            "results": [
-                {"formatted_address": "Banani, Dhaka 1213, Bangladesh"},
+            "features": [
+                {"place_name": "Banani, Dhaka 1213, Bangladesh"},
             ],
         },
     )
@@ -77,15 +76,16 @@ async def test_customer_reverse_geocode_returns_address(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"address": "Banani, Dhaka 1213, Bangladesh"}
-    assert calls[0]["params"]["latlng"] == "23.7937,90.4066"
-    assert calls[0]["params"]["key"] == "server-key"
+    assert calls[0]["url"].endswith("/90.4066,23.7937.json")
+    assert calls[0]["params"]["access_token"] == "server-token"
     assert calls[0]["params"]["language"] == "en"
+    assert calls[0]["params"]["limit"] == 1
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_customer_reverse_geocode_requires_server_key(monkeypatch):
+async def test_customer_reverse_geocode_requires_server_token(monkeypatch):
     await create_tables()
-    monkeypatch.setattr(customer_router.settings, "GOOGLE_GEOCODING_API_KEY", "")
+    monkeypatch.setattr(customer_router.settings, "MAPBOX_ACCESS_TOKEN", "")
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -102,7 +102,7 @@ async def test_customer_reverse_geocode_requires_server_key(monkeypatch):
 @pytest.mark.asyncio(loop_scope="session")
 async def test_customer_reverse_geocode_rejects_invalid_coordinates(monkeypatch):
     await create_tables()
-    monkeypatch.setattr(customer_router.settings, "GOOGLE_GEOCODING_API_KEY", "server-key")
+    monkeypatch.setattr(customer_router.settings, "MAPBOX_ACCESS_TOKEN", "server-token")
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -116,17 +116,42 @@ async def test_customer_reverse_geocode_rejects_invalid_coordinates(monkeypatch)
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_customer_reverse_geocode_handles_google_denial(monkeypatch):
+async def test_customer_reverse_geocode_handles_no_results(monkeypatch):
     await create_tables()
-    monkeypatch.setattr(customer_router.settings, "GOOGLE_GEOCODING_API_KEY", "server-key")
-    _mock_google_geocode(
-        monkeypatch,
-        {
-            "status": "REQUEST_DENIED",
-            "error_message": "API key cannot use this API.",
-            "results": [],
-        },
-    )
+    monkeypatch.setattr(customer_router.settings, "MAPBOX_ACCESS_TOKEN", "server-token")
+    _mock_mapbox_geocode(monkeypatch, {"features": []})
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        outlet_id = await _create_outlet(client)
+        response = await client.post(
+            f"/customer/{outlet_id}/geocode/reverse",
+            json={"lat": 23.7937, "lng": 90.4066},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No address found near this location."
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_customer_reverse_geocode_handles_upstream_failure(monkeypatch):
+    await create_tables()
+    monkeypatch.setattr(customer_router.settings, "MAPBOX_ACCESS_TOKEN", "server-token")
+
+    class FailingClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params):
+            raise customer_router.httpx.ConnectError("boom")
+
+    monkeypatch.setattr(customer_router.httpx, "AsyncClient", FailingClient)
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:

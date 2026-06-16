@@ -13,6 +13,9 @@ import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/pos_notification.dart';
+import '../../models/receipt_scan.dart';
+import '../../services/cloud_api_service.dart';
+import '../../services/menu_image_service.dart';
 import 'end_of_day_count_screen.dart';
 import 'inventory_item_detail_screen.dart';
 import 'stock_in_screen.dart';
@@ -44,6 +47,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
   _StockSort _sort = _StockSort.value;
   int _dir = -1; // -1 desc, 1 asc
   bool _firstLoadKicked = false;
+  bool _scanning = false;
+  final MenuImageService _imageService = MenuImageService();
 
   void _toggleSort(_StockSort key) {
     setState(() {
@@ -126,6 +131,50 @@ class _InventoryScreenState extends State<InventoryScreen> {
       context,
       MaterialPageRoute(builder: (_) => const EndOfDayCountScreen()),
     );
+    if (context.mounted) await AppScope.read(context).refreshInventorySummary();
+  }
+
+  /// The hero action: snap a supplier bill OR a count sheet, let the backend
+  /// classify it, then route into the pre-filled Stock-in or End-of-day screen.
+  Future<void> _scanAndRoute(BuildContext context) async {
+    if (_scanning) return;
+    final app = AppScope.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _scanning = true);
+    StockScanResult? result;
+    try {
+      final page = await _imageService.captureMenuScanPage(pageNumber: 1);
+      if (page == null) {
+        if (mounted) setState(() => _scanning = false);
+        return;
+      }
+      result = await app.scanInventoryStock([
+        MenuScanPageUpload(
+          bytes: page.bytes,
+          fileName: page.fileName,
+          mimeType: page.mimeType,
+        ),
+      ]);
+    } on CloudApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } on MenuImageException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+    if (result == null || !context.mounted) return;
+
+    final route = switch (result.category) {
+      StockScanCategory.count => MaterialPageRoute<void>(
+        builder: (_) => EndOfDayCountScreen(initialScan: result),
+      ),
+      StockScanCategory.stockIn => MaterialPageRoute<void>(
+        builder: (_) => StockInScreen(initialScan: result),
+      ),
+    };
+    await Navigator.push<void>(context, route);
     if (context.mounted) await AppScope.read(context).refreshInventorySummary();
   }
 
@@ -283,6 +332,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ),
           _StockBottomBar(
             text: text,
+            scanning: _scanning,
+            onScan: () => _scanAndRoute(context),
             onCount: () => _openCount(context),
             onStockIn: () => _openStockIn(context),
           ),
@@ -942,14 +993,21 @@ class _AddItemButton extends StatelessWidget {
   }
 }
 
+/// Bottom actions, by hierarchy: **Scan** is the lime primary hero (the fast
+/// path — photograph a bill or a count sheet and let the backend route it);
+/// **Count** and **Stock in** are the secondary manual-entry ghosts beneath it.
 class _StockBottomBar extends StatelessWidget {
   const _StockBottomBar({
     required this.text,
+    required this.scanning,
+    required this.onScan,
     required this.onCount,
     required this.onStockIn,
   });
 
   final AppStrings text;
+  final bool scanning;
+  final VoidCallback onScan;
   final VoidCallback onCount;
   final VoidCallback onStockIn;
 
@@ -957,27 +1015,40 @@ class _StockBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 132,
-            child: TfButton(
-              label: text.countAction,
-              icon: Icons.fact_check_outlined,
-              variant: TfButtonVariant.ghost,
-              size: TfButtonSize.lg,
-              onPressed: onCount,
-            ),
+          TfButton(
+            label: scanning ? text.scanningStock : text.scanStock,
+            icon: Icons.document_scanner_outlined,
+            variant: TfButtonVariant.primary,
+            size: TfButtonSize.lg,
+            busy: scanning,
+            onPressed: scanning ? null : onScan,
           ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: TfButton(
-              label: text.stockIn,
-              icon: Icons.add_box_outlined,
-              variant: TfButtonVariant.primary,
-              size: TfButtonSize.lg,
-              onPressed: onStockIn,
-            ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: TfButton(
+                  label: text.countAction,
+                  icon: Icons.fact_check_outlined,
+                  variant: TfButtonVariant.ghost,
+                  size: TfButtonSize.md,
+                  onPressed: scanning ? null : onCount,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: TfButton(
+                  label: text.stockIn,
+                  icon: Icons.add_box_outlined,
+                  variant: TfButtonVariant.ghost,
+                  size: TfButtonSize.md,
+                  onPressed: scanning ? null : onStockIn,
+                ),
+              ),
+            ],
           ),
         ],
       ),
