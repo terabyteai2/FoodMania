@@ -104,7 +104,6 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
         title: text.liveTab,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
-        showAdvanced: false,
       ),
       showDatePill: false,
       pinHeader: true,

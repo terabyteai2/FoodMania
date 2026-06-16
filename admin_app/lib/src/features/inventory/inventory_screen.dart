@@ -199,9 +199,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         title: text.stockTab,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
-        showAdvanced: true,
-        advancedValue: _advanced,
-        onAdvancedChanged: (v) => setState(() => _advanced = v),
+
       ),
       showDatePill: false,
       pinHeader: true,
@@ -217,14 +215,33 @@ class _InventoryScreenState extends State<InventoryScreen> {
             onTapLow: _surfaceBelowPar,
           ),
           const SizedBox(height: 12),
-          TfText(
-            text.inventory.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: PosColors.muted,
-            ),
+          Row(
+            children: [
+              TfText(
+                text.inventory.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: PosColors.muted,
+                ),
+              ),
+              const Spacer(),
+              TfText(
+                text.advanced,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: _advanced ? PosColors.text : PosColors.muted,
+                ),
+              ),
+              const SizedBox(width: 6),
+              TfToggle(
+                value: _advanced,
+                onChanged: (v) => setState(() => _advanced = v),
+                semanticLabel: text.advanced,
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Expanded(

@@ -893,7 +893,6 @@ void showTopNotificationToast(
 }) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
-  final text = AppScope.of(context).strings;
   late OverlayEntry entry;
   Timer? dismissTimer;
   var closed = false;
@@ -927,8 +926,7 @@ void showTopNotificationToast(
             child: _TopToastCard(
               title: title,
               body: body,
-              acceptLabel: text.openAction,
-              onAccept: onOpen == null
+              onTap: onOpen == null
                   ? null
                   : () {
                       close();
@@ -948,117 +946,76 @@ class _TopToastCard extends StatelessWidget {
   const _TopToastCard({
     required this.title,
     required this.body,
-    required this.acceptLabel,
-    required this.onAccept,
+    this.onTap,
   });
 
   final String title;
   final String body;
-  final String acceptLabel;
-  final VoidCallback? onAccept;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: PosColors.primaryDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.primary, width: 1),
-        boxShadow: PosShadows.glow,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: PosColors.primary,
-              borderRadius: BorderRadius.circular(8),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: PosColors.primaryDark,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PosColors.primary, width: 1),
+          boxShadow: PosShadows.glow,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: PosColors.primary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.receipt_long_rounded,
+                color: PosColors.primaryDark,
+                size: 18,
+              ),
             ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.receipt_long_rounded,
-              color: PosColors.primaryDark,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    height: 1.15,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      height: 1.15,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  body,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.78),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    height: 1.25,
+                  const SizedBox(height: 2),
+                  Text(
+                    body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.78),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      height: 1.25,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          if (onAccept != null)
-            _ToastButton(label: acceptLabel, onTap: onAccept!, filled: true),
-        ],
-      ),
-    );
-  }
-}
-
-class _ToastButton extends StatelessWidget {
-  const _ToastButton({
-    required this.label,
-    required this.onTap,
-    required this.filled,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = filled ? PosColors.primary : Colors.transparent;
-    final fg = filled ? PosColors.primaryDark : Colors.white;
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          constraints: const BoxConstraints(minWidth: 64),
-          alignment: Alignment.center,
-          child: TfText(
-            label,
-            style: TextStyle(
-              color: fg,
-              fontWeight: FontWeight.w500,
-              fontSize: 11.5,
-              height: 1,
-            ),
-          ),
+          ],
         ),
       ),
     );

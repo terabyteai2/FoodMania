@@ -4212,11 +4212,15 @@ class PosAppController extends ChangeNotifier {
         continue;
       }
 
+      final isCurrentUserCreator =
+          order.createdByAccountId != null &&
+          order.createdByAccountId == accountId;
+
       if (status == OrderStatus.pending) {
         final becamePending =
             !wasKnown ||
             (previousStatus != null && previousStatus != OrderStatus.pending);
-        if (becamePending && !_alertedPendingOrderIds.contains(id)) {
+        if (becamePending && !_alertedPendingOrderIds.contains(id) && !isCurrentUserCreator) {
           _alertedPendingOrderIds.add(id);
           orderNotifications.add(
             _QueuedPosNotification(
@@ -4244,7 +4248,7 @@ class PosAppController extends ChangeNotifier {
             !wasKnown ||
             previousStatus == OrderStatus.pending ||
             (previousStatus != null && previousStatus != OrderStatus.accepted);
-        if (becameAccepted && !alreadyHandled) {
+        if (becameAccepted && !alreadyHandled && !isCurrentUserCreator) {
           _alertedAcceptedOrderIds.add(id);
           orderNotifications.add(
             _QueuedPosNotification(
