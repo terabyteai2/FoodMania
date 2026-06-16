@@ -210,11 +210,17 @@ class _OrdersScreenState extends State<OrdersScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
+    _tabs.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     super.dispose();
   }
@@ -248,7 +254,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
     _syncTabWithPendingOrders(pendingCount, ongoingOrders.length);
     final hasAnyOpenOrders = ongoingOrders.isNotEmpty;
-    final floorTotal = ongoingOrders.fold<num>(0, (sum, o) => sum + o.total);
+    final isCompletedTab = _tabs.index == 1;
 
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -268,33 +274,33 @@ class _OrdersScreenState extends State<OrdersScreen>
               onNavigateToOrders: () {},
               onNavigateToTarget: widget.onNavigateToTarget,
             ),
-            if (hasAnyOpenOrders)
-              _OrdersSummaryRow(
-                floorTotal: floorTotal,
-                pendingCount: pendingCount,
-                ongoingCount: ongoingOrders.length,
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TfSearchField(
-                      controller: _searchController,
-                      hintText: text.orderSearchHint,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  TfIconButton(
-                    icon: Icons.tune_rounded,
-                    tooltip: text.filterOrders,
-                    dark: _filters.isActive,
-                    onPressed: () => _openOrderFilters(context),
-                  ),
-                ],
-              ),
+            _OrdersSummaryRow(
+              pendingCount: pendingCount,
+              isCompletedTab: isCompletedTab,
+              onGoToOngoing: () => _tabs.index = 0,
             ),
+            if (isCompletedTab)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TfSearchField(
+                        controller: _searchController,
+                        hintText: text.orderSearchHint,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    TfIconButton(
+                      icon: Icons.tune_rounded,
+                      tooltip: text.filterOrders,
+                      dark: _filters.isActive,
+                      onPressed: () => _openOrderFilters(context),
+                    ),
+                  ],
+                ),
+              ),
             _TabStrip(
               controller: _tabs,
               ongoingCount: ongoingOrders.length,
@@ -1156,127 +1162,72 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// Calm summary row: "On the floor ৳X" + "N to accept · M ongoing" (spec §4.1).
+/// Eyebrow row: "On the floor" / "Order history" + "N to accept" badge (spec §4.1).
 class _OrdersSummaryRow extends StatelessWidget {
   const _OrdersSummaryRow({
-    required this.floorTotal,
     required this.pendingCount,
-    required this.ongoingCount,
+    required this.isCompletedTab,
+    this.onGoToOngoing,
   });
 
-  final num floorTotal;
   final int pendingCount;
-  final int ongoingCount;
+  final bool isCompletedTab;
+  final VoidCallback? onGoToOngoing;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    if (kDebugMode) {
-      debugPrint(
-        '[QB-ORDERS-DIAG] summaryRow build '
-        'pending=$pendingCount accepted=$ongoingCount floorTotal=$floorTotal',
-      );
-    }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: TfCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: [
+          Text(
+            isCompletedTab
+                ? (text.isBn ? 'অর্ডার হিস্টরি' : 'Order history')
+                : text.onTheFloor,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.05,
+              color: PosColors.muted,
+              height: 1.3,
+            ),
+          ),
+          const Spacer(),
+          if (pendingCount > 0 && !isCompletedTab)
+            GestureDetector(
+              onTap: onGoToOngoing,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: PosColors.primary,
+                  borderRadius: BorderRadius.circular(PosRadii.xs),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TfText(
-                      text.onTheFloorNow,
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: PosColors.accentInk,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      text.toAcceptCount(pendingCount),
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: PosColors.muted,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TfText(
-                      tfFormatCurrency(context, floorTotal),
-                      style: TextStyle(
-                        fontFamily: tfFontFamily(context),
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.text,
-                        height: 1.05,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: PosColors.accentInk,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TfCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        TfText(
-                          tfFormatNumber(context, pendingCount),
-                          style: TextStyle(
-                            fontFamily: tfFontFamily(context),
-                            fontSize: 21,
-                            fontWeight: FontWeight.w700,
-                            color: pendingCount > 0
-                                ? PosColors.accentStrong
-                                : PosColors.text,
-                            height: 1.0,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: TfText(
-                            text.toAcceptLabel,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: PosColors.muted,
-                              height: 1.15,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    TfText(
-                      text.ongoingCount(ongoingCount),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: PosColors.muted,
-                        height: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
