@@ -446,9 +446,32 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  Future<void> _deepLinkToChat(String conversationId) async {
+    final app = AppScope.of(context);
+    try {
+      final chats = await app.fetchChats();
+      final chat = chats.where((c) => c.id == conversationId).firstOrNull;
+      if (!mounted) return;
+      if (chat != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChatThreadScreen(chat: chat),
+          ),
+        );
+        return;
+      }
+      _pushScreen(const MessagesScreen());
+    } catch (_) {
+      if (mounted) _pushScreen(const MessagesScreen());
+    }
+  }
+
   void _pushScreen(Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
+
+  bool _isChatNotification(PosNotification n) =>
+      n.type == PosNotificationType.system && n.actionTarget == 'messages';
 
   void _maybeShowNotification(PosAppController app) {
     final unread = app.notifications
@@ -456,11 +479,14 @@ class _MainShellState extends State<MainShell> {
         .toList(growable: false);
     if (unread.isEmpty) return;
     final latest = unread.first;
-    final alertKey = unread.length > 1
-        ? 'bulk:${unread.length}:${latest.id}'
-        : latest.orderId != null
-        ? '${latest.orderId}:${latest.type.name}'
-        : latest.id;
+    final isChatAlert = _isChatNotification(latest);
+    final alertKey = isChatAlert
+        ? latest.id
+        : unread.length > 1
+            ? 'bulk:${unread.length}:${latest.id}'
+            : latest.orderId != null
+                ? '${latest.orderId}:${latest.type.name}'
+                : latest.id;
     if (alertKey == _lastShownNotificationKey ||
         alertKey == _pendingNotificationToastKey) {
       return;
@@ -485,11 +511,14 @@ class _MainShellState extends State<MainShell> {
       return;
     }
     final latest = unread.first;
-    final alertKey = unread.length > 1
-        ? 'bulk:${unread.length}:${latest.id}'
-        : latest.orderId != null
-        ? '${latest.orderId}:${latest.type.name}'
-        : latest.id;
+    final isChatAlert = _isChatNotification(latest);
+    final alertKey = isChatAlert
+        ? latest.id
+        : unread.length > 1
+            ? 'bulk:${unread.length}:${latest.id}'
+            : latest.orderId != null
+                ? '${latest.orderId}:${latest.type.name}'
+                : latest.id;
     if (alertKey == _lastShownNotificationKey) {
       _pendingNotificationToastKey = null;
       return;
@@ -499,12 +528,14 @@ class _MainShellState extends State<MainShell> {
     _pendingNotificationToastKey = null;
     showTopNotificationToast(
       context,
-      title: unread.length > 1
-          ? text.notificationSummaryTitle(unread.length)
-          : latest.title,
-      body: unread.length > 1 ? text.notificationSummaryBody : latest.body,
+      title: isChatAlert || unread.length == 1
+          ? latest.title
+          : text.notificationSummaryTitle(unread.length),
+      body: isChatAlert || unread.length == 1
+          ? latest.body
+          : text.notificationSummaryBody,
       onOpen: () {
-        if (unread.length > 1) {
+        if (unread.length > 1 && !isChatAlert) {
           showNotificationCenter(
             context,
             onNavigateToOrders: () => _selectTab(_AppTab.orders),
@@ -512,7 +543,11 @@ class _MainShellState extends State<MainShell> {
           );
         } else {
           app.markNotificationRead(latest.id);
-          _navigateNotificationTarget(latest.target);
+          if (isChatAlert && latest.orderId != null) {
+            _deepLinkToChat(latest.orderId!);
+          } else {
+            _navigateNotificationTarget(latest.target);
+          }
         }
       },
     );

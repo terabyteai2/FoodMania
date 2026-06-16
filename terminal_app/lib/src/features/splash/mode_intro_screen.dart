@@ -385,16 +385,15 @@ class _BrandMark extends StatelessWidget {
       width: 72,
       height: 72,
       decoration: BoxDecoration(
-        color: PosColors.primarySoft,
         shape: BoxShape.circle,
         border: Border.all(color: PosColors.primary, width: 2),
       ),
-      child: const Center(
-        child: Icon(
-          Icons.restaurant_rounded,
-          color: PosColors.primaryDark,
-          size: 34,
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: Image.asset(
+        'assets/brand/splash.jpeg',
+        fit: BoxFit.cover,
+        width: 72,
+        height: 72,
       ),
     );
   }

@@ -833,7 +833,8 @@ class _GridTile extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: Stack(
                   children: [
-                    Center(
+                    Align(
+                      alignment: Alignment.centerLeft,
                       child: Padding(
                         padding: EdgeInsets.zero,
                         child: ItemImage(

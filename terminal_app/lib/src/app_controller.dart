@@ -2374,6 +2374,7 @@ class PosAppController extends ChangeNotifier {
             title: 'Chatbot needs you',
             body: body,
             actionTarget: 'messages',
+            orderId: changedConversationId,
           );
         }
       }
@@ -2400,6 +2401,7 @@ class PosAppController extends ChangeNotifier {
             title: 'Chatbot needs you',
             body: _chatEscalationNotificationBody(chat),
             actionTarget: 'messages',
+            orderId: chatId,
           );
         }
       }
@@ -3914,6 +3916,7 @@ class PosAppController extends ChangeNotifier {
           payload: actionTarget,
           type: type,
           playSound: soundOn,
+          actionTarget: actionTarget,
         ),
       );
     }
@@ -4101,6 +4104,8 @@ class PosAppController extends ChangeNotifier {
         return 'sounds/pending_order.wav';
       case PosNotificationType.acceptedOrder:
         return 'sounds/accepted_order.wav';
+      case PosNotificationType.system:
+        return 'sounds/chatbot_alert.wav';
       default:
         return null;
     }
