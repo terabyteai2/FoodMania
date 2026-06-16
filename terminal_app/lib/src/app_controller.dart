@@ -231,6 +231,7 @@ class PosAppController extends ChangeNotifier {
     cap: kAlertSetCap,
   );
   bool? _lastInternetOnline;
+  bool _lastIsSyncing = false;
   bool _coalesceNextOrderAlertBatch = false;
   Timer? _databaseChangeDebounce;
   Timer? _adminBlockingNoticePollTimer;
@@ -624,8 +625,13 @@ class PosAppController extends ChangeNotifier {
           if (error.contains('internet unavailable')) {
             _lastInternetOnline = false;
           }
+          final syncFinished = _lastIsSyncing && !state.isSyncing;
+          _lastIsSyncing = state.isSyncing;
           syncState = state;
           notifyListeners();
+          if (syncFinished) {
+            unawaited(_syncChatEscalationNotifications({}));
+          }
         }),
       );
       _subscriptions.add(
@@ -2340,6 +2346,41 @@ class PosAppController extends ChangeNotifier {
   ) async {
     if (!canMessages || !isCloudReady || !cloudConfig.canSync) return;
     final changedConversationId = _chatConversationIdFromEvent(event);
+
+    // Fast path: extract escalation info directly from the WS event payload
+    // so the notification fires instantly without waiting on an HTTP fetchChats
+    // call that could race with the backend's DB commit.
+    if (changedConversationId != null &&
+        !_alertedNeedsHelpChatIds.contains(changedConversationId)) {
+      final eventData = event['data'];
+      if (eventData is Map) {
+        final status =
+            (eventData['status'] as String?)?.trim().toLowerCase();
+        if (status == 'needs') {
+          _alertedNeedsHelpChatIds.add(changedConversationId);
+          final name =
+              (eventData['name'] as String?)?.trim() ?? 'Messenger customer';
+          final reason = (eventData['reason'] as String?)?.trim();
+          final lastMsg =
+              (eventData['lastUserMessage'] as String?)?.trim();
+          final detail = (reason?.isNotEmpty ?? false)
+              ? reason!
+              : (lastMsg ?? '');
+          final body = detail.isNotEmpty
+              ? '$name: $detail'
+              : '$name needs help in Messenger.';
+          await addNotification(
+            type: PosNotificationType.system,
+            title: 'Chatbot needs you',
+            body: body,
+            actionTarget: 'messages',
+          );
+        }
+      }
+    }
+
+    // Fallback: fetch all chats and process (handles cleanup and catches
+    // any escalated chats not covered by the fast path, e.g. periodic sync).
     try {
       final chats = await fetchChats();
       final activeNeedsIds = <String>{};

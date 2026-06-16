@@ -861,7 +861,7 @@ class TfButton extends StatelessWidget {
       TfButtonVariant.paper => (PosColors.surface, PosColors.primaryDark),
       // Accent-wash: the QuickBytes "Accept" / emphasis action — soft lime tint
       // with dark ink, never solid lime (spec §3).
-      TfButtonVariant.accent => (PosColors.accentSoft, PosColors.accentSoftInk),
+      TfButtonVariant.accent => (PosColors.accentSoft, PosColors.accentStrong),
     };
     final borderColor = switch (variant) {
       TfButtonVariant.primary => Colors.transparent,
@@ -4181,7 +4181,7 @@ class TfMenuPerfHeader extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: on ? FontWeight.w700 : FontWeight.w600,
                           color: on
-                              ? PosColors.accentSoftInk
+                              ? PosColors.accentStrong
                               : PosColors.textSec,
                         ),
                       ),
@@ -4193,7 +4193,7 @@ class TfMenuPerfHeader extends StatelessWidget {
                             '▼',
                             style: TextStyle(
                               fontSize: 9,
-                              color: PosColors.accentSoftInk,
+                              color: PosColors.accentStrong,
                             ),
                           ),
                         ),

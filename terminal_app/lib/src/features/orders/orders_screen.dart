@@ -1882,6 +1882,7 @@ class _OrderCard extends StatelessWidget {
                                   fontWeight: FontWeight.w800,
                                   color: PosColors.text,
                                   height: 1.1,
+                                  letterSpacing: -0.19,
                                   fontFeatures: const [
                                     FontFeature.tabularFigures(),
                                   ],
@@ -1909,7 +1910,7 @@ class _OrderCard extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 1),
                           TfText(
                             subline,
                             style: const TextStyle(
@@ -1938,7 +1939,7 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 // Spec §4.1: emphasized "N items · preview" line (count bold,
                 // item preview muted) — replaces the boxed line list.
                 Text.rich(
@@ -1966,7 +1967,7 @@ class _OrderCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 // if ((order.note ?? '').trim().isNotEmpty) ...[
