@@ -46,9 +46,11 @@ Future<void> openNewOrderForm(
   final counterMode = tier == BusinessTier.simple;
 
   final created = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(
+    PageRouteBuilder(
       fullscreenDialog: true,
-      builder: (_) => _NewOrderPage(
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (_, _, _) => _NewOrderPage(
         menuItems: menuItems,
         itemPopularity: app.itemPopularity,
         tableCount: tableCount,

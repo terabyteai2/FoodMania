@@ -91,4 +91,6 @@ async def bootstrap_tenant(
         "tableCount": outlet.table_count if outlet.table_count is not None else 10,
         "deviceToken": token,
         "publicApiBaseUrl": client_visible_api_base(request),
+        "logoUrl": outlet.logo_url,
+        "logoBitmapUrl": outlet.logo_bitmap_url,
     })

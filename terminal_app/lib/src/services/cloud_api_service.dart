@@ -147,6 +147,8 @@ class TenantBootstrapResult {
     required this.deviceToken,
     required this.tableCount,
     this.publicApiBaseUrl,
+    this.logoUrl,
+    this.logoBitmapUrl,
   });
 
   final String serverId;
@@ -157,6 +159,8 @@ class TenantBootstrapResult {
   final String deviceToken;
   final int tableCount;
   final String? publicApiBaseUrl;
+  final String? logoUrl;
+  final String? logoBitmapUrl;
 
   static TenantBootstrapResult fromJson(Map<String, Object?> json) {
     final data = json['data'] is Map
@@ -171,6 +175,8 @@ class TenantBootstrapResult {
       deviceToken: _required(data, 'deviceToken'),
       tableCount: _tableCount(data['tableCount']),
       publicApiBaseUrl: _optional(data['publicApiBaseUrl']),
+      logoUrl: _optional(data['logoUrl']),
+      logoBitmapUrl: _optional(data['logoBitmapUrl']),
     );
   }
 
@@ -211,6 +217,8 @@ class AdminLoginResult {
     this.customerMenuUrl,
     this.publicApiBaseUrl,
     this.hasAppAccess = false,
+    this.logoUrl,
+    this.logoBitmapUrl,
   });
 
   final String email;
@@ -229,6 +237,8 @@ class AdminLoginResult {
   final String? customerMenuUrl;
   final String? publicApiBaseUrl;
   final bool hasAppAccess;
+  final String? logoUrl;
+  final String? logoBitmapUrl;
 
   static AdminLoginResult fromAuthPayload(Map<String, Object?> data) {
     final account = data['account'] is Map
@@ -255,6 +265,8 @@ class AdminLoginResult {
         data['publicApiBaseUrl'],
       ),
       hasAppAccess: data['hasAppAccess'] == true,
+      logoUrl: TenantBootstrapResult._optional(data['logoUrl']),
+      logoBitmapUrl: TenantBootstrapResult._optional(data['logoBitmapUrl']),
     );
   }
 

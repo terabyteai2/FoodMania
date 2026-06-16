@@ -689,53 +689,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     leading: const Icon(Icons.tune_rounded),
                     onTap: _openFilters,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _activeFilters == 0
-                        ? TfText(
-                            tfPick(
-                              context,
-                              en: 'All channels · all day',
-                              bn: 'সব চ্যানেল · সারাদিন',
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: PosColors.muted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          )
-                        : Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: [
-                              if (_channel != _allChannels)
-                                _RemovableChip(
-                                  label: _channel,
-                                  onRemove: () => setState(() {
-                                    _logTouch(
-                                      'remove channel filter "$_channel"',
-                                    );
-                                    _channel = _allChannels;
-                                    _future = _load();
-                                  }),
-                                ),
-                              if (_daypart != _allDay)
-                                _RemovableChip(
-                                  label: _daypart,
-                                  onRemove: () => setState(() {
-                                    _logTouch(
-                                      'remove daypart filter "$_daypart"',
-                                    );
-                                    _daypart = _allDay;
-                                    _future = _load();
-                                  }),
-                                ),
-                            ],
-                          ),
-                  ),
-                  const SizedBox(width: 8),
+                  const Spacer(),
                   TfText(
                     AppScope.select(
                       context,
@@ -4438,48 +4392,6 @@ class _MiniChip extends StatelessWidget {
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RemovableChip extends StatelessWidget {
-  const _RemovableChip({required this.label, required this.onRemove});
-
-  final String label;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onRemove,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: PosColors.primarySoft,
-          borderRadius: BorderRadius.circular(PosRadii.chip),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TfText(
-              label,
-              style: const TextStyle(
-                color: PosColors.accentStrong,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 5),
-            const Icon(
-              Icons.close_rounded,
-              size: 14,
-              color: PosColors.accentStrong,
-            ),
-          ],
         ),
       ),
     );

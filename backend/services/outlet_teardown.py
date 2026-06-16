@@ -43,7 +43,7 @@ def media_urls_for_outlet(outlet: Outlet, menu_items: Iterable[MenuItem]) -> lis
     Shared menu placeholders are skipped — they are not per-outlet uploads.
     """
     urls: list[str] = []
-    for value in (outlet.banner_url, outlet.logo_url, outlet.video_url):
+    for value in (outlet.banner_url, outlet.logo_url, outlet.logo_bitmap_url, outlet.video_url):
         if value:
             urls.append(value)
     for value in outlet.gallery_images or []:

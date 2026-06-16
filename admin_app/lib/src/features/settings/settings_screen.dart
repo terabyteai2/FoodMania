@@ -492,7 +492,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final dataUrl = await _imageService.pickMenuImageDataUrl();
       if (dataUrl == null) return;
       setState(() => _savingLogo = true);
-      await app.cloudApiService.uploadOutletLogo(dataUrl);
+      final result = await app.cloudApiService.uploadOutletLogo(dataUrl);
+      final url = result['logoUrl'];
+      final bitmapUrl = result['logoBitmapUrl'];
+      debugPrint('[QB-LOGO] _openRestaurantLogoUpload result logoUrl="$url" logoBitmapUrl="$bitmapUrl"');
+      if (mounted) {
+        if (url != null) AppScope.of(context).setLogoUrl(url);
+        if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
+      }
       setState(() => _savingLogo = false);
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -500,6 +507,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ).showSnackBar(SnackBar(content: Text(text.heroLogoUploaded)));
     } catch (e) {
       setState(() => _savingLogo = false);
+      debugPrint('[QB-LOGO] _openRestaurantLogoUpload error="$e"');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -2309,6 +2317,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       final info = data['data'] is Map
           ? Map<String, dynamic>.from(data['data'] as Map)
           : <String, dynamic>{};
+      debugPrint('[QB-LOGO] _fetchOutletInfo raw logoUrl="${info['logoUrl']}" logoBitmapUrl="${info['logoBitmapUrl']}"');
       final rawGallery = info['galleryImages'];
       setState(() {
         _gallery = rawGallery is List
@@ -2318,6 +2327,12 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
             ? null
             : info['logoUrl']?.toString().trim();
         if (mounted) AppScope.of(context).setLogoUrl(_currentLogoUrl);
+        final bitmapUrl = info['logoBitmapUrl']?.toString().trim();
+        if (mounted) {
+          AppScope.of(context).setLogoBitmapUrl(
+            bitmapUrl?.isNotEmpty == true ? bitmapUrl : null,
+          );
+        }
         _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true
             ? null
             : info['videoUrl']?.toString().trim();
@@ -2336,14 +2351,17 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       final dataUrl = await _imageService.pickMenuImageDataUrl();
       if (dataUrl == null) return;
       setState(() => _saving = true);
-      final url =
-          await widget.cloudApiService.uploadOutletLogo(dataUrl) as String;
+      final result = await widget.cloudApiService.uploadOutletLogo(dataUrl);
+      final url = result['logoUrl'] as String?;
+      final bitmapUrl = result['logoBitmapUrl'] as String?;
+      debugPrint('[QB-LOGO] _pickAndUploadLogo result logoUrl="$url" logoBitmapUrl="$bitmapUrl"');
       setState(() {
         _currentLogoUrl = url;
         _saving = false;
       });
       if (!mounted) return;
-      AppScope.of(context).setLogoUrl(url);
+      if (url != null) AppScope.of(context).setLogoUrl(url);
+      if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppScope.of(context).strings.heroLogoUploaded)),
       );
@@ -2366,11 +2384,15 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
     setState(() => _saving = true);
     try {
       await widget.cloudApiService.updateOutletLogo(null);
+      debugPrint('[QB-LOGO] _clearLogo done');
       setState(() {
         _currentLogoUrl = null;
         _saving = false;
       });
-      if (mounted) AppScope.of(context).setLogoUrl(null);
+      if (mounted) {
+        AppScope.of(context).setLogoUrl(null);
+        AppScope.of(context).setLogoBitmapUrl(null);
+      }
     } catch (e) {
       setState(() => _saving = false);
       if (!mounted) return;

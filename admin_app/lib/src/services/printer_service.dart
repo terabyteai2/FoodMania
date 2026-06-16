@@ -954,6 +954,7 @@ class PrinterService {
     String? logoUrl,
   }) async {
     final attemptId = _nextPrinterAttempt('print-bill-${order.id}');
+    debugPrint('[QB-LOGO] printCustomerInvoice called logoUrl="$logoUrl"');
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady(diagId: attemptId);
       final profile = await CapabilityProfile.load();
@@ -1224,16 +1225,27 @@ class PrinterService {
   /// pixel-identical to the in-app preview regardless of printer firmware
   /// language support.
   Future<Uint8List?> _fetchLogoBytes(String? logoUrl) async {
-    if (logoUrl == null || logoUrl.trim().isEmpty) return null;
-    if (logoUrl == _cachedLogoUrl && _cachedLogoBytes != null) return _cachedLogoBytes;
+    if (logoUrl == null || logoUrl.trim().isEmpty) {
+      debugPrint('[QB-LOGO] _fetchLogoBytes logoUrl=null|empty -> skip');
+      return null;
+    }
+    if (logoUrl == _cachedLogoUrl && _cachedLogoBytes != null) {
+      debugPrint('[QB-LOGO] _fetchLogoBytes cache HIT url="$logoUrl" bytes=${_cachedLogoBytes!.length}');
+      return _cachedLogoBytes;
+    }
+    debugPrint('[QB-LOGO] _fetchLogoBytes downloading url="$logoUrl"');
     try {
       final res = await http.get(Uri.parse(logoUrl)).timeout(const Duration(seconds: 5));
+      debugPrint('[QB-LOGO] _fetchLogoBytes status=${res.statusCode} contentLength=${res.bodyBytes.length}');
       if (res.statusCode == 200) {
         _cachedLogoUrl = logoUrl;
         _cachedLogoBytes = res.bodyBytes;
+        debugPrint('[QB-LOGO] _fetchLogoBytes cached url="$logoUrl" bytes=${_cachedLogoBytes!.length}');
         return _cachedLogoBytes;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[QB-LOGO] _fetchLogoBytes error="$e"');
+    }
     return null;
   }
 
@@ -1264,6 +1276,7 @@ class PrinterService {
         ),
     ];
 
+    debugPrint('[QB-LOGO] _buildBitmapCopyPng logoUrl="$logoUrl"');
     final cleanRestaurant = restaurantName.trim();
     final resolvedRestaurant = cleanRestaurant.isEmpty
         ? labels.defaultRestaurantName

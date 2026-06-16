@@ -259,7 +259,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _RankedTable(
+                        _StockTable(
                           text: text,
                           items: sorted,
                           advanced: _advanced,
@@ -456,10 +456,10 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-// ── Ranked table ──────────────────────────────────────────────────────────
+// ── Stock table ────────────────────────────────────────────────────────────
 
-class _RankedTable extends StatelessWidget {
-  const _RankedTable({
+class _StockTable extends StatelessWidget {
+  const _StockTable({
     required this.text,
     required this.items,
     required this.advanced,
@@ -479,12 +479,9 @@ class _RankedTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final valueW = advanced ? 62.0 : 76.0;
-    final qtyW = advanced ? 62.0 : 70.0;
-    final tablePadH = advanced ? 15.0 : 19.0;
-    final gap = advanced ? 12.0 : 14.0;
+    final heroW = advanced ? 64.0 : 92.0;
     return Container(
-      padding: EdgeInsets.fromLTRB(tablePadH, 6, tablePadH, 12),
+      padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(PosRadii.card),
@@ -492,11 +489,8 @@ class _RankedTable extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Header row — QTY is the rightmost column, left-justified so the
-          // numbers align across units.
           Container(
-            constraints: const BoxConstraints(minHeight: 50),
-            padding: const EdgeInsets.only(top: 13, bottom: 11),
+            padding: const EdgeInsets.only(top: 11, bottom: 9),
             decoration: const BoxDecoration(
               border: Border(
                 bottom: BorderSide(color: PosColors.lineStrong, width: 1.5),
@@ -504,8 +498,7 @@ class _RankedTable extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const SizedBox(width: 14),
-                SizedBox(width: gap),
+                const SizedBox(width: 10),
                 _HCell(
                   label: text.colItem,
                   active: sort == _StockSort.name,
@@ -514,30 +507,21 @@ class _RankedTable extends StatelessWidget {
                   onTap: () => onSort(_StockSort.name),
                 ),
                 if (advanced) ...[
-                  SizedBox(width: gap),
+                  const SizedBox(width: 12),
                   _HCell(
                     label: text.colCover,
-                    width: 50,
+                    width: 46,
                     active: sort == _StockSort.cover,
                     dir: dir,
                     onTap: () => onSort(_StockSort.cover),
                   ),
                 ],
-                SizedBox(width: gap),
+                const SizedBox(width: 12),
                 _HCell(
-                  label: text.colValue,
-                  width: valueW,
-                  active: sort == _StockSort.value,
-                  dir: dir,
-                  onTap: () => onSort(_StockSort.value),
-                ),
-                SizedBox(width: gap),
-                _HCell(
-                  label: text.colQty,
-                  width: qtyW,
+                  label: text.colOnHand,
+                  width: heroW,
                   active: sort == _StockSort.qty,
                   dir: dir,
-                  left: true,
                   onTap: () => onSort(_StockSort.qty),
                 ),
               ],
@@ -547,13 +531,9 @@ class _RankedTable extends StatelessWidget {
             _StockRow(
               text: text,
               item: items[i],
-              rank: i + 1,
-              first: i == 0,
               last: i == items.length - 1,
               advanced: advanced,
-              valueW: valueW,
-              qtyW: qtyW,
-              gap: gap,
+              heroW: heroW,
               onTap: () => onRowTap(items[i]),
             ),
         ],
@@ -621,25 +601,17 @@ class _StockRow extends StatelessWidget {
   const _StockRow({
     required this.text,
     required this.item,
-    required this.rank,
-    required this.first,
     required this.last,
     required this.advanced,
-    required this.valueW,
-    required this.qtyW,
-    required this.gap,
+    required this.heroW,
     required this.onTap,
   });
 
   final AppStrings text;
   final InventorySummaryItem item;
-  final int rank;
-  final bool first;
   final bool last;
   final bool advanced;
-  final double valueW;
-  final double qtyW;
-  final double gap;
+  final double heroW;
   final VoidCallback onTap;
 
   @override
@@ -666,8 +638,7 @@ class _StockRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 62),
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
@@ -678,9 +649,8 @@ class _StockRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Single fixed-width status dot — keeps every column aligned.
             SizedBox(
-              width: 14,
+              width: 10,
               child: Center(
                 child: kind == 'ok'
                     ? const SizedBox.shrink()
@@ -696,46 +666,40 @@ class _StockRow extends StatelessWidget {
                       ),
               ),
             ),
-            SizedBox(width: gap),
+            const SizedBox(width: 12),
             Expanded(
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 14,
-                    child: TfText(
-                      tfFormatNumber(context, rank),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: first
-                            ? PosColors.accentStrong
-                            : PosColors.mutedSoft,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                  TfText(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                      color: PosColors.text,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TfText(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
-                        color: PosColors.text,
-                      ),
+                  const SizedBox(height: 2),
+                  TfText(
+                    tfFormatCurrency(context, _itemValue(item)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: PosColors.muted,
                     ),
                   ),
                 ],
               ),
             ),
             if (advanced) ...[
-              SizedBox(width: gap),
+              const SizedBox(width: 12),
               SizedBox(
-                width: 50,
+                width: 46,
                 child: TfText(
                   cover >= 99 ? '—' : '${tfFormatNumber(context, cover)}d',
                   textAlign: TextAlign.right,
@@ -748,49 +712,33 @@ class _StockRow extends StatelessWidget {
                 ),
               ),
             ],
-            SizedBox(width: gap),
+            const SizedBox(width: 12),
             SizedBox(
-              width: valueW,
-              child: TfText(
-                tfFormatCurrency(context, _itemValue(item)),
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: PosColors.text,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            SizedBox(width: gap),
-            SizedBox(
-              width: qtyW,
+              width: heroW,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TfText(
                     _formatQty(context, item.onHand),
                     style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
                       color: qtyColor,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(width: 3),
-                  Flexible(
-                    child: TfText(
-                      unit,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w600,
-                        color: PosColors.muted,
-                      ),
+                  TfText(
+                    unit,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: PosColors.muted,
                     ),
                   ),
                 ],

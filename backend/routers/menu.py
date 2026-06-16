@@ -1,9 +1,12 @@
 import base64
 import binascii
+import io
 import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
+
+from PIL import Image
 
 import pydantic
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
@@ -508,17 +511,34 @@ async def upload_outlet_logo(
     new_key = f"{prefix}/{uuid.uuid4()}.{ext}"
     public_url = storage.save(new_key, image_bytes, request)
 
+    # Generate 1-bit dithered bitmap for thermal printing
+    bitmap_url = None
+    try:
+        pil = Image.open(io.BytesIO(image_bytes))
+        bitmap = pil.convert("L").convert("1")
+        bitmap_buf = io.BytesIO()
+        bitmap.save(bitmap_buf, format="PNG")
+        bitmap_bytes = bitmap_buf.getvalue()
+        bitmap_key = f"{prefix}/bitmap_{uuid.uuid4()}.png"
+        bitmap_url = storage.save(bitmap_key, bitmap_bytes, request)
+    except Exception:
+        bitmap_url = None
+
     previous_url = outlet.logo_url
+    previous_bitmap_url = outlet.logo_bitmap_url
     outlet.logo_url = public_url
+    outlet.logo_bitmap_url = bitmap_url
     await db.commit()
 
     for old_key in storage.list_keys(prefix):
-        if old_key != new_key:
+        if old_key != new_key and old_key != bitmap_key:
             storage.delete_key(old_key)
     if previous_url and previous_url != public_url:
         storage.delete_by_url(previous_url)
+    if previous_bitmap_url and previous_bitmap_url != bitmap_url:
+        storage.delete_by_url(previous_bitmap_url)
 
-    return ok({"logoUrl": public_url})
+    return ok({"logoUrl": public_url, "logoBitmapUrl": bitmap_url})
 
 
 @router.post("/outlets/{outlet_id}/video")
@@ -574,12 +594,15 @@ async def update_outlet_media(
     fields_set = body.model_fields_set
     previous_url = outlet.video_url
     previous_logo_url = outlet.logo_url
+    previous_bitmap_url = outlet.logo_bitmap_url
     video_changed = "videoUrl" in fields_set
     logo_changed = "logoUrl" in fields_set
     if video_changed:
         outlet.video_url = body.videoUrl
     if logo_changed:
         outlet.logo_url = body.logoUrl
+        if body.logoUrl is None:
+            outlet.logo_bitmap_url = None
 
     if "menuTheme" in fields_set:
         outlet.menu_theme = _normalize_menu_theme(body.menuTheme)
@@ -593,10 +616,13 @@ async def update_outlet_media(
         storage.delete_by_url(previous_url)
     if logo_changed and previous_logo_url and previous_logo_url != body.logoUrl:
         storage.delete_by_url(previous_logo_url)
+    if logo_changed and body.logoUrl is None and previous_bitmap_url:
+        storage.delete_by_url(previous_bitmap_url)
 
     return ok({
         "videoUrl": outlet.video_url,
         "logoUrl": outlet.logo_url,
+        "logoBitmapUrl": outlet.logo_bitmap_url,
         "menuTheme": outlet.menu_theme if outlet.menu_theme in ALLOWED_MENU_THEMES else DEFAULT_MENU_THEME,
         "deliveryCharge": float(outlet.delivery_charge or 0),
     })

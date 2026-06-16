@@ -347,6 +347,7 @@ class PosAppController extends ChangeNotifier {
     restaurantName: '',
     outletName: '',
   );
+  String? _logoBitmapUrl; // cached 1-bit logo URL for thermal printing
   CloudConfig cloudConfig = CloudConfig(
     baseUrl: CloudDefaults.baseUrl,
     enabled: CloudDefaults.shouldEnableSyncByDefault,
@@ -507,7 +508,11 @@ class PosAppController extends ChangeNotifier {
         customerMenuTheme:
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
         deliveryCharge: preferences.getDouble(_deliveryChargeKey) ?? 0,
+        logoUrl: preferences.getString(_logoUrlKey),
+        logoBitmapUrl: preferences.getString(_logoBitmapUrlKey),
       );
+      _logoBitmapUrl = serverConfig.logoBitmapUrl;
+      debugPrint('[QB-LOGO] initialize loaded logoUrl="${serverConfig.logoUrl}" logoBitmapUrl="${serverConfig.logoBitmapUrl}"');
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
       final storedCloudUrl = preferences.getString(_cloudApiUrlKey);

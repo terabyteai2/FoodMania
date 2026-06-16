@@ -185,7 +185,7 @@ def _public_menu_url(slug: str | None) -> str | None:
 
 def _media_urls_for_wipe(outlet: Outlet, menu_items: list[MenuItem]) -> list[str]:
     urls: list[str] = []
-    for value in [outlet.banner_url, outlet.logo_url, outlet.video_url]:
+    for value in [outlet.banner_url, outlet.logo_url, outlet.logo_bitmap_url, outlet.video_url]:
         if value:
             urls.append(value)
     for value in outlet.gallery_images or []:
@@ -251,6 +251,8 @@ async def _auth_payload(
         "account": _account_dict(account),
         "role": account.role or MANAGER,
         "publicApiBaseUrl": client_visible_api_base(request),
+        "logoUrl": outlet.logo_url,
+        "logoBitmapUrl": outlet.logo_bitmap_url,
         **subscription_access_dict(sub),
     }
 

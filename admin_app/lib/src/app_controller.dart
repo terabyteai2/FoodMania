@@ -408,6 +408,20 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLogoBitmapUrl(String? url) async {
+    final cleaned = url?.trim().isEmpty == true ? null : url?.trim();
+    debugPrint('[QB-LOGO] setLogoBitmapUrl input="$url" cleaned="$cleaned" current="${serverConfig.logoBitmapUrl}"');
+    if (serverConfig.logoBitmapUrl == cleaned) return;
+    serverConfig = serverConfig.copyWith(logoBitmapUrl: cleaned);
+    final preferences = await SharedPreferences.getInstance();
+    if (cleaned == null) {
+      await preferences.remove(_logoBitmapUrlKey);
+    } else {
+      await preferences.setString(_logoBitmapUrlKey, cleaned);
+    }
+    notifyListeners();
+  }
+
   bool get hasAdminBlockingNotice => adminBlockingNotice?.isBlocking == true;
 
   /// Order-triggered printer side effects (auto-print + preflight + alerts).
@@ -510,7 +524,9 @@ class PosAppController extends ChangeNotifier {
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
         deliveryCharge: preferences.getDouble(_deliveryChargeKey) ?? 0,
         logoUrl: preferences.getString(_logoUrlKey),
+        logoBitmapUrl: preferences.getString(_logoBitmapUrlKey),
       );
+      debugPrint('[QB-LOGO] initialize loaded logoUrl="${serverConfig.logoUrl}" logoBitmapUrl="${serverConfig.logoBitmapUrl}"');
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
       final storedCloudUrl = preferences.getString(_cloudApiUrlKey);
@@ -2652,7 +2668,10 @@ class PosAppController extends ChangeNotifier {
       publicSlug: result.publicSlug ?? serverConfig.publicSlug,
       outletPhone: result.outletPhone ?? serverConfig.outletPhone,
       tableCount: result.tableCount,
+      logoUrl: result.logoUrl,
+      logoBitmapUrl: result.logoBitmapUrl,
     );
+    debugPrint('[QB-LOGO] _applyAdminLoginResult logoUrl="${result.logoUrl}" logoBitmapUrl="${result.logoBitmapUrl}"');
     cloudConfig = cloudConfig.copyWith(
       baseUrl: resolvedBase,
       enabled: true,
@@ -3711,13 +3730,15 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printCustomerInvoice(OrderModel order) async {
+    final usedUrl = serverConfig.logoBitmapUrl ?? serverConfig.logoUrl;
+    debugPrint('[QB-LOGO] printCustomerInvoice logoBitmapUrl="${serverConfig.logoBitmapUrl}" logoUrl="${serverConfig.logoUrl}" usedUrl="$usedUrl"');
     final ok = await printerService.printCustomerInvoice(
       order,
       restaurantName: restaurantName,
       outletName: outletName,
       language: language,
       orderDetailsUrl: _orderDetailsUrl(order),
-      logoUrl: serverConfig.logoUrl,
+      logoUrl: usedUrl,
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {
@@ -4461,7 +4482,10 @@ class PosAppController extends ChangeNotifier {
       restaurantName: tenant.restaurantName,
       outletName: tenant.outletName,
       tableCount: tenant.tableCount,
+      logoUrl: tenant.logoUrl,
+      logoBitmapUrl: tenant.logoBitmapUrl,
     );
+    debugPrint('[QB-LOGO] bootstrap logoUrl="${tenant.logoUrl}" logoBitmapUrl="${tenant.logoBitmapUrl}"');
     // /tenants/bootstrap returns a token that only carries outlet_id. If the
     // user is already logged in, their existing token also carries account_id
     // (required by manager-only endpoints like /admin/staff). Keep the
@@ -4595,6 +4619,7 @@ class PosAppController extends ChangeNotifier {
   static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
   static final String _deliveryChargeKey = 'local_pos_delivery_charge';
   static final String _logoUrlKey = 'local_pos_logo_url';
+  static final String _logoBitmapUrlKey = 'local_pos_logo_bitmap_url';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';
