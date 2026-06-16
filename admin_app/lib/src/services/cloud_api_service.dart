@@ -2116,6 +2116,25 @@ class CloudApiService {
     return Map<String, Object?>.from(data);
   }
 
+  /// All-time item popularity — returns {menuItemId: totalQty} for the outlet.
+  /// Aggregated server-side via JSONB; memory efficient (just ID→count pairs).
+  Future<Map<String, int>> fetchMenuPopularity() async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/menu/popularity');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! List) {
+      throw CloudApiException('Popularity response was malformed.');
+    }
+    return {
+      for (final entry in data)
+        (entry['menuItemId'] as String): (entry['qty'] as num).toInt(),
+    };
+  }
+
   Future<List<ChatThread>> fetchChats() async {
     _requireServerConfig();
     final uri = _uri('/admin/chatbot/chats');

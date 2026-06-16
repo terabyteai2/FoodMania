@@ -5,6 +5,7 @@ import 'package:local_pos/src/models/order_model.dart';
 import 'package:local_pos/src/models/order_service_type.dart';
 import 'package:local_pos/src/models/order_source.dart';
 import 'package:local_pos/src/models/order_status.dart';
+import 'package:local_pos/src/services/printer/printer_vendor.dart';
 import 'package:local_pos/src/services/printer_service.dart';
 import 'package:local_pos/src/services/ticket_bitmap.dart';
 
@@ -226,32 +227,26 @@ void main() {
     expect(TicketBitmapRenderer.debugPrintableWidth, 384);
   });
 
-  test('built-in printer label is hidden in the mobile app', () {
+  test('detected vendor reports as a selected built-in printer', () {
     final state = PrinterRuntimeState(
       autoPrintEnabled: true,
       connected: true,
       busy: false,
-      activeTransport: PrinterTransport.builtIn,
-      builtInPrinterAvailable: true,
-      usbPrinterAvailable: true,
-      selectedPrinterName: 'Bluetooth fallback',
-      selectedPrinterAddress: '00:11:22:33:44:55',
+      detectedVendor: PrinterVendor.sunmi,
     );
 
-    expect(state.hasSelectedPrinter, isTrue);
-    expect(state.selectedPrinterLabel, 'Bluetooth fallback');
+    expect(state.hasDetectedPrinter, isTrue);
+    expect(state.selectedPrinterLabel, 'Sunmi printer');
   });
 
-  test('USB printer remains a selected local fallback', () {
+  test('no detected vendor reports as no printer', () {
     final state = PrinterRuntimeState(
       autoPrintEnabled: true,
-      connected: true,
+      connected: false,
       busy: false,
-      activeTransport: PrinterTransport.usb,
-      usbPrinterAvailable: true,
     );
 
-    expect(state.hasSelectedPrinter, isTrue);
-    expect(state.selectedPrinterLabel, 'USB printer (type-C)');
+    expect(state.hasDetectedPrinter, isFalse);
+    expect(state.selectedPrinterLabel, 'No printer detected');
   });
 }

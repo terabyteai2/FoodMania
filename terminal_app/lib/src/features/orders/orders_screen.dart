@@ -50,6 +50,7 @@ Future<void> openNewOrderForm(
       fullscreenDialog: true,
       builder: (_) => _NewOrderPage(
         menuItems: menuItems,
+        itemPopularity: app.itemPopularity,
         tableCount: tableCount,
         dineInOpenOrders: dineInOpenOrders,
         counterMode: counterMode,
@@ -87,7 +88,7 @@ Future<void> openNewOrderForm(
               app.orderPrinterSideEffectsEnabled &&
               app.isManager &&
               !app.printerState.autoPrintEnabled &&
-              app.printerState.hasSelectedPrinter &&
+              app.printerState.hasDetectedPrinter &&
               !app.printerService.hasPrintedOrder(order.id);
           if (shouldPrint) {
             await app.printOrderTicket(order);
@@ -3037,9 +3038,11 @@ class _NewOrderPage extends StatefulWidget {
     this.initialTableNo,
     this.startAtMenu = false,
     this.startAtReview = false,
+    this.itemPopularity = const {},
   });
 
   final List<MenuItem> menuItems;
+  final Map<String, int> itemPopularity;
   final int tableCount;
   final List<OrderModel> dineInOpenOrders;
   final Future<OrderModel> Function(_OrderResult result) onCreateOrder;
@@ -3184,23 +3187,29 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     return ['All', ...cats];
   }
 
-  List<MenuItem> get _visibleItems => widget.menuItems
-      .where((i) {
-        final matchesCategory =
-            _selectedCategory == 'All' || i.category == _selectedCategory;
-        if (!matchesCategory) return false;
-        final query = _query.trim().toLowerCase();
-        if (query.isEmpty) return true;
-        final searchable = [
-          i.name,
-          i.nameEn,
-          i.nameBn,
-          i.category,
-          i.description,
-        ].whereType<String>().join(' ').toLowerCase();
-        return searchable.contains(query);
-      })
-      .toList(growable: false);
+  List<MenuItem> get _visibleItems {
+    final items = widget.menuItems.where((i) {
+      final matchesCategory =
+          _selectedCategory == 'All' || i.category == _selectedCategory;
+      if (!matchesCategory) return false;
+      final query = _query.trim().toLowerCase();
+      if (query.isEmpty) return true;
+      final searchable = [
+        i.name,
+        i.nameEn,
+        i.nameBn,
+        i.category,
+        i.description,
+      ].whereType<String>().join(' ').toLowerCase();
+      return searchable.contains(query);
+    }).toList(growable: false);
+    items.sort((a, b) {
+      final aPop = widget.itemPopularity[a.id] ?? 0;
+      final bPop = widget.itemPopularity[b.id] ?? 0;
+      return bPop.compareTo(aPop);
+    });
+    return items;
+  }
 
   Map<String, int> get _cartQtyByItemId {
     final out = <String, int>{};

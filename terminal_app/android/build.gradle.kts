@@ -42,7 +42,7 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Older Flutter plugins (e.g. flutter_bluetooth_serial) lack `android.namespace` required by AGP 8+.
+// Older Flutter plugins (e.g. sunmi_printer_plus) lack `android.namespace` required by AGP 8+.
 subprojects {
     pluginManager.withPlugin("com.android.library") {
         extensions.configure<LibraryExtension>("android") {

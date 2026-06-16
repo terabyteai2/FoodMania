@@ -2,10 +2,6 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
@@ -15,7 +11,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
-    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
     <application
         android:label="QuickBites"
@@ -83,6 +78,11 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Sunmi/Woyou built-in printer AIDL service visibility (Android 11+
+             package-visibility restrictions) — required for the
+             sunmi_printer_plus plugin to bind to it; the plugin's own
+             manifest does not declare this itself. Many generic/clone
+             Android POS terminals also implement this same service. -->
         <package android:name="woyou.aidlservice.jiuiv5"/>
         <!-- Facebook native variants plus Lite visibility for compatible routing. -->
         <package android:name="com.facebook.katana"/>

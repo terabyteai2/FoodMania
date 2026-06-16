@@ -185,14 +185,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  csslib:
-    dependency: transitive
-    description:
-      name: csslib
-      sha256: "09bad715f418841f976c77db72d5398dc1253c21fb9c0c7f0b0b985860b2d58e"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
   cupertino_icons:
     dependency: "direct main"
     description:
@@ -209,14 +201,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.12"
-  esc_pos_utils_plus:
-    dependency: "direct main"
-    description:
-      name: esc_pos_utils_plus
-      sha256: "2a22d281cb6f04600ba3ebd607ad8df03a4b2446d814007d22525bab4d50c2ff"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.4"
   fake_async:
     dependency: transitive
     description:
@@ -254,14 +238,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_bluetooth_serial:
-    dependency: "direct main"
-    description:
-      name: flutter_bluetooth_serial
-      sha256: "85ae82c4099b2b1facdc54e75e1bcfa88dc7f719e55dc886bb0b648cb16636b1"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.4.0"
   flutter_cache_manager:
     dependency: transitive
     description:
@@ -315,6 +291,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_pax_printer_utility:
+    dependency: "direct main"
+    description:
+      name: flutter_pax_printer_utility
+      sha256: "61724b480824d79322af3db4e6810eafa6368127128a18152fdb39213fd9e002"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.6"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -389,14 +373,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.3"
-  html:
-    dependency: transitive
-    description:
-      name: html
-      sha256: "6d1264f2dffa1b1101c25a91dff0dc2daee4c18e87cd8538729773c073dbf602"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.15.6"
   http:
     dependency: "direct main"
     description:
@@ -421,6 +397,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.8.0"
+  imin_printer:
+    dependency: "direct main"
+    description:
+      name: imin_printer
+      sha256: "92372c1d8b4226c8f6037e4388f485d835bab1fc60c11e0ff63bebdb6c45901f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.5"
   intl:
     dependency: "direct main"
     description:
@@ -477,6 +461,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
+  logger:
+    dependency: transitive
+    description:
+      name: logger
+      sha256: "25aee487596a6257655a1e091ec2ae66bc30e7af663592cc3a27e6591e05035c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.7.0"
   logging:
     dependency: transitive
     description:
@@ -717,14 +709,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.5.0"
-  print_bluetooth_thermal:
-    dependency: "direct main"
-    description:
-      name: print_bluetooth_thermal
-      sha256: "17b204a5340174c02acf5f6caf7279b5000344f1f1e1bcd01dbdbf912bce6e46"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.9"
   printing:
     dependency: "direct main"
     description:
@@ -930,6 +914,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  sunmi_printer_plus:
+    dependency: "direct main"
+    description:
+      name: sunmi_printer_plus
+      sha256: "77293b7da16bdf3805c5a24ea41731978e8a31da99c3fca38a658a0778450b78"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.1"
   synchronized:
     dependency: transitive
     description:
@@ -1018,14 +1010,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.3"
-  win_ble:
-    dependency: transitive
-    description:
-      name: win_ble
-      sha256: "2a867e13c4b355b101fc2c6e2ac85eeebf965db34eca46856f8b478e93b41e96"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.1"
   xdg_directories:
     dependency: transitive
     description:

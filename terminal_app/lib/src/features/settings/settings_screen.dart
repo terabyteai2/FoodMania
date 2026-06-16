@@ -12,6 +12,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/pos_notification.dart';
+import '../../services/printer/printer_vendor.dart';
 import '../../services/printer_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -290,12 +291,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (kDebugMode) {
       debugPrint(
         '[QB-PRINTER-DIAG] settings open receipt printer page '
-        'state transport=${app.printerState.activeTransport.name} '
+        'vendor=${app.printerState.detectedVendor.label} '
         'connected=${app.printerState.connected} '
-        'busy=${app.printerState.busy} '
-        'usb=${app.printerState.usbPrinterAvailable} '
-        'btSelected=${app.printerState.selectedPrinterAddress?.isNotEmpty == true} '
-        'systemQueue="${app.printerState.selectedWindowsQueueName ?? ''}"',
+        'busy=${app.printerState.busy}',
       );
     }
     await Navigator.of(context).push(
@@ -303,9 +301,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context) => _SettingsSectionPage(
           title: text.receiptPrinter,
           child: _PrinterSettingsCard(
-            onUsbConnect: _connectUsbPrinter,
-            onRefresh: _refreshPrinters,
-            onConnect: _connectPrinter,
+            onRescan: _rescanPrinter,
             onTestPrint: _testPrinter,
           ),
         ),
@@ -406,172 +402,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await app.updateUiScale(value);
   }
 
-  Future<void> _refreshPrinters() async {
+  Future<void> _rescanPrinter() async {
     final app = AppScope.of(context);
     final text = app.strings;
     if (kDebugMode) {
       debugPrint(
-        '[QB-PRINTER-DIAG] settings tap Bluetooth refresh '
-        'supportsDirect=${app.supportsDirectBluetoothPrinting} '
+        '[QB-PRINTER-DIAG] settings tap re-scan printer '
         'busy=${app.printerState.busy}',
       );
     }
-    if (!app.supportsDirectBluetoothPrinting) {
-      await _connectBluetoothSystemPrinter();
-      return;
-    }
-    final printers = await app.refreshPairedPrinters();
-    if (!mounted) return;
-    final error = app.printerState.lastError;
-    final message =
-        error ??
-        (printers.isEmpty
-            ? text.noPairedPrintersFound
-            : text.pairedPrinterFound(printers.length));
-    if (kDebugMode) {
-      debugPrint(
-        '[QB-PRINTER-DIAG] settings Bluetooth refresh result '
-        'printers=${printers.length} lastError="$error" snackbar="$message"',
-      );
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _connectBluetoothSystemPrinter() async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final queues = await app.listSystemPrinterQueues();
-    if (!mounted) return;
-    if (queues.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: TfText(
-            text.isBn
-                ? 'Bluetooth প্রিন্টার OS/CUPS-এ pair/install করুন, তারপর আবার চেষ্টা করুন।'
-                : 'Pair/install the Bluetooth printer in the OS first, then try again.',
-          ),
-        ),
-      );
-      return;
-    }
-    final choice = await showDialog<(String, int)>(
-      context: context,
-      builder: (_) => _SystemPrinterQueueDialog(
-        printers: queues,
-        selectedPrinter: app.printerState.selectedWindowsQueueName,
-        initialWidth: app.printerState.windowsPaperWidthMm,
-        title: text.isBn ? 'Bluetooth প্রিন্টার' : 'Bluetooth printer',
-      ),
-    );
-    if (choice == null) return;
-    await app.selectSystemPrinterQueue(choice.$1, paperWidthMm: choice.$2);
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: TfText(text.connectedTo(choice.$1))));
-  }
-
-  Future<void> _connectUsbPrinter() async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    if (kDebugMode) {
-      debugPrint(
-        '[QB-PRINTER-DIAG] settings tap USB connect '
-        'busy=${app.printerState.busy} '
-        'systemQueue="${app.printerState.selectedWindowsQueueName ?? ''}"',
-      );
-    }
-    try {
-      final queues = await app.listSystemPrinterQueues();
-      if (kDebugMode) {
-        debugPrint(
-          '[QB-PRINTER-DIAG] settings USB system queues=${queues.length}',
-        );
-      }
-      if (!mounted) return;
-
-      if (queues.isNotEmpty) {
-        final choice = queues.length == 1
-            ? (queues.first, app.printerState.windowsPaperWidthMm)
-            : await showDialog<(String, int)>(
-                context: context,
-                builder: (_) => _SystemPrinterQueueDialog(
-                  printers: queues,
-                  selectedPrinter: app.printerState.selectedWindowsQueueName,
-                  initialWidth: app.printerState.windowsPaperWidthMm,
-                  title: text.isBn ? 'USB প্রিন্টার' : 'USB printer',
-                ),
-              );
-        if (choice == null) return;
-        await app.selectSystemPrinterQueue(choice.$1, paperWidthMm: choice.$2);
-        if (!mounted) return;
-        if (kDebugMode) {
-          debugPrint(
-            '[QB-PRINTER-DIAG] settings USB selected system queue '
-            'queue="${choice.$1}" width=${choice.$2}',
-          );
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: TfText(text.connectedTo(choice.$1))));
-        return;
-      }
-
-      final ok = await app.connectLocalUsbPrinterAuto();
-      if (!mounted) return;
-      final message = ok
-          ? text.connectedTo(app.printerState.selectedPrinterLabel)
-          : app.printerState.lastError ?? text.printerConnectionFailed;
-      if (kDebugMode) {
-        debugPrint(
-          '[QB-PRINTER-DIAG] settings USB auto result ok=$ok '
-          'lastError="${app.printerState.lastError ?? ''}" '
-          'snackbar="$message"',
-        );
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText(message)));
-    } catch (error) {
-      if (!mounted) return;
-      final message = _printerErrorMessage(error, text);
-      if (kDebugMode) {
-        debugPrint(
-          '[QB-PRINTER-DIAG] settings USB exception error="$error" '
-          'snackbar="$message"',
-        );
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: TfText(message)));
-    }
-  }
-
-  Future<void> _connectPrinter(BluetoothPrinterDevice printer) async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    if (kDebugMode) {
-      debugPrint(
-        '[QB-PRINTER-DIAG] settings _connectPrinter name="${printer.name}" '
-        'address=${printer.address}',
-      );
-    }
-    final ok = await app.connectPrinter(printer);
-    if (kDebugMode) {
-      debugPrint(
-        '[QB-PRINTER-DIAG] settings _connectPrinter ok=$ok '
-        'lastError=${app.printerState.lastError}',
-      );
-    }
+    final ok = await app.redetectPrinter();
     if (!mounted) return;
     final message = ok
-        ? text.connectedTo(printer.label)
+        ? text.connectedTo(app.printerState.selectedPrinterLabel)
         : app.printerState.lastError ?? text.printerConnectionFailed;
     if (kDebugMode) {
       debugPrint(
-        '[QB-PRINTER-DIAG] settings Bluetooth connect snackbar="$message"',
+        '[QB-PRINTER-DIAG] settings re-scan result ok=$ok '
+        'vendor=${app.printerState.detectedVendor.label} '
+        'snackbar="$message"',
       );
     }
     ScaffoldMessenger.of(
@@ -585,9 +434,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (kDebugMode) {
       debugPrint(
         '[QB-PRINTER-DIAG] settings tap test print '
-        'transport=${app.printerState.activeTransport.name} '
+        'vendor=${app.printerState.detectedVendor.label} '
         'connected=${app.printerState.connected} '
-        'hasSelected=${app.printerState.hasSelectedPrinter}',
+        'hasDetected=${app.printerState.hasDetectedPrinter}',
       );
     }
     final ok = await app.testPrinter();
@@ -605,21 +454,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: TfText(message)));
-  }
-
-  String _printerErrorMessage(Object error, AppStrings text) {
-    final message = error is PrinterException ? error.message : '$error';
-    if (message.contains('Choose a USB/system printer')) {
-      return text.isBn
-          ? 'লিস্ট থেকে USB/system প্রিন্টার সিলেক্ট করুন।'
-          : 'Choose a USB/system printer from the list.';
-    }
-    if (message.contains('No USB printer found')) {
-      return text.isBn
-          ? 'USB প্রিন্টার পাওয়া যায়নি। USB লাগান অথবা Bluetooth ব্যবহার করুন।'
-          : 'No USB printer found. Plug in USB or use Bluetooth.';
-    }
-    return message;
   }
 }
 
@@ -1091,15 +925,11 @@ class _PresetChip extends StatelessWidget {
 
 class _PrinterSettingsCard extends StatelessWidget {
   const _PrinterSettingsCard({
-    required this.onUsbConnect,
-    required this.onRefresh,
-    required this.onConnect,
+    required this.onRescan,
     required this.onTestPrint,
   });
 
-  final Future<void> Function() onUsbConnect;
-  final Future<void> Function() onRefresh;
-  final Future<void> Function(BluetoothPrinterDevice printer) onConnect;
+  final Future<void> Function() onRescan;
   final Future<void> Function() onTestPrint;
 
   @override
@@ -1107,24 +937,11 @@ class _PrinterSettingsCard extends StatelessWidget {
     final app = AppScope.of(context);
     final text = app.strings;
     final state = app.printerState;
-    final devices = app.pairedPrinters;
-    final usbSelected =
-        state.activeTransport == PrinterTransport.usb ||
-        state.activeTransport == PrinterTransport.windowsUsb ||
-        state.usbPrinterAvailable ||
-        (state.selectedWindowsQueueName?.trim().isNotEmpty ?? false);
-    final bluetoothSelected =
-        state.activeTransport == PrinterTransport.bluetooth ||
-        (state.selectedPrinterAddress?.trim().isNotEmpty ?? false);
     if (kDebugMode) {
       debugPrint(
         '[QB-PRINTER-DIAG] settings printer page build '
-        'usbSelected=$usbSelected bluetoothSelected=$bluetoothSelected '
-        'busy=${state.busy} devices=${devices.length} '
-        'testVisible=${state.hasSelectedPrinter} '
-        'transport=${state.activeTransport.name} '
-        'usbAvailable=${state.usbPrinterAvailable} '
-        'builtInHidden=${state.builtInPrinterAvailable}',
+        'vendor=${state.detectedVendor.label} connected=${state.connected} '
+        'busy=${state.busy}',
       );
     }
 
@@ -1135,41 +952,12 @@ class _PrinterSettingsCard extends StatelessWidget {
       children: [
         _PrinterStatusPanel(state: state, text: text),
         const SizedBox(height: 12),
-        _PrinterConnectionOption(
-          title: text.isBn ? 'USB প্রিন্টার' : 'USB printer',
-          subtitle: text.isBn
-              ? 'USB কেবল লাগান। অ্যাপ নিজে প্রিন্টার খুঁজে নেবে।'
-              : 'Plug in USB. The app will detect the printer automatically.',
-          icon: Icons.usb_rounded,
-          selected: usbSelected,
+        TfButton(
+          label: text.refreshPairedPrinters,
+          icon: Icons.refresh_rounded,
           busy: state.busy,
-          buttonLabel: usbSelected ? text.reconnect : text.connect,
-          onPressed: state.busy ? null : onUsbConnect,
+          onPressed: state.busy ? null : onRescan,
         ),
-        const SizedBox(height: 10),
-        _PrinterConnectionOption(
-          title: text.isBn ? 'Bluetooth প্রিন্টার' : 'Bluetooth printer',
-          subtitle: text.isBn
-              ? 'USB না থাকলে Bluetooth ডিভাইস স্ক্যান করে কানেক্ট করুন।'
-              : 'If USB is not available, scan and connect a Bluetooth device.',
-          icon: Icons.bluetooth_rounded,
-          selected: bluetoothSelected,
-          busy: state.busy,
-          buttonLabel: text.refreshPairedPrinters,
-          onPressed: state.busy ? null : onRefresh,
-        ),
-        if (devices.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          ...devices.map(
-            (printer) => _PrinterDeviceTile(
-              printer: printer,
-              selected: printer.address == state.selectedPrinterAddress,
-              busy: state.busy,
-              text: text,
-              onConnect: () => onConnect(printer),
-            ),
-          ),
-        ],
         if (state.lastError?.trim().isNotEmpty == true) ...[
           const SizedBox(height: 10),
           _PrinterHint(
@@ -1178,7 +966,7 @@ class _PrinterSettingsCard extends StatelessWidget {
             color: PosColors.danger,
           ),
         ],
-        if (state.hasSelectedPrinter) ...[
+        if (state.hasDetectedPrinter) ...[
           const SizedBox(height: 12),
           TfButton(
             label: text.testPrint,
@@ -1246,85 +1034,6 @@ class _PrinterStatusPanel extends StatelessWidget {
   }
 }
 
-class _PrinterConnectionOption extends StatelessWidget {
-  const _PrinterConnectionOption({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.selected,
-    required this.busy,
-    required this.buttonLabel,
-    required this.onPressed,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool selected;
-  final bool busy;
-  final String buttonLabel;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: PosColors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected
-              ? PosColors.primary.withValues(alpha: 0.28)
-              : PosColors.lineStrong.withValues(alpha: 0.48),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: selected
-                  ? PosColors.primary.withValues(alpha: 0.10)
-                  : PosColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: PosColors.line),
-            ),
-            child: Icon(
-              selected ? Icons.check_circle_rounded : icon,
-              color: selected ? PosColors.primary : PosColors.muted,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(title, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 3),
-                TfText(
-                  subtitle,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          TfButton(
-            label: buttonLabel,
-            size: TfButtonSize.sm,
-            fullWidth: false,
-            busy: busy,
-            onPressed: onPressed,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PrinterHint extends StatelessWidget {
   const _PrinterHint({
     required this.icon,
@@ -1359,92 +1068,6 @@ class _PrinterHint extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SystemPrinterQueueDialog extends StatefulWidget {
-  const _SystemPrinterQueueDialog({
-    required this.printers,
-    required this.initialWidth,
-    required this.title,
-    this.selectedPrinter,
-  });
-
-  final List<String> printers;
-  final String? selectedPrinter;
-  final int initialWidth;
-  final String title;
-
-  @override
-  State<_SystemPrinterQueueDialog> createState() =>
-      _SystemPrinterQueueDialogState();
-}
-
-class _SystemPrinterQueueDialogState extends State<_SystemPrinterQueueDialog> {
-  late String _printer;
-  late int _width;
-
-  @override
-  void initState() {
-    super.initState();
-    _printer = _initialPrinter();
-    _width = widget.initialWidth == 80 ? 80 : 58;
-  }
-
-  String _initialPrinter() {
-    final selected = widget.selectedPrinter?.trim();
-    if (selected != null &&
-        selected.isNotEmpty &&
-        widget.printers.contains(selected)) {
-      return selected;
-    }
-    return widget.printers.first;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
-    return AlertDialog(
-      title: TfText(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DropdownButtonFormField<String>(
-            initialValue: _printer,
-            decoration: InputDecoration(
-              labelText: text.isBn ? 'প্রিন্টার' : 'Printer',
-            ),
-            items: [
-              for (final printer in widget.printers)
-                DropdownMenuItem(value: printer, child: Text(printer)),
-            ],
-            onChanged: (value) {
-              if (value != null) setState(() => _printer = value);
-            },
-          ),
-          const SizedBox(height: 14),
-          SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 58, label: Text('58 mm')),
-              ButtonSegment(value: 80, label: Text('80 mm')),
-            ],
-            selected: {_width},
-            onSelectionChanged: (value) => setState(() => _width = value.first),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: TfText(text.close),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, (_printer, _width)),
-          child: TfText(text.connect),
-        ),
-      ],
     );
   }
 }
@@ -1612,60 +1235,6 @@ class _DiagnosticStatusRow extends StatelessWidget {
                 context,
               ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PrinterDeviceTile extends StatelessWidget {
-  const _PrinterDeviceTile({
-    required this.printer,
-    required this.selected,
-    required this.busy,
-    required this.text,
-    required this.onConnect,
-  });
-
-  final BluetoothPrinterDevice printer;
-  final bool selected;
-  final bool busy;
-  final AppStrings text;
-  final Future<void> Function() onConnect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: PosColors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected
-              ? PosColors.primary.withValues(alpha: 0.24)
-              : PosColors.lineStrong.withValues(alpha: 0.48),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            selected ? Icons.check_circle_rounded : Icons.bluetooth_rounded,
-            color: selected ? PosColors.primary : PosColors.muted,
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: TfText(
-              printer.label,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          TfButton(
-            label: selected ? text.reconnect : text.connect,
-            size: TfButtonSize.sm,
-            fullWidth: false,
-            onPressed: busy ? null : onConnect,
-          ),
         ],
       ),
     );

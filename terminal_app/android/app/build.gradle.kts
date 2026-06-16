@@ -16,7 +16,10 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
 }
-val posTerminalMinSdk = 22
+// Flutter (3.44+) enforces a hard floor of minSdk 23 at build time
+// (ReleaseMinSdkCheck) — 22 fails the build outright. Keep this at the
+// lowest value Flutter currently accepts; do not drop it back to 22.
+val posTerminalMinSdk = 23
 val isPosTerminalBuild =
     providers.gradleProperty("posTerminalBuild").orNull.toBoolean() ||
         System.getenv("POS_TERMINAL_BUILD").orEmpty().let {
@@ -35,10 +38,6 @@ android {
     namespace = "com.terabyteai.foodmania.posadmin"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
-
-    buildFeatures {
-        aidl = true
-    }
 
     compileOptions {
         // Core library desugaring lets us use newer java.time APIs on older
@@ -73,8 +72,8 @@ android {
         release {
             signingConfig = signingConfigs.getByName("release")
             // Shrink + obfuscate to keep the dex/method footprint small. Keep
-            // rules live in proguard-rules.pro (Sunmi/Facebook/printer plugins
-            // use reflection/AIDL).
+            // rules live in proguard-rules.pro (Facebook + vendor printer
+            // plugins use reflection/AIDL internally).
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

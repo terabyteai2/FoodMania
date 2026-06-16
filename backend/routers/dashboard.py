@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_outlet_id
@@ -1438,3 +1438,43 @@ async def _analytics_wastage(
         "pct": round(_safe_div(waste_cost, stock_value), 3) if stock_value > 0 else 0,
         "topItem": top_name or "—",
     }
+
+
+@router.get("/outlets/{outlet_id}/menu/popularity")
+async def menu_popularity(
+    outlet_id: str,
+    limit: int = Query(9999, ge=1, le=9999),
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """All-time item popularity — total qty ordered per menu item.
+
+    Aggregates every non-rejected order from the outlet's entire history
+    using a DB-level JSONB query so only the summary is materialised
+    in Python memory (no full Order objects loaded).
+    Returns items sorted descending by totalQty.
+    """
+    _ensure_outlet(current_outlet, outlet_id)
+    rows = (
+        await db.execute(
+            text("""
+                SELECT
+                    item->>'menuItemId' AS menu_item_id,
+                    SUM(COALESCE((item->>'qty')::int, 0)) AS total_qty
+                FROM orders,
+                     jsonb_array_elements(items) AS items(item)
+                WHERE outlet_id = :outlet_id
+                  AND status NOT IN ('cancelled', 'rejected')
+                  AND items IS NOT NULL
+                GROUP BY menu_item_id
+                ORDER BY total_qty DESC
+                LIMIT :limit
+            """),
+            {"outlet_id": outlet_id, "limit": limit},
+        )
+    ).all()
+    return ok([
+        {"menuItemId": row.menu_item_id, "qty": row.total_qty}
+        for row in rows
+        if row.menu_item_id is not None
+    ])

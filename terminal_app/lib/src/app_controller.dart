@@ -295,6 +295,7 @@ class PosAppController extends ChangeNotifier {
   /// Tables tab becomes a tap-to-ring quick-sell grid instead of the FOH map.
   bool counterModeEnabled = false;
   List<MenuItem> menuItems = [];
+  Map<String, int> itemPopularity = {};
   List<String> quickSellMenuItemIds = [];
   List<OrderModel> orders = [];
   int? _lastOrdersForIdentityHash;
@@ -305,7 +306,6 @@ class PosAppController extends ChangeNotifier {
   List<SyncEvent> syncEvents = [];
   List<InventoryItem> inventoryItems = [];
   List<InventorySupplier> inventorySuppliers = [];
-  List<BluetoothPrinterDevice> pairedPrinters = [];
   PrinterRuntimeState printerState = PrinterRuntimeState(
     autoPrintEnabled: true,
     connected: false,
@@ -1030,7 +1030,19 @@ class PosAppController extends ChangeNotifier {
       DateTime.now(),
     );
     notifications = await database.getNotifications();
+    _loadPopularity();
     notifyListeners();
+  }
+
+  /// Fetch all-time item popularity from the server and cache in [itemPopularity].
+  /// Gracefully degrades (empty map, no sort change) when offline or on error.
+  Future<void> _loadPopularity() async {
+    try {
+      itemPopularity = await cloudApiService.fetchMenuPopularity();
+      notifyListeners();
+    } catch (_) {
+      // Stay with current map (empty or stale) — null-safe, no crash.
+    }
   }
 
   /// Append the next page of older orders to [orders] for scroll-to-load-more.
@@ -3644,52 +3656,10 @@ class PosAppController extends ChangeNotifier {
     );
   }
 
-  Future<List<BluetoothPrinterDevice>> refreshPairedPrinters() async {
-    pairedPrinters = await printerService.refreshPairedPrinters();
-    notifyListeners();
-    return pairedPrinters;
-  }
-
-  Future<List<String>> listSystemPrinterQueues() {
-    return printerService.listSystemPrinterQueues();
-  }
-
-  bool get supportsDirectBluetoothPrinting {
-    return printerService.supportsDirectBluetoothPrinting;
-  }
-
-  Future<void> selectSystemPrinterQueue(
-    String queueName, {
-    int paperWidthMm = 58,
-  }) async {
-    await printerService.selectSystemPrinterQueue(
-      queueName,
-      paperWidthMm: paperWidthMm,
-    );
-    printerState = printerService.state;
-    notifyListeners();
-  }
-
-  Future<bool> connectLocalUsbPrinterAuto() async {
-    final ok = await printerService.connectLocalUsbPrinterAuto();
-    printerState = printerService.state;
-    notifyListeners();
-    return ok;
-  }
-
-  Future<bool> connectPrinter(BluetoothPrinterDevice printer) async {
-    final ok = await printerService.connect(printer);
-    printerState = printerService.state;
-    if (ok) {
-      await refreshPairedPrinters();
-    } else {
-      notifyListeners();
-    }
-    return ok;
-  }
-
-  Future<bool> disconnectPrinter() async {
-    final ok = await printerService.disconnect();
+  /// Re-runs built-in printer vendor detection (e.g. a "Re-scan printer"
+  /// action in settings). Detection otherwise only runs once, at startup.
+  Future<bool> redetectPrinter() async {
+    final ok = await printerService.redetectPrinter();
     printerState = printerService.state;
     notifyListeners();
     return ok;
@@ -3710,14 +3680,6 @@ class PosAppController extends ChangeNotifier {
     printerState = printerService.state;
     notifyListeners();
     return ok;
-  }
-
-  Future<String> readPrinterDiagnostics() {
-    return printerService.readPrinterDiagnostics();
-  }
-
-  Future<void> clearPrinterDiagnostics() {
-    return printerService.clearPrinterDiagnostics();
   }
 
   Future<bool> printOrderTicket(OrderModel order) {
@@ -4351,7 +4313,7 @@ class PosAppController extends ChangeNotifier {
     final isAccepted = status == OrderStatus.accepted;
     if (isAccepted &&
         printerState.autoPrintEnabled &&
-        !printerState.hasSelectedPrinter) {
+        !printerState.hasDetectedPrinter) {
       final reason = await printerService.preflightBlockReason();
       printerState = printerService.state;
       if (reason != null) return;
@@ -4359,7 +4321,7 @@ class PosAppController extends ChangeNotifier {
     }
     if (!isAccepted ||
         !printerState.autoPrintEnabled ||
-        !printerState.hasSelectedPrinter ||
+        !printerState.hasDetectedPrinter ||
         printerService.hasPrintedOrder(order.id) ||
         _autoPrintGiveUpOrderIds.contains(order.id) ||
         _autoPrintInFlight.contains(order.id)) {

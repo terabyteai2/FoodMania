@@ -283,6 +283,7 @@ class PosAppController extends ChangeNotifier {
   /// Tables tab becomes a tap-to-ring quick-sell grid instead of the FOH map.
   bool counterModeEnabled = false;
   List<MenuItem> menuItems = [];
+  Map<String, int> itemPopularity = {};
   List<String> quickSellMenuItemIds = [];
   List<OrderModel> orders = [];
   int? _lastOrdersForIdentityHash;
@@ -1026,7 +1027,21 @@ class PosAppController extends ChangeNotifier {
       DateTime.now(),
     );
     notifications = await database.getNotifications();
+    // Kick off popularity fetch in the background — UI renders with local
+    // data immediately, then re-sorts when the map arrives.
+    _loadPopularity();
     notifyListeners();
+  }
+
+  /// Fetch all-time item popularity from the server and cache in [itemPopularity].
+  /// Gracefully degrades (empty map, no sort change) when offline or on error.
+  Future<void> _loadPopularity() async {
+    try {
+      itemPopularity = await cloudApiService.fetchMenuPopularity();
+      notifyListeners();
+    } catch (_) {
+      // Stay with current map (empty or stale) — null-safe, no crash.
+    }
   }
 
   /// Append the next page of older orders to [orders] for scroll-to-load-more.
