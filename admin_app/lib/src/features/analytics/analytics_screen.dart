@@ -256,6 +256,57 @@ const _Data _emptyData = _Data(
 // Set by _AnalyticsScreenState before building the card subtree.
 _Data _data = _emptyData;
 
+// Shared timeframe state — read/written by all analytics screens.
+_Timeframe _globalTf = _Timeframe.week;
+DateTime? _globalRangeStart;
+DateTime? _globalRangeEnd;
+
+String _globalRangeKey() => switch (_globalTf) {
+  _Timeframe.today => 'today',
+  _Timeframe.week => 'week',
+  _Timeframe.month => 'custom',
+  _Timeframe.custom => 'custom',
+};
+
+(String?, String?) _globalRangeBounds() {
+  if (_globalTf == _Timeframe.month) {
+    final now = DateTime.now();
+    return (
+      DateTime(now.year, now.month, 1).toUtc().toIso8601String(),
+      now.toUtc().toIso8601String(),
+    );
+  }
+  if (_globalTf == _Timeframe.custom) {
+    return (
+      _globalRangeStart?.toUtc().toIso8601String(),
+      _globalRangeEnd?.toUtc().toIso8601String(),
+    );
+  }
+  return (null, null);
+}
+
+Future<_Data> _loadAnalytics(BuildContext context) async {
+  final app = AppScope.read(context);
+  final (start, end) = _globalRangeBounds();
+  final json = await app.fetchAnalytics(
+    range: _globalRangeKey(),
+    start: start,
+    end: end,
+    channel: _channelQuery(_allChannels),
+    daypart: _daypartQuery(_allDay),
+  );
+  return _Data.fromJson(json);
+}
+
+String _tfLabelFromGlobals(BuildContext context) => switch (_globalTf) {
+  _Timeframe.today => tfPick(context, en: 'Today', bn: 'আজ'),
+  _Timeframe.week => tfPick(context, en: 'This week', bn: 'এই সপ্তাহ'),
+  _Timeframe.month => tfPick(context, en: 'This month', bn: 'এই মাস'),
+  _Timeframe.custom => _globalRangeStart != null && _globalRangeEnd != null
+      ? '${_fmtDate(_globalRangeStart!)}–${_fmtDate(_globalRangeEnd!)}'
+      : tfPick(context, en: 'Custom', bn: 'কাস্টম'),
+};
+
 // ── Filter option lists ────────────────────────────────────────────────────
 const String _allChannels = 'All channels';
 const String _allDay = 'All day';
@@ -310,11 +361,8 @@ class AnalyticsScreen extends StatefulWidget {
 }
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
-  _Timeframe _tf = _Timeframe.week;
   bool _advanced = false;
   _ProductSort _sort = _ProductSort.rev;
-  DateTime? _rangeStart;
-  DateTime? _rangeEnd;
   bool _showCalendar = false;
   bool _calendarClosing = false;
   String _channel = _allChannels;
@@ -344,27 +392,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   void _reload() { setState(() { _future = _load(); }); }
 
-  String get _rangeKey => switch (_tf) {
-    _Timeframe.today => 'today',
-    _Timeframe.week => 'week',
-    _Timeframe.month => 'custom',
-    _Timeframe.custom => 'custom',
-  };
-
   Future<_Data> _load() async {
     final app = AppScope.read(context);
-    String? start;
-    String? end;
-    if (_tf == _Timeframe.month) {
-      final now = DateTime.now();
-      start = DateTime(now.year, now.month, 1).toUtc().toIso8601String();
-      end = now.toUtc().toIso8601String();
-    } else if (_tf == _Timeframe.custom) {
-      start = _rangeStart?.toUtc().toIso8601String();
-      end = _rangeEnd?.toUtc().toIso8601String();
-    }
+    final (start, end) = _globalRangeBounds();
     final json = await app.fetchAnalytics(
-      range: _rangeKey,
+      range: _globalRangeKey(),
       start: start,
       end: end,
       channel: _channelQuery(_channel),
@@ -384,12 +416,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return data;
   }
 
-  String _tfLabel(BuildContext context) => switch (_tf) {
+  String _tfLabel(BuildContext context) => switch (_globalTf) {
     _Timeframe.today => tfPick(context, en: 'Today', bn: 'আজ'),
     _Timeframe.week => tfPick(context, en: 'This week', bn: 'এই সপ্তাহ'),
     _Timeframe.month => tfPick(context, en: 'This month', bn: 'এই মাস'),
-    _Timeframe.custom => _rangeStart != null && _rangeEnd != null
-        ? '${_fmtDate(_rangeStart!)}–${_fmtDate(_rangeEnd!)}'
+    _Timeframe.custom => _globalRangeStart != null && _globalRangeEnd != null
+        ? '${_fmtDate(_globalRangeStart!)}–${_fmtDate(_globalRangeEnd!)}'
         : tfPick(context, en: 'Custom', bn: 'কাস্টম'),
   };
 
@@ -412,7 +444,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   String _stateSummary() {
-    return 'range=$_rangeKey start=$_rangeStart end=$_rangeEnd channel="$_channel" '
+    return 'range=${_globalRangeKey()} start=$_globalRangeStart end=$_globalRangeEnd channel="$_channel" '
         'daypart="$_daypart" advanced=$_advanced';
   }
 
@@ -608,10 +640,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: _Segmented(
-                selected: _tf,
+                selected: _globalTf,
                 onChanged: (tf) => setState(() {
-                  _logTouch('timeframe tap ${_tf.name}->${tf.name}');
-                  _tf = tf;
+                  _logTouch('timeframe tap $_globalTf->$tf');
+                  _globalTf = tf;
                   _showCalendar = tf == _Timeframe.custom;
                   _future = _load();
                 }),
@@ -783,11 +815,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                     onTap: () {
                                       _logTouch('detailed sales table tap');
                                       _push(
-                                        _SalesTableScreen(
-                                          initialTf: _tf,
-                                          initialStart: _rangeStart,
-                                          initialEnd: _rangeEnd,
-                                        ),
+                                    const _SalesTableScreen(),
                                       );
                                     },
                                   ),
@@ -856,16 +884,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               elevation: 4,
                               borderRadius: BorderRadius.circular(PosRadii.lg),
                               child: _CalendarRangePicker(
-                                start: _rangeStart,
-                                end: _rangeEnd,
-                                onRangeChanged: (s, e) => setState(() {
-                                  _rangeStart = s;
-                                  _rangeEnd = e;
+                                start: _globalRangeStart,
+                                end: _globalRangeEnd,
+                                onRangeChanged: (s, e) {
+                                  _globalRangeStart = s;
+                                  _globalRangeEnd = e;
+                                  setState(() {
+                                    if (s != null && e != null) {
+                                      _calendarClosing = true;
+                                    }
+                                  });
                                   if (s != null && e != null) {
                                     _future = _load();
-                                    _calendarClosing = true;
                                   }
-                                }),
+                                },
                               ),
                             ),
                           ),
@@ -883,7 +915,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   void _push(Widget screen) {
     _logTouch('push ${screen.runtimeType}');
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => screen))
+        .then((_) => _reload());
   }
 }
 
@@ -2309,6 +2343,8 @@ class _CategoryAllScreen extends StatefulWidget {
 
 class _CategoryAllScreenState extends State<_CategoryAllScreen> {
   _CatSort _sort = _CatSort.rev;
+  bool _showCalendar = false;
+  bool _calendarClosing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -2369,8 +2405,27 @@ class _CategoryAllScreenState extends State<_CategoryAllScreen> {
               ),
               subtitle:
                   '${_money(context, totalRev)} '
-                  '${tfPick(context, en: 'net · last 7 days', bn: 'নিট · গত ৭ দিন')}',
+                  '${tfPick(context, en: 'net', bn: 'নিট')} · ${_tfLabelFromGlobals(context)}',
               leading: const _BackButton(),
+            ),
+            // Timeframe segmented
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: _Segmented(
+                selected: _globalTf,
+                onChanged: (tf) {
+                  _globalTf = tf;
+                  _showCalendar = tf == _Timeframe.custom;
+                  if (tf != _Timeframe.custom) {
+                    _globalRangeStart = null;
+                    _globalRangeEnd = null;
+                  }
+                  _loadAnalytics(context).then((d) {
+                    _data = d;
+                    if (mounted) setState(() {});
+                  });
+                },
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -2390,60 +2445,62 @@ class _CategoryAllScreenState extends State<_CategoryAllScreen> {
               ),
             ),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                itemCount: rows.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 11),
-                itemBuilder: (context, i) {
-                  final r = rows[i];
-                  final barColor = i == 0
-                      ? PosColors.primary
-                      : i < 3
-                      ? PosColors.primaryWash
-                      : PosColors.surface3;
-                  return TfCard(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
+              child: Stack(
+                children: [
+                  ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 11),
+                    itemBuilder: (context, i) {
+                      final r = rows[i];
+                      final barColor = i == 0
+                          ? PosColors.primary
+                          : i < 3
+                          ? PosColors.primaryWash
+                          : PosColors.surface3;
+                      return TfCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _RankNumber(rank: i, small: true),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TfText(
-                                r.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: PosColors.text,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                _RankNumber(rank: i, small: true),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TfText(
+                                    r.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: PosColors.text,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                TfText(
+                                  _money(context, r.value),
+                                  style: const TextStyle(
+                                    color: PosColors.text,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
-                            TfText(
-                              _money(context, r.value),
-                              style: const TextStyle(
-                                color: PosColors.text,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _Bar(fraction: r.value / maxV, color: barColor),
-                        const SizedBox(height: 11),
-                        Row(
-                          children: [
-                            _miniStat(
-                              context,
-                              tfPick(context, en: 'Share', bn: 'শেয়ার'),
-                              '${(r.share * 100).round()}%',
-                              PosColors.inkSoft,
+                            const SizedBox(height: 10),
+                            _Bar(fraction: r.value / maxV, color: barColor),
+                            const SizedBox(height: 11),
+                            Row(
+                              children: [
+                                _miniStat(
+                                  context,
+                                  tfPick(context, en: 'Share', bn: 'শেয়ার'),
+                                  '${(r.share * 100).round()}%',
+                                  PosColors.inkSoft,
                             ),
                             _miniStat(
                               context,
@@ -2472,7 +2529,59 @@ class _CategoryAllScreenState extends State<_CategoryAllScreen> {
                   );
                 },
               ),
-            ),
+              if (_showCalendar)
+                AnimatedOpacity(
+                  opacity: _calendarClosing ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 400),
+                  onEnd: _calendarClosing
+                      ? () => setState(() {
+                          _showCalendar = false;
+                          _calendarClosing = false;
+                        })
+                      : null,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _showCalendar = false),
+                          child: Container(color: Colors.black26),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        left: 16,
+                        right: 16,
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(PosRadii.lg),
+                          child: _CalendarRangePicker(
+                            start: _globalRangeStart,
+                            end: _globalRangeEnd,
+                            onRangeChanged: (s, e) {
+                              _globalRangeStart = s;
+                              _globalRangeEnd = e;
+                              setState(() {
+                                if (s != null && e != null) {
+                                  _calendarClosing = true;
+                                }
+                              });
+                              if (s != null && e != null) {
+                                _loadAnalytics(context).then((d) {
+                                  _data = d;
+                                  if (mounted) setState(() {});
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          ),
+
             _ExportBar(
               label: tfPick(
                 context,
@@ -2528,6 +2637,8 @@ class _ProductsAllScreenState extends State<_ProductsAllScreen> {
   late _ProductSort _sort = widget.initialSort;
   final TextEditingController _search = TextEditingController();
   String _query = '';
+  bool _showCalendar = false;
+  bool _calendarClosing = false;
 
   @override
   void dispose() {
@@ -2571,9 +2682,28 @@ class _ProductsAllScreenState extends State<_ProductsAllScreen> {
                 bn: 'প্রোডাক্ট পারফরম্যান্স',
               ),
               subtitle:
-                  '${tfFormatNumber(context, products.length)} '
-                  '${tfPick(context, en: 'menu items · last 7 days', bn: 'মেনু আইটেম · গত ৭ দিন')}',
+                  '${tfFormatNumber(context, products.length)}'
+                  ' ${tfPick(context, en: 'menu items', bn: 'মেনু আইটেম')}'
+                  ' · ${_tfLabelFromGlobals(context)}',
               leading: const _BackButton(),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: _Segmented(
+                selected: _globalTf,
+                onChanged: (tf) {
+                  _globalTf = tf;
+                  _showCalendar = tf == _Timeframe.custom;
+                  if (tf != _Timeframe.custom) {
+                    _globalRangeStart = null;
+                    _globalRangeEnd = null;
+                  }
+                  _loadAnalytics(context).then((d) {
+                    _data = d;
+                    if (mounted) setState(() {});
+                  });
+                },
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -2605,59 +2735,112 @@ class _ProductsAllScreenState extends State<_ProductsAllScreen> {
               ),
             ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Stack(
                 children: [
-                  TfCard(
-                    padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 11, bottom: 9),
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 14),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TfMicroLabel(
-                                  tfPick(context, en: 'ITEM', bn: 'আইটেম'),
+                  ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    children: [
+                      TfCard(
+                        padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 11, bottom: 9),
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 14),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TfMicroLabel(
+                                      tfPick(context, en: 'ITEM', bn: 'আইটেম'),
+                                    ),
+                                  ),
+                                  TfMicroLabel(
+                                    _sortLabel(context, _sort).toUpperCase(),
+                                    color: PosColors.accentStrong,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Divider(height: 1, color: PosColors.lineStrong),
+                            if (filtered.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 32),
+                                child: TfText(
+                                  tfPick(
+                                    context,
+                                    en: 'No items match "$_query".',
+                                    bn: '"$_query" এর সাথে কিছু মেলেনি।',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: PosColors.muted,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                              ),
-                              TfMicroLabel(
-                                _sortLabel(context, _sort).toUpperCase(),
-                                color: PosColors.accentStrong,
-                              ),
-                            ],
-                          ),
+                              )
+                            else
+                              for (var i = 0; i < filtered.length; i++)
+                                _FullProductRow(
+                                  item: filtered[i],
+                                  rank: i,
+                                  sort: _sort,
+                                  last: i == filtered.length - 1,
+                                ),
+                          ],
                         ),
-                        const Divider(height: 1, color: PosColors.lineStrong),
-                        if (filtered.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 32),
-                            child: TfText(
-                              tfPick(
-                                context,
-                                en: 'No items match "$_query".',
-                                bn: '"$_query" এর সাথে কিছু মেলেনি।',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: PosColors.muted,
-                                fontSize: 14,
-                              ),
-                            ),
-                          )
-                        else
-                          for (var i = 0; i < filtered.length; i++)
-                            _FullProductRow(
-                              item: filtered[i],
-                              rank: i,
-                              sort: _sort,
-                              last: i == filtered.length - 1,
-                            ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                  if (_showCalendar)
+                    AnimatedOpacity(
+                      opacity: _calendarClosing ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 400),
+                      onEnd: _calendarClosing
+                          ? () => setState(() {
+                                _showCalendar = false;
+                                _calendarClosing = false;
+                              })
+                          : null,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _showCalendar = false),
+                              child: Container(color: Colors.black26),
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            left: 16,
+                            right: 16,
+                            child: Material(
+                              elevation: 4,
+                              borderRadius: BorderRadius.circular(PosRadii.lg),
+                              child: _CalendarRangePicker(
+                                start: _globalRangeStart,
+                                end: _globalRangeEnd,
+                                onRangeChanged: (s, e) {
+                                  _globalRangeStart = s;
+                                  _globalRangeEnd = e;
+                                  setState(() {
+                                    if (s != null && e != null) {
+                                      _calendarClosing = true;
+                                    }
+                                  });
+                                  if (s != null && e != null) {
+                                    _loadAnalytics(context).then((d) {
+                                      _data = d;
+                                      if (mounted) setState(() {});
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -3006,24 +3189,13 @@ class _SalesTableEntry extends StatelessWidget {
 }
 
 class _SalesTableScreen extends StatefulWidget {
-  const _SalesTableScreen({
-    required this.initialTf,
-    this.initialStart,
-    this.initialEnd,
-  });
-
-  final _Timeframe initialTf;
-  final DateTime? initialStart;
-  final DateTime? initialEnd;
+  const _SalesTableScreen();
 
   @override
   State<_SalesTableScreen> createState() => _SalesTableScreenState();
 }
 
 class _SalesTableScreenState extends State<_SalesTableScreen> {
-  late _Timeframe _tf = widget.initialTf;
-  late DateTime? _rangeStart = widget.initialStart;
-  late DateTime? _rangeEnd = widget.initialEnd;
   bool _showCalendar = false;
   bool _calendarClosing = false;
   String _service = _stAllServices;
@@ -3044,13 +3216,6 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
 
   void _reload() { setState(() { _future = _load(); }); }
 
-  String get _rangeKey => switch (_tf) {
-    _Timeframe.today => 'today',
-    _Timeframe.week => 'week',
-    _Timeframe.month => 'custom',
-    _Timeframe.custom => 'custom',
-  };
-
   int get _activeFilters =>
       (_channel != _stAllChannels ? 1 : 0) +
       (_shift != _stAllShifts ? 1 : 0) +
@@ -3062,20 +3227,11 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
 
   Future<List<_SalesRow>> _load() async {
     final app = AppScope.read(context);
-    String? start;
-    String? end;
-    if (_tf == _Timeframe.month) {
-      final now = DateTime.now();
-      start = DateTime(now.year, now.month, 1).toUtc().toIso8601String();
-      end = now.toUtc().toIso8601String();
-    } else if (_tf == _Timeframe.custom) {
-      start = _rangeStart?.toUtc().toIso8601String();
-      end = _rangeEnd?.toUtc().toIso8601String();
-    }
+    final (start, end) = _globalRangeBounds();
     // Fetch the full period once (channel = all); Service/Channel/Shift/etc.
     // are applied client-side so only the timeframe triggers a refetch.
     final json = await app.fetchSalesTable(
-      range: _rangeKey,
+      range: _globalRangeKey(),
       start: start,
       end: end,
     );
@@ -3209,14 +3365,14 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                   child: _Segmented(
-                    selected: _tf,
+                selected: _globalTf,
                     onChanged: (tf) {
                       setState(() {
-                        _tf = tf;
+                        _globalTf = tf;
                         _showCalendar = tf == _Timeframe.custom;
                         if (tf != _Timeframe.custom) {
-                          _rangeStart = null;
-                          _rangeEnd = null;
+                          _globalRangeStart = null;
+                          _globalRangeEnd = null;
                         }
                       });
                       _reload();
@@ -3304,12 +3460,12 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
                                   elevation: 4,
                                   borderRadius: BorderRadius.circular(PosRadii.lg),
                                   child: _CalendarRangePicker(
-                                    start: _rangeStart,
-                                    end: _rangeEnd,
+                                    start: _globalRangeStart,
+                                    end: _globalRangeEnd,
                                     onRangeChanged: (s, e) {
+                                      _globalRangeStart = s;
+                                      _globalRangeEnd = e;
                                       setState(() {
-                                        _rangeStart = s;
-                                        _rangeEnd = e;
                                         if (s != null && e != null) {
                                           _calendarClosing = true;
                                         }
