@@ -63,7 +63,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   TextEditingController _controller(InventoryItem item) =>
       _controllers.putIfAbsent(item.id, () {
         final seeded = _scannedQty[item.id];
-        return TextEditingController(text: _fmtQty(seeded ?? item.quantity));
+        return TextEditingController(text: seeded != null ? _fmtQty(seeded) : '');
       });
 
   static String _fmtQty(double value) =>
@@ -443,7 +443,7 @@ class _CountLineState extends State<_CountLine> {
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 11),
             SizedBox(
               width: 28,
               child: TfText(

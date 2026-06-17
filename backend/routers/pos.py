@@ -65,6 +65,8 @@ def _settings_dict(outlet: Outlet) -> dict:
             if outlet.pos_daily_sales_target is not None
             else None
         ),
+        "logoUrl": outlet.logo_url,
+        "logoBitmapUrl": outlet.logo_bitmap_url,
     }
 
 

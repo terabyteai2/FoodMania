@@ -28,6 +28,7 @@ class StockInScreen extends StatefulWidget {
 
 class _StockInScreenState extends State<StockInScreen> {
   final List<_StockInLine> _lines = [];
+  final Map<String, TextEditingController> _existingCtrls = {};
   bool _scanning = false;
   bool _saving = false;
   String? _scanError;
@@ -71,6 +72,9 @@ class _StockInScreenState extends State<StockInScreen> {
   void dispose() {
     for (final line in _lines) {
       line.dispose();
+    }
+    for (final ctrl in _existingCtrls.values) {
+      ctrl.dispose();
     }
     super.dispose();
   }
@@ -147,7 +151,7 @@ class _StockInScreenState extends State<StockInScreen> {
   Future<void> _saveAll() async {
     if (_saving) return;
     final valid = _lines.where((l) => l.canSave).toList(growable: false);
-    if (valid.isEmpty) return;
+    if (valid.isEmpty && _existingCtrls.values.every((c) => c.text.trim().isEmpty)) return;
     setState(() => _saving = true);
     final app = AppScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -167,7 +171,6 @@ class _StockInScreenState extends State<StockInScreen> {
             if (mergedName != existing.name) {
               updatedExisting = updatedExisting.copyWith(name: mergedName);
             }
-            // Keep the saved unit price in sync if the user edited it.
             final unitPrice = line.parsedUnitPrice;
             if (unitPrice != null &&
                 unitPrice > 0 &&
@@ -213,6 +216,23 @@ class _StockInScreenState extends State<StockInScreen> {
             billRef: '',
           );
         }
+      }
+      // Save existing-item quick entries
+      for (final entry in _existingCtrls.entries) {
+        final qty = double.tryParse(entry.value.text.trim());
+        if (qty == null || qty <= 0) continue;
+        final existing = app.inventoryItems
+            .where((i) => i.id == entry.key)
+            .firstOrNull;
+        if (existing == null) continue;
+        await app.recordInventoryPurchase(
+          inventoryItemId: entry.key,
+          quantity: qty,
+          totalCostBdt: qty * existing.costPerUnit,
+          supplierId: null,
+          supplierName: '',
+          billRef: '',
+        );
       }
       await app.refreshInventorySummary();
       if (mounted) Navigator.pop(context);
@@ -281,7 +301,11 @@ class _StockInScreenState extends State<StockInScreen> {
       0,
       (sum, line) => sum + line.computedTotal,
     );
-    final canSave = _lines.any((line) => line.canSave);
+    final hasExisting = _existingCtrls.values.any((c) {
+      final v = double.tryParse(c.text.trim());
+      return v != null && v > 0;
+    });
+    final canSave = _lines.any((line) => line.canSave) || hasExisting;
 
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -323,6 +347,12 @@ class _StockInScreenState extends State<StockInScreen> {
                     const SizedBox(height: 10),
                   ],
                   _AddAnotherLineButton(text: text, onPressed: _addLine),
+                  const SizedBox(height: 8),
+                  _ExistingItemsSection(
+                    items: app.inventoryItems,
+                    text: text,
+                    controllers: _existingCtrls,
+                  ),
                 ],
               ),
             ),
@@ -957,6 +987,175 @@ class _AddAnotherLineButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Existing items quick-stock-in section ─────────────────────────────────────
+
+class _ExistingItemsSection extends StatelessWidget {
+  const _ExistingItemsSection({
+    required this.items,
+    required this.text,
+    required this.controllers,
+  });
+
+  final List<InventoryItem> items;
+  final AppStrings text;
+  final Map<String, TextEditingController> controllers;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TfText(
+            text.inventory.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: PosColors.muted,
+            ),
+          ),
+        ),
+        for (final item in items)
+          _ExistingStockInRow(
+            item: item,
+            controller: controllers.putIfAbsent(
+              item.id,
+              () => TextEditingController(),
+            ),
+            text: text,
+          ),
+      ],
+    );
+  }
+}
+
+class _ExistingStockInRow extends StatelessWidget {
+  const _ExistingStockInRow({
+    required this.item,
+    required this.controller,
+    required this.text,
+  });
+
+  final InventoryItem item;
+  final TextEditingController controller;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
+    final system = item.quantity;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(PosRadii.card),
+          border: Border.all(color: PosColors.line),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: PosColors.surfaceSunk,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.grid_on_rounded,
+                size: 18,
+                color: PosColors.inkSoft,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TfText(
+                    item.localizedName(AppScope.of(context).language),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                      color: PosColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  TfText(
+                    'System: ${_fmtQty(system)} $unit',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: PosColors.muted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 78,
+              child: TextField(
+                controller: controller,
+                textAlign: TextAlign.center,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                ],
+                decoration: const InputDecoration(
+                  hintText: '—',
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.mutedSoft,
+                  ),
+                ),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.text,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 11),
+            SizedBox(
+              width: 28,
+              child: TfText(
+                unit,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.muted,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _fmtQty(double value) =>
+      value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toStringAsFixed(1);
 }
 
 class _DashedBorderPainter extends CustomPainter {

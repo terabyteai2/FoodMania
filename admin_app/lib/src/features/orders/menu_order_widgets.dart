@@ -816,9 +816,10 @@ class _GridTile extends StatelessWidget {
       child: Opacity(
         opacity: off ? 0.5 : 1.0,
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: inCart ? PosColors.primarySoft : PosColors.surface,
+            color: PosColors.surface,
             border: Border.all(
               color: inCart ? PosColors.primaryDeep : PosColors.line,
             ),
@@ -828,127 +829,131 @@ class _GridTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Image section — category tint bg, centered
+              // Image section — full-width tint, inner padding for badges
               Container(
                 height: 54,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(PosRadii.card),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: EdgeInsets.zero,
+                color: resolveCategoryBg(item.category),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Stack(
+                    clipBehavior: Clip.antiAlias,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
                         child: ItemImage(
                           url: item.imageUrl ?? '',
                           iconKey: iconKey,
                           category: item.category,
                         ),
                       ),
-                    ),
-                    if (inCart) ...[
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Container(
-                          constraints: const BoxConstraints(minWidth: 22),
-                          height: 22,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          decoration: BoxDecoration(
-                            color: PosColors.primary,
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          alignment: Alignment.center,
-                          child: TfText(
-                            tfFormatNumber(context, qty),
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                              color: PosColors.accentInk,
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: GestureDetector(
-                          onTap: onDecrement,
+                      if (inCart) ...[
+                        Positioned(
+                          top: 0,
+                          right: 0,
                           child: Container(
-                            width: 24,
-                            height: 24,
+                            constraints: const BoxConstraints(minWidth: 22),
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
-                              color: PosColors.surface,
-                              borderRadius: BorderRadius.circular(PosRadii.md),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x2E14180E),
-                                  blurRadius: 3,
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
+                              color: PosColors.primary,
+                              borderRadius: BorderRadius.circular(11),
                             ),
-                            child: const Icon(
-                              Icons.remove_rounded,
-                              size: 16,
+                            alignment: Alignment.center,
+                            child: TfText(
+                              tfFormatNumber(context, qty),
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: PosColors.accentInk,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          child: GestureDetector(
+                            onTap: onDecrement,
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: PosColors.surface,
+                                borderRadius: BorderRadius.circular(PosRadii.md),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x2E14180E),
+                                    blurRadius: 3,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.remove_rounded,
+                                size: 16,
+                                color: PosColors.danger,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (off)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 3,
+                              horizontal: 6,
+                            ),
+                            decoration: BoxDecoration(
                               color: PosColors.danger,
+                              borderRadius: BorderRadius.circular(PosRadii.sm),
+                            ),
+                            child: const Text(
+                              "86'd",
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
                     ],
-                    if (off)
-                      Positioned(
-                        right: 6,
-                        bottom: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 3,
-                            horizontal: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: PosColors.danger,
-                            borderRadius: BorderRadius.circular(PosRadii.sm),
-                          ),
-                          child: const Text(
-                            "86'd",
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
-              // Name — 14/600, --ink
-              TfText(
-                item.localizedName(app.language),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: cols == 4 ? 12.0 : 13.0,
-                  fontWeight: FontWeight.w500,
-                  color: PosColors.primaryDark,
-                  height: 1.25,
-                ),
-              ),
-              const Spacer(),
-              // Price — 14/700 tabular, --ink
-              TfText(
-                tfFormatCurrency(context, item.price),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: PosColors.primaryDark,
-                  fontFeatures: [FontFeature.tabularFigures()],
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Name — 14/600, --ink
+                    TfText(
+                      item.localizedName(app.language),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: cols == 4 ? 12.0 : 13.0,
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.primaryDark,
+                        height: 1.25,
+                      ),
+                    ),
+                    // Price — 14/700 tabular, --ink
+                    TfText(
+                      tfFormatCurrency(context, item.price),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.primaryDark,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

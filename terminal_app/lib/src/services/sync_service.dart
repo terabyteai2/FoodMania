@@ -593,6 +593,19 @@ class SyncService {
       }
     }
 
+    // Pull outlet config (logo URL, logo bitmap URL for thermal printing)
+    try {
+      final outletSettings = await _cloudApi.pullDesktopPosSettings();
+      if (outletSettings != null) {
+        _onRemoteEvent?.call({
+          'type': 'outlet_config_updated',
+          'data': outletSettings,
+        });
+      }
+    } catch (error) {
+      _addLog('Cloud outlet config pull skipped: $error', isError: true);
+    }
+
     _lastCloudPullAt = DateTime.now().toUtc().subtract(Duration(seconds: 2));
     return imported;
   }

@@ -2306,6 +2306,10 @@ class PosAppController extends ChangeNotifier {
   void _handleRemoteSyncEvent(Map<String, Object?> event) {
     final type = event['type']?.toString() ?? '';
     final data = event['data'];
+    if (type == 'outlet_config_updated' && data is Map) {
+      unawaited(_applyOutletConfigUpdate(data.cast<String, Object?>()));
+      return;
+    }
     if (type == 'chat_updated') {
       _chatEventController.add(event);
       unawaited(_syncChatEscalationNotifications(event));
@@ -3737,6 +3741,23 @@ class PosAppController extends ChangeNotifier {
       await prefs.setString(_logoBitmapUrlKey, cleaned);
     }
     notifyListeners();
+  }
+
+  Future<void> _applyOutletConfigUpdate(Map<String, Object?> settings) async {
+    final newBitmapUrl = settings['logoBitmapUrl']?.toString();
+    final cleanedBitmap = newBitmapUrl?.trim().isEmpty == true ? null : newBitmapUrl?.trim();
+    if (cleanedBitmap != null && cleanedBitmap != _logoBitmapUrl) {
+      debugPrint('[QB-LOGO] _applyOutletConfigUpdate logoBitmapUrl="$cleanedBitmap" (was "$_logoBitmapUrl")');
+      await setLogoBitmapUrl(cleanedBitmap);
+    }
+    final newLogoUrl = settings['logoUrl']?.toString();
+    final cleanedLogo = newLogoUrl?.trim().isEmpty == true ? null : newLogoUrl?.trim();
+    if (cleanedLogo != null && cleanedLogo != serverConfig.logoUrl) {
+      serverConfig = serverConfig.copyWith(logoUrl: cleanedLogo);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_logoUrlKey, cleanedLogo);
+      notifyListeners();
+    }
   }
 
   Future<bool> testPrinter() async {

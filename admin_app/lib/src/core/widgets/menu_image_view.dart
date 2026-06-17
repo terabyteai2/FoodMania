@@ -102,12 +102,7 @@ class _ImagePlaceholder extends StatelessWidget {
         },
       );
     }
-    final style = menuIconStyleFor(iconKey);
-    return Container(
-      color: style.background,
-      alignment: Alignment.center,
-      child: Icon(style.icon, color: style.color, size: 26),
-    );
+    return const SizedBox.shrink();
   }
 }
 

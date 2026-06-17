@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/category_tints.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
@@ -162,92 +163,94 @@ class _ViewToggleState extends State<_ViewToggle> {
     final pos = box.localToGlobal(Offset.zero);
     final size = box.size;
 
-    _overlay = OverlayEntry(builder: (ctx) {
-      return Stack(
-        children: [
-          // Dismiss scrim
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _closeColMenu,
+    _overlay = OverlayEntry(
+      builder: (ctx) {
+        return Stack(
+          children: [
+            // Dismiss scrim
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _closeColMenu,
+              ),
             ),
-          ),
-          // Dropdown
-          Positioned(
-            top: pos.dy + size.height + 4,
-            left: pos.dx + size.width - 122,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: 122,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: PosColors.surface,
-                  border: Border.all(color: PosColors.lineStrong),
-                  borderRadius: BorderRadius.circular(PosRadii.md),
-                  boxShadow: PosShadows.raised,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [2, 3, 4].map((n) {
-                    final sel = n == widget.cols;
-                    return GestureDetector(
-                      onTap: () {
-                        widget.onColsChanged(n);
-                        _closeColMenu();
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 9,
-                          horizontal: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: sel
-                              ? PosColors.primarySoft
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(PosRadii.sm),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.grid_view_rounded,
-                              size: 15,
-                              color: sel
-                                  ? PosColors.accentStrong
-                                  : PosColors.inkSoft,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$n columns',
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: sel
-                                      ? PosColors.accentStrong
-                                      : PosColors.inkSoft,
+            // Dropdown
+            Positioned(
+              top: pos.dy + size.height + 4,
+              left: pos.dx + size.width - 122,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: 122,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: PosColors.surface,
+                    border: Border.all(color: PosColors.lineStrong),
+                    borderRadius: BorderRadius.circular(PosRadii.md),
+                    boxShadow: PosShadows.raised,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [2, 3, 4].map((n) {
+                      final sel = n == widget.cols;
+                      return GestureDetector(
+                        onTap: () {
+                          widget.onColsChanged(n);
+                          _closeColMenu();
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 9,
+                            horizontal: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: sel
+                                ? PosColors.primarySoft
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(PosRadii.sm),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.grid_view_rounded,
+                                size: 15,
+                                color: sel
+                                    ? PosColors.accentStrong
+                                    : PosColors.inkSoft,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '$n columns',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: sel
+                                        ? PosColors.accentStrong
+                                        : PosColors.inkSoft,
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (sel)
-                              Icon(
-                                Icons.check_rounded,
-                                size: 15,
-                                color: PosColors.accentStrong,
-                              ),
-                          ],
+                              if (sel)
+                                Icon(
+                                  Icons.check_rounded,
+                                  size: 15,
+                                  color: PosColors.accentStrong,
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
     Overlay.of(context).insert(_overlay!);
     setState(() {});
   }
@@ -344,7 +347,15 @@ class _SegBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: active ? PosColors.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(PosRadii.sm),
-          boxShadow: active ? [BoxShadow(color: Color(0x0D14180E), blurRadius: 16, offset: Offset(0, 6))] : const [],
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: Color(0x0D14180E),
+                    blurRadius: 16,
+                    offset: Offset(0, 6),
+                  ),
+                ]
+              : const [],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -624,10 +635,7 @@ class _MenuListRow extends StatelessWidget {
                         item.description,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: PosColors.muted,
-                        ),
+                        style: TextStyle(fontSize: 13, color: PosColors.muted),
                       ),
                     ],
                     // Low stock indicator omitted — isAvailable covers stock state
@@ -806,7 +814,8 @@ class _GridTile extends StatelessWidget {
       child: Opacity(
         opacity: off ? 0.5 : 1.0,
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: inCart ? PosColors.primarySoft : PosColors.surface,
             border: Border.all(
@@ -818,126 +827,132 @@ class _GridTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Image section — category tint bg, centered
+              // Image section — full-width tint, inner padding for badges
               Container(
                 height: 54,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(PosRadii.card),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: EdgeInsets.zero,
+                color: resolveCategoryBg(item.category),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Stack(
+                    clipBehavior: Clip.antiAlias,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
                         child: ItemImage(
                           url: item.imageUrl ?? '',
                           iconKey: iconKey,
+                          category: item.category,
                         ),
                       ),
-                    ),
-                    if (inCart) ...[
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Container(
-                          constraints: const BoxConstraints(minWidth: 22),
-                          height: 22,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          decoration: BoxDecoration(
-                            color: PosColors.primary,
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          alignment: Alignment.center,
-                          child: TfText(
-                            tfFormatNumber(context, qty),
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                              color: PosColors.accentInk,
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: GestureDetector(
-                          onTap: onDecrement,
+                      if (inCart) ...[
+                        Positioned(
+                          top: 6,
+                          right: 6,
                           child: Container(
-                            width: 24,
-                            height: 24,
+                            constraints: const BoxConstraints(minWidth: 22),
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
-                              color: PosColors.surface,
-                              borderRadius: BorderRadius.circular(PosRadii.md),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x2E14180E),
-                                  blurRadius: 3,
-                                  offset: Offset(0, 1),
+                              color: PosColors.primary,
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            alignment: Alignment.center,
+                            child: TfText(
+                              tfFormatNumber(context, qty),
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: PosColors.accentInk,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 6,
+                          left: 6,
+                          child: GestureDetector(
+                            onTap: onDecrement,
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: PosColors.surface,
+                                borderRadius: BorderRadius.circular(
+                                  PosRadii.md,
                                 ),
-                              ],
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x2E14180E),
+                                    blurRadius: 3,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.remove_rounded,
+                                size: 16,
+                                color: PosColors.danger,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.remove_rounded,
-                              size: 16,
+                          ),
+                        ),
+                      ],
+                      if (off)
+                        Positioned(
+                          right: 6,
+                          bottom: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 3,
+                              horizontal: 6,
+                            ),
+                            decoration: BoxDecoration(
                               color: PosColors.danger,
+                              borderRadius: BorderRadius.circular(PosRadii.sm),
+                            ),
+                            child: const Text(
+                              "86'd",
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
                     ],
-                    if (off)
-                      Positioned(
-                        right: 6,
-                        bottom: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 3,
-                            horizontal: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: PosColors.danger,
-                            borderRadius: BorderRadius.circular(PosRadii.sm),
-                          ),
-                          child: const Text(
-                            "86'd",
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
               // Name
-              TfText(
-                item.localizedName(app.language),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: cols == 4 ? 12.0 : 13.0,
-                  fontWeight: FontWeight.w500,
-                  color: PosColors.primaryDark,
-                  height: 1.25,
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8),
+                child: TfText(
+                  item.localizedName(app.language),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: cols == 4 ? 12.0 : 13.0,
+                    fontWeight: FontWeight.w500,
+                    color: PosColors.primaryDark,
+                    height: 1.25,
+                  ),
                 ),
               ),
               const Spacer(),
               // Price
-              TfText(
-                tfFormatCurrency(context, item.price),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: PosColors.primaryDark,
-                  fontFeatures: [FontFeature.tabularFigures()],
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: TfText(
+                  tfFormatCurrency(context, item.price),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.primaryDark,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
             ],
@@ -951,45 +966,54 @@ class _GridTile extends StatelessWidget {
 // ── Menu item image ──
 
 class ItemImage extends StatelessWidget {
-  const ItemImage({required this.url, required this.iconKey, super.key});
+  const ItemImage({
+    required this.url,
+    required this.iconKey,
+    this.category,
+    super.key,
+  });
 
   final String url;
   final String iconKey;
+  final String? category;
 
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxSide = [
-          constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
-          constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
-        ].reduce((a, b) => a > b ? a : b);
-        final cachePx = (maxSide * dpr).round().clamp(64, 512);
+    return Container(
+      color: resolveCategoryBg(category ?? ''),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxSide = [
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
+          ].reduce((a, b) => a > b ? a : b);
+          final cachePx = (maxSide * dpr).round().clamp(64, 512);
 
-        if (url.startsWith('data:image/')) {
-          try {
-            final bytes = base64Decode(url.split(',').last);
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              cacheWidth: cachePx,
-              cacheHeight: cachePx,
-            );
-          } catch (_) {
-            return _placeholder();
+          if (url.startsWith('data:image/')) {
+            try {
+              final bytes = base64Decode(url.split(',').last);
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                cacheWidth: cachePx,
+                cacheHeight: cachePx,
+              );
+            } catch (_) {
+              return _placeholder();
+            }
           }
-        }
-        return CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          memCacheWidth: cachePx,
-          memCacheHeight: cachePx,
-          fadeInDuration: const Duration(milliseconds: 200),
-          placeholder: (context, url) => _placeholder(),
-          errorWidget: (context, url, err) => _placeholder(),
-        );
-      },
+          return CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            memCacheWidth: cachePx,
+            memCacheHeight: cachePx,
+            fadeInDuration: const Duration(milliseconds: 200),
+            placeholder: (context, url) => _placeholder(),
+            errorWidget: (context, url, err) => _placeholder(),
+          );
+        },
+      ),
     );
   }
 
@@ -999,10 +1023,7 @@ class ItemImage extends StatelessWidget {
 // ── Cart footer (white bar, single "Review order" primary button) ──
 
 class CartFooter extends StatelessWidget {
-  const CartFooter({
-    this.onSubmit,
-    super.key,
-  });
+  const CartFooter({this.onSubmit, super.key});
 
   final VoidCallback? onSubmit;
 
@@ -1065,7 +1086,9 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
 
   double get _unitPrice {
     final base = widget.item.price;
-    final optDelta = _hasOptions ? _options[_selectedOptionIdx].priceDelta : 0.0;
+    final optDelta = _hasOptions
+        ? _options[_selectedOptionIdx].priceDelta
+        : 0.0;
     final addOnTotal = _selectedAddOnIdxs.fold<double>(
       0,
       (sum, i) => sum + _addOns[i].price,
@@ -1076,8 +1099,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
   double get _lineTotal => _unitPrice * _qty;
 
   DesktopMenuLineSelection _buildSelection() {
-    final note =
-        _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
+    final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
     final DesktopMenuOption opt;
     if (_hasOptions) {
       final o = _options[_selectedOptionIdx];
@@ -1218,10 +1240,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
-                        Text(
-                          isBn ? 'অপশন' : 'OPTIONS',
-                          style: eyebrowStyle,
-                        ),
+                        Text(isBn ? 'অপশন' : 'OPTIONS', style: eyebrowStyle),
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1373,8 +1392,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () =>
-                            Navigator.pop(context, _buildSelection()),
+                        onTap: () => Navigator.pop(context, _buildSelection()),
                         child: Container(
                           height: 52,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1386,9 +1404,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  isBn
-                                      ? 'অর্ডারে যোগ করুন'
-                                      : 'Add to order',
+                                  isBn ? 'অর্ডারে যোগ করুন' : 'Add to order',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -1402,9 +1418,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
                                   color: PosColors.accentInk,
-                                  fontFeatures: [
-                                    FontFeature.tabularFigures(),
-                                  ],
+                                  fontFeatures: [FontFeature.tabularFigures()],
                                 ),
                               ),
                             ],
@@ -1460,7 +1474,9 @@ class _OptionBtn extends StatelessWidget {
               height: 20,
               decoration: BoxDecoration(
                 shape: isRadio ? BoxShape.circle : BoxShape.rectangle,
-                borderRadius: isRadio ? null : BorderRadius.circular(PosRadii.sm),
+                borderRadius: isRadio
+                    ? null
+                    : BorderRadius.circular(PosRadii.sm),
                 border: Border.all(
                   color: selected
                       ? PosColors.accentStrong
@@ -1506,5 +1522,3 @@ class _OptionBtn extends StatelessWidget {
     );
   }
 }
-
-
