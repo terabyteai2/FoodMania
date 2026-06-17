@@ -159,7 +159,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                               ),
                             ),
                           ],
-                          SizedBox(height: 20),
+                          SizedBox(height: 16),
                           if (app.menuItems.isEmpty)
                             TfEmptyState(
                               title: text.menuEmptyTitle,
@@ -1958,8 +1958,8 @@ class _MenuList extends StatelessWidget {
     final icon = ClipRRect(
       borderRadius: BorderRadius.circular(PosRadii.tile),
       child: SizedBox(
-        width: 48,
-        height: 48,
+        width: 52,
+        height: 52,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -2063,7 +2063,7 @@ class _SourceMenuRow extends StatelessWidget {
           onLongPress: onLongPress,
           child: Container(
             constraints: const BoxConstraints(minHeight: 76),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(13),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(
@@ -2079,7 +2079,7 @@ class _SourceMenuRow extends StatelessWidget {
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: onAddImage,
-                  child: SizedBox(width: 48, height: 48, child: icon),
+                  child: SizedBox(width: 52, height: 52, child: icon),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
