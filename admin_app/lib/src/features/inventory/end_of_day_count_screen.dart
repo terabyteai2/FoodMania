@@ -13,9 +13,6 @@ import '../../services/menu_image_service.dart';
 class EndOfDayCountScreen extends StatefulWidget {
   const EndOfDayCountScreen({this.initialScan, super.key});
 
-  /// When the user arrives from the unified Inventory-page Scan (the backend
-  /// classified the photo as a count sheet), the parsed lines are passed in so
-  /// matched quantities pre-fill without a second OCR round-trip.
   final StockScanResult? initialScan;
 
   @override
@@ -25,17 +22,16 @@ class EndOfDayCountScreen extends StatefulWidget {
 class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   final Map<String, TextEditingController> _controllers = {};
 
-  /// inventoryItemId -> counted qty read from a scan (overrides the on-hand
-  /// prefill). Populated from `initialScan` and any in-screen re-scan.
   final Map<String, double> _scannedQty = {};
 
-  /// Scanned names that didn't match any inventory item — surfaced in a banner,
-  /// never silently dropped or auto-created (hide-don't-fabricate invariant).
   final List<String> _unmatched = [];
 
   bool _saving = false;
   bool _scanning = false;
   final MenuImageService _imageService = MenuImageService();
+
+  int get _done =>
+      _controllers.values.where((c) => c.text.trim().isNotEmpty).length;
 
   @override
   void initState() {
@@ -71,7 +67,9 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
       });
 
   static String _fmtQty(double value) =>
-      value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1);
+      value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toStringAsFixed(1);
 
   Future<void> _pickAndScan() async {
     if (_scanning) return;
@@ -95,7 +93,6 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
         _scannedQty.clear();
         _unmatched.clear();
         _applyScan(result);
-        // Push freshly-scanned counts into any controllers already built.
         for (final entry in _scannedQty.entries) {
           _controllers[entry.key]?.text = _fmtQty(entry.value);
         }
@@ -135,36 +132,74 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
+    final items = app.inventoryItems;
+    final total = items.length;
+
     return Scaffold(
       backgroundColor: PosColors.background,
       appBar: AppBar(
         backgroundColor: PosColors.background,
-        title: const TfText(
-          'End-of-day count',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const TfText(
+              'Stock count',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TfText(
+              '$_done of $total counted',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: PosColors.muted,
+              ),
+            ),
+          ],
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: PosColors.primaryWash,
-              borderRadius: BorderRadius.circular(PosRadii.card),
+          if (total > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: SizedBox(
+                  height: 6,
+                  child: Stack(
+                    children: [
+                      Container(color: PosColors.surfaceSunk),
+                      AnimatedFractionallySizedBox(
+                        widthFactor: _done / total,
+                        duration: const Duration(milliseconds: 200),
+                        child: Container(color: PosColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            child: const TfText(
-              'Count what is physically on hand. Differences are recorded as count corrections.',
-              style: TextStyle(color: PosColors.primaryDark, fontSize: 14, fontWeight: FontWeight.w400, height: 1.45),
-            ),
-          ),
           if (_unmatched.isNotEmpty) ...[
             const SizedBox(height: 12),
-            _UnmatchedBanner(title: text.countScanUnmatched, names: _unmatched),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _UnmatchedBanner(
+                title: text.countScanUnmatched,
+                names: _unmatched,
+              ),
+            ),
           ],
-          const SizedBox(height: 16),
-          for (final item in app.inventoryItems)
-            _CountLine(item: item, controller: _controller(item)),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              children: [
+                for (final item in items)
+                  _CountLine(item: item, controller: _controller(item)),
+              ],
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: Container(
@@ -191,7 +226,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
               const SizedBox(width: 9),
               Expanded(
                 child: TfButton(
-                  label: 'Save count',
+                  label: _done > 0 ? 'Finish count · $_done' : 'Finish count',
                   size: TfButtonSize.lg,
                   busy: _saving,
                   onPressed: _saving || _scanning ? null : _save,
@@ -257,42 +292,169 @@ class _UnmatchedBanner extends StatelessWidget {
   }
 }
 
-class _CountLine extends StatelessWidget {
+class _CountLine extends StatefulWidget {
   const _CountLine({required this.item, required this.controller});
   final InventoryItem item;
   final TextEditingController controller;
 
   @override
+  State<_CountLine> createState() => _CountLineState();
+}
+
+class _CountLineState extends State<_CountLine> {
+  String _text = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _text = widget.controller.text;
+    widget.controller.addListener(_onChanged);
+  }
+
+  @override
+  void didUpdateWidget(_CountLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onChanged);
+      widget.controller.addListener(_onChanged);
+    }
+    _text = widget.controller.text;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() {
+    setState(() => _text = widget.controller.text);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final unit = InventoryUnits.displayLabel(item.unit, isBn: tfIsBn(context));
+    final entered = double.tryParse(_text.trim());
+    final counted = entered != null && _text.trim().isNotEmpty;
+    final variance = entered != null && _text.trim().isNotEmpty
+        ? entered - item.quantity
+        : null;
+    final system = item.quantity;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: TfCard(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Container(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(PosRadii.card),
+          border: Border.all(
+            color: counted ? PosColors.primaryWash : PosColors.line,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
         child: Row(
           children: [
-            Expanded(
-              child: TfText(
-                item.localizedName(AppScope.of(context).language),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                ),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: counted ? PosColors.primary : PosColors.surfaceSunk,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                counted ? Icons.check_rounded : Icons.grid_on_rounded,
+                size: 18,
+                color: counted ? PosColors.accentInk : PosColors.inkSoft,
               ),
             ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TfText(
+                    item.localizedName(AppScope.of(context).language),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                      color: PosColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Row(
+                    children: [
+                      TfText(
+                        'System: ${_fmt(system)} $unit',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: PosColors.muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (variance != null && variance != 0) ...[
+                        const SizedBox(width: 4),
+                        TfText(
+                          '· ${variance > 0 ? '+' : ''}${_fmt(variance)}',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: variance > 0
+                                ? PosColors.success
+                                : PosColors.danger,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
             SizedBox(
-              width: 104,
+              width: 78,
               child: TextField(
-                controller: controller,
-                textAlign: TextAlign.end,
+                controller: widget.controller,
+                textAlign: TextAlign.center,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                 ],
-                decoration: InputDecoration(suffixText: unit, isDense: true),
+                decoration: InputDecoration(
+                  hintText: '—',
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.mutedSoft,
+                  ),
+                ),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.text,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 28,
+              child: TfText(
+                unit,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: PosColors.muted,
+                ),
               ),
             ),
           ],
@@ -300,4 +462,9 @@ class _CountLine extends StatelessWidget {
       ),
     );
   }
+
+  static String _fmt(double value) =>
+      value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toStringAsFixed(1);
 }

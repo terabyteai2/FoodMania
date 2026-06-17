@@ -7,6 +7,7 @@ import '../../app_scope.dart';
 import '../../core/enums/business_tier.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/category_tints.dart';
 import '../../core/widgets/hourly_bars_chart.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/notification_center.dart';
@@ -1433,7 +1434,7 @@ class _FcRingupTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
           decoration: BoxDecoration(
-            color: PosColors.surface,
+            color: resolveCategoryBg(item.category),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: active ? PosColors.primaryDark : PosColors.line,

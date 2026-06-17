@@ -1,0 +1,7 @@
+[Header: Title "Stock" / "Analytics"          Messages  Bell]
+
+[Summary tiles / Hero card — full width, accent-wash where relevant]
+
+[Control Row — single clean row, h~44–48]
+  Left:          [Today] [7d] [30d] [Custom]     (seg)
+  Right side:    Filters pill (icon)     Advanced [toggle]

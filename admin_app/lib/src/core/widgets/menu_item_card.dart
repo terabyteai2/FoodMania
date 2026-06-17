@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../models/menu_item.dart';
 import '../theme/app_theme.dart';
+import '../theme/category_tints.dart';
 import 'menu_image_view.dart';
 import 'status_badge.dart';
 import 'tf_design_system.dart';
@@ -47,6 +48,9 @@ class _MenuItemCardState extends State<MenuItemCard> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
+                        Container(
+                          color: resolveCategoryBg(widget.item.category),
+                        ),
                         ColorFiltered(
                             colorFilter: ColorFilter.mode(
                               available

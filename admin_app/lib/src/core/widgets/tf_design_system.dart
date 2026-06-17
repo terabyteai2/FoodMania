@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
+import '../theme/category_tints.dart';
 import 'menu_image_view.dart';
 
 // ---------------------------------------------------------------------------
@@ -1408,7 +1409,78 @@ class TfToggle extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfStatusBadge — Clean tracking badges using updated warning schemas.
+// AdvToggle — minimal labeled toggle pill (analytics, tower, stock)
+// Matches QuickBytes POS spec: 34px pill, accent-tint bg when on,
+// accent-strong label, 38×22 inner toggle with 16×16 knob.
+// ---------------------------------------------------------------------------
+class AdvToggle extends StatelessWidget {
+  const AdvToggle({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    super.key,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.only(left: 12, right: 6),
+        decoration: BoxDecoration(
+          color: value ? PosColors.primarySoft : PosColors.surface,
+          borderRadius: BorderRadius.circular(PosRadii.md),
+          border: Border.all(
+            color: value ? PosColors.primaryWash : PosColors.lineStrong,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TfText(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: value ? PosColors.accentStrong : PosColors.inkSoft,
+              ),
+            ),
+            const SizedBox(width: 9),
+            // Inner toggle — smaller track + knob
+            Container(
+              width: 38,
+              height: 22,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: value ? PosColors.primary : PosColors.lineStrong,
+                borderRadius: BorderRadius.circular(PosRadii.pill),
+              ),
+              child: Align(
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: const BoxDecoration(
+                    color: PosColors.surface,
+                    shape: BoxShape.circle,
+                    boxShadow: PosShadows.soft,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 // ---------------------------------------------------------------------------
 enum TfStatusKind { pending, accepted, late, served, info, warning }
 
@@ -3098,6 +3170,7 @@ class TfFohTile extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 102),
           padding: const EdgeInsets.fromLTRB(10, 8, 9, 8),
           decoration: BoxDecoration(
+            color: resolveCategoryBg(category ?? ''),
             borderRadius: BorderRadius.circular(PosRadii.tile),
             border: Border.all(
               color: active ? PosColors.text : PosColors.line,

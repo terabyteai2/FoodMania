@@ -143,6 +143,9 @@ class PosRadii {
 // PosShadows — minimal, only for sheets/modals/sticky bars (§4)
 // ---------------------------------------------------------------------------
 class PosShadows {
+  static const List<BoxShadow> e1 = [
+    BoxShadow(color: Color(0x0F14180E), blurRadius: 2, offset: Offset(0, 1)),
+  ];
   static const List<BoxShadow> soft = [];
   static const List<BoxShadow> glow = [
     BoxShadow(color: Color(0x0D14180E), blurRadius: 16, offset: Offset(0, 6)),

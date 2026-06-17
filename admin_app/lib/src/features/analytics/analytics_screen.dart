@@ -653,37 +653,60 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
                 children: [
-                  TfChip(
-                    label: tfPick(context, en: 'Filters', bn: 'ফিল্টার'),
-                    count: _activeFilters > 0 ? _activeFilters : null,
-                    active: _activeFilters > 0,
-                    tint: true,
-                    small: true,
-                    leading: const Icon(Icons.tune_rounded),
+                  GestureDetector(
                     onTap: _openFilters,
-                  ),
-                  const Spacer(),
-                  TfText(
-                    AppScope.select(
-                      context,
-                      AppAspect.language,
-                    ).strings.advanced,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: _advanced
-                          ? PosColors.text
-                          : PosColors.muted,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: _activeFilters > 0 ? PosColors.primarySoft : PosColors.surface,
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        border: Border.all(
+                          color: _activeFilters > 0 ? PosColors.primaryWash : PosColors.lineStrong,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 14,
+                            color: _activeFilters > 0 ? PosColors.accentStrong : PosColors.inkSoft,
+                          ),
+                          const SizedBox(width: 6),
+                          TfText(
+                            tfPick(context, en: 'Filters', bn: 'ফিল্টার'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _activeFilters > 0 ? PosColors.accentStrong : PosColors.inkSoft,
+                            ),
+                          ),
+                          if (_activeFilters > 0) ...[
+                            const SizedBox(width: 3),
+                            TfText(
+                              '· $_activeFilters',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: PosColors.accentStrong.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  TfToggle(
+                  const Spacer(),
+                  AdvToggle(
                     value: _advanced,
                     onChanged: (v) => setState(() {
                       _logTouch('advanced toggle $_advanced->$v');
                       _advanced = v;
                     }),
-                    semanticLabel: AppScope.of(context).strings.advanced,
+                    label: AppScope.of(context).strings.advanced,
                   ),
                 ],
               ),
@@ -3362,8 +3385,8 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
                   leading: const _BackButton(),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: TfTimeframeSelector(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: TfTimeframeSelector(
                 selected: _globalTf,
                     onChanged: (tf) {
                       setState(() {

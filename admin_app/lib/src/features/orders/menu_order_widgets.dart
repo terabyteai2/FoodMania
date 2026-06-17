@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/category_tints.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
@@ -608,7 +609,7 @@ class _MenuListRow extends StatelessWidget {
                 child: SizedBox(
                   width: 52,
                   height: 52,
-                  child: ItemImage(url: item.imageUrl ?? '', iconKey: iconKey),
+                  child: ItemImage(url: item.imageUrl ?? '', iconKey: iconKey, category: item.category),
                 ),
               ),
               const SizedBox(width: 12),
@@ -844,6 +845,7 @@ class _GridTile extends StatelessWidget {
                         child: ItemImage(
                           url: item.imageUrl ?? '',
                           iconKey: iconKey,
+                          category: item.category,
                         ),
                       ),
                     ),
@@ -960,45 +962,49 @@ class _GridTile extends StatelessWidget {
 // ── Menu item image ──
 
 class ItemImage extends StatelessWidget {
-  const ItemImage({required this.url, required this.iconKey, super.key});
+  const ItemImage({required this.url, required this.iconKey, this.category, super.key});
 
   final String url;
   final String iconKey;
+  final String? category;
 
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxSide = [
-          constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
-          constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
-        ].reduce((a, b) => a > b ? a : b);
-        final cachePx = (maxSide * dpr).round().clamp(64, 512);
+    return Container(
+      color: resolveCategoryBg(category ?? ''),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxSide = [
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 96.0,
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 96.0,
+          ].reduce((a, b) => a > b ? a : b);
+          final cachePx = (maxSide * dpr).round().clamp(64, 512);
 
-        if (url.startsWith('data:image/')) {
-          try {
-            final bytes = base64Decode(url.split(',').last);
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              cacheWidth: cachePx,
-              cacheHeight: cachePx,
-            );
-          } catch (_) {
-            return _placeholder();
+          if (url.startsWith('data:image/')) {
+            try {
+              final bytes = base64Decode(url.split(',').last);
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                cacheWidth: cachePx,
+                cacheHeight: cachePx,
+              );
+            } catch (_) {
+              return _placeholder();
+            }
           }
-        }
-        return CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          memCacheWidth: cachePx,
-          memCacheHeight: cachePx,
-          fadeInDuration: const Duration(milliseconds: 200),
-          placeholder: (context, url) => _placeholder(),
-          errorWidget: (context, url, err) => _placeholder(),
-        );
-      },
+          return CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            memCacheWidth: cachePx,
+            memCacheHeight: cachePx,
+            fadeInDuration: const Duration(milliseconds: 200),
+            placeholder: (context, url) => _placeholder(),
+            errorWidget: (context, url, err) => _placeholder(),
+          );
+        },
+      ),
     );
   }
 
@@ -1163,6 +1169,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                     child: ItemImage(
                       url: widget.item.imageUrl ?? '',
                       iconKey: iconKey,
+                      category: widget.item.category,
                     ),
                   ),
                 ),

@@ -361,29 +361,11 @@ class _InventoryScreenState extends State<InventoryScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              TfText(
-                text.inventory.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: PosColors.muted,
-                ),
-              ),
               const Spacer(),
-              TfText(
-                text.advanced,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: _advanced ? PosColors.text : PosColors.muted,
-                ),
-              ),
-              const SizedBox(width: 6),
-              TfToggle(
+              AdvToggle(
                 value: _advanced,
                 onChanged: _onToggleAdvanced,
-                semanticLabel: text.advanced,
+                label: text.advanced,
               ),
             ],
           ),

@@ -23,61 +23,65 @@ class TfTimeframeSelector extends StatelessWidget {
       (TfTimeframe.custom, tfPick(context, en: 'Custom', bn: 'কাস্টম')),
     ];
 
+    final children = <Widget>[];
+    for (final o in opts) {
+      if (children.isNotEmpty) {
+        children.add(const SizedBox(width: 4));
+      }
+      children.add(
+        Expanded(
+          child: GestureDetector(
+            onTap: () => onChanged(o.$1),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected == o.$1
+                    ? PosColors.surface
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(PosRadii.sm),
+                boxShadow: selected == o.$1 ? PosShadows.e1 : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (o.$1 == TfTimeframe.custom) ...[
+                    Icon(
+                      Icons.calendar_month_rounded,
+                      size: 14,
+                      color: selected == o.$1
+                          ? PosColors.text
+                          : PosColors.muted,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  TfText(
+                    o.$2,
+                    style: TextStyle(
+                      color: selected == o.$1
+                          ? PosColors.text
+                          : PosColors.muted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: PosColors.surfaceSunk,
         borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.line, width: 1),
       ),
-      child: Row(
-        children: [
-          for (final o in opts)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(o.$1),
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: selected == o.$1
-                        ? PosColors.surface
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(PosRadii.sm),
-                    boxShadow: selected == o.$1 ? PosShadows.soft : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (o.$1 == TfTimeframe.custom) ...[
-                        Icon(
-                          Icons.schedule_rounded,
-                          size: 14,
-                          color: selected == o.$1
-                              ? PosColors.text
-                              : PosColors.muted,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      TfText(
-                        o.$2,
-                        style: TextStyle(
-                          color: selected == o.$1
-                              ? PosColors.text
-                              : PosColors.muted,
-                          fontSize: 13,
-                          fontWeight: selected == o.$1
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      child: Row(children: children),
     );
   }
 }
