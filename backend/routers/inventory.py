@@ -678,13 +678,32 @@ async def upsert_daily_stock_count(
 async def inventory_summary(
     outlet_id: str,
     as_of: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(current_outlet, outlet_id)
     now = _parse_as_of(as_of)
-    today_start, today_end = _bdt_day_bounds(now)
-    today_local = (today_start + BDT_OFFSET).date().isoformat()
+    
+    if start and end:
+        try:
+            today_start = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            today_end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            if today_start.tzinfo is None:
+                today_start = today_start.replace(tzinfo=timezone.utc)
+            if today_end.tzinfo is None:
+                today_end = today_end.replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid start/end ISO timestamp.",
+            )
+    else:
+        today_start, today_end = _bdt_day_bounds(now)
+        
+    # today_local is used for DailyStockCount lookup. We use the end of the range for reference.
+    today_local = (today_end - timedelta(seconds=1)).astimezone(timezone(BDT_OFFSET)).date().isoformat()
 
     items = (
         await db.execute(

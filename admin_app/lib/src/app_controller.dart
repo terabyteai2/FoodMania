@@ -1161,7 +1161,7 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshInventorySummary() async {
+  Future<void> refreshInventorySummary({String? start, String? end}) async {
     if (!isCloudReady) {
       inventorySummaryError = 'Cloud sync not configured.';
       notifyListeners();
@@ -1171,7 +1171,10 @@ class PosAppController extends ChangeNotifier {
     inventorySummaryError = null;
     notifyListeners();
     try {
-      inventorySummary = await cloudApiService.fetchInventorySummary();
+      inventorySummary = await cloudApiService.fetchInventorySummary(
+        start: start,
+        end: end,
+      );
     } on CloudApiException catch (error) {
       inventorySummaryError = error.message;
     } catch (error) {

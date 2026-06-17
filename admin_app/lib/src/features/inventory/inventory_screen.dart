@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_timeframe_selector.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
@@ -40,15 +41,109 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-enum _StockSort { name, cover, value, qty, status }
+enum _StockSort { name, inOut, net, value, qty, status }
 
-class _InventoryScreenState extends State<InventoryScreen> {
+class _InventoryScreenState extends State<InventoryScreen>
+    with SingleTickerProviderStateMixin {
   bool _advanced = false;
   _StockSort _sort = _StockSort.value;
   int _dir = -1; // -1 desc, 1 asc
   bool _firstLoadKicked = false;
   bool _scanning = false;
   final MenuImageService _imageService = MenuImageService();
+
+  TfTimeframe _timeframe = TfTimeframe.today;
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+  bool _showCalendar = false;
+  bool _calendarClosing = false;
+
+  late final AnimationController _tfController;
+  late final Animation<double> _tfAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _tfController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _tfAnimation = CurvedAnimation(
+      parent: _tfController,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _tfController.dispose();
+    super.dispose();
+  }
+
+  void _onToggleAdvanced(bool v) {
+    setState(() => _advanced = v);
+    if (v) {
+      _tfController.forward();
+    } else {
+      _tfController.reverse();
+      // Reset to today when turning off advanced
+      if (_timeframe != TfTimeframe.today) {
+        _updateTimeframe(TfTimeframe.today);
+      }
+    }
+  }
+
+  void _updateTimeframe(TfTimeframe tf) {
+    if (tf == TfTimeframe.custom) {
+      setState(() => _showCalendar = true);
+      return;
+    }
+
+    setState(() {
+      _timeframe = tf;
+      _rangeStart = null;
+      _rangeEnd = null;
+    });
+
+    final now = DateTime.now();
+    String? start;
+    String? end;
+
+    if (tf == TfTimeframe.week) {
+      final s = now.subtract(const Duration(days: 6));
+      start = DateTime(s.year, s.month, s.day).toUtc().toIso8601String();
+      end = DateTime(now.year, now.month, now.day, 23, 59, 59)
+          .toUtc()
+          .toIso8601String();
+    } else if (tf == TfTimeframe.month) {
+      final s = DateTime(now.year, now.month, 1);
+      start = s.toUtc().toIso8601String();
+      end = DateTime(now.year, now.month, now.day, 23, 59, 59)
+          .toUtc()
+          .toIso8601String();
+    }
+
+    AppScope.read(context).refreshInventorySummary(start: start, end: end);
+  }
+
+  void _onRangeChanged(DateTime? s, DateTime? e) {
+    setState(() {
+      _rangeStart = s;
+      _rangeEnd = e;
+      if (s != null && e != null) {
+        _calendarClosing = true;
+        _timeframe = TfTimeframe.custom;
+      }
+    });
+
+    if (s != null && e != null) {
+      final start = s.toUtc().toIso8601String();
+      final end = DateTime(e.year, e.month, e.day, 23, 59, 59)
+          .toUtc()
+          .toIso8601String();
+      AppScope.read(context).refreshInventorySummary(start: start, end: end);
+    }
+  }
 
   void _toggleSort(_StockSort key) {
     setState(() {
@@ -92,11 +187,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
       }
       double r;
       switch (_sort) {
-        case _StockSort.cover:
-          r =
-              (_coverDays(a.onHand, a.todayOut) -
-                      _coverDays(b.onHand, b.todayOut))
-                  .toDouble();
+        case _StockSort.inOut:
+          r = a.todayOut - b.todayOut;
+          break;
+        case _StockSort.net:
+          r = (a.todayIn - a.todayOut) - (b.todayIn - b.todayOut);
           break;
         case _StockSort.qty:
           r = a.onHand - b.onHand;
@@ -287,48 +382,94 @@ class _InventoryScreenState extends State<InventoryScreen> {
               const SizedBox(width: 6),
               TfToggle(
                 value: _advanced,
-                onChanged: (v) => setState(() => _advanced = v),
+                onChanged: _onToggleAdvanced,
                 semanticLabel: text.advanced,
               ),
             ],
           ),
+          SizeTransition(
+            sizeFactor: _tfAnimation,
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: TfTimeframeSelector(
+                selected: _timeframe,
+                onChanged: _updateTimeframe,
+              ),
+            ),
+          ),
           const SizedBox(height: 10),
           Expanded(
-            child: items.isEmpty
-                ? Center(
-                    child: TfEmptyState(
-                      icon: Icons.inventory_2_outlined,
-                      title: text.noStockItems,
-                      message: 'Use Stock in to add your first item.',
-                      messageBn: text.addFirstStockItem,
-                    ),
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
+              children: [
+                items.isEmpty
+                    ? Center(
+                        child: TfEmptyState(
+                          icon: Icons.inventory_2_outlined,
+                          title: text.noStockItems,
+                          message: 'Use Stock in to add your first item.',
+                          messageBn: text.addFirstStockItem,
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _StockTable(
+                              text: text,
+                              items: sorted,
+                              advanced: _advanced,
+                              sort: _sort,
+                              dir: _dir,
+                              onSort: _toggleSort,
+                              onRowTap: (item) => _openRow(context, app, item),
+                            ),
+                            const SizedBox(height: 12),
+                            _AddItemButton(
+                              text: text,
+                              onPressed: () => _showAddItem(context),
+                            ),
+                            if (_advanced) ...[
+                              const SizedBox(height: 14),
+                              _AdvancedDrilldowns(text: text),
+                            ],
+                          ],
+                        ),
+                      ),
+                if (_showCalendar)
+                  AnimatedOpacity(
+                    opacity: _calendarClosing ? 0.0 : 1.0,
+                    duration: const Duration(milliseconds: 400),
+                    onEnd: _calendarClosing
+                        ? () => setState(() {
+                            _showCalendar = false;
+                            _calendarClosing = false;
+                          })
+                        : null,
+                    child: Stack(
                       children: [
-                        _StockTable(
-                          text: text,
-                          items: sorted,
-                          advanced: _advanced,
-                          sort: _sort,
-                          dir: _dir,
-                          onSort: _toggleSort,
-                          onRowTap: (item) => _openRow(context, app, item),
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _showCalendar = false),
+                            child: Container(color: Colors.black26),
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        _AddItemButton(
-                          text: text,
-                          onPressed: () => _showAddItem(context),
+                        Positioned(
+                          top: 8,
+                          left: 0,
+                          right: 0,
+                          child: TfCalendarRangePicker(
+                            start: _rangeStart,
+                            end: _rangeEnd,
+                            onRangeChanged: _onRangeChanged,
+                          ),
                         ),
-                        if (_advanced) ...[
-                          const SizedBox(height: 14),
-                          _AdvancedDrilldowns(text: text),
-                        ],
                       ],
                     ),
                   ),
+              ],
+            ),
           ),
           _StockBottomBar(
             text: text,
@@ -360,14 +501,6 @@ double _ratio(InventorySummaryItem it) =>
     it.minThreshold > 0 ? it.onHand / it.minThreshold : 99;
 
 double _itemValue(InventorySummaryItem it) => it.onHand * it.costPerUnit;
-
-/// coverDays = round(qty / dailyUse). The summary exposes today's usage
-/// (`todayOut`) as the best available daily-burn proxy until the backend
-/// surfaces a 7-day figure (`round(qty/used7*7)`). 99 = effectively infinite.
-int _coverDays(double onHand, double dailyOut) {
-  if (dailyOut <= 0) return 99;
-  return (onHand / dailyOut).round();
-}
 
 InventoryItem? _resolveItem(PosAppController app, String id) {
   for (final i in app.inventoryItems) {
@@ -560,11 +693,19 @@ class _StockTable extends StatelessWidget {
                 if (advanced) ...[
                   const SizedBox(width: 12),
                   _HCell(
-                    label: text.colCover,
-                    width: 46,
-                    active: sort == _StockSort.cover,
+                    label: text.colInOut,
+                    width: 68,
+                    active: sort == _StockSort.inOut,
                     dir: dir,
-                    onTap: () => onSort(_StockSort.cover),
+                    onTap: () => onSort(_StockSort.inOut),
+                  ),
+                  const SizedBox(width: 12),
+                  _HCell(
+                    label: text.colNet,
+                    width: 54,
+                    active: sort == _StockSort.net,
+                    dir: dir,
+                    onTap: () => onSort(_StockSort.net),
                   ),
                 ],
                 const SizedBox(width: 12),
@@ -668,7 +809,6 @@ class _StockRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = _stockKind(item.onHand, item.minThreshold);
-    final cover = _coverDays(item.onHand, item.todayOut);
     final name = InventoryItem.localizedNameParts(
       nameEn: item.nameEn,
       nameBn: item.nameBn,
@@ -680,11 +820,6 @@ class _StockRow extends StatelessWidget {
         : kind == 'low'
         ? PosColors.warning
         : PosColors.text;
-    final coverColor = cover <= 2
-        ? PosColors.danger
-        : cover <= 5
-        ? PosColors.warning
-        : PosColors.textSec;
 
     return InkWell(
       onTap: onTap,
@@ -750,17 +885,67 @@ class _StockRow extends StatelessWidget {
             if (advanced) ...[
               const SizedBox(width: 12),
               SizedBox(
-                width: 46,
-                child: TfText(
-                  cover >= 99 ? '—' : '${tfFormatNumber(context, cover)}d',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: coverColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                width: 68,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (item.todayIn > 0)
+                      TfText(
+                        '+${tfFormatNumber(context, item.todayIn)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.success,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    if (item.todayOut > 0)
+                      TfText(
+                        '-${tfFormatNumber(context, item.todayOut)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.muted,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    if (item.todayIn == 0 && item.todayOut == 0)
+                      const TfText(
+                        '—',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: PosColors.mutedSoft,
+                        ),
+                      ),
+                  ],
                 ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 54,
+                child: Builder(builder: (context) {
+                  final net = item.todayIn - item.todayOut;
+                  if (net == 0) {
+                    return const TfText(
+                      '—',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: PosColors.mutedSoft,
+                      ),
+                    );
+                  }
+                  return TfText(
+                    '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: net > 0 ? PosColors.success : PosColors.danger,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  );
+                }),
               ),
             ],
             const SizedBox(width: 12),

@@ -2005,13 +2005,20 @@ class CloudApiService {
     return DashboardSummary.fromJson(Map<String, Object?>.from(data));
   }
 
-  Future<InventorySummary> fetchInventorySummary({DateTime? asOf}) async {
+  Future<InventorySummary> fetchInventorySummary({
+    DateTime? asOf,
+    String? start,
+    String? end,
+  }) async {
     final config = _requireServerConfig();
+    final params = <String, String>{};
+    if (asOf != null) params['as_of'] = asOf.toUtc().toIso8601String();
+    if (start != null) params['start'] = start;
+    if (end != null) params['end'] = end;
+
     final uri = _uri(
       '/outlets/${config.outletId}/inventory/summary',
-      queryParameters: asOf == null
-          ? null
-          : {'as_of': asOf.toUtc().toIso8601String()},
+      queryParameters: params.isEmpty ? null : params,
     );
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');

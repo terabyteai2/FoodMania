@@ -7,6 +7,7 @@ import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_timeframe_selector.dart';
 import '../../models/pos_notification.dart';
 import '../orders/orders_screen.dart';
 
@@ -257,26 +258,26 @@ const _Data _emptyData = _Data(
 _Data _data = _emptyData;
 
 // Shared timeframe state — read/written by all analytics screens.
-_Timeframe _globalTf = _Timeframe.week;
+TfTimeframe _globalTf = TfTimeframe.week;
 DateTime? _globalRangeStart;
 DateTime? _globalRangeEnd;
 
 String _globalRangeKey() => switch (_globalTf) {
-  _Timeframe.today => 'today',
-  _Timeframe.week => 'week',
-  _Timeframe.month => 'custom',
-  _Timeframe.custom => 'custom',
+  TfTimeframe.today => 'today',
+  TfTimeframe.week => 'week',
+  TfTimeframe.month => 'custom',
+  TfTimeframe.custom => 'custom',
 };
 
 (String?, String?) _globalRangeBounds() {
-  if (_globalTf == _Timeframe.month) {
+  if (_globalTf == TfTimeframe.month) {
     final now = DateTime.now();
     return (
       DateTime(now.year, now.month, 1).toUtc().toIso8601String(),
       now.toUtc().toIso8601String(),
     );
   }
-  if (_globalTf == _Timeframe.custom) {
+  if (_globalTf == TfTimeframe.custom) {
     return (
       _globalRangeStart?.toUtc().toIso8601String(),
       _globalRangeEnd?.toUtc().toIso8601String(),
@@ -299,10 +300,10 @@ Future<_Data> _loadAnalytics(BuildContext context) async {
 }
 
 String _tfLabelFromGlobals(BuildContext context) => switch (_globalTf) {
-  _Timeframe.today => tfPick(context, en: 'Today', bn: 'আজ'),
-  _Timeframe.week => tfPick(context, en: 'This week', bn: 'এই সপ্তাহ'),
-  _Timeframe.month => tfPick(context, en: 'This month', bn: 'এই মাস'),
-  _Timeframe.custom => _globalRangeStart != null && _globalRangeEnd != null
+  TfTimeframe.today => tfPick(context, en: 'Today', bn: 'আজ'),
+  TfTimeframe.week => tfPick(context, en: 'This week', bn: 'এই সপ্তাহ'),
+  TfTimeframe.month => tfPick(context, en: 'This month', bn: 'এই মাস'),
+  TfTimeframe.custom => _globalRangeStart != null && _globalRangeEnd != null
       ? '${_fmtDate(_globalRangeStart!)}–${_fmtDate(_globalRangeEnd!)}'
       : tfPick(context, en: 'Custom', bn: 'কাস্টম'),
 };
@@ -333,8 +334,6 @@ String _daypartQuery(String label) => switch (label) {
   'Late' => 'late',
   _ => 'all',
 };
-
-enum _Timeframe { today, week, month, custom }
 
 enum _ProductSort { rev, units, orders, margin, aov, growth }
 
@@ -417,10 +416,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   String _tfLabel(BuildContext context) => switch (_globalTf) {
-    _Timeframe.today => tfPick(context, en: 'Today', bn: 'আজ'),
-    _Timeframe.week => tfPick(context, en: 'This week', bn: 'এই সপ্তাহ'),
-    _Timeframe.month => tfPick(context, en: 'This month', bn: 'এই মাস'),
-    _Timeframe.custom => _globalRangeStart != null && _globalRangeEnd != null
+    TfTimeframe.today => tfPick(context, en: 'Today', bn: 'আজ'),
+    TfTimeframe.week => tfPick(context, en: 'This week', bn: 'এই সপ্তাহ'),
+    TfTimeframe.month => tfPick(context, en: 'This month', bn: 'এই মাস'),
+    TfTimeframe.custom => _globalRangeStart != null && _globalRangeEnd != null
         ? '${_fmtDate(_globalRangeStart!)}–${_fmtDate(_globalRangeEnd!)}'
         : tfPick(context, en: 'Custom', bn: 'কাস্টম'),
   };
@@ -639,12 +638,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             // Timeframe segmented
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: _Segmented(
+              child: TfTimeframeSelector(
                 selected: _globalTf,
                 onChanged: (tf) => setState(() {
                   _logTouch('timeframe tap $_globalTf->$tf');
                   _globalTf = tf;
-                  _showCalendar = tf == _Timeframe.custom;
+                  _showCalendar = tf == TfTimeframe.custom;
                   _future = _load();
                 }),
               ),
@@ -883,7 +882,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             child: Material(
                               elevation: 4,
                               borderRadius: BorderRadius.circular(PosRadii.lg),
-                              child: _CalendarRangePicker(
+                              child: TfCalendarRangePicker(
                                 start: _globalRangeStart,
                                 end: _globalRangeEnd,
                                 onRangeChanged: (s, e) {
@@ -2411,12 +2410,12 @@ class _CategoryAllScreenState extends State<_CategoryAllScreen> {
             // Timeframe segmented
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: _Segmented(
+              child: TfTimeframeSelector(
                 selected: _globalTf,
                 onChanged: (tf) {
                   _globalTf = tf;
-                  _showCalendar = tf == _Timeframe.custom;
-                  if (tf != _Timeframe.custom) {
+                  _showCalendar = tf == TfTimeframe.custom;
+                  if (tf != TfTimeframe.custom) {
                     _globalRangeStart = null;
                     _globalRangeEnd = null;
                   }
@@ -2554,7 +2553,7 @@ class _CategoryAllScreenState extends State<_CategoryAllScreen> {
                         child: Material(
                           elevation: 4,
                           borderRadius: BorderRadius.circular(PosRadii.lg),
-                          child: _CalendarRangePicker(
+                          child: TfCalendarRangePicker(
                             start: _globalRangeStart,
                             end: _globalRangeEnd,
                             onRangeChanged: (s, e) {
@@ -2689,12 +2688,12 @@ class _ProductsAllScreenState extends State<_ProductsAllScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: _Segmented(
+              child: TfTimeframeSelector(
                 selected: _globalTf,
                 onChanged: (tf) {
                   _globalTf = tf;
-                  _showCalendar = tf == _Timeframe.custom;
-                  if (tf != _Timeframe.custom) {
+                  _showCalendar = tf == TfTimeframe.custom;
+                  if (tf != TfTimeframe.custom) {
                     _globalRangeStart = null;
                     _globalRangeEnd = null;
                   }
@@ -2817,7 +2816,7 @@ class _ProductsAllScreenState extends State<_ProductsAllScreen> {
                             child: Material(
                               elevation: 4,
                               borderRadius: BorderRadius.circular(PosRadii.lg),
-                              child: _CalendarRangePicker(
+                              child: TfCalendarRangePicker(
                                 start: _globalRangeStart,
                                 end: _globalRangeEnd,
                                 onRangeChanged: (s, e) {
@@ -3364,13 +3363,13 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: _Segmented(
+                  child: TfTimeframeSelector(
                 selected: _globalTf,
                     onChanged: (tf) {
                       setState(() {
                         _globalTf = tf;
-                        _showCalendar = tf == _Timeframe.custom;
-                        if (tf != _Timeframe.custom) {
+                        _showCalendar = tf == TfTimeframe.custom;
+                        if (tf != TfTimeframe.custom) {
                           _globalRangeStart = null;
                           _globalRangeEnd = null;
                         }
@@ -3459,7 +3458,7 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
                                 child: Material(
                                   elevation: 4,
                                   borderRadius: BorderRadius.circular(PosRadii.lg),
-                                  child: _CalendarRangePicker(
+                                  child: TfCalendarRangePicker(
                                     start: _globalRangeStart,
                                     end: _globalRangeEnd,
                                     onRangeChanged: (s, e) {
@@ -3761,7 +3760,7 @@ class _SalesTableScreenState extends State<_SalesTableScreen> {
   }
 }
 
-// Generic string segmented control (mirrors _Segmented, value-driven).
+// Generic string segmented control (mirrors TfTimeframeSelector, value-driven).
 class _StringSegmented extends StatelessWidget {
   const _StringSegmented({
     required this.options,
@@ -4362,78 +4361,6 @@ class _FiltersSheetState extends State<_FiltersSheet> {
 // ===========================================================================
 // Shared small widgets
 // ===========================================================================
-class _Segmented extends StatelessWidget {
-  const _Segmented({required this.selected, required this.onChanged});
-
-  final _Timeframe selected;
-  final ValueChanged<_Timeframe> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final opts = <(_Timeframe, String)>[
-      (_Timeframe.today, tfPick(context, en: 'Today', bn: 'আজ')),
-      (_Timeframe.week, tfPick(context, en: '7 days', bn: '৭ দিন')),
-      (_Timeframe.month, tfPick(context, en: 'This month', bn: 'এই মাস')),
-      (_Timeframe.custom, tfPick(context, en: 'Custom', bn: 'কাস্টম')),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-      ),
-      child: Row(
-        children: [
-          for (final o in opts)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(o.$1),
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: selected == o.$1
-                        ? PosColors.surface
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(PosRadii.sm),
-                    boxShadow: selected == o.$1 ? PosShadows.soft : null,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (o.$1 == _Timeframe.custom) ...[
-                        Icon(
-                          Icons.schedule_rounded,
-                          size: 14,
-                          color: selected == o.$1
-                              ? PosColors.text
-                              : PosColors.muted,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      TfText(
-                        o.$2,
-                        style: TextStyle(
-                          color: selected == o.$1
-                              ? PosColors.text
-                              : PosColors.muted,
-                          fontSize: 13,
-                          fontWeight: selected == o.$1
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.title, {this.note});
@@ -4561,258 +4488,6 @@ class _RankNumber extends StatelessWidget {
       ),
     );
   }
-}
-
-// ===========================================================================
-// Calendar range picker
-// ===========================================================================
-class _CalendarRangePicker extends StatefulWidget {
-  const _CalendarRangePicker({
-    required this.start,
-    required this.end,
-    required this.onRangeChanged,
-  });
-
-  final DateTime? start;
-  final DateTime? end;
-  final void Function(DateTime? start, DateTime? end) onRangeChanged;
-
-  @override
-  State<_CalendarRangePicker> createState() => _CalendarRangePickerState();
-}
-
-class _CalendarRangePickerState extends State<_CalendarRangePicker> {
-  late DateTime _viewMonth;
-
-  @override
-  void initState() {
-    super.initState();
-    _viewMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  }
-
-  void _prev() => setState(() {
-    _viewMonth = DateTime(_viewMonth.year, _viewMonth.month - 1, 1);
-  });
-
-  void _next() => setState(() {
-    _viewMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 1);
-  });
-
-  void _tapDay(DateTime day) {
-    final s = widget.start;
-    final e = widget.end;
-    if (s == null) {
-      widget.onRangeChanged(day, null);
-    } else if (e == null) {
-      if (day.isBefore(s)) {
-        widget.onRangeChanged(day, s);
-      } else {
-        widget.onRangeChanged(s, day);
-      }
-    } else {
-      widget.onRangeChanged(day, null);
-    }
-  }
-
-  bool _inRange(DateTime d) {
-    final s = widget.start;
-    final e = widget.end;
-    if (s == null || e == null) return false;
-    return !d.isBefore(s) && !d.isAfter(e);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun',
-      'Jul','Aug','Sep','Oct','Nov','Dec'];
-    final monthLabel = '${months[_viewMonth.month - 1]} ${_viewMonth.year}';
-    final daysInMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 0).day;
-    final firstDOW = DateTime(_viewMonth.year, _viewMonth.month, 1).weekday;
-    // weekday: Monday=1 ... Sunday=7 -> shift to Mon-start (0-indexed)
-    final lead = firstDOW - 1;
-
-    final s = widget.start;
-    final e = widget.end;
-    final summary = (s != null && e != null)
-        ? '${_fmtDate(s)} – ${_fmtDate(e)}'
-        : (s != null
-            ? '${tfPick(context, en: 'Start', bn: 'শুরু')}: ${_fmtDate(s)}'
-            : tfPick(context, en: 'Tap a date to start', bn: 'তারিখ নির্বাচন করুন'));
-
-    final now = DateTime.now();
-    final todayNormalized = DateTime(now.year, now.month, now.day);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          borderRadius: BorderRadius.circular(PosRadii.lg),
-          border: Border.all(color: PosColors.line, width: 1),
-        ),
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Month navigation
-            Row(
-              children: [
-                TfIconButton(
-                  icon: Icons.chevron_left_rounded,
-                  tooltip: tfPick(context, en: 'Previous month', bn: 'পূর্ববর্তী মাস'),
-                  onPressed: _prev,
-                ),
-                Expanded(
-                  child: Center(
-                    child: TfText(
-                      monthLabel,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.text,
-                      ),
-                    ),
-                  ),
-                ),
-                TfIconButton(
-                  icon: Icons.chevron_right_rounded,
-                  tooltip: tfPick(context, en: 'Next month', bn: 'পরবর্তী মাস'),
-                  onPressed: _next,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // DOW header
-            Row(
-              children: ['Mo','Tu','We','Th','Fr','Sa','Su'].map((d) =>
-                Expanded(
-                  child: Center(
-                    child: TfText(
-                      d,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.muted,
-                        letterSpacing: 0.04,
-                      ),
-                    ),
-                  ),
-                ),
-              ).toList(),
-            ),
-            const SizedBox(height: 4),
-            // Day grid
-            ...List.generate(_gridRows(daysInMonth, lead), (ri) {
-              final cells = <Widget>[];
-              for (int ci = 0; ci < 7; ci++) {
-                final idx = ri * 7 + ci - lead;
-                final day = idx + 1;
-                if (idx < 0 || idx >= daysInMonth) {
-                  cells.add(const Expanded(child: SizedBox.shrink()));
-                } else {
-                  final date = DateTime(_viewMonth.year, _viewMonth.month, day);
-                  final isStart = s != null && date == s;
-                  final isEnd = e != null && date == e;
-                  final inRange = _inRange(date);
-                  final isToday = date == todayNormalized;
-
-                  Color bg;
-                  Color fg;
-                  FontWeight fw;
-                  if (isStart || isEnd) {
-                    bg = PosColors.primary;
-                    fg = PosColors.accentInk;
-                    fw = FontWeight.w700;
-                  } else if (inRange) {
-                    bg = PosColors.primarySoft;
-                    fg = PosColors.accentStrong;
-                    fw = FontWeight.w600;
-                  } else {
-                    bg = Colors.transparent;
-                    fg = PosColors.inkSoft;
-                    fw = FontWeight.w400;
-                  }
-
-                  cells.add(
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _tapDay(date),
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          height: 38,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: bg,
-                            borderRadius: BorderRadius.circular(PosRadii.sm),
-                            border: isToday && !isStart && !isEnd
-                                ? Border.all(color: PosColors.lineStrong, width: 1)
-                                : null,
-                          ),
-                          child: TfText(
-                            '$day',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: fw,
-                              color: fg,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              }
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 1),
-                child: Row(children: cells),
-              );
-            }),
-            const SizedBox(height: 6),
-            // Summary bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: PosColors.surfaceSunk,
-                borderRadius: BorderRadius.circular(PosRadii.sm),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.schedule_rounded, size: 15, color: PosColors.muted),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: TfText(
-                      summary,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: s != null ? PosColors.text : PosColors.muted,
-                      ),
-                    ),
-                  ),
-                  if (s != null && e != null)
-                    GestureDetector(
-                      onTap: () => widget.onRangeChanged(null, null),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Icon(
-                          Icons.close_rounded,
-                          size: 16,
-                          color: PosColors.mutedSoft,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  int _gridRows(int daysInMonth, int lead) =>
-      ((lead + daysInMonth + 6) ~/ 7);
 }
 
 class _DeltaPill extends StatelessWidget {
@@ -4947,9 +4622,13 @@ class _AreaChartPainter extends CustomPainter {
         ..strokeWidth = 1.8
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
-      _dashedPolyline(canvas, [
-        for (var i = 0; i < compare!.length; i++) Offset(x(i), y(compare![i])),
-      ], cmpPaint);
+      _dashedPolyline(
+          canvas,
+          [
+            for (var i = 0; i < compare!.length; i++)
+              Offset(x(i), y(compare![i])),
+          ],
+          cmpPaint);
     }
 
     // Main line
