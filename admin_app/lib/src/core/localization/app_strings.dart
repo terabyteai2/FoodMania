@@ -185,6 +185,14 @@ class AppStrings {
   String get tableQrSubtitle => isBn
       ? 'রেস্টুরেন্ট মেনু ও প্রতিটি টেবিলের QR কোড PDF প্রিন্ট করুন।'
       : 'Print restaurant-menu and table QR codes as a PDF.';
+  String get tableQrLabels => isBn ? 'টেবিল QR লেবেল' : 'Table QR Labels';
+  String get tableQrLabelsSubtitle => isBn
+      ? 'প্রিন্টার দিয়ে আলাদা টেবিল QR স্টিকার প্রিন্ট করুন।'
+      : 'Print individual table QR stickers via Bluetooth/USB printer.';
+  String get tableLabelPrinted => isBn ? 'এর লেবেল প্রিন্ট হয়েছে' : 'label printed';
+  String get noTablesConfigured => isBn
+      ? 'কোনো টেবিল কনফিগার করা নেই'
+      : 'No tables configured';
   String get orderingUrl => isBn ? 'অর্ডারিং URL' : 'Ordering URL';
   String get orderingUrlHint => isBn
       ? 'যেমন: https://order.myrestaurant.com'

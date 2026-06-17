@@ -7,6 +7,8 @@ import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/account_role.dart';
+import '../../models/dashboard_metrics.dart';
+import '../../models/dashboard_summary.dart';
 import '../../models/order_model.dart';
 import '../../models/order_source.dart';
 import '../../models/order_status.dart';
@@ -37,6 +39,7 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
   static const double _kDefaultDailyTarget = 30000;
 
   bool _settingsRequested = false;
+  bool _summaryRequested = false;
   double? _configuredTarget;
 
   int _ageMins(OrderModel o) =>
@@ -51,6 +54,10 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
       if (!mounted) return;
       setState(() => _configuredTarget = settings.dailySalesTarget);
     });
+    if (!_summaryRequested) {
+      _summaryRequested = true;
+      AppScope.read(context).refreshDashboardSummary();
+    }
   }
 
   @override
@@ -166,6 +173,15 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
                     _AllClearCard(text: text),
                     const SizedBox(height: 14),
                   ],
+
+                  _DailySummaryCard(
+                    text: text,
+                    dashboardSummary: app.dashboardSummary,
+                    isLoading: app.dashboardSummaryLoading,
+                    error: app.dashboardSummaryError,
+                    metrics: app.metrics,
+                  ),
+                  const SizedBox(height: 14),
 
                   // Quick stats — always visible.
                   IntrinsicHeight(
@@ -350,6 +366,188 @@ class _AllClearCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Daily summary card ────────────────────────────────────────────────────────
+
+class _DailySummaryCard extends StatelessWidget {
+  const _DailySummaryCard({
+    required this.text,
+    required this.dashboardSummary,
+    required this.isLoading,
+    required this.error,
+    required this.metrics,
+  });
+
+  final AppStrings text;
+  final DashboardSummary? dashboardSummary;
+  final bool isLoading;
+  final String? error;
+  final DashboardMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final ds = dashboardSummary;
+
+    // Prefer cloud summary, fall back to local metrics.
+    final revenue = ds?.moneyFirst.earnedToday ?? metrics.totalSales;
+    final orders = ds?.moneyFirst.kpis.orders ?? metrics.todayOrders;
+    final avgTicket = ds?.moneyFirst.kpis.avgTicket ??
+        (orders > 0 ? revenue / orders : 0);
+    final deltaPct = ds?.moneyFirst.deltaPct;
+    final hasDelta = deltaPct != null && deltaPct != 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.card),
+        border: Border.all(color: PosColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title row
+          Row(
+            children: [
+              Expanded(
+                child: TfText(
+                  text.todaySoFar,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.text,
+                  ),
+                ),
+              ),
+              if (isLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: PosColors.muted,
+                  ),
+                )
+              else if (error != null)
+                Icon(Icons.cloud_off_rounded,
+                    size: 16, color: PosColors.muted)
+              else if (hasDelta)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      deltaPct > 0
+                          ? Icons.trending_up_rounded
+                          : Icons.trending_down_rounded,
+                      size: 16,
+                      color: deltaPct > 0
+                          ? PosColors.success
+                          : PosColors.danger,
+                    ),
+                    const SizedBox(width: 3),
+                    TfText(
+                      '${deltaPct > 0 ? '+' : ''}${deltaPct.round()}%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: deltaPct > 0
+                            ? PosColors.success
+                            : PosColors.danger,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Metric row
+          Row(
+            children: [
+              Expanded(
+                child: _DailyStat(
+                  value: tfFormatCurrency(context, revenue),
+                  label: text.earnedToday,
+                ),
+              ),
+              _DotSep(),
+              Expanded(
+                child: _DailyStat(
+                  value: tfFormatNumber(context, orders),
+                  label: text.kpiOrders,
+                ),
+              ),
+              _DotSep(),
+              Expanded(
+                child: _DailyStat(
+                  value: tfFormatCurrency(context, avgTicket),
+                  label: text.kpiAvg,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyStat extends StatelessWidget {
+  const _DailyStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TfText(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: PosColors.text,
+            letterSpacing: -0.3,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        const SizedBox(height: 3),
+        TfText(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: PosColors.muted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DotSep extends StatelessWidget {
+  const _DotSep();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        '·',
+        style: TextStyle(
+          fontSize: 18,
+          color: PosColors.lineStrong,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

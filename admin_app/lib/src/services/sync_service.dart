@@ -143,6 +143,17 @@ class SyncService {
     return '{${keys.map((k) => '$k:${counts[k]}').join(', ')}}';
   }
 
+  String _payloadSourceCounts(List<Map<String, Object?>> rows) {
+    final counts = <String, int>{};
+    for (final row in rows) {
+      final source = row['source']?.toString().trim();
+      final key = source == null || source.isEmpty ? '<missing>' : source;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    final keys = counts.keys.toList()..sort();
+    return 'sourceCounts={${keys.map((k) => '$k:${counts[k]}').join(', ')}}';
+  }
+
   String _ordersDiagSummary(List<OrderModel> rows, {int sampleLimit = 5}) {
     final raw = <String, int>{};
     final admin = <String, int>{};
@@ -460,7 +471,8 @@ class SyncService {
       debugPrint(
         '[QB-ORDERS-DIAG] sync pullOrders since=$since '
         'received=${orderPayloads.length} '
-        'payloadStatusCounts=${_payloadStatusCounts(orderPayloads)}',
+        '${_payloadStatusCounts(orderPayloads)} '
+        '${_payloadSourceCounts(orderPayloads)}',
       );
     }
     var ordersApplied = 0;

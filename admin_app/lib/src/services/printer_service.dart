@@ -138,7 +138,8 @@ class _ReceiptLabels {
 
   String get managerCopy => _bn ? 'ম্যানেজার কপি' : 'Manager Copy';
   String get customerCopy => _bn ? 'কাস্টমার কপি' : 'Customer Copy';
-  String orderNo(String seq) => digits(seq);
+  String get orderNoLabel => _bn ? 'অর্ডার নং:' : 'Order No:';
+  String orderNo(String seq) => '$orderNoLabel ${digits(seq)}';
   String tableLabel(String t) => _bn ? 'টেবিল ${digits(t)}' : 'Table $t';
   String get takeaway => _bn ? 'টেকওয়ে' : 'Takeaway';
   String get nameLabel => _bn ? 'নাম' : 'Name';
@@ -1152,6 +1153,125 @@ class PrinterService {
       _logPrinterEnd(attemptId, 'print-end-of-day-ok');
       return true;
     }, diagId: attemptId);
+  }
+
+  Future<bool> printTableQrLabel({
+    required String tableLabel,
+    required String qrUrl,
+  }) async {
+    final attemptId = _nextPrinterAttempt('print-table-qr-$tableLabel');
+    return _withBusyBool(() async {
+      await _ensureAnyPrinterReady(diagId: attemptId);
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(_paperSize, profile);
+      final bytes = await _buildTableQrLabelBytes(generator, tableLabel, qrUrl);
+      var ok = await _writeBytes(bytes, diagId: attemptId);
+      if (!ok && _hasSelectedSystemPrinter) {
+        ok = await _printSystemTableQrPdfFallback(tableLabel, qrUrl);
+      }
+      if (!ok) {
+        throw PrinterException(
+          'Printing QR label for $tableLabel failed.',
+        );
+      }
+      _emit(
+        _state.copyWith(
+          lastPrintedOrderNo: tableLabel,
+          lastPrintedAt: DateTime.now(),
+          clearLastError: true,
+        ),
+      );
+      _logPrinterEnd(attemptId, 'print-table-qr-ok');
+      return true;
+    }, diagId: attemptId);
+  }
+
+  Future<List<int>> _buildTableQrLabelBytes(
+    Generator generator,
+    String tableLabel,
+    String qrUrl,
+  ) async {
+    final paperWidthPx = (_paperSize == PaperSize.mm80 ? 576 : 384).toDouble();
+    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes tableLabel="$tableLabel" paperWidthPx=$paperWidthPx');
+    final pngBytes = await TicketBitmapRenderer.renderTableQrLabel(
+      tableLabel: tableLabel,
+      qrUrl: qrUrl,
+      paperWidthPx: paperWidthPx,
+    );
+    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes pngBytes=${pngBytes.length}');
+
+    final decoded = img.decodePng(pngBytes);
+    if (decoded == null) {
+      throw PrinterException('Could not decode table QR label bitmap.');
+    }
+    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes decoded width=${decoded.width} height=${decoded.height}');
+
+    final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
+        ? img.copyResize(decoded, width: 576)
+        : decoded;
+    final grayscale = img.grayscale(raster);
+    final bytes = <int>[
+      ...generator.reset(),
+      ..._targetPrintSpeed90MmPerSecond,
+      ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.feed(4),
+      ...generator.cut(),
+    ];
+    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes escPosBytes=${bytes.length}');
+    return bytes;
+  }
+
+  Future<bool> _printSystemTableQrPdfFallback(
+    String tableLabel,
+    String qrUrl,
+  ) async {
+    if (!_hasSelectedSystemPrinter) return false;
+    final selected = _state.selectedWindowsQueueName?.trim() ?? '';
+    if (selected.isEmpty) return false;
+    try {
+      final printers = await Printing.listPrinters();
+      Printer? printer;
+      for (final item in printers) {
+        if (item.name == selected) {
+          printer = item;
+          break;
+        }
+      }
+      if (printer == null) return false;
+      final pngBytes = await TicketBitmapRenderer.renderTableQrLabel(
+        tableLabel: tableLabel,
+        qrUrl: qrUrl,
+        paperWidthPx: _state.windowsPaperWidthMm == 80 ? 576 : 384,
+      );
+      final doc = pw.Document();
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat(
+            _state.windowsPaperWidthMm == 80 ? 80 : 58,
+            120,
+            marginAll: 4,
+          ),
+          build: (_) => pw.Center(
+            child: pw.Image(pw.MemoryImage(pngBytes)),
+          ),
+        ),
+      );
+      final pageFormat = PdfPageFormat(
+        _state.windowsPaperWidthMm == 80 ? 80 : 58,
+        120,
+        marginAll: 4,
+      );
+      await Printing.directPrintPdf(
+        printer: printer,
+        name: 'Table-QR-$tableLabel',
+        format: pageFormat,
+        usePrinterSettings: true,
+        onLayout: (_) => doc.save(),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Uint8List> _buildKotBitmapPng(

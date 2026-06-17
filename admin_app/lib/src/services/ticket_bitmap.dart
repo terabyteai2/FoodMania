@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
@@ -333,8 +333,8 @@ class TicketBitmapRenderer {
       canvas,
       data.orderNumberDisplay,
       y + 8,
-      fontSize: 72,
-      weight: FontWeight.w900,
+      fontSize: 30,
+      weight: FontWeight.w700,
       align: TextAlign.center,
     );
     // 7. Service type / table / server role — all centered
@@ -454,6 +454,74 @@ class TicketBitmapRenderer {
     final png = await image.toByteData(format: ui.ImageByteFormat.png);
     if (png == null) {
       throw StateError('Ticket bitmap encoding failed.');
+    }
+    return png.buffer.asUint8List();
+  }
+
+  static Future<Uint8List> renderTableQrLabel({
+    required String tableLabel,
+    required String qrUrl,
+    double paperWidthPx = 384,
+  }) async {
+    debugPrint('[TicketBitmap] renderTableQrLabel tableLabel="$tableLabel" qrUrl="$qrUrl" paperWidthPx=$paperWidthPx');
+    const qrTargetPx = 120;
+    final qrCode = QrCode.fromData(
+      data: qrUrl,
+      errorCorrectLevel: QrErrorCorrectLevel.L,
+    );
+    final qrImage = QrImage(qrCode);
+    final modules = qrImage.moduleCount;
+    final modulePx = (qrTargetPx / modules).floor().clamp(1, 6);
+    final qrSizePx = modules * modulePx;
+    debugPrint('[TicketBitmap] renderTableQrLabel modules=$modules modulePx=$modulePx qrSizePx=$qrSizePx');
+
+    const labelFontSize = 20.0;
+    const labelHeight = 30.0;
+    const scanFontSize = 38.0;
+    const scanHeight = 52.0;
+    const topPad = 14.0;
+    const gap1 = 10.0;
+    const gap2 = 10.0;
+    const botPad = 18.0;
+
+    final height = (topPad + labelHeight + gap1 + qrSizePx + gap2 + scanHeight + botPad).toDouble();
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, paperWidthPx, height),
+      Paint()..color = Colors.white,
+    );
+
+    var y = topPad;
+    y = _text(canvas, tableLabel, y, fontSize: labelFontSize, weight: FontWeight.w700, align: TextAlign.center);
+    y += gap1;
+
+    final left = (paperWidthPx - qrSizePx) / 2;
+    final paint = Paint()..color = Colors.black;
+    for (var row = 0; row < modules; row++) {
+      for (var col = 0; col < modules; col++) {
+        if (!qrImage.isDark(row, col)) continue;
+        canvas.drawRect(
+          Rect.fromLTWH(
+            left + col * modulePx.toDouble(),
+            y + row * modulePx.toDouble(),
+            modulePx.toDouble(),
+            modulePx.toDouble(),
+          ),
+          paint,
+        );
+      }
+    }
+    y += qrSizePx + gap2;
+
+    _text(canvas, 'SCAN TO ORDER', y, fontSize: scanFontSize, weight: FontWeight.w800, align: TextAlign.center);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(paperWidthPx.toInt(), height.ceil());
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) {
+      throw StateError('Table QR label bitmap encoding failed.');
     }
     return png.buffer.asUint8List();
   }

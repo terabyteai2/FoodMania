@@ -217,25 +217,25 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
 
 // QuickBytes role-aware navigation (spec §1). Enum ordinals fix the page-build
 // slots; the per-role lists below choose which tabs show and in what order.
-enum _AppTab { analytics, live, tables, orders, stock, more }
+enum _AppTab { analytics, live, tables, orders, stock, more, menu }
 
-// Owner: Analytics · Tables · Orders · Stock · More
+// Owner: Analytics · Menu · Orders · Stock · More
 const _ownerTabOrder = <_AppTab>[
   _AppTab.analytics,
-  _AppTab.tables,
+  _AppTab.menu,
   _AppTab.orders,
   _AppTab.stock,
   _AppTab.more,
 ];
-// Manager: Live (Control Tower) · Tables · Orders · Stock · More
+// Manager: Live (Control Tower) · Menu · Orders · Stock · More
 const _managerTabOrder = <_AppTab>[
   _AppTab.live,
-  _AppTab.tables,
+  _AppTab.menu,
   _AppTab.orders,
   _AppTab.stock,
   _AppTab.more,
 ];
-// Waiter: Tables · Orders · More
+// Waiter: Tables · Orders · More (Tables stays for waiters)
 const _waiterTabOrder = <_AppTab>[_AppTab.tables, _AppTab.orders, _AppTab.more];
 
 List<_AppTab> _tabOrderForRole(AccountRole role) {
@@ -322,6 +322,12 @@ class _MainShellState extends State<MainShell> {
         Icons.grid_on_outlined,
         Icons.grid_on_rounded,
       ),
+      _AppTab.menu => _Destination(
+        text.menu,
+        text.menu,
+        Icons.restaurant_menu_outlined,
+        Icons.restaurant_menu,
+      ),
       _AppTab.more => _Destination(
         text.settingsTab,
         text.settingsTab,
@@ -351,8 +357,8 @@ class _MainShellState extends State<MainShell> {
     // Fixed page order matching _AppTab.index ordinals. Builders (not eager
     // instances) so unvisited tabs never mount — see [_LazyIndexedStack].
     void goToOrders() => _selectTab(_AppTab.orders);
-    // Order MUST match _AppTab ordinals: analytics, live, tables, orders,
-    // stock, more.
+    // Order MUST match _AppTab ordinals: analytics(0), live(1), tables(2),
+    // orders(3), stock(4), more(5), menu(6).
     final pageBuilders = <WidgetBuilder>[
       (_) => AnalyticsScreen(onNavigateToTarget: _navigateNotificationTarget),
       (_) => ControlTowerScreen(
@@ -372,6 +378,10 @@ class _MainShellState extends State<MainShell> {
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
         receiptPrinterOpenRequest: _receiptPrinterOpenRequest,
+      ),
+      (_) => MenuManagementScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
       ),
     ];
 
@@ -471,12 +481,7 @@ class _MainShellState extends State<MainShell> {
         _selectTab(_AppTab.stock);
         return;
       case PosNotificationTarget.menu:
-        _pushScreen(
-          MenuManagementScreen(
-            onNavigateToOrders: () => _selectTab(_AppTab.orders),
-            onNavigateToTarget: _navigateNotificationTarget,
-          ),
-        );
+        _selectTab(_AppTab.menu);
         return;
       case PosNotificationTarget.receiptPrinter:
         // Settings (incl. receipt printer) is now embedded in the Settings

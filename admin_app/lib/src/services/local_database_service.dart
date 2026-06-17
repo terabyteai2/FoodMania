@@ -119,7 +119,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 14,
+      version: 15,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -1188,7 +1188,7 @@ class LocalDatabaseService {
     await db.execute('''
       CREATE TABLE orders (
         id TEXT PRIMARY KEY,
-        orderNo TEXT NOT NULL UNIQUE,
+        orderNo TEXT NOT NULL,
         source TEXT NOT NULL DEFAULT 'cloud',
         customerName TEXT,
         tableNo TEXT,
@@ -1350,6 +1350,9 @@ class LocalDatabaseService {
     if (oldVersion < 14) {
       await _migrateDesktopPosV14(db);
     }
+    if (oldVersion < 15) {
+      await _migrateOrdersDropOrderNoUniqueV15(db);
+    }
   }
 
   Future<void> _migrateInventoryRedesignV13(Database db) async {
@@ -1429,6 +1432,51 @@ class LocalDatabaseService {
       await _addColumnIfMissing(db, 'order_items', entry.$1, entry.$2);
     }
     await _createDesktopPosTables(db);
+  }
+
+  Future<void> _migrateOrdersDropOrderNoUniqueV15(Database db) async {
+    await db.execute('PRAGMA defer_foreign_keys = ON');
+    await db.execute('''
+      CREATE TABLE orders_v15 (
+        id TEXT PRIMARY KEY,
+        orderNo TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'cloud',
+        customerName TEXT,
+        tableNo TEXT,
+        note TEXT,
+        deliveryAddress TEXT,
+        mobileNumber TEXT,
+        createdByAccountId TEXT,
+        createdByRole TEXT,
+        shiftId TEXT,
+        discountLabel TEXT,
+        discountAmount REAL NOT NULL DEFAULT 0,
+        serviceChargeRatePercent REAL NOT NULL DEFAULT 0,
+        serviceChargeAmount REAL NOT NULL DEFAULT 0,
+        billingSnapshot TEXT NOT NULL DEFAULT '{}',
+        kotBatches TEXT NOT NULL DEFAULT '[]',
+        settledAt TEXT,
+        serviceType TEXT,
+        covers INTEGER,
+        paymentMethod TEXT,
+        subtotal REAL,
+        vatRatePercent REAL,
+        vatAmount REAL,
+        deliveryCharge REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        total REAL NOT NULL,
+        syncStatus TEXT NOT NULL DEFAULT 'synced',
+        version INTEGER NOT NULL DEFAULT 1,
+        sequenceNo INTEGER NOT NULL,
+        orderDate TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+    await db.execute('INSERT INTO orders_v15 SELECT * FROM orders');
+    await db.execute('DROP TABLE orders');
+    await db.execute('ALTER TABLE orders_v15 RENAME TO orders');
+    await _createIndexes(db);
   }
 
   Future<void> _migrateOrdersDeliveryChargeV12(Database db) async {
@@ -1598,6 +1646,9 @@ class LocalDatabaseService {
     );
     await _addColumnIfMissing(db, 'orders', 'sequenceNo', 'sequenceNo INTEGER');
     await _addColumnIfMissing(db, 'orders', 'orderDate', 'orderDate TEXT');
+    await db.execute(
+      "UPDATE orders SET orderDate = substr(orderDate, 1, 10) WHERE orderDate IS NOT NULL AND length(orderDate) > 10",
+    );
     await _addColumnIfMissing(
       db,
       'orders',
@@ -1827,7 +1878,7 @@ class LocalDatabaseService {
   Future<int> _nextOrderSequence(DatabaseExecutor db) async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
     final rows = await db.rawQuery(
-      'SELECT COALESCE(MAX(sequenceNo), 0) + 1 AS nextSequence FROM orders WHERE orderDate = ?',
+      'SELECT COALESCE(MAX(sequenceNo), 0) + 1 AS nextSequence FROM orders WHERE date(orderDate) = ?',
       [today],
     );
     final value = rows.first['nextSequence'];

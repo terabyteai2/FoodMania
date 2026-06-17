@@ -1742,7 +1742,8 @@ class CloudApiService {
     if (kDebugMode) {
       debugPrint(
         '[QB-ORDERS-DIAG] cloud pullOrders response count=${rows.length} '
-        '${_orderPayloadStatusCounts(rows)} sample=${_orderPayloadSample(rows)}',
+        '${_orderPayloadStatusCounts(rows)} ${_orderPayloadSourceCounts(rows)} '
+        'sample=${_orderPayloadSample(rows)}',
       );
     }
     return rows;
@@ -1757,6 +1758,17 @@ class CloudApiService {
     }
     final keys = counts.keys.toList()..sort();
     return 'statusCounts={${keys.map((k) => '$k:${counts[k]}').join(', ')}}';
+  }
+
+  String _orderPayloadSourceCounts(List<Map<String, Object?>> rows) {
+    final counts = <String, int>{};
+    for (final row in rows) {
+      final source = row['source']?.toString().trim();
+      final key = source == null || source.isEmpty ? '<missing>' : source;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    final keys = counts.keys.toList()..sort();
+    return 'sourceCounts={${keys.map((k) => '$k:${counts[k]}').join(', ')}}';
   }
 
   String _orderPayloadSample(List<Map<String, Object?>> rows, {int limit = 5}) {

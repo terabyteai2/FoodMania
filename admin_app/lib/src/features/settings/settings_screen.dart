@@ -22,6 +22,7 @@ import '../../services/printer_service.dart';
 import '../reports/reports_screen.dart';
 import 'customer_menu_themes.dart';
 import 'qr_pdf_screen.dart';
+import 'table_qr_labels_screen.dart';
 
 const bool _showFacebookChatbotSettings = true;
 
@@ -150,6 +151,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: text.tableQrSubtitle,
                   icon: Icons.qr_code_rounded,
                   onTap: _openQrCodes,
+                ),
+                _SettingActionData(
+                  title: text.tableQrLabels,
+                  subtitle: text.tableQrLabelsSubtitle,
+                  icon: Icons.qr_code_rounded,
+                  onTap: _openTableQrLabels,
                 ),
                 _SettingActionData(
                   title: text.websiteImageVideoTitle,
@@ -517,6 +524,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const QrPdfScreen()));
+  }
+
+  Future<void> _openTableQrLabels() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const TableQrLabelsScreen()));
   }
 
   Future<void> _openReports() async {
