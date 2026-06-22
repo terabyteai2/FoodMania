@@ -187,6 +187,76 @@ async def test_menu_scan_ocr_space_sends_image_and_keeps_json_for_llm(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_menu_scan_ocr_keeps_good_pages_when_one_page_fails(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if b"bad" in request.content:
+            return httpx.Response(
+                200,
+                json={
+                    "IsErroredOnProcessing": True,
+                    "ErrorMessage": "unreadable",
+                    "ParsedResults": [],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "ParsedResults": [
+                    {"FileParseExitCode": 1, "ParsedText": "Tea 50"}
+                ],
+                "IsErroredOnProcessing": False,
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*, timeout):
+        return real_async_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(menu_scan.settings, "OCR_SPACE_API_KEY", "ocr-space-test")
+    monkeypatch.setattr(menu_scan.httpx, "AsyncClient", mock_client)
+
+    texts = await menu_scan.extract_menu_page_texts(
+        [(b"good", "image/png"), (b"bad", "image/png")]
+    )
+
+    assert len(texts) == 1
+    assert json.loads(texts[0])["ParsedResults"][0]["ParsedText"] == "Tea 50"
+
+
+@pytest.mark.asyncio
+async def test_menu_scan_ocr_raises_when_every_page_fails(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "IsErroredOnProcessing": True,
+                "ErrorMessage": "unreadable",
+                "ParsedResults": [],
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*, timeout):
+        return real_async_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(menu_scan.settings, "OCR_SPACE_API_KEY", "ocr-space-test")
+    monkeypatch.setattr(menu_scan.httpx, "AsyncClient", mock_client)
+
+    with pytest.raises(menu_scan.MenuScanError):
+        await menu_scan.extract_menu_page_texts(
+            [(b"a", "image/png"), (b"b", "image/png")]
+        )
+
+
+@pytest.mark.asyncio
 async def test_menu_scan_llm_falls_back_after_invalid_schema(monkeypatch):
     calls = []
 

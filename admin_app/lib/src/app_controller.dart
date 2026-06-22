@@ -64,6 +64,8 @@ class StaffInvitePending {
     required this.outletName,
     required this.signupToken,
     required this.phone,
+    this.role,
+    this.invitedBy,
   });
 
   final String inviteId;
@@ -71,6 +73,8 @@ class StaffInvitePending {
   final String outletName;
   final String signupToken;
   final String phone;
+  final String? role;
+  final String? invitedBy;
 }
 
 class MenuScanImportResult {
@@ -203,8 +207,9 @@ class PosAppController extends ChangeNotifier {
     cap: kAlertSetCap,
   );
 
-  /// Auto-print stopped after a failure so DB churn does not re-print forever.
-  final BoundedStringSet _autoPrintGiveUpOrderIds = BoundedStringSet(
+  /// Persisted set of accepted orders whose KOT failed to auto-print.
+  /// Prevents re-print on restart; drives the "KOT not printed" UI indicator.
+  final BoundedStringSet _unprintedKotOrderIds = BoundedStringSet(
     cap: kAlertSetCap,
   );
 
@@ -588,6 +593,8 @@ class PosAppController extends ChangeNotifier {
       _dismissedAppUpdateVersionCode =
           preferences.getInt(_dismissedAppUpdateVersionCodeKey) ?? 0;
       isLoggedIn = preferences.getBool(_accountLoggedInKey) ?? isTenantReady;
+      final unprinted = preferences.getStringList(_unprintedKotOrderIdsKey);
+      if (unprinted != null) _unprintedKotOrderIds.addAll(unprinted);
 
       // The printer probe (USB/Bluetooth scan) is the heaviest startup step and
       // isn't needed before the first frame — it's deferred to a post-frame
@@ -1127,9 +1134,26 @@ class PosAppController extends ChangeNotifier {
     _alertedPendingOrderIds.clear();
     _alertedAcceptedOrderIds.clear();
     _alertedPrintOrderIds.clear();
-    _autoPrintGiveUpOrderIds.clear();
     _alertedPrintFailureReasons.clear();
   }
+
+  Future<void> _addUnprintedKotOrderId(String id) async {
+    if (id.isEmpty) return;
+    _unprintedKotOrderIds.add(id);
+    await _persistUnprintedKotOrderIds();
+  }
+
+  Future<void> _persistUnprintedKotOrderIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _unprintedKotOrderIdsKey,
+      _unprintedKotOrderIds.toList(),
+    );
+  }
+
+  bool needsKotPrint(OrderModel order) =>
+      order.status.adminStatus == OrderStatus.accepted &&
+      !printerService.hasPrintedOrder(order.id);
 
   // Diagnostics — surfaced by the hidden dev panel in SettingsScreen.
   int get diagOrdersInMemory => orders.length;
@@ -1141,7 +1165,7 @@ class PosAppController extends ChangeNotifier {
       _alertedPendingOrderIds.length +
       _alertedAcceptedOrderIds.length +
       _alertedPrintOrderIds.length +
-      _autoPrintGiveUpOrderIds.length +
+      _unprintedKotOrderIds.length +
       _alertedPrintFailureReasons.length;
   int get diagSubscriptionCount => _subscriptions.length;
 
@@ -1246,6 +1270,22 @@ class PosAppController extends ChangeNotifier {
       end: end,
       channel: channel,
       daypart: daypart,
+    );
+  }
+
+  /// QuicklyServices-style plain analytics (spec Part B).
+  Future<Map<String, Object?>> fetchAnalyticsSummary({
+    String range = 'today',
+    String? start,
+    String? end,
+  }) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchAnalyticsSummary(
+      range: range,
+      start: start,
+      end: end,
     );
   }
 
@@ -1818,6 +1858,8 @@ class PosAppController extends ChangeNotifier {
           outletName: result.outletName ?? 'Outlet',
           signupToken: token,
           phone: verifiedPhoneDisplay ?? phone,
+          role: result.role,
+          invitedBy: result.invitedBy,
         );
         await completeIntro();
         nextStep = 'pending_staff_invite';
@@ -2839,6 +2881,7 @@ class PosAppController extends ChangeNotifier {
     String? categoryBn,
     String? imageUrl,
     int? preparationTimeMinutes,
+    int? shortCode,
     List<String> tags = const [],
     DateTime? createdAt,
     bool syncAfterSave = true,
@@ -2858,6 +2901,7 @@ class PosAppController extends ChangeNotifier {
           : (categoryEn ?? category).trim(),
       categoryBn: (categoryBn ?? '').trim(),
       price: price,
+      shortCode: shortCode,
       imageUrl: _cleanNullable(imageUrl),
       isAvailable: isAvailable,
       preparationTimeMinutes: preparationTimeMinutes,
@@ -3743,7 +3787,7 @@ class PosAppController extends ChangeNotifier {
             );
           }
           if (!ok && _autoPrintInFlight.contains(order.id)) {
-            _autoPrintGiveUpOrderIds.add(order.id);
+            await _addUnprintedKotOrderId(order.id);
           }
           return ok;
         });
@@ -4153,12 +4197,12 @@ class PosAppController extends ChangeNotifier {
     );
   }
 
-  void _markAcceptedOrdersPrintAlerted() {
+  Future<void> _markAcceptedOrdersPrintAlerted() async {
     for (final order in orders) {
       final status = order.status.adminStatus;
       if (status == OrderStatus.accepted) {
         _alertedPrintOrderIds.add(order.id);
-        _autoPrintGiveUpOrderIds.add(order.id);
+        await _addUnprintedKotOrderId(order.id);
       }
     }
   }
@@ -4329,7 +4373,10 @@ class PosAppController extends ChangeNotifier {
     // Only the manager device auto-prints. Staff devices forward to manager
     // via cloud sync; the manager app then receives the order and prints.
     if (!isManager) return;
-    if (_autoPrintInfrastructureBlocked != null) return;
+    if (_autoPrintInfrastructureBlocked != null) {
+      await _addUnprintedKotOrderId(order.id);
+      return;
+    }
     final status = order.status.adminStatus;
     final isAccepted = status == OrderStatus.accepted;
     if (isAccepted &&
@@ -4344,7 +4391,7 @@ class PosAppController extends ChangeNotifier {
         !printerState.autoPrintEnabled ||
         !printerState.hasSelectedPrinter ||
         printerService.hasPrintedOrder(order.id) ||
-        _autoPrintGiveUpOrderIds.contains(order.id) ||
+        _unprintedKotOrderIds.contains(order.id) ||
         _autoPrintInFlight.contains(order.id)) {
       return;
     }
@@ -4666,4 +4713,6 @@ class PosAppController extends ChangeNotifier {
       'local_pos_needs_onboarding_payment';
   static final String _selectedPlanKey = 'local_pos_selected_subscription_plan';
   static final String _trialEndsAtKey = 'local_pos_trial_ends_at';
+  static final String _unprintedKotOrderIdsKey =
+      'local_pos_unprinted_kot_order_ids';
 }

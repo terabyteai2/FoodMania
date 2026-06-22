@@ -87,6 +87,7 @@ class AdminAccount(Base):
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invite_status: Mapped[str | None] = mapped_column(String, nullable=True)
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    invited_by_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth_provider: Mapped[str] = mapped_column(String, default="password")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -121,6 +122,9 @@ class MenuItem(Base):
     description_bn: Mapped[str | None] = mapped_column(Text)
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     cost_price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Short code — serial-by-default, editable; powers fast numeric item lookup
+    # in the POS (the ⚡ search toggle). NULL = not yet assigned.
+    short_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     category: Mapped[str | None] = mapped_column(Text)
     category_en: Mapped[str | None] = mapped_column(Text)
     category_bn: Mapped[str | None] = mapped_column(Text)

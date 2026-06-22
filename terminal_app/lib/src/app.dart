@@ -11,6 +11,7 @@ import 'core/widgets/notification_center.dart';
 import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
+import 'features/menu/menu_management_screen.dart';
 import 'features/messaging/messages_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
@@ -199,12 +200,12 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
 
 // Lean terminal navigation — single manager role. Enum ordinals fix the
 // page-build slots; the list below chooses which tabs show and in what order.
-enum _AppTab { live, tables, orders, more }
+enum _AppTab { live, tables, orders, more, menu }
 
-// Manager terminal: Live (Control Tower) · Tables · Orders · More
+// Manager terminal: Live (Control Tower) · Menu · Orders · More
 const _terminalTabOrder = <_AppTab>[
   _AppTab.live,
-  _AppTab.tables,
+  _AppTab.menu,
   _AppTab.orders,
   _AppTab.more,
 ];
@@ -275,6 +276,12 @@ class _MainShellState extends State<MainShell> {
         Icons.receipt_long_outlined,
         Icons.receipt_long,
       ),
+      _AppTab.menu => _Destination(
+        text.menu,
+        text.menu,
+        Icons.restaurant_menu_outlined,
+        Icons.restaurant_menu,
+      ),
       _AppTab.more => _Destination(
         text.moreTab,
         text.moreTab,
@@ -304,7 +311,7 @@ class _MainShellState extends State<MainShell> {
     // Fixed page order matching _AppTab.index ordinals. Builders (not eager
     // instances) so unvisited tabs never mount — see [_LazyIndexedStack].
     void goToOrders() => _selectTab(_AppTab.orders);
-    // Order MUST match _AppTab ordinals: live, tables, orders, more.
+    // Order MUST match _AppTab ordinals: live, tables, orders, more, menu.
     final pageBuilders = <WidgetBuilder>[
       (_) => ControlTowerScreen(
         onNavigateToOrders: goToOrders,
@@ -316,6 +323,10 @@ class _MainShellState extends State<MainShell> {
       ),
       (_) => OrdersScreen(onNavigateToTarget: _navigateNotificationTarget),
       (_) => MoreScreen(
+        onNavigateToOrders: goToOrders,
+        onNavigateToTarget: _navigateNotificationTarget,
+      ),
+      (_) => MenuManagementScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
       ),
@@ -408,14 +419,16 @@ class _MainShellState extends State<MainShell> {
 
   void _navigateNotificationTarget(PosNotificationTarget target) {
     // Settings lives in the More hub, so its deep-links push the screen rather
-    // than switching a tab. Inventory & Menu are removed on the terminal — their
-    // targets no longer have a screen to route to (no-op).
+    // than switching a tab. Inventory is removed on the terminal — its target
+    // no longer has a screen to route to (no-op).
     switch (target) {
       case PosNotificationTarget.orders:
         _selectTab(_AppTab.orders);
         return;
       case PosNotificationTarget.inventory:
+        return;
       case PosNotificationTarget.menu:
+        _selectTab(_AppTab.menu);
         return;
       case PosNotificationTarget.receiptPrinter:
         _receiptPrinterOpenRequest++;

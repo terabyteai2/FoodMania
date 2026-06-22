@@ -1560,6 +1560,12 @@ class _OrderCard extends StatelessWidget {
                                   kind: TfStatusKind.late,
                                   upper: false,
                                 ),
+                              if (app.needsKotPrint(order))
+                                TfStatusBadge(
+                                  label: text.kotNotPrinted,
+                                  kind: TfStatusKind.warning,
+                                  upper: false,
+                                ),
                             ],
                           ),
                           const SizedBox(height: 1),
@@ -2068,7 +2074,7 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                         child: TfButton(
                           label: text.acceptAndSendToKitchen,
                           icon: TfNavIcon.check,
-                          variant: TfButtonVariant.accent,
+                          variant: TfButtonVariant.primary,
                           size: TfButtonSize.lg,
                           onPressed: onAccept,
                         ),

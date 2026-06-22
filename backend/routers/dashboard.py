@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_outlet_id
@@ -1478,3 +1478,208 @@ async def menu_popularity(
         for row in rows
         if row.menu_item_id is not None
     ])
+
+
+def _line_cost(item: dict[str, Any]) -> float:
+    """Prep cost for a line — costPriceSnapshot × qty (0 when cost unset)."""
+    cost = item.get("costPriceSnapshot")
+    if not isinstance(cost, (int, float)):
+        return 0.0
+    return float(cost) * float(_item_qty(item))
+
+
+@router.get("/outlets/{outlet_id}/analytics/summary")
+async def analytics_summary(
+    outlet_id: str,
+    range_: str = Query("today", alias="range"),
+    start: str | None = None,
+    end: str | None = None,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """QuicklyServices-style plain BD analytics (spec Part B).
+
+    Sales Summary · Collection Summary · Service-wise Sales · Profit Estimation
+    · Popular Dishes · Item-wise Sales. No AOV/cohort/LTV/forecast jargon.
+    """
+    _ensure_outlet(current_outlet, outlet_id)
+    now = datetime.now(timezone.utc)
+    cur_start, cur_end, _prev_start, _prev_end = _analytics_period(
+        range_, start, end, now
+    )
+
+    orders = (
+        (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= cur_start)
+                .where(Order.created_at < cur_end)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    orders = [o for o in orders if not _is_rejected_status(o.status)]
+
+    # Menu lookup: menuItemId -> (name, category) for item-wise grouping.
+    menu_rows = (
+        (
+            await db.execute(
+                select(MenuItem).where(MenuItem.outlet_id == outlet_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    menu_cat = {m.id: (m.category_en or m.category or "General") for m in menu_rows}
+    menu_name = {m.id: (m.name_en or m.name) for m in menu_rows}
+
+    orders_completed = len(orders)
+    gross_sales = 0.0
+    discount_total = 0.0
+    total_collection = 0.0
+    service_charge_total = 0.0
+    delivery_total = 0.0
+    tax_total = 0.0
+    prep_cost = 0.0
+    collection: dict[str, float] = defaultdict(float)
+    service: dict[str, float] = defaultdict(float)
+    # item_id -> [units, sales]
+    item_agg: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+
+    for order in orders:
+        total = float(order.total_amount or 0)
+        discount = float(order.discount_amount or 0)
+        total_collection += total
+        discount_total += discount
+        service_charge_total += float(order.service_charge_amount or 0)
+        delivery_total += float(order.delivery_charge or 0)
+        tax_total += float(order.vat_amount or 0)
+        collection[(order.payment_method or "cash").strip().lower() or "cash"] += total
+        service[_service_key(order.service_type)] += total
+        lines = _line_items(order.items)
+        for line in lines:
+            rev = _item_revenue(line)
+            gross_sales += rev
+            prep_cost += _line_cost(line)
+            key = str(line.get("menuItemId") or line.get("name") or "?")
+            item_agg[key][0] += _item_qty(line)
+            item_agg[key][1] += rev
+
+    net_sales = gross_sales - discount_total
+
+    # Wastage cost in the window (stock adjustments marked waste).
+    wastage = float(
+        (
+            await db.execute(
+                select(func.coalesce(func.sum(StockAdjustment.total_cost_bdt), 0))
+                .where(StockAdjustment.outlet_id == outlet_id)
+                .where(StockAdjustment.type == "waste")
+                .where(StockAdjustment.created_at >= cur_start)
+                .where(StockAdjustment.created_at < cur_end)
+            )
+        ).scalar_one()
+        or 0
+    )
+    payment_fee = 0.0
+    gross_profit = (
+        net_sales
+        + service_charge_total
+        + delivery_total
+        - prep_cost
+        - wastage
+        - payment_fee
+        - tax_total
+    )
+
+    # Popular dishes — top 10 by sales.
+    popular = sorted(
+        (
+            {
+                "name": menu_name.get(key, key),
+                "qty": int(units),
+                "salesBdt": round(sales, 2),
+            }
+            for key, (units, sales) in item_agg.items()
+        ),
+        key=lambda r: r["salesBdt"],
+        reverse=True,
+    )[:10]
+
+    # Item-wise grouped by category.
+    cat_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for key, (units, sales) in item_agg.items():
+        cat = menu_cat.get(key, "General")
+        cat_groups[cat].append(
+            {
+                "name": menu_name.get(key, key),
+                "units": int(units),
+                "avgUnitPrice": round(_safe_div(sales, units), 2),
+                "totalPrice": round(sales, 2),
+            }
+        )
+    item_wise = [
+        {
+            "category": cat,
+            "units": int(sum(i["units"] for i in items)),
+            "totalPrice": round(sum(i["totalPrice"] for i in items), 2),
+            "items": sorted(items, key=lambda i: i["totalPrice"], reverse=True),
+        }
+        for cat, items in sorted(cat_groups.items())
+    ]
+
+    def _money_rows(totals: dict[str, float], labels: list[tuple[str, str]]):
+        return [
+            {"key": k, "label": label, "valueBdt": round(totals.get(k, 0.0), 2)}
+            for k, label in labels
+            if totals.get(k, 0.0) != 0
+        ]
+
+    return ok(
+        {
+            "rangeStart": cur_start.isoformat(),
+            "rangeEnd": cur_end.isoformat(),
+            "salesSummary": {
+                "ordersCompleted": orders_completed,
+                "grossSales": round(gross_sales, 2),
+                "discountByStaff": round(discount_total, 2),
+                "netSales": round(net_sales, 2),
+            },
+            "totalCollection": round(total_collection, 2),
+            "collection": [
+                {
+                    "key": k,
+                    "label": k.upper() if len(k) <= 4 else k.capitalize(),
+                    "valueBdt": round(v, 2),
+                }
+                for k, v in sorted(
+                    collection.items(), key=lambda kv: kv[1], reverse=True
+                )
+            ],
+            "serviceWise": [
+                {
+                    "key": k,
+                    "label": label,
+                    "valueBdt": round(service.get(k, 0.0), 2),
+                }
+                for k, label in (
+                    ("dineIn", "Dine-in"),
+                    ("takeaway", "Takeaway"),
+                    ("delivery", "Delivery Service"),
+                )
+            ],
+            "profit": {
+                "netSales": round(net_sales, 2),
+                "serviceCharge": round(service_charge_total, 2),
+                "deliveryCharge": round(delivery_total, 2),
+                "preparationCost": round(prep_cost, 2),
+                "wastage": round(wastage, 2),
+                "paymentFee": round(payment_fee, 2),
+                "taxes": round(tax_total, 2),
+                "grossProfit": round(gross_profit, 2),
+            },
+            "popularDishes": popular,
+            "itemWise": item_wise,
+        }
+    )

@@ -883,7 +883,7 @@ class _GridTile extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(PosRadii.md),
                                 boxShadow: const [
                                   BoxShadow(
-                                    color: Color(0x2E14180E),
+                                    color: Color(0x2E1B2330),
                                     blurRadius: 3,
                                     offset: Offset(0, 1),
                                   ),

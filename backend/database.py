@@ -116,6 +116,7 @@ async def _ensure_auth_columns(conn) -> None:
         "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS phone VARCHAR",
         "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ",
         "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS invite_status VARCHAR",
+        "ALTER TABLE admin_accounts ADD COLUMN IF NOT EXISTS invited_by_name TEXT",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_admin_accounts_phone ON admin_accounts(phone)",
         "ALTER TABLE admin_accounts ALTER COLUMN password_hash DROP NOT NULL",
     ]
@@ -373,6 +374,7 @@ async def _ensure_menu_columns(conn) -> None:
         ("category_bn", "TEXT"),
         ("tags_json", "TEXT"),
         ("cost_price", "NUMERIC(10, 2)"),
+        ("short_code", "INTEGER"),
     ]
     if dialect == "sqlite":
         for column, column_type in columns:

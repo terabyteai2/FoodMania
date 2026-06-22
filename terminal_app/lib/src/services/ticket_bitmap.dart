@@ -332,8 +332,8 @@ class TicketBitmapRenderer {
       canvas,
       data.orderNumberDisplay,
       y + 8,
-      fontSize: 72,
-      weight: FontWeight.w900,
+      fontSize: 30,
+      weight: FontWeight.w700,
       align: TextAlign.center,
     );
     // 7. Service type / table / server role — all centered

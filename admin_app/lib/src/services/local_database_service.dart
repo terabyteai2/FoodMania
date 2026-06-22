@@ -119,7 +119,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 15,
+      version: 16,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -1173,6 +1173,7 @@ class LocalDatabaseService {
         categoryBn TEXT NOT NULL DEFAULT '',
         price REAL NOT NULL,
         costPrice REAL,
+        shortCode INTEGER,
         imageUrl TEXT,
         isAvailable INTEGER NOT NULL,
         preparationTimeMinutes INTEGER,
@@ -1352,6 +1353,14 @@ class LocalDatabaseService {
     }
     if (oldVersion < 15) {
       await _migrateOrdersDropOrderNoUniqueV15(db);
+    }
+    if (oldVersion < 16) {
+      await _addColumnIfMissing(
+        db,
+        'menu_items',
+        'shortCode',
+        'shortCode INTEGER',
+      );
     }
   }
 

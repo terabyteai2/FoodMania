@@ -25,13 +25,13 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   final Map<String, double> _scannedQty = {};
 
   final List<String> _unmatched = [];
+  final Set<String> _touchedItemIds = {};
 
   bool _saving = false;
   bool _scanning = false;
   final MenuImageService _imageService = MenuImageService();
 
-  int get _done =>
-      _controllers.values.where((c) => c.text.trim().isNotEmpty).length;
+  int get _done => _touchedItemIds.length;
 
   @override
   void initState() {
@@ -63,7 +63,9 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
   TextEditingController _controller(InventoryItem item) =>
       _controllers.putIfAbsent(item.id, () {
         final seeded = _scannedQty[item.id];
-        return TextEditingController(text: seeded != null ? _fmtQty(seeded) : '');
+        return TextEditingController(
+          text: seeded != null ? _fmtQty(seeded) : _fmtQty(item.quantity),
+        );
       });
 
   static String _fmtQty(double value) =>
@@ -95,6 +97,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
         _applyScan(result);
         for (final entry in _scannedQty.entries) {
           _controllers[entry.key]?.text = _fmtQty(entry.value);
+          _touchedItemIds.add(entry.key);
         }
       });
     } on CloudApiException catch (error) {
@@ -196,7 +199,11 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               children: [
                 for (final item in items)
-                  _CountLine(item: item, controller: _controller(item)),
+                  _CountLine(
+                    item: item,
+                    controller: _controller(item),
+                    onTouched: () => setState(() => _touchedItemIds.add(item.id)),
+                  ),
               ],
             ),
           ),
@@ -293,9 +300,10 @@ class _UnmatchedBanner extends StatelessWidget {
 }
 
 class _CountLine extends StatefulWidget {
-  const _CountLine({required this.item, required this.controller});
+  const _CountLine({required this.item, required this.controller, this.onTouched});
   final InventoryItem item;
   final TextEditingController controller;
+  final VoidCallback? onTouched;
 
   @override
   State<_CountLine> createState() => _CountLineState();
@@ -303,6 +311,7 @@ class _CountLine extends StatefulWidget {
 
 class _CountLineState extends State<_CountLine> {
   String _text = '';
+  bool _touched = false;
 
   @override
   void initState() {
@@ -328,7 +337,15 @@ class _CountLineState extends State<_CountLine> {
   }
 
   void _onChanged() {
-    setState(() => _text = widget.controller.text);
+    final text = widget.controller.text.trim();
+    if (!_touched) {
+      final entered = double.tryParse(text);
+      if (entered != null && entered != widget.item.quantity) {
+        _touched = true;
+        widget.onTouched?.call();
+      }
+    }
+    setState(() => _text = text);
   }
 
   @override
@@ -336,7 +353,7 @@ class _CountLineState extends State<_CountLine> {
     final item = widget.item;
     final unit = InventoryUnits.displayLabel(item.unit, isBn: tfIsBn(context));
     final entered = double.tryParse(_text.trim());
-    final counted = entered != null && _text.trim().isNotEmpty;
+    final counted = _touched;
     final variance = entered != null && _text.trim().isNotEmpty
         ? entered - item.quantity
         : null;

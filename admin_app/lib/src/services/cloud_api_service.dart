@@ -598,6 +598,8 @@ class PhoneVerifyResult {
     this.inviteId,
     this.restaurantName,
     this.outletName,
+    this.role,
+    this.invitedBy,
   });
 
   final String status;
@@ -607,6 +609,8 @@ class PhoneVerifyResult {
   final String? inviteId;
   final String? restaurantName;
   final String? outletName;
+  final String? role;
+  final String? invitedBy;
 
   static PhoneVerifyResult fromJson(Map<String, Object?> json) {
     final data = json['data'] is Map
@@ -634,6 +638,8 @@ class PhoneVerifyResult {
         inviteId: data['inviteId']?.toString(),
         restaurantName: data['restaurantName']?.toString(),
         outletName: data['outletName']?.toString(),
+        role: data['role']?.toString(),
+        invitedBy: data['invitedBy']?.toString(),
       );
     }
     return PhoneVerifyResult(status: status);
@@ -1175,7 +1181,7 @@ class CloudApiService {
       'PATCH',
       uri,
       body: {
-        'isActive': ?isActive,
+        if (isActive != null) 'isActive': isActive,
         if (displayName?.trim().isNotEmpty == true)
           'displayName': displayName!.trim(),
       },
@@ -2113,6 +2119,34 @@ class CloudApiService {
     final data = json['data'];
     if (data is! Map) {
       throw CloudApiException('Analytics response was malformed.');
+    }
+    return Map<String, Object?>.from(data);
+  }
+
+  /// Owner QS analytics (spec Part B) — plain BD metrics: Sales Summary,
+  /// Collection, Service-wise Sales, Profit Estimation, Popular Dishes,
+  /// Item-wise. Returns the raw `data` map; the analytics screen parses it.
+  Future<Map<String, Object?>> fetchAnalyticsSummary({
+    String range = 'today',
+    String? start,
+    String? end,
+  }) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/analytics/summary',
+      queryParameters: {
+        'range': range,
+        'start': ?start,
+        'end': ?end,
+      },
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Analytics summary response was malformed.');
     }
     return Map<String, Object?>.from(data);
   }

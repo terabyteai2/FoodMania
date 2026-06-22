@@ -14,6 +14,7 @@ class MenuItem {
     required this.createdAt,
     required this.updatedAt,
     this.costPrice,
+    this.shortCode,
     this.nameEn = '',
     this.nameBn = '',
     this.descriptionEn = '',
@@ -43,6 +44,10 @@ class MenuItem {
   /// Owner-entered ingredient cost; null when unset. Drives Review-tab
   /// food-cost % / margin. Preserved on sync so it isn't wiped by round-trips.
   final double? costPrice;
+
+  /// Serial-by-default, editable short code for fast numeric item lookup in the
+  /// POS (the ⚡ search toggle). Null until the backend assigns a serial.
+  final int? shortCode;
   final String? imageUrl;
   final bool isAvailable;
   final int? preparationTimeMinutes;
@@ -67,6 +72,7 @@ class MenuItem {
     double? price,
     double? costPrice,
     bool clearCostPrice = false,
+    int? shortCode,
     String? imageUrl,
     bool? isAvailable,
     int? preparationTimeMinutes,
@@ -91,6 +97,7 @@ class MenuItem {
       categoryBn: categoryBn ?? this.categoryBn,
       price: price ?? this.price,
       costPrice: clearCostPrice ? null : costPrice ?? this.costPrice,
+      shortCode: shortCode ?? this.shortCode,
       imageUrl: imageUrl ?? this.imageUrl,
       isAvailable: isAvailable ?? this.isAvailable,
       preparationTimeMinutes:
@@ -118,6 +125,7 @@ class MenuItem {
       'categoryBn': categoryBn,
       'price': price,
       'costPrice': costPrice,
+      'shortCode': shortCode,
       'imageUrl': imageUrl,
       'isAvailable': isAvailable ? 1 : 0,
       'preparationTimeMinutes': preparationTimeMinutes,
@@ -144,6 +152,7 @@ class MenuItem {
       'categoryBn': categoryBn,
       'price': price,
       'costPrice': costPrice,
+      'shortCode': shortCode,
       'imageUrl': imageUrl,
       'isAvailable': isAvailable,
       'preparationTimeMinutes': preparationTimeMinutes,
@@ -174,6 +183,7 @@ class MenuItem {
       categoryBn: _text(map['categoryBn']) ?? _splitLegacy(category).$2,
       price: (map['price'] as num).toDouble(),
       costPrice: (map['costPrice'] as num?)?.toDouble(),
+      shortCode: (map['shortCode'] as num?)?.toInt(),
       imageUrl: map['imageUrl'] as String?,
       isAvailable: _decodeBool(map['isAvailable']),
       preparationTimeMinutes: map['preparationTimeMinutes'] as int?,

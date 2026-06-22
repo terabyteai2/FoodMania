@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
@@ -165,79 +166,82 @@ class _AuditRow extends StatelessWidget {
       if (roleLabel.isNotEmpty) roleLabel,
       text.agoMinutes(mins < 0 ? 0 : mins),
     ];
-    return TfCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: tone.soft,
-              borderRadius: BorderRadius.circular(PosRadii.tag),
-            ),
-            child: TfText(
-              text.isBn ? entry.action.labelBn : entry.action.label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: tone.fg,
-                letterSpacing: 0.3,
+    return GestureDetector(
+      onTap: () => _showAuditDetail(context, entry, text),
+      child: TfCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: tone.soft,
+                borderRadius: BorderRadius.circular(PosRadii.tag),
+              ),
+              child: TfText(
+                text.isBn ? entry.action.labelBn : entry.action.label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: tone.fg,
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(
-                  entry.orderSerial != null
-                      ? text.auditOrderRef(entry.orderSerial!)
-                      : (text.isBn ? entry.action.labelBn : entry.action.label),
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.text,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                TfText(
-                  metaParts.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: PosColors.muted,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if ((entry.reason ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 5),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   TfText(
-                    entry.reason!.trim(),
+                    entry.orderSerial != null
+                        ? text.auditOrderRef(entry.orderSerial!)
+                        : (text.isBn ? entry.action.labelBn : entry.action.label),
                     style: const TextStyle(
-                      fontSize: 13,
-                      color: PosColors.textSec,
-                      height: 1.35,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: PosColors.text,
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  TfText(
+                    metaParts.join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: PosColors.muted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if ((entry.reason ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    TfText(
+                      entry.reason!.trim(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: PosColors.textSec,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          if (entry.amount != null) ...[
-            const SizedBox(width: 10),
-            TfText(
-              tfFormatCurrency(context, entry.amount!),
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: PosColors.text,
-                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
+            if (entry.amount != null) ...[
+              const SizedBox(width: 10),
+              TfText(
+                tfFormatCurrency(context, entry.amount!),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: PosColors.text,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -255,6 +259,220 @@ class _AuditRow extends StatelessWidget {
       case AuditAction.unknown:
         return const _Tone(PosColors.muted, PosColors.surfaceSunk);
     }
+  }
+}
+
+void _showAuditDetail(BuildContext context, AuditEntry entry, AppStrings text) {
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => _AuditDetailSheet(entry: entry, text: text),
+  );
+}
+
+class _AuditDetailSheet extends StatelessWidget {
+  const _AuditDetailSheet({required this.entry, required this.text});
+
+  final AuditEntry entry;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _tone(entry.action);
+    final who = (entry.who ?? '').trim().isEmpty
+        ? text.auditUnknownWho
+        : entry.who!.trim();
+    final roleLabel = (entry.role ?? '').trim();
+    final ts = DateFormat('MMM d, yyyy · h:mm a').format(entry.createdAt);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: PosColors.lineStrong,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tone.soft,
+                      borderRadius: BorderRadius.circular(PosRadii.tag),
+                    ),
+                    child: TfText(
+                      text.isBn ? entry.action.labelBn : entry.action.label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: tone.fg,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  TfText(
+                    entry.orderSerial != null
+                        ? text.auditOrderRef(entry.orderSerial!)
+                        : (text.isBn ? entry.action.labelBn : entry.action.label),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: PosColors.text,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _DetailSection(label: text.isBn ? 'কে' : 'Who', children: [
+                _DetailRow(
+                  label: text.isBn ? 'নাম' : 'Name',
+                  value: who,
+                ),
+                if (roleLabel.isNotEmpty)
+                  _DetailRow(label: 'Role', value: roleLabel),
+                _DetailRow(
+                  label: text.isBn ? 'সময়' : 'Time',
+                  value: ts,
+                ),
+              ]),
+              if (entry.amount != null || (entry.reason ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _DetailSection(
+                  label: text.isBn ? 'বিবরণ' : 'Details',
+                  children: [
+                    if (entry.amount != null)
+                      _DetailRow(
+                        label: 'Amount',
+                        value: tfFormatCurrency(context, entry.amount!),
+                      ),
+                    if ((entry.reason ?? '').trim().isNotEmpty)
+                      _DetailRow(
+                        label: text.isBn ? 'কারণ' : 'Reason',
+                        value: entry.reason!.trim(),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static _Tone _tone(AuditAction a) {
+    switch (a) {
+      case AuditAction.void_:
+        return const _Tone(PosColors.danger, PosColors.dangerSoft);
+      case AuditAction.refund:
+        return const _Tone(PosColors.warning, PosColors.warningSoft);
+      case AuditAction.comp:
+        return const _Tone(PosColors.info, PosColors.infoSoft);
+      case AuditAction.discount:
+        return const _Tone(PosColors.accentStrong, PosColors.accentSoft);
+      case AuditAction.unknown:
+        return const _Tone(PosColors.muted, PosColors.surfaceSunk);
+    }
+  }
+}
+
+class _DetailSection extends StatelessWidget {
+  const _DetailSection({required this.label, required this.children});
+
+  final String label;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TfText(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: PosColors.muted,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: PosColors.surfaceSunk,
+            borderRadius: BorderRadius.circular(PosRadii.card),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: TfText(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: PosColors.muted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TfText(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: PosColors.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

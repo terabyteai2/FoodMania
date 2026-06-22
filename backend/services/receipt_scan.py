@@ -577,9 +577,34 @@ async def _extract_page_ocr_json(
 
 async def extract_receipt_page_texts(pages: list[tuple[bytes, str]]) -> list[str]:
     async with httpx.AsyncClient(timeout=OCR_TIMEOUT_SECONDS) as client:
-        return await asyncio.gather(
+        results = await asyncio.gather(
             *[
                 _extract_page_ocr_json(client, image_bytes, content_type)
                 for image_bytes, content_type in pages
-            ]
+            ],
+            return_exceptions=True,
         )
+
+    # A single unreadable page (a blank back, a blurry shot, a transient OCR
+    # error) must not sink the whole multi-image scan. Keep every page that read
+    # cleanly and only fail when nothing was readable.
+    texts: list[str] = []
+    first_error: BaseException | None = None
+    for index, result in enumerate(results):
+        if isinstance(result, BaseException):
+            logger.warning(
+                "receipt scan ocr page failed page=%s of=%s error=%s",
+                index + 1,
+                len(results),
+                result,
+            )
+            if first_error is None:
+                first_error = result
+            continue
+        texts.append(result)
+
+    if not texts:
+        if first_error is not None:
+            raise first_error
+        raise ReceiptScanError("OCR.space found no readable receipt text.")
+    return texts

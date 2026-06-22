@@ -14,7 +14,6 @@ import '../messaging/messages_screen.dart';
 import '../staff/staff_screen.dart';
 import '../menu/menu_management_screen.dart';
 import '../settings/settings_screen.dart';
-import '../tables/tables_screen.dart';
 
 /// QuickBytes "More" hub — shared secondary navigation across all roles
 /// (spec §14). Profile + demo role switcher, messaging link, role-gated manage
@@ -270,11 +269,8 @@ class _ManageGroup extends StatelessWidget {
     }
 
     if (app.canManageStock) {
-      add(
-        Icons.table_restaurant_outlined,
-        text.tables,
-        TablesScreen(onNavigateToOrders: onNavigateToOrders),
-      );
+      // Tables now lives in the bottom nav for every role, so it's not repeated
+      // here. Menu moved out of the bottom nav into this hub (spec nav change).
       add(
         Icons.restaurant_menu_outlined,
         text.menu,

@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 
 from services import receipt_scan
@@ -162,6 +163,76 @@ def test_receipt_scan_normalize_unit_accepts_aliases():
     assert receipt_scan._normalize_unit("packet") == "pcs"  # not in alias map → pcs default
     assert receipt_scan._normalize_unit("pack") == "pack"
     assert receipt_scan._normalize_unit("") == "pcs"
+
+
+@pytest.mark.asyncio
+async def test_receipt_scan_ocr_keeps_good_pages_when_one_page_fails(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if b"bad" in request.content:
+            return httpx.Response(
+                200,
+                json={
+                    "IsErroredOnProcessing": True,
+                    "ErrorMessage": "unreadable",
+                    "ParsedResults": [],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "ParsedResults": [
+                    {"FileParseExitCode": 1, "ParsedText": "Chicken 15kg 6300"}
+                ],
+                "IsErroredOnProcessing": False,
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*, timeout):
+        return real_async_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(receipt_scan.settings, "OCR_SPACE_API_KEY", "ocr-space-test")
+    monkeypatch.setattr(receipt_scan.httpx, "AsyncClient", mock_client)
+
+    texts = await receipt_scan.extract_receipt_page_texts(
+        [(b"good", "image/png"), (b"bad", "image/png")]
+    )
+
+    assert len(texts) == 1
+    assert json.loads(texts[0])["ParsedResults"][0]["ParsedText"] == "Chicken 15kg 6300"
+
+
+@pytest.mark.asyncio
+async def test_receipt_scan_ocr_raises_when_every_page_fails(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "IsErroredOnProcessing": True,
+                "ErrorMessage": "unreadable",
+                "ParsedResults": [],
+            },
+        )
+
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*, timeout):
+        return real_async_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+        )
+
+    monkeypatch.setattr(receipt_scan.settings, "OCR_SPACE_API_KEY", "ocr-space-test")
+    monkeypatch.setattr(receipt_scan.httpx, "AsyncClient", mock_client)
+
+    with pytest.raises(receipt_scan.ReceiptScanError):
+        await receipt_scan.extract_receipt_page_texts(
+            [(b"a", "image/png"), (b"b", "image/png")]
+        )
 
 
 def test_receipt_scan_uses_json_object_mode_for_groq():

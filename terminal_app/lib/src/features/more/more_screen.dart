@@ -11,6 +11,7 @@ import '../../models/account_role.dart';
 import '../../models/pos_notification.dart';
 import '../messaging/messages_screen.dart';
 import '../settings/settings_screen.dart';
+import '../tables/tables_screen.dart';
 
 /// Terminal "More" hub — profile, Messenger takeover link, Settings
 /// (printer/cloud), the service-mode toggle and the language quick toggle.
@@ -197,6 +198,11 @@ class _ManageGroup extends StatelessWidget {
     }
 
     if (app.canManageSettings) {
+      add(
+        Icons.table_restaurant_outlined,
+        text.tables,
+        TablesScreen(onNavigateToOrders: onNavigateToOrders),
+      );
       add(
         Icons.settings_outlined,
         text.settings,

@@ -2425,43 +2425,7 @@ class PrinterService {
       throw PrinterException('Bluetooth printing is not supported here.');
     }
     if (Platform.isAndroid) {
-      final alreadyGranted =
-          await PrintBluetoothThermal.isPermissionBluetoothGranted;
-      if (kDebugMode) {
-        debugPrint(
-          '[QB-PRINTER-DIAG] $attemptId '
-          'isPermissionBluetoothGranted=$alreadyGranted',
-        );
-      }
-      if (!alreadyGranted) {
-        final statuses = await [
-          Permission.bluetoothConnect,
-          Permission.bluetoothScan,
-        ].request();
-        if (kDebugMode) {
-          debugPrint(
-            '[QB-PRINTER-DIAG] $attemptId permission request results: '
-            'bluetoothConnect=${statuses[Permission.bluetoothConnect]} '
-            'bluetoothScan=${statuses[Permission.bluetoothScan]}',
-          );
-        }
-        final granted = statuses.values.every((status) => status.isGranted);
-        if (kDebugMode) {
-          debugPrint(
-            '[QB-PRINTER-DIAG] $attemptId all permissions granted=$granted',
-          );
-        }
-        if (!granted) {
-          if (kDebugMode) {
-            debugPrint(
-              '[QB-PRINTER-DIAG] $attemptId '
-              'THROW "Bluetooth permission is required." — '
-              'one or more of BLUETOOTH_CONNECT/BLUETOOTH_SCAN was not granted',
-            );
-          }
-          throw PrinterException('Bluetooth permission is required.');
-        }
-      }
+      await _requestBluetoothPermission(attemptId: attemptId);
     }
     final enabled = await PrintBluetoothThermal.bluetoothEnabled;
     if (kDebugMode) {
@@ -2469,6 +2433,45 @@ class PrinterService {
     }
     if (!enabled) {
       throw PrinterException('Turn on Bluetooth first.');
+    }
+  }
+
+  Future<void> _requestBluetoothPermission({String? attemptId}) async {
+    final id = attemptId ?? _nextPrinterAttempt('request-bt-permission');
+    void log(String message) {
+      if (kDebugMode) {
+        debugPrint('[QB-PRINTER-DIAG] $id $message');
+      }
+    }
+
+    var connectStatus = await Permission.bluetoothConnect.status;
+    var scanStatus = await Permission.bluetoothScan.status;
+
+    log('initial: connect=$connectStatus scan=$scanStatus');
+
+    if (connectStatus.isGranted && scanStatus.isGranted) return;
+
+    if (connectStatus.isPermanentlyDenied || scanStatus.isPermanentlyDenied) {
+      log('permanently denied — redirecting to settings');
+      await openAppSettings();
+      throw PrinterException(
+        'Bluetooth permission was permanently denied. '
+        'Please enable it in Settings > Nearby devices.',
+      );
+    }
+
+    log('requesting…');
+    final statuses = await [
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+    ].request();
+
+    connectStatus = statuses[Permission.bluetoothConnect] ?? connectStatus;
+    scanStatus = statuses[Permission.bluetoothScan] ?? scanStatus;
+    log('result: connect=$connectStatus scan=$scanStatus');
+
+    if (!connectStatus.isGranted || !scanStatus.isGranted) {
+      throw PrinterException('Bluetooth permission is required.');
     }
   }
 

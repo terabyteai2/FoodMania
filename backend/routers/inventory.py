@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 
 ADJUSTMENT_TYPES = {"restock", "usage", "waste", "correction"}
 
+# Multi-image stock / count scans are bounded so a single upload can't fan out
+# an unbounded number of concurrent OCR requests. Mirrors the menu-scan caps.
+MAX_INVENTORY_SCAN_PAGES = 6
+MAX_INVENTORY_SCAN_PAGE_BYTES = 1200 * 1024
+
 # Run on Bangladesh local time so "today's spend / variance" matches the wall clock.
 BDT_OFFSET = timedelta(hours=6)
 VARIANCE_TOLERANCE = 0.05  # ignore tiny rounding noise below 5% of a unit
@@ -1094,6 +1099,11 @@ async def scan_inventory(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Select at least one image.",
         )
+    if len(files) > MAX_INVENTORY_SCAN_PAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Select up to {MAX_INVENTORY_SCAN_PAGES} images at a time.",
+        )
 
     requested_category = (category or "").strip().lower() or None
     if requested_category is not None and requested_category not in {"stock_in", "count"}:
@@ -1115,6 +1125,14 @@ async def scan_inventory(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{upload.filename or 'Uploaded file'} is empty.",
+            )
+        if len(data) > MAX_INVENTORY_SCAN_PAGE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"{upload.filename or 'Uploaded file'} is too large. "
+                    "Choose a compressed photo."
+                ),
             )
         pages.append((data, content_type))
 

@@ -219,23 +219,23 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
 // slots; the per-role lists below choose which tabs show and in what order.
 enum _AppTab { analytics, live, tables, orders, stock, more, menu }
 
-// Owner: Analytics · Menu · Orders · Stock · More
+// Owner: Analytics · Tables · Orders · Stock · More (Menu lives in More)
 const _ownerTabOrder = <_AppTab>[
   _AppTab.analytics,
-  _AppTab.menu,
+  _AppTab.tables,
   _AppTab.orders,
   _AppTab.stock,
   _AppTab.more,
 ];
-// Manager: Live (Control Tower) · Menu · Orders · Stock · More
+// Manager: Live (Control Tower) · Tables · Orders · Stock · More
 const _managerTabOrder = <_AppTab>[
   _AppTab.live,
-  _AppTab.menu,
+  _AppTab.tables,
   _AppTab.orders,
   _AppTab.stock,
   _AppTab.more,
 ];
-// Waiter: Tables · Orders · More (Tables stays for waiters)
+// Waiter: Tables · Orders · More
 const _waiterTabOrder = <_AppTab>[_AppTab.tables, _AppTab.orders, _AppTab.more];
 
 List<_AppTab> _tabOrderForRole(AccountRole role) {
@@ -481,7 +481,16 @@ class _MainShellState extends State<MainShell> {
         _selectTab(_AppTab.stock);
         return;
       case PosNotificationTarget.menu:
-        _selectTab(_AppTab.menu);
+        // Menu moved out of the bottom nav into the More hub — deep-link pushes
+        // the management screen rather than switching a tab (manager+ only).
+        if (AppScope.of(context).accountRole.isManager) {
+          _pushScreen(
+            MenuManagementScreen(
+              onNavigateToOrders: () => _selectTab(_AppTab.orders),
+              onNavigateToTarget: _navigateNotificationTarget,
+            ),
+          );
+        }
         return;
       case PosNotificationTarget.receiptPrinter:
         // Settings (incl. receipt printer) is now embedded in the Settings
@@ -874,7 +883,7 @@ class _RailLogo extends StatelessWidget {
         borderRadius: BorderRadius.circular(PosRadii.md),
         boxShadow: PosShadows.glow,
       ),
-      child: Icon(Icons.whatshot_rounded, color: PosColors.slate, size: 24),
+      child: Icon(Icons.bolt_rounded, color: PosColors.accentInk, size: 24),
     );
     if (!extended) return mark;
     return Row(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/screen_blocker.dart';
 import '../../core/widgets/tf_design_system.dart';
 
 class StaffInviteScreen extends StatefulWidget {
@@ -48,75 +49,55 @@ class _StaffInviteScreenState extends State<StaffInviteScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      backgroundColor: PosColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(flex: 2),
-              const Icon(
-                Icons.storefront_rounded,
-                size: 56,
-                color: PosColors.primaryDark,
-              ),
-              const SizedBox(height: 24),
-              TfText(
-                '${invite.restaurantName} wants to add you as staff',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w500,
-                  color: PosColors.slate,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TfText(
-                'Outlet: ${invite.outletName}\nPhone: ${invite.phone}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: PosColors.muted,
-                  height: 1.4,
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 20),
-                TfCard(
-                  padding: const EdgeInsets.all(12),
-                  color: PosColors.dangerSoft,
-                  child: TfText(
-                    _error!,
-                    style: const TextStyle(
-                      color: PosColors.danger,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-              const Spacer(flex: 3),
-              TfButton(
-                label: 'Accept',
-                busy: _busy,
-                size: TfButtonSize.lg,
-                onPressed: () => _respond(accept: true),
-              ),
-              const SizedBox(height: 12),
-              TfButton(
-                label: 'Decline',
-                variant: TfButtonVariant.paper,
-                size: TfButtonSize.lg,
-                onPressed: _busy ? null : () => _respond(accept: false),
-              ),
-              const Spacer(flex: 1),
-            ],
+    final roleLabel = invite.role == 'manager' ? 'Manager' : 'Staff';
+    final inviter = invite.invitedBy?.trim().isNotEmpty == true
+        ? invite.invitedBy!
+        : 'Someone';
+
+    return ScreenBlocker(
+      body: Column(
+        children: [
+          const Icon(
+            Icons.storefront_rounded,
+            size: 56,
+            color: PosColors.primaryDark,
           ),
-        ),
+          const SizedBox(height: 24),
+          TfText(
+            '$inviter has invited you to become a $roleLabel of ${invite.restaurantName}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: PosColors.slate,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TfText(
+            'Outlet: ${invite.outletName}\nPhone: ${invite.phone}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              color: PosColors.muted,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
+      error: _error,
+      actions: [
+        ScreenBlockerAction(
+          label: 'Accept',
+          busy: _busy,
+          onPressed: () => _respond(accept: true),
+        ),
+        ScreenBlockerAction(
+          label: 'Decline',
+          variant: TfButtonVariant.paper,
+          onPressed: _busy ? null : () => _respond(accept: false),
+        ),
+      ],
     );
   }
 }

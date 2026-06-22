@@ -756,9 +756,15 @@ async def _handle_event(
         return
     text = _event_text(message, postback)
 
-    # Let the bot handle non-text messages by passing a placeholder
+    # The LLM is text-only and cannot see images, videos, files, or shared
+    # posts/links. Describe any attachment in words so both the manager (in the
+    # Messages UI) and the LLM (in history) know what arrived. Combine it with
+    # the customer's own text so a "is this available?" + photo stays intact.
+    attachment_note = _describe_attachments(message)
+    if attachment_note:
+        text = f"{text} {attachment_note}".strip() if text else attachment_note
     if not text:
-        text = "[User sent a non-text message like sticker or image]"
+        text = "[Customer sent a non-text message]"
 
     conversation = await _get_conversation(db, integration, psid)
     conversation.last_user_message = text
@@ -802,6 +808,59 @@ def _event_text(message: dict | None, postback: dict | None) -> str:
     return str(message.get("text") or "").strip()
 
 
+def _describe_attachments(message: dict | None) -> str:
+    """Turn Facebook message attachments into a short text note.
+
+    The LLM cannot see media, so we record what kind of attachment arrived (and
+    a URL for the manager to open where Facebook provides one). The bot uses this
+    to decide whether to escalate; the manager uses it to know an image/post was
+    sent and to describe it back into the conversation.
+    """
+    if not message:
+        return ""
+    attachments = message.get("attachments")
+    if not isinstance(attachments, list) or not attachments:
+        return ""
+
+    notes: list[str] = []
+    for attachment in attachments:
+        if not isinstance(attachment, dict):
+            continue
+        a_type = str(attachment.get("type") or "").strip().lower()
+        payload = attachment.get("payload") if isinstance(attachment.get("payload"), dict) else {}
+        url = str(payload.get("url") or attachment.get("url") or "").strip()
+        title = str(attachment.get("title") or payload.get("title") or "").strip()
+        if a_type == "image":
+            # Stickers also arrive as images; they carry a sticker_id.
+            if payload.get("sticker_id") or message.get("sticker_id"):
+                notes.append("[Customer sent a sticker]")
+            else:
+                notes.append(_media_note("an image the bot cannot see", url))
+        elif a_type == "video":
+            notes.append(_media_note("a video the bot cannot see", url))
+        elif a_type == "audio":
+            notes.append(_media_note("a voice/audio message the bot cannot hear", url))
+        elif a_type == "file":
+            notes.append(_media_note("a file the bot cannot read", url))
+        elif a_type == "location":
+            notes.append("[Customer shared a location]")
+        else:
+            # "fallback" = a shared Facebook post or external link.
+            shared = " ".join(part for part in (title, url) if part).strip()
+            notes.append(
+                f"[Customer shared a post/link the bot cannot open: {shared}]"
+                if shared
+                else "[Customer shared a post/link the bot cannot open]"
+            )
+    return " ".join(notes).strip()
+
+
+def _media_note(what: str, url: str) -> str:
+    if url:
+        return f"[Customer sent {what} — view it in the Page inbox: {url}]"
+    return f"[Customer sent {what} — view it in the Page inbox]"
+
+
 async def _get_conversation(
     db: AsyncSession,
     integration: ChatbotIntegration,
@@ -837,6 +896,11 @@ def _restaurant_context(
         "restaurantName": outlet.restaurant.name if outlet.restaurant else outlet.name,
         "outletName": outlet.name,
         "orderingEnabled": ordering_enabled,
+        # Pricing rules so the bot can quote an accurate total in its cart
+        # summary. The backend stays the source of truth at order creation
+        # (see delivery_order_totals / create_delivery_order).
+        "vatRatePercent": 5.0,
+        "deliveryCharge": float(outlet.delivery_charge or 0),
         "menu": [
             {
                 "id": item.id,
@@ -1241,9 +1305,13 @@ async def _process_batch(batch: list[dict]) -> None:
                 )
                 conv.state_json = state
 
+                # Only these two events need data the bot couldn't know when it
+                # wrote its reply (the real order number/total, or which item just
+                # went unavailable), so they get a history-aware final phrasing.
+                # For missing_details / needs_confirmation / order_cancelled the
+                # bot already wrote a natural reply with full context — use it.
                 if system_event and system_event.get("type") in (
-                    "order_created", "validation_failed", "missing_details",
-                    "needs_confirmation", "order_cancelled"
+                    "order_created", "validation_failed",
                 ):
                     conv.state_json["systemEvent"] = system_event
                     conversations_needing_final_reply.append(conv)
@@ -1319,6 +1387,9 @@ async def _generate_final_replies_batch(
             ),
             "systemEvent": system_event,
             "conversationState": state,
+            "history": recent_chat_history(
+                conv.history_json, limit=CHAT_HISTORY_CONTEXT_LIMIT
+            ),
         })
     
     try:
@@ -1415,39 +1486,67 @@ def _batched_system_prompt() -> str:
         "2. BATCH PROCESSING: You will receive a JSON object containing an array of independent "
         "\"conversations\". You MUST process EVERY conversation in the array and return a response "
         "for EACH one. Do not mix up the context between different conversations.\n"
-        "3. CONTEXT: For each conversation, you are provided with the \"restaurant\" menu, the "
-        "current \"conversationState\" (cart/details), the \"history\" (last 10 messages), and the "
-        "latest \"customerMessage\". Use the history to understand the flow of the specific "
-        "conversation.\n\n"
+        "3. CONTEXT: For each conversation, you are provided with the \"restaurant\" (menu plus "
+        "vatRatePercent and deliveryCharge), the current \"conversationState\" (cart/details), the "
+        "\"history\" (last 10 messages), and the latest \"customerMessage\". Use the history to "
+        "understand the flow of the specific conversation.\n\n"
+        "### HISTORY ROLES\n"
+        "- Each history entry has a \"role\": \"user\" (the customer), \"bot\" (you), \"manager\" "
+        "(a human staff member), or \"system\" (internal notes).\n"
+        "- \"manager\" messages are AUTHORITATIVE human notes. Trust them completely and act on "
+        "them: they tell you what is available, real prices, current offers/deals, and what an "
+        "image or shared post the customer sent actually is. If a manager said something is "
+        "available or described a dish/offer, treat it as ground truth and help the customer "
+        "accordingly (e.g. add that item, apply that offer).\n\n"
+        "### IMAGES, POSTS & ATTACHMENTS\n"
+        "- You are TEXT-ONLY. You cannot see images, photos, videos, files, or shared posts/links. "
+        "These arrive in the message as a bracketed note like '[Customer sent an image the bot "
+        "cannot see ...]'.\n"
+        "- If the customer shares such media AND their request depends on its content (e.g. \"এটা "
+        "আছে?\", \"is this available?\", \"how much is this?\") AND there is NO \"manager\" note in "
+        "the history that already explains it, then ESCALATE (see below) with reason "
+        "\"photo_request\". Do NOT guess what the image shows.\n"
+        "- If a \"manager\" note in the history already explains the image/post, use that note to "
+        "answer and continue normally. Do NOT escalate again.\n"
+        "- A pure sticker, emoji, or thumbs-up needs no escalation — just reply naturally.\n\n"
         "### MENU & GENERAL CHAT\n"
         "- Answer questions about menu items, prices, categories, or the restaurant naturally.\n"
         "- If the customer goes off-topic, respond naturally in Bangla while preserving their "
-        "current order state.\n"
-        "- If the customerMessage is '[User sent a non-text message like sticker or image]', "
-        "politely ask them to send a text message so you can help them.\n\n"
+        "current order state.\n\n"
         "### ORDERING RULES (Delivery Only)\n"
+        "- You OWN the whole ordering conversation. Using the menu, conversationState, and history, "
+        "YOU collect everything and write every message yourself in \"reply\".\n"
         "- Goal: Collect menu items (with quantities), customerName, mobileNumber, and "
         "deliveryAddress.\n"
         "- Items: Customers can add, remove, or change items freely. \n"
         "- Quantities: MANDATORY. You must ensure every item has a quantity. If the user doesn't "
         "specify, assume 1 or ask politely, but the final JSON must always have a valid integer "
         "for \"qty\".\n"
-        "- Customer Details: You must collect all three details (name, mobile, address). \n"
+        "- Customer Details: Politely ask for any of the three details (name, mobile, address) "
+        "that are still missing in conversationState. Ask naturally in your \"reply\".\n"
         "- Confirmation: Once you have AT LEAST ONE item AND all three customer details, "
-        "summarize the cart in Bangla and ask the customer to confirm. \n"
+        "summarize the cart in Bangla in your \"reply\" and ask the customer to confirm. Compute "
+        "the total as (sum of price×qty) + vatRatePercent% VAT + deliveryCharge so it matches "
+        "the final bill. \n"
         "- Affirmative: If they reply with an affirmative (e.g., \"হ্যাঁ\", \"yes\", \"confirm\", "
-        "\"ঠিক আছে\"), set order.intent to \"confirm\" and order.confirmed to true.\n"
-        "- Cancellation: If they want to cancel, set order.intent to \"cancel\".\n\n"
+        "\"ঠিক আছে\"), set order.intent to \"confirm\" and order.confirmed to true and write a warm "
+        "\"reply\" confirming you are placing it (the system adds the order number after).\n"
+        "- Cancellation: If they want to cancel, set order.intent to \"cancel\" and acknowledge it "
+        "in your \"reply\".\n\n"
         "### ESCALATION (hand off to a human manager)\n"
         "- Some requests you CANNOT reliably fulfill. When the customer asks for any of the "
         "following, you MUST escalate to a human instead of guessing or refusing:\n"
-        "  1. A photo/image of a specific dish (e.g. \"ছবি দেখান\", \"photo\", \"কেমন দেখতে\").\n"
-        "  2. A delivery charge/quote for a far or unknown area you have no fixed price for.\n"
-        "  3. Catering, bulk, event, or custom orders (large party, special menu).\n"
+        "  1. Anything about an image/photo/video/post the customer sent that you cannot see (see "
+        "IMAGES section) — reason \"photo_request\".\n"
+        "  2. A delivery charge/quote for a far or unknown area you have no fixed price for — "
+        "reason \"delivery_quote\".\n"
+        "  3. Catering, bulk, event, or custom orders (large party, special menu) — reason "
+        "\"catering\".\n"
         "- To escalate: set \"escalate\".\"needed\" to true with the matching \"reason\", and write a "
         "short, warm holding \"reply\" in Bangla telling the customer you're checking with the team "
         "and will get back shortly. Do NOT invent a photo, price, or promise.\n"
-        "- For anything you can answer normally, set \"escalate\".\"needed\" to false.\n\n"
+        "- For anything you can answer normally (including when a manager note already covers it), "
+        "set \"escalate\".\"needed\" to false.\n\n"
         "### OUTPUT FORMAT\n"
         "You MUST return ONLY a valid JSON object. No markdown formatting (no ```json), no "
         "explanations, no extra text. \n"
@@ -1482,12 +1581,11 @@ def _final_reply_system_prompt() -> str:
         "You are generating the final text reply for a Facebook Messenger restaurant bot. "
         "The system has processed the user's intent and updated the conversation state. "
         "You MUST reply in conversational Bangla using the Bangla alphabet. Be warm, friendly, and brief.\n\n"
+        "Each input item includes the recent 'history' (last 10 messages, with roles "
+        "user/bot/manager/system). Match the tone and continue naturally from that history.\n\n"
         "Based on the 'systemEvent' in the input, generate the appropriate message:\n"
         "- 'order_created': Congratulate the user, mention the order number (orderNumber) and total amount (totalAmount).\n"
-        "- 'order_cancelled': Confirm that the draft order was cancelled.\n"
-        "- 'validation_failed': Inform the user that some items are unavailable (reason) and ask them to choose again.\n"
-        "- 'missing_details': Politely ask for the missing customer details listed in 'missing' (e.g., customerName, mobileNumber, deliveryAddress).\n"
-        "- 'needs_confirmation': Summarize the cart items and total from the event, and ask the user to confirm the order.\n\n"
+        "- 'validation_failed': Inform the user that some items are unavailable (reason) and ask them to choose again.\n\n"
         "Return ONLY a JSON object with a 'responses' array: \n"
         "{\"responses\": [{\"id\": \"<conversation id>\", \"reply\": \"<your Bangla reply>\"}]}"
     )

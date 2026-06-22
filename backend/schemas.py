@@ -186,6 +186,7 @@ class MenuItemPayload(BaseModel):
     descriptionBn: str | None = None
     price: float
     costPrice: float | None = None
+    shortCode: int | None = None
     category: str | None = None
     categoryEn: str | None = None
     categoryBn: str | None = None

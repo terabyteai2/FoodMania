@@ -73,7 +73,8 @@ class _ReceiptLabels {
 
   String get managerCopy => _bn ? 'ম্যানেজার কপি' : 'Manager Copy';
   String get customerCopy => _bn ? 'কাস্টমার কপি' : 'Customer Copy';
-  String orderNo(String seq) => digits(seq);
+  String get orderNoLabel => _bn ? 'অর্ডার নং:' : 'Order No:';
+  String orderNo(String seq) => '$orderNoLabel ${digits(seq)}';
   String tableLabel(String t) => _bn ? 'টেবিল ${digits(t)}' : 'Table $t';
   String get takeaway => _bn ? 'টেকওয়ে' : 'Takeaway';
   String get nameLabel => _bn ? 'নাম' : 'Name';

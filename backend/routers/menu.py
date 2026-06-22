@@ -10,7 +10,7 @@ from PIL import Image
 
 import pydantic
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import storage
@@ -74,6 +74,7 @@ def _item_to_dict(item: MenuItem) -> dict:
         "descriptionBn": item.description_bn or "",
         "price": float(item.price),
         "costPrice": float(item.cost_price) if item.cost_price is not None else None,
+        "shortCode": item.short_code,
         "category": item.category,
         "categoryEn": item.category_en or item.category or "General",
         "categoryBn": item.category_bn or "",
@@ -111,6 +112,10 @@ def _apply_menu_payload(
     item.description_bn = description_bn
     item.price = body.price
     item.cost_price = body.costPrice
+    # Short code is editable; only overwrite when the client sends one so a
+    # missing value never wipes an existing/auto-assigned code.
+    if body.shortCode is not None:
+        item.short_code = body.shortCode
     item.category = category_en
     item.category_en = category_en
     item.category_bn = category_bn
@@ -122,6 +127,15 @@ def _apply_menu_payload(
     item.version = max(item.version, body.version)
     item.updated_at = datetime.now(timezone.utc)
     item.deleted_at = None
+
+
+async def _next_short_code(db: AsyncSession, outlet_id: str) -> int:
+    """Next serial short code for an outlet — max existing + 1, starting at 1."""
+    result = await db.execute(
+        select(func.max(MenuItem.short_code)).where(MenuItem.outlet_id == outlet_id)
+    )
+    current_max = result.scalar_one_or_none()
+    return (current_max or 0) + 1
 
 
 def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
@@ -214,6 +228,8 @@ async def push_menu_item(
     if existing:
         existing.outlet_id = outlet_id
         _apply_menu_payload(existing, body, image_url)
+        if existing.short_code is None:
+            existing.short_code = await _next_short_code(db, outlet_id)
         await db.commit()
         await db.refresh(existing)
         await manager.broadcast(outlet_id, {"type": "menu_updated", "data": _item_to_dict(existing)})
@@ -226,6 +242,8 @@ async def push_menu_item(
         updated_at=datetime.now(timezone.utc),
     )
     _apply_menu_payload(item, body, image_url)
+    if item.short_code is None:
+        item.short_code = await _next_short_code(db, outlet_id)
     db.add(item)
     await db.commit()
     await db.refresh(item)

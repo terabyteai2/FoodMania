@@ -540,6 +540,146 @@ async def test_batched_llm_receives_recent_ten_without_truncating_db(monkeypatch
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_records_image_attachment_note_with_customer_text(monkeypatch):
+    page_id = f"attach-page-{uuid.uuid4()}"
+
+    async def fake_resolve(_token: str):
+        return {"pageId": page_id, "pageName": "Attach Page"}
+
+    async def fake_broadcast(_outlet_id: str, _payload: dict):
+        return None
+
+    monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_SECRET", "")
+    monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
+    monkeypatch.setattr(facebook_chatbot.manager, "broadcast", fake_broadcast)
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-attach")
+        saved = await client.put(
+            "/admin/chatbot/facebook",
+            headers=headers,
+            json={"pageAccessToken": "page-token", "isEnabled": True, "orderingEnabled": True},
+        )
+        assert saved.status_code == 200
+        webhook = await client.post(
+            "/webhooks/facebook",
+            json={
+                "object": "page",
+                "entry": [
+                    {
+                        "id": page_id,
+                        "messaging": [
+                            {
+                                "sender": {"id": "psid-attach"},
+                                "message": {
+                                    "text": "is this available?",
+                                    "attachments": [
+                                        {
+                                            "type": "image",
+                                            "payload": {"url": "https://cdn.fb/img.jpg"},
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+    assert webhook.status_code == 200
+    async with AsyncSessionLocal() as db:
+        conv = (
+            await db.execute(
+                select(ChatbotConversation).where(
+                    ChatbotConversation.psid == "psid-attach"
+                )
+            )
+        ).scalar_one()
+    assert conv.last_user_message.startswith("is this available?")
+    assert "the bot cannot see" in conv.last_user_message
+    assert "https://cdn.fb/img.jpg" in conv.last_user_message
+    user_entries = [e for e in conv.history_json if e.get("role") == "user"]
+    assert user_entries[-1]["text"] == conv.last_user_message
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_batched_llm_receives_manager_note_in_history(monkeypatch):
+    page_id = f"mgr-note-page-{uuid.uuid4()}"
+    captured = {}
+
+    async def fake_resolve(_token: str):
+        return {"pageId": page_id, "pageName": "Manager Note Page"}
+
+    async def fake_call(conversations, _system_prompt):
+        captured["history"] = conversations[0]["history"]
+        return {
+            "responses": [
+                {
+                    "id": conversations[0]["id"],
+                    "reply": "জি, BBQ পিৎজা আছে।",
+                    "escalate": {"needed": False},
+                    "order": {},
+                }
+            ]
+        }
+
+    async def fake_send(_integration, _psid: str, _text: str):
+        return None
+
+    async def fake_broadcast(_outlet_id: str, _payload: dict):
+        return None
+
+    monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
+    monkeypatch.setattr(facebook_chatbot, "_call_batched_llm", fake_call)
+    monkeypatch.setattr(facebook_chatbot, "_send_message", fake_send)
+    monkeypatch.setattr(facebook_chatbot.manager, "broadcast", fake_broadcast)
+
+    await create_tables()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        _, headers = await _manager_headers(client, "bot-mgr-note")
+        saved = await client.put(
+            "/admin/chatbot/facebook",
+            headers=headers,
+            json={"pageAccessToken": "page-token", "isEnabled": True, "orderingEnabled": True},
+        )
+        assert saved.status_code == 200
+
+    async with AsyncSessionLocal() as db:
+        integration = (
+            await db.execute(
+                select(ChatbotIntegration).where(ChatbotIntegration.page_id == page_id)
+            )
+        ).scalar_one()
+        conv = ChatbotConversation(
+            integration_id=integration.id,
+            page_id=page_id,
+            psid="psid-mgr-note",
+            state_json={"status": "bot"},
+            history_json=[
+                {"role": "user", "text": "is this available? [Customer sent an image ...]"},
+                {"role": "system", "text": "⚠ Chatbot needs your help · Photo requested"},
+                {"role": "manager", "text": "That's the BBQ pizza, yes we have it."},
+                {"role": "system", "text": "Handed back to bot"},
+            ],
+            last_user_message="ok add 2",
+        )
+        db.add(conv)
+        await db.commit()
+        conv_id = conv.id
+
+    await facebook_chatbot._process_batch([{"conversation_id": conv_id, "text": "ok add 2"}])
+
+    texts = [entry["text"] for entry in captured["history"]]
+    assert "That's the BBQ pizza, yes we have it." in texts
+    roles = [entry["role"] for entry in captured["history"]]
+    assert "manager" in roles
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkeypatch):
     page_id = f"page-order-{uuid.uuid4()}"
     menu_id = f"menu-fb-{uuid.uuid4()}"

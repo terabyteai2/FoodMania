@@ -67,6 +67,45 @@ class AppStrings {
   String get settingsTab => isBn ? 'সেটিংস' : 'Settings';
   String get liveTab => isBn ? 'লাইভ' : 'Live';
   String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
+  // ── QS analytics (owner) ──────────────────────────────────────────────
+  String ownerViewSubtitle(String outlet) =>
+      isBn ? 'মালিক ভিউ · $outlet' : 'Owner view · $outlet';
+  String get salesBreakdownTab => isBn ? 'সেলস ব্রেকডাউন' : 'Sales Breakdown';
+  String get itemWiseTab => isBn ? 'আইটেম ওয়াইজ' : 'Item-wise Sales';
+  String get rangeToday => isBn ? 'আজ' : 'Today';
+  String get range7Days => isBn ? '৭ দিন' : '7 days';
+  String get range30Days => isBn ? '৩০ দিন' : '30 days';
+  String get ordersCompleted => isBn ? 'সম্পন্ন অর্ডার' : 'Orders Completed';
+  String get grossSales => isBn ? 'গ্রস সেলস' : 'Gross Sales';
+  String get discountByStaff =>
+      isBn ? 'স্টাফ ডিসকাউন্ট' : 'Discount by Staff';
+  String get netSales => isBn ? 'নেট সেলস' : 'Net Sales';
+  String get totalCollection => isBn ? 'মোট কালেকশন' : 'Total Collection';
+  String get salesSummary => isBn ? 'সেলস সারাংশ' : 'Sales Summary';
+  String get collectionSummary =>
+      isBn ? 'কালেকশন সারাংশ' : 'Collection Summary';
+  String get serviceWiseSales =>
+      isBn ? 'সার্ভিস অনুযায়ী সেলস' : 'Service-wise Sales';
+  String get profitEstimation => isBn ? 'প্রফিট অনুমান' : 'Profit Estimation';
+  String get serviceCharge => isBn ? 'সার্ভিস চার্জ' : 'Service Charge';
+  String get deliveryCharge => isBn ? 'ডেলিভারি চার্জ' : 'Delivery Charge';
+  String get preparationCost => isBn ? 'প্রস্তুতি খরচ' : 'Preparation Cost';
+  String get wastage => isBn ? 'অপচয়' : 'Wastage';
+  String get paymentFee => isBn ? 'পেমেন্ট ফি' : 'Payment Fee';
+  String get taxesIncl => isBn ? 'ট্যাক্স (অন্তর্ভুক্ত)' : 'Taxes incl.';
+  String get grossProfit => isBn ? 'গ্রস প্রফিট' : 'Gross Profit';
+  String get popularDishes => isBn ? 'জনপ্রিয় ডিশ' : 'Popular Dishes';
+  String get noData => isBn ? 'কোনো ডেটা নেই' : 'No data';
+  String get analyticsErrorTitle =>
+      isBn ? 'অ্যানালিটিক্স লোড হয়নি' : 'Analytics unavailable';
+  String get analyticsErrorMessage => isBn
+      ? 'ক্লাউড সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'
+      : 'Check your cloud connection and pull to retry.';
+  String get analyticsNoItemsTitle =>
+      isBn ? 'কোনো বিক্রি নেই' : 'No sales yet';
+  String get analyticsNoItemsMessage => isBn
+      ? 'এই সময়ের মধ্যে কোনো আইটেম বিক্রি হয়নি।'
+      : 'No items were sold in this period.';
   String get stockTab => isBn ? 'স্টক' : 'Stock';
   String get manageSection => isBn ? 'ম্যানেজ' : 'Manage';
   String get messages => isBn ? 'মেসেজ' : 'Messages';
@@ -459,6 +498,8 @@ class AppStrings {
   String get printKotAction => isBn ? 'KOT প্রিন্ট' : 'Print KOT';
   String kotPrinted(String seq) =>
       isBn ? '${_digits(seq)}-এর KOT প্রিন্ট হয়েছে' : 'KOT printed for $seq';
+  String get kotNotPrinted =>
+      isBn ? 'KOT প্রিন্ট হয়নি' : 'KOT not printed';
   String get noOngoingOrders =>
       isBn ? 'কোনো চলমান অর্ডার নেই।' : 'No ongoing orders.';
   String get noCompletedOrders =>
@@ -867,6 +908,11 @@ class AppStrings {
       ? '${_n(total)} আইটেম · ${_n(categories)} ক্যাটাগরি'
       : '$total items · $categories categories';
   String get menuSearchHint => isBn ? 'আইটেম খুঁজুন' : 'Search items';
+  String get shortCodeSearchHint =>
+      isBn ? 'শর্ট কোড লিখুন' : 'Enter short code';
+  String get shortCodeLabel => isBn ? 'শর্ট কোড' : 'Short code';
+  String get shortCodeAutoHint =>
+      isBn ? 'স্বয়ংক্রিয় (সিরিয়াল)' : 'Auto (serial)';
   String get menuEmptyTitle => isBn ? 'মেনু খালি' : 'Your menu is empty';
   String get menuEmptyMessage =>
       isBn ? '+ চাপুন প্রথম আইটেম যোগ করতে।' : 'Tap + to add your first item.';

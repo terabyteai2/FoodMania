@@ -79,6 +79,10 @@ class _StockInScreenState extends State<StockInScreen> {
     super.dispose();
   }
 
+  void _onExistingChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _removeLine(_StockInLine line) {
     setState(() {
       _lines.remove(line);
@@ -352,6 +356,7 @@ class _StockInScreenState extends State<StockInScreen> {
                     items: app.inventoryItems,
                     text: text,
                     controllers: _existingCtrls,
+                    onChanged: _onExistingChanged,
                   ),
                 ],
               ),
@@ -996,11 +1001,13 @@ class _ExistingItemsSection extends StatelessWidget {
     required this.items,
     required this.text,
     required this.controllers,
+    required this.onChanged,
   });
 
   final List<InventoryItem> items;
   final AppStrings text;
   final Map<String, TextEditingController> controllers;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1025,7 +1032,11 @@ class _ExistingItemsSection extends StatelessWidget {
             item: item,
             controller: controllers.putIfAbsent(
               item.id,
-              () => TextEditingController(),
+              () {
+                final ctrl = TextEditingController();
+                ctrl.addListener(onChanged);
+                return ctrl;
+              },
             ),
             text: text,
           ),

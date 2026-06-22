@@ -857,11 +857,12 @@ class TfButton extends StatelessWidget {
     final disabled = onPressed == null;
     final colors = switch (variant) {
       TfButtonVariant.primary => (PosColors.primary, PosColors.accentInk),
-      TfButtonVariant.dark => (PosColors.primaryDark, Colors.white),
+      // Navy secondary action (spec §1.2) — left half of a paired footer.
+      TfButtonVariant.dark => (PosColors.secondary, PosColors.onSecondary),
       TfButtonVariant.ghost => (Colors.transparent, PosColors.primaryDark),
       TfButtonVariant.paper => (PosColors.surface, PosColors.primaryDark),
-      // Accent-wash: the QuickBytes "Accept" / emphasis action — soft lime tint
-      // with dark ink, never solid lime (spec §3).
+      // Accent-wash: soft emphasis action — primary-tint fill + blue text
+      // (spec §5 soft active), never a solid block.
       TfButtonVariant.accent => (PosColors.accentSoft, PosColors.accentStrong),
     };
     final borderColor = switch (variant) {
@@ -1239,18 +1240,18 @@ class TfChip extends StatelessWidget {
 
     return Material(
       color: fillColor,
-      borderRadius: BorderRadius.circular(PosRadii.chip),
+      borderRadius: BorderRadius.circular(PosRadii.pill),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
           constraints: BoxConstraints(minHeight: small ? 36 : 44),
           padding: EdgeInsets.symmetric(
-            horizontal: small ? 12 : 16,
+            horizontal: small ? 14 : 18,
             vertical: small ? 7 : 10,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.chip),
+            borderRadius: BorderRadius.circular(PosRadii.pill),
             border: Border.all(color: borderColor, width: 1),
           ),
           child: Row(
@@ -1857,7 +1858,7 @@ class TfBottomNav extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: selected
-                                    ? PosColors.primary
+                                    ? PosColors.primarySoft
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(
                                   PosRadii.pill,
@@ -1869,7 +1870,7 @@ class TfBottomNav extends StatelessWidget {
                                     : it.icon,
                                 size: 22,
                                 color: selected
-                                    ? PosColors.accentInk
+                                    ? PosColors.primary
                                     : PosColors.muted,
                               ),
                             ),
@@ -1915,7 +1916,9 @@ class TfBottomNav extends StatelessWidget {
                             fontWeight: selected
                                 ? FontWeight.w700
                                 : FontWeight.w500,
-                            color: selected ? PosColors.slate : PosColors.muted,
+                            color: selected
+                                ? PosColors.primary
+                                : PosColors.muted,
                             height: 1,
                           ),
                         ),
@@ -2215,12 +2218,16 @@ class TfSearchField extends StatelessWidget {
     required this.controller,
     required this.hintText,
     this.onChanged,
+    this.keyboardType,
+    this.prefixIcon = Icons.search_rounded,
     super.key,
   });
 
   final TextEditingController controller;
   final String hintText;
   final ValueChanged<String>? onChanged;
+  final TextInputType? keyboardType;
+  final IconData prefixIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -2229,6 +2236,7 @@ class TfSearchField extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
+        keyboardType: keyboardType,
         textInputAction: TextInputAction.search,
         style: TextStyle(
           fontFamily: tfFontFamily(context),
@@ -2245,8 +2253,8 @@ class TfSearchField extends StatelessWidget {
             fontSize: 16,
             fontWeight: FontWeight.w400,
           ),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
+          prefixIcon: Icon(
+            prefixIcon,
             size: 20,
             color: PosColors.textSec,
           ),
@@ -2299,6 +2307,99 @@ class TfTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Underline tabs (spec §5): active = primary-strong text + 2–3px primary
+    // underline; inactive = muted. Bottom hairline runs the full width.
+    final isBn = tfIsBn(context);
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: PosColors.line, width: 1)),
+      ),
+      child: Row(
+        children: List.generate(items.length, (i) {
+          final it = items[i];
+          final selected = i == activeIndex;
+          final text = isBn && (it.labelBn?.isNotEmpty ?? false)
+              ? it.labelBn!
+              : it.label;
+          return Expanded(
+            child: InkWell(
+              onTap: () => onChanged(i),
+              child: Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: selected ? PosColors.primary : Colors.transparent,
+                      width: 2.5,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TfText(
+                      text,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? PosColors.accentStrong
+                            : PosColors.muted,
+                      ),
+                    ),
+                    if (it.count != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? PosColors.primary
+                              : PosColors.surface3,
+                          borderRadius: BorderRadius.circular(PosRadii.chip),
+                        ),
+                        child: TfText(
+                          '${it.count}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: selected
+                                ? PosColors.accentInk
+                                : PosColors.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// Two-tab toggle (analytics) — rounded segmented control on surface-2; active
+/// segment = white card + blue text (spec §5). Used for Sales Breakdown /
+/// Item-wise Sales, not for primary navigation.
+class TfSegToggle extends StatelessWidget {
+  const TfSegToggle({
+    required this.items,
+    required this.activeIndex,
+    required this.onChanged,
+    super.key,
+  });
+
+  final List<TfTabItem> items;
+  final int activeIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
     final isBn = tfIsBn(context);
     return Container(
       padding: const EdgeInsets.all(4),
@@ -2323,48 +2424,17 @@ class TfTabs extends StatelessWidget {
                 onTap: () => onChanged(i),
                 child: Container(
                   height: 38,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(PosRadii.sm),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TfText(
-                        text,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: selected
-                              ? FontWeight.w700
-                              : FontWeight.w600,
-                          color: PosColors.slate,
-                        ),
-                      ),
-                      if (it.count != null) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? PosColors.primary
-                                : PosColors.surface3,
-                            borderRadius: BorderRadius.circular(PosRadii.chip),
-                          ),
-                          child: TfText(
-                            '${it.count}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: selected
-                                  ? PosColors.accentInk
-                                  : PosColors.muted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  alignment: Alignment.center,
+                  decoration: selected
+                      ? const BoxDecoration(boxShadow: PosShadows.e1)
+                      : null,
+                  child: TfText(
+                    text,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? PosColors.accentStrong : PosColors.muted,
+                    ),
                   ),
                 ),
               ),

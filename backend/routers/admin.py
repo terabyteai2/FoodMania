@@ -148,6 +148,7 @@ def _account_dict(account: AdminAccount) -> dict:
         "phone": display_phone(account.phone),
         "role": account.role or MANAGER,
         "displayName": account.display_name,
+        "invitedByName": account.invited_by_name,
         "authProvider": account.auth_provider or "password",
         "isActive": account.is_active,
         "inviteStatus": account.invite_status,
@@ -544,7 +545,7 @@ async def phone_verify_otp(
     pending_staff = [
         a
         for a in accounts
-        if a.role in FLOOR_ROLES and a.invite_status == INVITE_PENDING
+        if a.role in {MANAGER, *FLOOR_ROLES} and a.invite_status == INVITE_PENDING
     ]
     if pending_staff:
         pending_staff.sort(key=lambda a: a.created_at, reverse=True)
@@ -566,6 +567,8 @@ async def phone_verify_otp(
                 "inviteId": invite.id,
                 "restaurantName": restaurant.name,
                 "outletName": outlet.name,
+                "role": invite.role,
+                "invitedBy": invite.invited_by_name,
                 "signupToken": token,
                 "phone": display_phone(phone),
             }
@@ -1292,6 +1295,7 @@ async def add_staff(
                 )
             existing.role = requested_role
             existing.display_name = body.displayName or existing.display_name
+            existing.invited_by_name = manager.display_name
             existing.invite_status = INVITE_PENDING
             existing.is_active = False
             existing.auth_provider = "phone"
@@ -1309,6 +1313,7 @@ async def add_staff(
             role=requested_role,
             phone=phone,
             display_name=body.displayName,
+            invited_by_name=manager.display_name,
             auth_provider="phone",
             is_active=False,
             invite_status=INVITE_PENDING,
@@ -1329,6 +1334,7 @@ async def add_staff(
                 )
             existing.role = requested_role
             existing.display_name = body.displayName or existing.display_name
+            existing.invited_by_name = manager.display_name
             existing.is_active = True
             existing.invite_status = INVITE_ACCEPTED
             await db.commit()
@@ -1342,6 +1348,7 @@ async def add_staff(
             password_hash=None,
             role=requested_role,
             display_name=body.displayName,
+            invited_by_name=manager.display_name,
             auth_provider="google",
             is_active=True,
             invite_status=INVITE_ACCEPTED,

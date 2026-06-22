@@ -43,6 +43,10 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   final Set<String> _selectedItemIds = <String>{};
   bool _scanBusy = false;
 
+  /// ⚡ short-code mode — shows the code badge on item cards and makes the
+  /// search field numeric so a code lookup is a couple of taps.
+  bool _codeMode = false;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -65,8 +69,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
           final matchesCategory =
               _selectedCategory == text.allCategories ||
               item.localizedCategory(language) == _selectedCategory;
-          final matchesSearch =
-              query.isEmpty || item.searchText(language).contains(query);
+          final matchesSearch = query.isEmpty
+              ? true
+              : _codeMode
+              ? (item.shortCode?.toString().startsWith(query) ?? false)
+              : item.searchText(language).contains(query);
           return matchesCategory && matchesSearch;
         })
         .toList(growable: false);
@@ -127,10 +134,32 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             ),
                           ],
                           SizedBox(height: 12),
-                          TfSearchField(
-                            controller: _searchController,
-                            hintText: text.menuSearchHint,
-                            onChanged: (_) => setState(() {}),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TfSearchField(
+                                  controller: _searchController,
+                                  hintText: _codeMode
+                                      ? text.shortCodeSearchHint
+                                      : text.menuSearchHint,
+                                  keyboardType: _codeMode
+                                      ? TextInputType.number
+                                      : null,
+                                  prefixIcon: _codeMode
+                                      ? Icons.bolt_rounded
+                                      : Icons.search_rounded,
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              _CodeModeButton(
+                                active: _codeMode,
+                                onTap: () => setState(() {
+                                  _codeMode = !_codeMode;
+                                  _searchController.clear();
+                                }),
+                              ),
+                            ],
                           ),
                           if (app.menuItems.isNotEmpty) ...[
                             SizedBox(height: 12),
@@ -184,6 +213,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             _MenuList(
                               items: items,
                               language: language,
+                              showCode: _codeMode,
                               selectedIds: _selectedItemIds,
                               selectionMode: _selectedItemIds.isNotEmpty,
                               onEdit: app.isManager
@@ -824,6 +854,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       categoryEn: result.category!,
       categoryBn: item?.categoryBn,
       price: result.price!,
+      shortCode: result.shortCode ?? item?.shortCode,
       imageUrl: result.imageUrl,
       isAvailable: result.isAvailable!,
       preparationTimeMinutes: result.preparationTimeMinutes,
@@ -1873,6 +1904,7 @@ class _MenuList extends StatelessWidget {
   const _MenuList({
     required this.items,
     required this.language,
+    required this.showCode,
     required this.selectedIds,
     required this.selectionMode,
     required this.onEdit,
@@ -1884,6 +1916,7 @@ class _MenuList extends StatelessWidget {
 
   final List<MenuItem> items;
   final AppLanguage language;
+  final bool showCode;
   final Set<String> selectedIds;
   final bool selectionMode;
   final ValueChanged<MenuItem> onEdit;
@@ -2005,6 +2038,9 @@ class _MenuList extends StatelessWidget {
           ? tfFormatCurrency(context, discounted, decimalDigits: priceDecimals)
           : null,
       discountLabel: discountLabel,
+      codeBadge: showCode
+          ? (item.shortCode != null ? '#${item.shortCode}' : '#—')
+          : null,
       available: item.isAvailable,
       onTap: () => selectionMode ? onSelect(item) : onEdit(item),
       onLongPress: () => onSelect(item),
@@ -2013,6 +2049,44 @@ class _MenuList extends StatelessWidget {
       onSelect: () => onSelect(item),
       onAddImage: () => onAddImage(item),
       onAvailabilityChanged: (value) => onAvailabilityChanged(item, value),
+    );
+  }
+}
+
+/// ⚡ Short-code mode toggle — square button beside the search field. Active =
+/// blue fill + white bolt; inactive = ghost outline. Mirrors Petpooja's
+/// "Short Code" quick-entry next to item search.
+class _CodeModeButton extends StatelessWidget {
+  const _CodeModeButton({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? PosColors.primary : PosColors.surface,
+      borderRadius: BorderRadius.circular(PosRadii.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: 56,
+          height: 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(PosRadii.md),
+            border: Border.all(
+              color: active ? PosColors.primary : PosColors.lineStrong,
+            ),
+          ),
+          child: Icon(
+            Icons.bolt_rounded,
+            size: 22,
+            color: active ? PosColors.accentInk : PosColors.muted,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2026,6 +2100,7 @@ class _SourceMenuRow extends StatelessWidget {
     required this.onAvailabilityChanged,
     this.discountPrice,
     this.discountLabel,
+    this.codeBadge,
     this.selected = false,
     this.selectionMode = false,
     this.onTap,
@@ -2039,6 +2114,7 @@ class _SourceMenuRow extends StatelessWidget {
   final String price;
   final String? discountPrice;
   final String? discountLabel;
+  final String? codeBadge;
   final bool available;
   final bool selected;
   final bool selectionMode;
@@ -2104,6 +2180,12 @@ class _SourceMenuRow extends StatelessWidget {
                         runSpacing: 4,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
+                          if (codeBadge != null)
+                            _MiniMenuTag(
+                              label: codeBadge!,
+                              color: PosColors.accentStrong,
+                              fill: PosColors.primarySoft,
+                            ),
                           if (discountPrice != null) ...[
                             TfText(
                               price,
@@ -2211,6 +2293,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _categoryController;
   late final TextEditingController _priceController;
+  late final TextEditingController _shortCodeController;
   late final TextEditingController _imageController;
   late final TextEditingController _prepController;
   late final TextEditingController _discountController;
@@ -2234,6 +2317,9 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     _categoryController = TextEditingController(text: item?.category ?? '');
     _priceController = TextEditingController(
       text: item == null ? '' : item.price.toStringAsFixed(2),
+    );
+    _shortCodeController = TextEditingController(
+      text: item?.shortCode?.toString() ?? '',
     );
     _imageController = TextEditingController(text: item?.imageUrl ?? '');
     _prepController = TextEditingController(
@@ -2283,6 +2369,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     _descriptionController.dispose();
     _categoryController.dispose();
     _priceController.dispose();
+    _shortCodeController.dispose();
     _imageController.dispose();
     _prepController.dispose();
     _discountController.dispose();
@@ -2428,6 +2515,24 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                                 }
                                 return null;
                               },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _EditorField(
+                            label: text.shortCodeLabel,
+                            child: TextFormField(
+                              controller: _shortCodeController,
+                              decoration: InputDecoration(
+                                prefixIcon: const Icon(
+                                  Icons.bolt_rounded,
+                                  size: 18,
+                                ),
+                                hintText: text.shortCodeAutoHint,
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2612,6 +2717,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         description: _descriptionController.text,
         category: _categoryController.text,
         price: double.parse(_priceController.text),
+        shortCode: int.tryParse(_shortCodeController.text.trim()),
         imageUrl: _imageController.text,
         isAvailable: _isAvailable,
         preparationTimeMinutes: int.tryParse(_prepController.text),
@@ -3088,6 +3194,7 @@ class _MenuFormResult {
     required this.price,
     required this.isAvailable,
     required this.tags,
+    this.shortCode,
     this.imageUrl,
     this.preparationTimeMinutes,
   }) : deleteRequested = false;
@@ -3097,6 +3204,7 @@ class _MenuFormResult {
       description = null,
       category = null,
       price = null,
+      shortCode = null,
       imageUrl = null,
       isAvailable = null,
       preparationTimeMinutes = null,
@@ -3107,6 +3215,7 @@ class _MenuFormResult {
   final String? description;
   final String? category;
   final double? price;
+  final int? shortCode;
   final String? imageUrl;
   final bool? isAvailable;
   final int? preparationTimeMinutes;
