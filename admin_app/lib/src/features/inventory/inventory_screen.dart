@@ -286,7 +286,7 @@ class _InventoryScreenState extends State<InventoryScreen>
           MaterialPageRoute(
             builder: (detailCtx) => InventoryItemDetailScreen(
               item: full,
-              onEdit: app.isManager
+              onEdit: app.isOwner
                   ? () async {
                       final latest = _resolveItem(app, full.id) ?? full;
                       final result = await Navigator.push<InventoryItem>(

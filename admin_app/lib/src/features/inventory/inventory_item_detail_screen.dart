@@ -53,7 +53,7 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         actions: [
-          if (app.isManager && widget.onEdit != null)
+          if (app.isOwner && widget.onEdit != null)
             IconButton(
               onPressed: widget.onEdit,
               icon: const Icon(Icons.edit_outlined),

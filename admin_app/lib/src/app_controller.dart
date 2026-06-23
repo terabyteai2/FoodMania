@@ -386,8 +386,8 @@ class PosAppController extends ChangeNotifier {
   /// Messenger chat takeover — owner & manager.
   bool get canMessages => isManager;
 
-  /// Stock & menu management — owner & manager (waiters view menu only).
-  bool get canManageStock => isManager;
+  /// Stock & inventory — owner only (managers & waiters blocked entirely).
+  bool get canManageStock => isOwner;
 
   /// Demo-only role switch (More → profile). In production the role comes from
   /// the authenticated session; here it lets one device preview each role's

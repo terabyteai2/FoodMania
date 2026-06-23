@@ -201,10 +201,12 @@ services/  cloud_api_service.dart(2143 REST), local_database_service.dart(2784 S
   sync_service.dart(670), cloud_realtime_service.dart(WS), printer_service.dart(1561;
   @ hasPrintedOrder(id) + persisted printed-id set = print-dedup, printOrderTicket,
   printCustomerInvoice), push/system notifications.
-core/theme/app_theme.dart(601)  @ PosColors (lime400=#99FF47 primary, accentSoft/
-  primarySoft=#F0FADF wash, accentInk=#14180E ink-on-lime, seatTint=#EDF1F7 occupied-
-  table slate, success/warning/danger), PosSpacing(base-4), PosRadii(xs3..xl12,pill999),
-  PosShadows(borders-over-shadows), AppTheme.light. Inter + Bengali fallback, tabular nums.
+core/theme/app_theme.dart(654)  @ PosColors (blue500=#2F4FE0 royal-indigo primary,
+  primarySoft=#EEF1FE tint, accentInk=#FFFFFF white-on-blue, secondary=#1E2A44 navy,
+  seatTint=#DCEBFB sky, stateRunning/statePrinted/stateKot pastel fills, success=#1E9E5A
+  green-only, danger=#D8434A red-only), PosSpacing(base-4), PosRadii(xs3..xl12,pill999),
+  PosShadows(e1 added, borders-over-shadows), AppTheme.light (no uiScale param).
+  Inter + Bengali fallback, tabular nums.
 core/widgets/tf_design_system.dart(3912)  Design-system widgets. @ TfText, TfButton
   (variant: primary/dark/ghost/paper/ACCENT[=accent-wash, use for Accept/emphasis]),
   TfCard, TfListCard, TfBrandHeader, TfIconButton, TfFab, TfField, TfSearchField,
@@ -224,7 +226,7 @@ features/orders/orders_screen.dart(4763)  Orders home + build wizard. @ OrdersSc
   Ongoing tab = pending+accepted, Completed tab = completed, Accept=>accepted,
   Reject=>rejected, Print Bill=>completed; no auto-complete timer. openEditOrderSheet
   (public; reused by Tables), _EditOrderSheet.
-features/tables/tables_screen.dart(477)  TablesScreen FOH: Dine-in grid (occupied=slate,
+features/tables/tables_screen.dart(477)  TablesScreen FOH: Dine-in grid (occupied=sky,
   tap->openEditOrderSheet; vacant->openNewOrderForm) / Parcel / Delivery lists + counter
   mode quick-sell + bottom-bar new-order.
 features/more/more_screen.dart(479)  More hub: profile + 3-role demo switcher, Messages
@@ -232,13 +234,17 @@ features/more/more_screen.dart(479)  More hub: profile + 3-role demo switcher, M
   EN/বাংলা toggle. Pushes existing SettingsScreen/MenuManagementScreen + ComingSoon stubs.
 
 
-=========================  DESIGN INVARIANTS (spec §3)  =========================
-Lime #99FF47 sparingly (1 primary / active tab / key positive). Ink-on-lime #14180E,
-never white text on lime. Accept/emphasis = accent-WASH #F0FADF (TfButtonVariant.accent),
-NOT solid lime. Occupied tables = slate #EDF1F7 (PosColors.seatTint), never lime.
-Tabular numerals for all money/qty. Corners <=12 (only toggles round). Borders over
-shadows. Touch targets >=44. Primary actions in the BOTTOM bar, not the top bar.
-Every nav label/title/high-traffic action needs EN + বাংলা. Phone-width constrained:
-avoid unbounded Row children (use Expanded/Flexible) so layout never overflows.
+=========================  DESIGN INVARIANTS (redesign_source_of_truth.md)  =========================
+Blue #2F4FE0 royal-indigo = primary (1 CTA / active tab underline / selected radios).
+Navy #1E2A44 = secondary action (paired footers: navy + blue). Green #1E9E5A only for
+success/profit — never decorative, never a CTA. Red #D8434A only for destructive actions.
+Pastel fills carry order/table states (sky=running/seated, mint=printed, amber=KOT).
+White cards, hairline dividers, light shadows, soft radius ≤12. Underline tabs, not pill
+segments. Tabular numerals for all money ৳. Touch targets ≥44. Petpooja-dense layout
+(pack panels, multi-card rows) on FOH + desktop; QS-style stat grids on mobile
+back-office. Primary actions in the BOTTOM bar, not the top bar. Every nav label /
+high-traffic action needs EN + বাংলা. Phone-width constrained — avoid unbounded Row
+children (use Expanded/Flexible). Tokens source: admin_app/lib/src/core/theme/app_theme.dart.
+Full rationale: redesign_source_of_truth.md (repo root).
 
 

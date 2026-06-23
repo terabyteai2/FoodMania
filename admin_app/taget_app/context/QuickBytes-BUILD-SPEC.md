@@ -101,10 +101,12 @@ Settings { areas:[{name,charge}], discounts:[{label,kind:'pct'|'flat',val}], vat
 
 ## 3. Global UI system (condensed)
 
-- **Mostly white, lime sparingly.** Accent `#99FF47`; ink-on-lime `#14180E` (never white); lime text on white `--accent-strong #3E7E14`; **accent-wash** `--accent-tint #F0FADF` for emphasis (Accept, owner cards, bot bubbles).
-- Neutrals `bg #F7F8F4 · surface #fff · ink #1A1E14 · muted #878C79 · line #EDEEE8`. Signals `success #498F18 · warning #B0760A · danger #D43A3F · info #3E6FE0`. **Occupied-table wash (NOT lime):** slate `#EDF1F7 / #D5DEEC / #4C679C`.
+> **DESIGN NOTE:** The visual UI has been redesigned to a Petpooja-clone, blue-primary scheme. See `redesign_source_of_truth.md` (repo root) for the complete design system. The behavioral and data-model spec below remains accurate. Key token changes: `#99FF47 lime → #2F4FE0 blue`, `accent-wash #F0FADF → primary-tint #EEF1FE`, `ink-on-lime #14180E → accentInk #FFFFFF`, `slate table wash → sky tint #DCEBFB`. Below is the updated reference.
+
+- **Blue-primary Petpooja-clone design.** Accent `#2F4FE0` (royal-indigo) = brand + main CTA; white `#FFFFFF` text/icon on blue fills; navy `#1E2A44` for secondary action (paired footers: navy + blue). **primary-tint** `#EEF1FE` for emphasis/wash (selected rows, Accept, bot bubbles). Green `#1E9E5A` = success/profit ONLY; red `#D8434A` = destructive ONLY.
+- Neutrals `bg #F6F7F9 · surface #FFFFFF · ink #1B2330 · muted #8A93A3 · line #ECEEF2`. Signals `success #1E9E5A · warning #C98208 · danger #D8434A · info = primary blue`. **Occupied-table (Petpooja pastel):** sky `#DCEBFB / #BFD6F2 / #2B5C9E`. Other state fills: printed=mint `#E3F6EC`, KOT=amber `#FCF3CF`.
 - Typeface **Inter**; **tabular numerals** for all money/qty. Corners ≤12px (only toggles round). **Borders over shadows.** Targets ≥44px.
-- **Shared `Header`:** brand variant (lime mark + "QuickBytes" + location) on Orders home; title (+ back) elsewhere. Right slot = **`TopActions`** (Messages icon w/ escalation badge + notification **bell** opening an in-app dropdown). **No page-navigation buttons in the top bar** — primary actions live in the bottom bar.
+- **Shared `Header`:** brand variant (blue mark + "QuickBytes" + location) on Orders home; title (+ back) elsewhere. Right slot = **`TopActions`** (Messages icon w/ escalation badge + notification **bell** opening an in-app dropdown). **No page-navigation buttons in the top bar** — primary actions live in the bottom bar.
 - **Phone frame is hard-width-constrained**; give flex inputs `min-width:0`.
 - **i18n:** every nav label / title / high-traffic action has an EN + বাংলা string via `t('key')`; toggle in Settings + More.
 
@@ -130,9 +132,9 @@ Settings { areas:[{name,charge}], discounts:[{label,kind:'pct'|'flat',val}], vat
 │ │     Website · 1m ago              │  │  TYPE replaces customer name
 │ │     5 items · 2× Kacchi, 2× Borh… │  │
 │ │                      [✕] [ Accept ]│  │  pending: reject + Accept
-│ └───────────────────────────────────┘  │  (Accept = accent-WASH, not solid lime)
+│ └───────────────────────────────────┘  │  (Accept = primary-tint #EEF1FE wash)
 │ … accepted card → [Print KOT][Print Bill]
-│                                    (＋) │  lone solid-lime FAB → new order
+│                                    (＋) │  lone solid-blue circular FAB → new order
 │ [ Analytics ][Tables][Orders][Stock][More]
 └───────────────────────────────────────┘
 ```
@@ -146,7 +148,7 @@ Settings { areas:[{name,charge}], discounts:[{label,kind:'pct'|'flat',val}], vat
 [≡] Tables (big)                 [✉][🔔]
 [ Dine-in · Parcel · Delivery ]          ← order-type seg
 ●occupied 4   ○free 8
-┌────┐┌────┐┌────┐   occupied = slate wash (NOT lime)
+┌────┐┌────┐┌────┐   occupied = sky tint #DCEBFB
 │ T1 ││ T2●││ T3 │   vacant = plain white
 │vac ││12m ││vac │   tile shows mins + running total when seated
 └────┘└────┘└────┘
@@ -186,7 +188,7 @@ Items with mod groups open a **modifier sheet** (single/multi, required flags, p
 ```
 Review                                Success
 [ + Add more items ]                  ┌──────────────────────┐
-lines (qty steppers / remove)         │        ✓ (lime)       │
+lines (qty steppers / remove)         │        ✓ (blue)      │
 Discount [None][10%][15%][৳50]…       │   Order confirmed     │
  (presets from Settings)              │  ╔══════════════════╗ │
 Summary: subtotal / VAT / charge      │  ║ CUSTOMER TOKEN   ║ │
@@ -206,7 +208,7 @@ Confirm prints KOT · Token · Bill `[API: print jobs, dedup]`. Success screen n
 │ (RA) Rumana Akter         2m  ●2 │                  cust: Can you show the Kacchi?  (left, neutral)
 │  Photo requested  [amber tag]    │ → tap →          ⚠ Chatbot needs your help (amber, centered)
 │  Reply ›                          │                  YOU/BYTES BOT bubbles (right):
-└─────────────────────────────────┘                   bot = accent-tint + "BYTES BOT" label
+└─────────────────────────────────┘                   bot = primary-tint #EEF1FE + "BYTES BOT" label
                                                        manager = solid ink
                                                        [Send Kacchi photo][Quote price]  quick replies
                                                        [🖼][ Write a reply…        ][➤]

@@ -920,7 +920,7 @@ Capacity-limited LinkedHashSet<String> (default cap=2000)
 
 --- 7d. Theme / Design System (admin_app/lib/src/core/theme/app_theme.dart) ----
 enum PosThemeTone { dark, light }
-PosColors: static color constants for the lime (#99FF47) design system
+PosColors: static color constants for the blue (#2F4FE0) design system (Petpooja clone, see redesign_source_of_truth.md)
 PosSpacing: base-4 spatial scale (sp1=4 .. sp8=40)
 PosRadii: xs=3, sm=5, md=7, lg=9, xl=12, pill=999
 PosShadows: soft, glow, bar, raised, fab

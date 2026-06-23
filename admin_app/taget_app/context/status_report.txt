@@ -201,12 +201,10 @@ services/  cloud_api_service.dart(2143 REST), local_database_service.dart(2784 S
   sync_service.dart(670), cloud_realtime_service.dart(WS), printer_service.dart(1561;
   @ hasPrintedOrder(id) + persisted printed-id set = print-dedup, printOrderTicket,
   printCustomerInvoice), push/system notifications.
-core/theme/app_theme.dart(654)  @ PosColors (blue500=#2F4FE0 royal-indigo primary,
-  primarySoft=#EEF1FE tint, accentInk=#FFFFFF white-on-blue, secondary=#1E2A44 navy,
-  seatTint=#DCEBFB sky, stateRunning/statePrinted/stateKot pastel fills, success=#1E9E5A
-  green-only, danger=#D8434A red-only), PosSpacing(base-4), PosRadii(xs3..xl12,pill999),
-  PosShadows(e1 added, borders-over-shadows), AppTheme.light (no uiScale param).
-  Inter + Bengali fallback, tabular nums.
+core/theme/app_theme.dart(601)  @ PosColors (lime400=#99FF47 primary, accentSoft/
+  primarySoft=#F0FADF wash, accentInk=#14180E ink-on-lime, seatTint=#EDF1F7 occupied-
+  table slate, success/warning/danger), PosSpacing(base-4), PosRadii(xs3..xl12,pill999),
+  PosShadows(borders-over-shadows), AppTheme.light. Inter + Bengali fallback, tabular nums.
 core/widgets/tf_design_system.dart(3912)  Design-system widgets. @ TfText, TfButton
   (variant: primary/dark/ghost/paper/ACCENT[=accent-wash, use for Accept/emphasis]),
   TfCard, TfListCard, TfBrandHeader, TfIconButton, TfFab, TfField, TfSearchField,
@@ -226,7 +224,7 @@ features/orders/orders_screen.dart(4763)  Orders home + build wizard. @ OrdersSc
   Ongoing tab = pending+accepted, Completed tab = completed, Accept=>accepted,
   Reject=>rejected, Print Bill=>completed; no auto-complete timer. openEditOrderSheet
   (public; reused by Tables), _EditOrderSheet.
-features/tables/tables_screen.dart(477)  TablesScreen FOH: Dine-in grid (occupied=sky,
+features/tables/tables_screen.dart(477)  TablesScreen FOH: Dine-in grid (occupied=slate,
   tap->openEditOrderSheet; vacant->openNewOrderForm) / Parcel / Delivery lists + counter
   mode quick-sell + bottom-bar new-order.
 features/more/more_screen.dart(479)  More hub: profile + 3-role demo switcher, Messages

@@ -282,7 +282,7 @@ async def _require_inventory_account(
     outlet_id: str,
     payload: dict,
     *,
-    manager_only: bool = False,
+    owner_only: bool = False,
 ) -> AdminAccount | None:
     account_id = str(payload.get("account_id") or "")
     if not account_id:
@@ -301,8 +301,8 @@ async def _require_inventory_account(
     ).scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Active account required.")
-    if manager_only and account.role not in ("owner", "manager"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
+    if owner_only and account.role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required.")
     return account
 
 
@@ -311,10 +311,12 @@ async def pull_inventory(
     outlet_id: str,
     since: str | None = None,
     current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
     """Pull inventory items, stock adjustments, and daily counts changed since `since`."""
     _ensure_outlet(current_outlet, outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     since_dt = _parse_since(since) if since else None
 
     item_query = select(InventoryItem).where(InventoryItem.outlet_id == outlet_id)
@@ -357,7 +359,7 @@ async def upsert_inventory_item(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     now = datetime.now(timezone.utc)
     created_at = now
     if body.createdAt:
@@ -432,7 +434,7 @@ async def delete_inventory_item(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     item = await _get_item(db, outlet_id, item_id)
     now = datetime.now(timezone.utc)
     item.deleted_at = now
@@ -446,9 +448,11 @@ async def list_inventory_suppliers(
     outlet_id: str,
     include_archived: bool = False,
     current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(current_outlet, outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     query = select(InventorySupplier).where(InventorySupplier.outlet_id == outlet_id)
     if not include_archived:
         query = query.where(InventorySupplier.is_active.is_(True))
@@ -464,7 +468,7 @@ async def create_inventory_supplier(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     row = InventorySupplier(
         id=body.id or str(uuid4()),
         outlet_id=outlet_id,
@@ -487,7 +491,7 @@ async def update_inventory_supplier(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    await _require_inventory_account(db, outlet_id, payload, manager_only=True)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     row = (
         await db.execute(
             select(InventorySupplier).where(
@@ -600,7 +604,7 @@ async def record_stock_adjustment(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    account = await _require_inventory_account(db, outlet_id, payload)
+    account = await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     item, adjustment = await _apply_stock_adjustment(db, outlet_id, body, account)
     await db.commit()
     await db.refresh(item)
@@ -616,7 +620,7 @@ async def record_stock_adjustment_batch(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    account = await _require_inventory_account(db, outlet_id, payload)
+    account = await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     results = [
         await _apply_stock_adjustment(db, outlet_id, adjustment, account)
         for adjustment in body.adjustments
@@ -638,7 +642,7 @@ async def upsert_daily_stock_count(
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    await _require_inventory_account(db, outlet_id, payload)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     await _get_item(db, outlet_id, body.inventoryItemId)
 
     existing = (
@@ -686,9 +690,11 @@ async def inventory_summary(
     start: str | None = None,
     end: str | None = None,
     current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(current_outlet, outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     now = _parse_as_of(as_of)
     
     if start and end:
@@ -861,9 +867,11 @@ async def inventory_daily_report(
     outlet_id: str,
     date_param: str | None = Query(default=None, alias="date"),
     current_outlet: str = Depends(get_current_outlet_id),
+    payload: dict = Depends(get_current_device_payload),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_outlet(current_outlet, outlet_id)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     target_date = _parse_date_param(date_param)
     target_str = target_date.isoformat()
     yesterday_str = (target_date - timedelta(days=1)).isoformat()
@@ -1093,7 +1101,7 @@ async def scan_inventory(
     lines plus the resolved category so the app can route to stock-in or count.
     """
     _ensure_outlet(str(payload["sub"]), outlet_id)
-    await _require_inventory_account(db, outlet_id, payload)
+    await _require_inventory_account(db, outlet_id, payload, owner_only=True)
     if not files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

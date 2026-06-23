@@ -92,12 +92,15 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
     });
   }
 
-  void _navigate(PcNav nav) => setState(() {
-    _section = nav;
-    _activeOrder = null;
-    _showZ = false;
-    _draftTableNo = null;
-  });
+  void _navigate(PcNav nav) {
+    if (nav == PcNav.stock && !AppScope.of(context).isOwner) return;
+    setState(() {
+      _section = nav;
+      _activeOrder = null;
+      _showZ = false;
+      _draftTableNo = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +182,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
       shiftClock: _shift == null ? null : _elapsed(_shift!.openedAt),
       userInitials: _initials(app.outletName),
       alertBadge: 0,
+      isOwner: app.isOwner,
     );
   }
 
@@ -269,6 +273,8 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
           title: _t('Menu', 'মেনু'),
           child: const MenuManagementScreen(desktop: true),
         );
+      case PcNav.stock when !app.isOwner:
+        return _activeBodyFallback(chrome);
       case PcNav.stock:
         return PcShell(
           chrome: chrome,
@@ -321,6 +327,18 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
           ),
         );
     }
+  }
+
+  /// Fallback for blocked sections (e.g. stock for non-owner).
+  Widget _activeBodyFallback(PcChrome chrome) {
+    return PcShell(
+      chrome: chrome,
+      activeNav: PcNav.counter,
+      title: '',
+      child: const Center(
+        child: Text('Section not available for your role.'),
+      ),
+    );
   }
 
   // ---- controller-backed actions -----------------------------------------

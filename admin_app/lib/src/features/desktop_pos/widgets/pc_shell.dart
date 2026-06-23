@@ -33,6 +33,7 @@ class PcChrome {
     this.lastSyncLabel,
     this.onPrinter,
     this.alertBadge = 0,
+    this.isOwner = false,
   });
 
   final ValueChanged<PcNav> onNav;
@@ -50,6 +51,7 @@ class PcChrome {
   final String? shiftClock;
   final String userInitials;
   final int alertBadge;
+  final bool isOwner;
 }
 
 /// Full desktop frame: rail · (topbar + body + footer). Layout only — the host
@@ -123,7 +125,7 @@ class PcRail extends StatelessWidget {
   final PcNav active;
   final PcChrome chrome;
 
-  static const _items = <(PcNav, String, String, String)>[
+  static const _allItems = <(PcNav, String, String, String)>[
     (PcNav.counter, 'counter', 'Counter', 'F1'),
     (PcNav.floor, 'people', 'Dine-in', 'F2'),
     (PcNav.orders, 'orders', 'Orders', 'F3'),
@@ -131,6 +133,11 @@ class PcRail extends StatelessWidget {
     (PcNav.stock, 'inventory', 'Stock', 'F5'),
     (PcNav.reports, 'chart', 'Reports', 'F6'),
   ];
+
+  List<(PcNav, String, String, String)> get _items {
+    if (chrome.isOwner) return _allItems;
+    return _allItems.where((i) => i.$1 != PcNav.stock).toList();
+  }
 
   @override
   Widget build(BuildContext context) => Container(
