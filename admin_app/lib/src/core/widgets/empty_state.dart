@@ -21,7 +21,10 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return TfCard(
       clip: true,
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PosSpacing.sp6,
+        vertical: PosSpacing.sp7,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -30,24 +33,27 @@ class EmptyState extends StatelessWidget {
             height: 72,
             decoration: BoxDecoration(
               color: PosColors.primarySoft,
-              borderRadius: BorderRadius.circular(PosRadii.tile),
+              borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(color: PosColors.line),
             ),
-            child: Icon(icon, color: PosColors.primaryDark, size: 30),
+            child: Icon(icon, color: PosColors.accentStrong, size: 30),
           ),
-          SizedBox(height: 18),
+          const SizedBox(height: PosSpacing.sp4),
           TfText(
             title,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: PosSpacing.sp2),
           TfText(
             message,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          if (action != null) ...[SizedBox(height: 16), action!],
+          if (action != null) ...[
+            const SizedBox(height: PosSpacing.sp4),
+            action!,
+          ],
         ],
       ),
     );

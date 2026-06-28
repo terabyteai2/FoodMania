@@ -151,10 +151,7 @@ class KotTicketData {
 }
 
 class UtilityTicketSection {
-  const UtilityTicketSection({
-    required this.title,
-    required this.lines,
-  });
+  const UtilityTicketSection({required this.title, required this.lines});
 
   final String title;
   final List<String> lines;
@@ -203,9 +200,8 @@ class TicketBitmapRenderer {
     final hasTable =
         data.tableLabel?.trim().isNotEmpty == true &&
         data.tableValue?.trim().isNotEmpty == true;
-    final height =
-        (336 + dynamicRows + noteRows + (hasTable ? 30 : 0))
-            .toDouble();
+    final height = (336 + dynamicRows + noteRows + (hasTable ? 30 : 0))
+        .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
@@ -237,7 +233,13 @@ class TicketBitmapRenderer {
       );
     }
     y = _rule(canvas, y + 8);
-    y = _text(canvas, data.itemsLabel, y, fontSize: 28, weight: FontWeight.w700);
+    y = _text(
+      canvas,
+      data.itemsLabel,
+      y,
+      fontSize: 28,
+      weight: FontWeight.w700,
+    );
     for (final item in data.items) {
       y = _kotItemRow(canvas, item, y);
     }
@@ -248,7 +250,13 @@ class TicketBitmapRenderer {
     ];
     if (notedItems.isNotEmpty) {
       y = _rule(canvas, y + 8);
-      y = _text(canvas, data.noteLabel, y, fontSize: 28, weight: FontWeight.w700);
+      y = _text(
+        canvas,
+        data.noteLabel,
+        y,
+        fontSize: 28,
+        weight: FontWeight.w700,
+      );
       for (final item in notedItems) {
         y = _text(
           canvas,
@@ -270,7 +278,9 @@ class TicketBitmapRenderer {
   }
 
   static Future<Uint8List> render(TicketCopyData data) async {
-    debugPrint('[QB-LOGO] render logoImageBytes=${data.logoImageBytes != null ? "${data.logoImageBytes!.length}B" : "null"}');
+    debugPrint(
+      '[QB-LOGO] render logoImageBytes=${data.logoImageBytes != null ? "${data.logoImageBytes!.length}B" : "null"}',
+    );
     final logoRows = data.logoImageBytes != null ? 152 : 0;
     final dynamicRows = data.items.length * 58;
     final optionalRows =
@@ -284,7 +294,14 @@ class TicketBitmapRenderer {
     final qrRows = data.orderDetailsUrl?.trim().isNotEmpty == true ? 195 : 0;
     final footerRows = data.footerText?.trim().isNotEmpty == true ? 38 : 0;
     final height =
-        (420 + logoRows + dynamicRows + optionalRows + summaryRows + paymentRows + qrRows + footerRows)
+        (420 +
+                logoRows +
+                dynamicRows +
+                optionalRows +
+                summaryRows +
+                paymentRows +
+                qrRows +
+                footerRows)
             .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -338,8 +355,7 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
     // 7. Service type / table / server role — all centered
-    final isDineIn =
-        data.orderTypeLabel.toUpperCase().contains('DINE');
+    final isDineIn = data.orderTypeLabel.toUpperCase().contains('DINE');
     y = _serviceMetaRow(
       canvas,
       data.orderTypeLabel.toUpperCase(),
@@ -463,7 +479,9 @@ class TicketBitmapRenderer {
     required String qrUrl,
     double paperWidthPx = 384,
   }) async {
-    debugPrint('[TicketBitmap] renderTableQrLabel tableLabel="$tableLabel" qrUrl="$qrUrl" paperWidthPx=$paperWidthPx');
+    debugPrint(
+      '[TicketBitmap] renderTableQrLabel tableLabel="$tableLabel" qrUrl="$qrUrl" paperWidthPx=$paperWidthPx',
+    );
     const qrTargetPx = 120;
     final qrCode = QrCode.fromData(
       data: qrUrl,
@@ -473,7 +491,9 @@ class TicketBitmapRenderer {
     final modules = qrImage.moduleCount;
     final modulePx = (qrTargetPx / modules).floor().clamp(1, 6);
     final qrSizePx = modules * modulePx;
-    debugPrint('[TicketBitmap] renderTableQrLabel modules=$modules modulePx=$modulePx qrSizePx=$qrSizePx');
+    debugPrint(
+      '[TicketBitmap] renderTableQrLabel modules=$modules modulePx=$modulePx qrSizePx=$qrSizePx',
+    );
 
     const labelFontSize = 20.0;
     const labelHeight = 30.0;
@@ -484,7 +504,9 @@ class TicketBitmapRenderer {
     const gap2 = 10.0;
     const botPad = 18.0;
 
-    final height = (topPad + labelHeight + gap1 + qrSizePx + gap2 + scanHeight + botPad).toDouble();
+    final height =
+        (topPad + labelHeight + gap1 + qrSizePx + gap2 + scanHeight + botPad)
+            .toDouble();
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -494,7 +516,14 @@ class TicketBitmapRenderer {
     );
 
     var y = topPad;
-    y = _text(canvas, tableLabel, y, fontSize: labelFontSize, weight: FontWeight.w700, align: TextAlign.center);
+    y = _text(
+      canvas,
+      tableLabel,
+      y,
+      fontSize: labelFontSize,
+      weight: FontWeight.w700,
+      align: TextAlign.center,
+    );
     y += gap1;
 
     final left = (paperWidthPx - qrSizePx) / 2;
@@ -515,7 +544,14 @@ class TicketBitmapRenderer {
     }
     y += qrSizePx + gap2;
 
-    _text(canvas, 'SCAN TO ORDER', y, fontSize: scanFontSize, weight: FontWeight.w800, align: TextAlign.center);
+    _text(
+      canvas,
+      'SCAN TO ORDER',
+      y,
+      fontSize: scanFontSize,
+      weight: FontWeight.w800,
+      align: TextAlign.center,
+    );
 
     final picture = recorder.endRecording();
     final image = await picture.toImage(paperWidthPx.toInt(), height.ceil());
@@ -532,7 +568,11 @@ class TicketBitmapRenderer {
       (total, section) => total + section.lines.length + 1,
     );
     final height =
-        (260 + data.headerRows.length * 34 + sectionLines * 34 + data.totalRows.length * 38 + data.footerLines.length * 34)
+        (260 +
+                data.headerRows.length * 34 +
+                sectionLines * 34 +
+                data.totalRows.length * 38 +
+                data.footerLines.length * 34)
             .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -652,9 +692,12 @@ class TicketBitmapRenderer {
 
     final painters = labels
         .map(
-          (t) =>
-              _painter(t, fontSize: badgeFontSize, weight: FontWeight.w600, maxLines: 1)
-                ..layout(maxWidth: _width - (_padding * 2)),
+          (t) => _painter(
+            t,
+            fontSize: badgeFontSize,
+            weight: FontWeight.w600,
+            maxLines: 1,
+          )..layout(maxWidth: _width - (_padding * 2)),
         )
         .toList();
 
@@ -697,7 +740,9 @@ class TicketBitmapRenderer {
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final image = frame.image;
-      debugPrint('[QB-LOGO] _drawLogoCentered decoded img=${image.width}x${image.height}');
+      debugPrint(
+        '[QB-LOGO] _drawLogoCentered decoded img=${image.width}x${image.height}',
+      );
       const maxH = 144.0;
       final scale = maxH / image.height;
       final w = image.width * scale;
@@ -708,7 +753,9 @@ class TicketBitmapRenderer {
         image.height.toDouble(),
       );
       final dst = Rect.fromLTWH((_width - w) / 2, y, w, maxH);
-      debugPrint('[QB-LOGO] _drawLogoCentered draw at ${((_width - w) / 2).round()},${y.round()} size ${w.round()}x$maxH');
+      debugPrint(
+        '[QB-LOGO] _drawLogoCentered draw at ${((_width - w) / 2).round()},${y.round()} size ${w.round()}x$maxH',
+      );
       canvas.drawImageRect(image, src, dst, Paint());
       image.dispose();
       return y + maxH + 6;
@@ -724,7 +771,11 @@ class TicketBitmapRenderer {
       ..strokeWidth = 1.4;
     final center = _width / 2;
     canvas.drawLine(Offset(_padding, y + 8), Offset(center - 28, y + 8), paint);
-    canvas.drawLine(Offset(center + 28, y + 8), Offset(_width - _padding, y + 8), paint);
+    canvas.drawLine(
+      Offset(center + 28, y + 8),
+      Offset(_width - _padding, y + 8),
+      paint,
+    );
     final star = _painter('✦', fontSize: 18, weight: FontWeight.w500)
       ..layout(maxWidth: 24);
     star.paint(canvas, Offset(center - (star.width / 2), y));

@@ -647,7 +647,8 @@ class _Bubble extends StatelessWidget {
     final bg = isCustomer
         ? PosColors.surfaceSunk
         : isManager
-        ? PosColors.secondary // navy manager bubble (spec §5)
+        ? PosColors
+              .secondary // navy manager bubble (spec §5)
         : PosColors.accentSoft;
     final fg = isManager ? PosColors.onInk : PosColors.text;
 

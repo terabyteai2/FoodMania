@@ -38,14 +38,14 @@ class AdminBlockingNotice {
       title: data['title']?.toString().trim() ?? '',
       message: data['message']?.toString().trim() ?? '',
       imageUrl: () {
-            final v = data['imageUrl']?.toString().trim();
-            return (v != null && v.isNotEmpty) ? v : null;
-          }(),
+        final v = data['imageUrl']?.toString().trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      }(),
       inputField: data['inputField'] == true,
       inputLabel: () {
-            final v = data['inputLabel']?.toString().trim();
-            return (v != null && v.isNotEmpty) ? v : null;
-          }(),
+        final v = data['inputLabel']?.toString().trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      }(),
       updatedAt: rawUpdatedAt == null || rawUpdatedAt.isEmpty
           ? null
           : DateTime.tryParse(rawUpdatedAt),

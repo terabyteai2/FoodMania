@@ -120,7 +120,9 @@ Future<List<DesktopMenuLineSelection>?> showDesktopMenuLineCustomizerLines(
   required bool isBn,
   int initialQty = 1,
 }) {
-  debugPrint('[POS] Showing menu customizer for item=${item.name} id=${item.id} tags=${item.tags}');
+  debugPrint(
+    '[POS] Showing menu customizer for item=${item.name} id=${item.id} tags=${item.tags}',
+  );
   return showDialog<List<DesktopMenuLineSelection>>(
     context: context,
     builder: (_) => _MenuLineCustomizerDialog(
@@ -145,10 +147,13 @@ List<DesktopMenuOption> desktopConfiguredMenuOptionsFor(MenuItem item) {
 }
 
 bool desktopMenuNeedsCustomization(MenuItem item) {
-  final needs = desktopConfiguredMenuOptionsFor(item).isNotEmpty ||
+  final needs =
+      desktopConfiguredMenuOptionsFor(item).isNotEmpty ||
       item.extras.addOns.isNotEmpty;
   if (!needs) {
-    debugPrint('[POS] Item does NOT need customization: ${item.name} id=${item.id} optionsCount=${item.extras.options.length} addOnsCount=${item.extras.addOns.length}');
+    debugPrint(
+      '[POS] Item does NOT need customization: ${item.name} id=${item.id} optionsCount=${item.extras.options.length} addOnsCount=${item.extras.addOns.length}',
+    );
   }
   return needs;
 }

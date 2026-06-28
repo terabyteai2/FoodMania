@@ -26,9 +26,7 @@ class CloudDefaults {
   static String get defaultPublicApiBase {
     final raw = ngrokStaticDomain.trim();
     if (raw.isEmpty) {
-      return _cloudApiUrlFromEnvironment
-          .trim()
-          .replaceAll(RegExp(r'/+$'), '');
+      return _cloudApiUrlFromEnvironment.trim().replaceAll(RegExp(r'/+$'), '');
     }
     final low = raw.toLowerCase();
     if (low.startsWith('https://') || low.startsWith('http://')) {
@@ -84,9 +82,10 @@ class CloudDefaults {
       }
     }
     for (var i = 0; i < 8; i++) {
-      final m = RegExp(r'^(Exception|CloudApis?Exception|Error)\s*:\s*',
-              caseSensitive: false)
-          .firstMatch(s);
+      final m = RegExp(
+        r'^(Exception|CloudApis?Exception|Error)\s*:\s*',
+        caseSensitive: false,
+      ).firstMatch(s);
       if (m == null) break;
       s = s.substring(m.end).trim();
       if (s.isEmpty) break;
@@ -98,8 +97,7 @@ class CloudDefaults {
   }
 
   static String resolveBaseUrl(String? override) {
-    final trimmed =
-        sanitizeManualBaseUrl(override ?? '').trim();
+    final trimmed = sanitizeManualBaseUrl(override ?? '').trim();
     if (trimmed.isEmpty || trimmed == placeholderBaseUrl) {
       return embeddedBaseUrl;
     }
@@ -119,8 +117,7 @@ class CloudDefaults {
     if (resolvedBase == 'https://quickbytes.buzz' &&
         !isUuidLike &&
         subdomain.isNotEmpty &&
-        RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$')
-            .hasMatch(subdomain)) {
+        RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$').hasMatch(subdomain)) {
       return 'https://$subdomain.quickbytes.buzz';
     }
     return '$resolvedBase/menu/$outletId';

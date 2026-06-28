@@ -73,6 +73,8 @@ Future<void> openNewOrderForm(
               serviceType: result.serviceType,
               customerName: result.customerName,
               paymentMethod: null,
+              discountLabel: result.discountLabel,
+              discountAmount: result.discountAmount,
             );
             if (result.serviceType == OrderServiceType.delivery &&
                 ((result.deliveryAddress ?? '').isNotEmpty ||
@@ -215,7 +217,13 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    // Orders home reads orders (+ hasMore/loadingMore, both in the orders
+    // aspect), language, and menu availability — not printer/sync/inventory.
+    final app = AppScope.selectMany(context, const [
+      AppAspect.orders,
+      AppAspect.language,
+      AppAspect.menu,
+    ]);
     final rawOrders = app.ordersFor();
     final language = app.language;
     final searchQuery = _searchController.text.trim();
@@ -249,10 +257,8 @@ class _OrdersScreenState extends State<OrdersScreen>
       floatingActionButton: canCreate && hasAnyOpenOrders
           ? TfFab(
               tooltip: text.newOrder,
-              onPressed: () => openNewOrderForm(
-                context,
-                onCreated: () => _tabs.index = 0,
-              ),
+              onPressed: () =>
+                  openNewOrderForm(context, onCreated: () => _tabs.index = 0),
             )
           : null,
       body: SafeArea(
@@ -267,19 +273,18 @@ class _OrdersScreenState extends State<OrdersScreen>
               isCompletedTab: isCompletedTab,
               onGoToOngoing: () => _tabs.index = 0,
             ),
-            if (isCompletedTab)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TfSearchField(
-                        controller: _searchController,
-                        hintText: text.orderSearchHint,
-                        onChanged: (_) => setState(() {}),
-                      ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TfSearchField(
+                      controller: _searchController,
+                      hintText: text.orderSearchHint,
+                      onChanged: (_) => setState(() {}),
                     ),
-                  const SizedBox(width: 10),
+                  ),
+                  const SizedBox(width: PosSpacing.sp3 - 2),
                   TfIconButton(
                     icon: Icons.tune_rounded,
                     tooltip: text.filterOrders,
@@ -310,10 +315,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                     searchQuery: searchQuery,
                     onPrintBill: (o) => _printBill(context, o),
                     onPrintKot: (o) => _printKot(context, o),
-                    onOpen: (o) =>
-                        o.status.adminStatus == OrderStatus.pending
-                            ? _showPendingOrderDetails(context, o)
-                            : _openEditOrderSheet(context, o),
+                    onOpen: (o) => o.status.adminStatus == OrderStatus.pending
+                        ? _showPendingOrderDetails(context, o)
+                        : _openEditOrderSheet(context, o),
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
@@ -576,7 +580,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Future<void> _openOrderFilters(BuildContext context) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final result = await showModalBottomSheet<OrderListFilters>(
       context: context,
       isScrollControlled: true,
@@ -590,7 +594,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Future<void> _printKot(BuildContext context, OrderModel order) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (!app.isManager) return;
     final text = app.strings;
     final ok = await app.printOrderTicket(order);
@@ -603,7 +607,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   Future<void> _printBill(BuildContext context, OrderModel order) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (!app.isManager) return;
     final text = app.strings;
     // Spec: Print Bill marks the order completed so it moves to the Completed
@@ -626,7 +630,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     OrderModel order,
     OrderStatus status,
   ) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (!app.isManager) return;
     await app.updateOrderStatus(order.id, status);
   }
@@ -638,7 +642,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     BuildContext context,
     OrderModel order,
   ) async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     await showModalBottomSheet<void>(
       context: context,
       builder: (_) => SafeArea(
@@ -733,7 +737,8 @@ Future<void> openEditOrderSheet(BuildContext context, OrderModel order) async {
     }
   }
   final reasons = <String>[];
-  final hasEdit = result.serviceType != (order.serviceType ?? OrderServiceType.dineIn) ||
+  final hasEdit =
+      result.serviceType != (order.serviceType ?? OrderServiceType.dineIn) ||
       result.tableNo != order.tableNo ||
       result.customerName != order.customerName ||
       result.deliveryAddress != order.deliveryAddress ||
@@ -850,7 +855,10 @@ class _OrdersSummaryRow extends StatelessWidget {
             GestureDetector(
               onTap: onGoToOngoing,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: PosColors.primary,
                   borderRadius: BorderRadius.circular(PosRadii.xs),
@@ -1817,10 +1825,7 @@ class _PendingOrderDetailSheet extends StatelessWidget {
         .inMinutes;
     final typeLabel = _sourceLabel(order, text);
     final isDelivery = order.serviceType == OrderServiceType.delivery;
-    final subtotal = order.items.fold<double>(
-      0,
-      (s, i) => s + i.lineTotal,
-    );
+    final subtotal = order.items.fold<double>(0, (s, i) => s + i.lineTotal);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
@@ -2964,6 +2969,8 @@ class _OrderResult {
     this.customerName,
     this.mobileNumber,
     this.deliveryAddress,
+    this.discountAmount = 0,
+    this.discountLabel,
   });
 
   final List<OrderRequestItem> items;
@@ -2973,6 +2980,8 @@ class _OrderResult {
   final String? customerName;
   final String? mobileNumber;
   final String? deliveryAddress;
+  final double discountAmount;
+  final String? discountLabel;
 }
 
 class _NewOrderPage extends StatefulWidget {
@@ -3029,8 +3038,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _custPhoneCtrl = TextEditingController();
   final _custAddrCtrl = TextEditingController();
   String _query = '';
-  MenuLayoutMode _menuLayoutMode = MenuLayoutMode.grid;
-  int _gridCols = 3;
+  bool _codeMode = false;
   OrderModel? _createdOrder;
   bool _creating = false;
   Timer? _closeTimer;
@@ -3144,34 +3152,72 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     _goToStep(1);
   }
 
-  List<String> get _categories {
+  // ── Menu memo ──────────────────────────────────────────────────────────
+  // The menu only changes when the controller replaces the list wholesale
+  // (same identity signal the AppModel uses), so the favourite/popularity sort,
+  // the category list, and the per-item lowercased search blob are computed
+  // once per menu identity instead of on every build/keystroke.
+  List<MenuItem>? _menuMemoKey;
+  Map<String, int>? _popularityMemoKey;
+  List<MenuItem> _sortedMenu = const [];
+  List<String> _categoriesMemo = const ['All'];
+  Map<String, String> _searchBlobs = const {};
+
+  void _ensureMenuMemo() {
+    if (identical(_menuMemoKey, widget.menuItems) &&
+        identical(_popularityMemoKey, widget.itemPopularity)) {
+      return;
+    }
+    _menuMemoKey = widget.menuItems;
+    _popularityMemoKey = widget.itemPopularity;
+    // Favourites float to the top, then by all-time popularity. Filtering
+    // below preserves this order, so we never re-sort per keystroke.
+    _sortedMenu = [...widget.menuItems]
+      ..sort((a, b) {
+        if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+        final aPop = widget.itemPopularity[a.id] ?? 0;
+        final bPop = widget.itemPopularity[b.id] ?? 0;
+        return bPop.compareTo(aPop);
+      });
     final cats = widget.menuItems.map((i) => i.category).toSet().toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return ['All', ...cats];
+    _categoriesMemo = ['All', ...cats];
+    _searchBlobs = {
+      for (final i in widget.menuItems)
+        i.id: [
+          i.name,
+          i.nameEn,
+          i.nameBn,
+          i.category,
+          i.description,
+        ].whereType<String>().join(' ').toLowerCase(),
+    };
+  }
+
+  List<String> get _categories {
+    _ensureMenuMemo();
+    return _categoriesMemo;
   }
 
   List<MenuItem> get _visibleItems {
-    final items = widget.menuItems.where((i) {
-      final matchesCategory =
-          _selectedCategory == 'All' || i.category == _selectedCategory;
-      if (!matchesCategory) return false;
-      final query = _query.trim().toLowerCase();
-      if (query.isEmpty) return true;
-      final searchable = [
-        i.name,
-        i.nameEn,
-        i.nameBn,
-        i.category,
-        i.description,
-      ].whereType<String>().join(' ').toLowerCase();
-      return searchable.contains(query);
-    }).toList(growable: false);
-    items.sort((a, b) {
-      final aPop = widget.itemPopularity[a.id] ?? 0;
-      final bPop = widget.itemPopularity[b.id] ?? 0;
-      return bPop.compareTo(aPop);
-    });
-    return items;
+    _ensureMenuMemo();
+    final rawQuery = _query.trim();
+    final lowerQuery = rawQuery.toLowerCase();
+    final selectedCategory = _selectedCategory;
+    final codeMode = _codeMode;
+    return _sortedMenu
+        .where((i) {
+          if (selectedCategory != 'All' && i.category != selectedCategory) {
+            return false;
+          }
+          if (rawQuery.isEmpty) return true;
+          if (codeMode) {
+            // Code mode: match the short code by prefix.
+            return (i.shortCode?.toString() ?? '').startsWith(rawQuery);
+          }
+          return (_searchBlobs[i.id] ?? '').contains(lowerQuery);
+        })
+        .toList(growable: false);
   }
 
   Map<String, int> get _cartQtyByItemId {
@@ -3189,8 +3235,10 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   }
 
   double get _discount =>
-      (double.tryParse(_discountCtrl.text.replaceAll(',', '')) ?? 0.0)
-          .clamp(0.0, _subtotal);
+      (double.tryParse(_discountCtrl.text.replaceAll(',', '')) ?? 0.0).clamp(
+        0.0,
+        _subtotal,
+      );
 
   double get _total => _roundMoney(_subtotal - _discount);
 
@@ -3247,14 +3295,87 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     });
   }
 
-  void _selectMenuLayout(MenuLayoutMode mode) {
-    if (_menuLayoutMode == mode) return;
-    setState(() => _menuLayoutMode = mode);
+  void _toggleCodeMode() {
+    setState(() {
+      _codeMode = !_codeMode;
+      _query = '';
+      _searchCtrl.clear();
+    });
   }
 
-  void _selectGridCols(int cols) {
-    if (_gridCols == cols) return;
-    setState(() => _gridCols = cols);
+  /// Quick-pick by short code: add the exact match, then clear for the next.
+  void _onCodeSubmit(String raw) {
+    final code = int.tryParse(raw.trim());
+    if (code == null) return;
+    MenuItem? match;
+    for (final item in widget.menuItems) {
+      if (item.shortCode == code && item.isAvailable) {
+        match = item;
+        break;
+      }
+    }
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(AppScope.of(context).strings.noItemForCode(raw)),
+        ),
+      );
+      return;
+    }
+    unawaited(_tap(match));
+    setState(() => _query = '');
+    _searchCtrl.clear();
+  }
+
+  Future<void> _toggleFavorite(MenuItem item) async {
+    HapticFeedback.selectionClick();
+    await AppScope.of(context).setMenuItemFavorite(item.id, !item.isFavorite);
+  }
+
+  static const String _kClearShortCode = '__clear__';
+
+  Future<void> _setShortCode(MenuItem item) async {
+    final scope = AppScope.of(context);
+    final text = scope.strings;
+    final controller = TextEditingController(
+      text: item.shortCode?.toString() ?? '',
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: TfText(text.setShortCode),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(hintText: text.shortCodeFieldHint),
+          onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, _kClearShortCode),
+            child: TfText(text.clearShortCode),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: TfText(text.cancel),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: TfText(text.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return; // dismissed
+    // Clearing (explicit button or an empty value) removes the code.
+    final code = result == _kClearShortCode ? null : int.tryParse(result);
+    if (result != _kClearShortCode && result.isNotEmpty && code == null) {
+      return; // non-numeric input — ignore
+    }
+    await scope.setMenuItemShortCode(item.id, code);
   }
 
   Map<String, int> get _categoryCounts {
@@ -3298,6 +3419,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
           deliveryAddress: isDelivery && _custAddrCtrl.text.trim().isNotEmpty
               ? _custAddrCtrl.text.trim()
               : null,
+          discountAmount: _discount,
+          discountLabel: _discount > 0
+              ? (AppScope.of(context).strings.isBn
+                    ? 'ম্যানুয়াল ডিসকাউন্ট'
+                    : 'Manual discount')
+              : null,
         ),
       );
       if (!mounted) return;
@@ -3320,7 +3447,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     }
   }
 
-
   String get _tableLabel {
     if (_source == OrderServiceType.takeaway) return 'Parcel';
     if (_source == OrderServiceType.delivery) return 'Delivery';
@@ -3338,23 +3464,28 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final displayStep = skipsSourceStep ? _step - 1 : _step;
     final displayTotalSteps = skipsSourceStep ? _totalSteps - 1 : _totalSteps;
     final cartQtyByItemId = _cartQtyByItemId;
+    final text = AppScope.of(context).strings;
     return Scaffold(
       backgroundColor: PosColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            _WizardHeader(
-              step: displayStep,
-              totalSteps: displayTotalSteps,
-              tableLabel: _tableLabel,
-              onClose: () => Navigator.pop(context),
-              onBack: _step > firstReachableStep && !isSuccess
-                  ? () => _goToStep(_step - 1)
-                  : null,
-              counterMode: widget.counterMode,
-              skipsSourceStep: skipsSourceStep,
-            ),
-            _StepIndicator(step: displayStep, total: displayTotalSteps),
+            // The Add-items step (1) renders its own Petpooja-style top bar
+            // inside MenuStep; the wizard chrome shows on the other steps.
+            if (_step != 1) ...[
+              _WizardHeader(
+                step: displayStep,
+                totalSteps: displayTotalSteps,
+                tableLabel: _tableLabel,
+                onClose: () => Navigator.pop(context),
+                onBack: _step > firstReachableStep && !isSuccess
+                    ? () => _goToStep(_step - 1)
+                    : null,
+                counterMode: widget.counterMode,
+                skipsSourceStep: skipsSourceStep,
+              ),
+              _StepIndicator(step: displayStep, total: displayTotalSteps),
+            ],
             Expanded(
               child: PageView(
                 controller: _pageCtrl,
@@ -3383,16 +3514,25 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     totalQty: _totalQty,
                     searchCtrl: _searchCtrl,
                     query: _query,
-                    layoutMode: _menuLayoutMode,
-                    gridCols: _gridCols,
+                    codeMode: _codeMode,
                     categoryCounts: _categoryCounts,
+                    title: text.itemsTitle(
+                      _tableLabel.isEmpty ? '—' : _tableLabel,
+                    ),
+                    onBack: _step > firstReachableStep
+                        ? () => _goToStep(_step - 1)
+                        : () => Navigator.pop(context),
+                    leadingIsClose: _step <= firstReachableStep,
                     onSearchChanged: (value) => setState(() => _query = value),
-                    onLayoutChanged: _selectMenuLayout,
-                    onGridColsChanged: _selectGridCols,
+                    onToggleCodeMode: _toggleCodeMode,
+                    onCodeSubmit: _onCodeSubmit,
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),
                     onTap: (item) => unawaited(_tap(item)),
                     onDecrement: _decrement,
+                    onToggleFavorite: (item) =>
+                        unawaited(_toggleFavorite(item)),
+                    onSetShortCode: (item) => unawaited(_setShortCode(item)),
                     onSubmit: _cartLines.isNotEmpty ? _goToReview : null,
                   ),
                   _ReviewStep(
@@ -3883,85 +4023,38 @@ class _ReviewStep extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
-              TfCard(
+              // Quiet source + item-count line (no card chrome).
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 4, 2, 10),
                 child: Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: PosColors.primarySoft,
-                        borderRadius: BorderRadius.circular(PosRadii.tile),
-                        border: Border.all(color: PosColors.line, width: 1),
-                      ),
-                      child: const Icon(
-                        Icons.receipt_long_rounded,
-                        color: PosColors.primaryDark,
-                        size: 22,
+                    Expanded(
+                      child: TfText(
+                        sourceLabel,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.slate,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TfText(
-                            text.isBn ? 'অর্ডার রিভিউ' : 'Review order',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: PosColors.slate,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          TfText(
-                            text.isBn
-                                ? '${tfFormatNumber(context, totalQty)} আইটেম · ${tfFormatCurrency(context, total)}'
-                                : '${tfFormatNumber(context, totalQty)} items · ${tfFormatCurrency(context, total)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: PosColors.muted,
-                            ),
-                          ),
-                        ],
+                    TfText(
+                      text.isBn
+                          ? '${tfFormatNumber(context, totalQty)} আইটেম'
+                          : '${tfFormatNumber(context, totalQty)} items',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: PosColors.muted,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
               TfCard(
                 padded: false,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TfSectionHeader(
-                              label: text.sourceLabel,
-                              padding: EdgeInsets.zero,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          TfText(
-                            sourceLabel,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: PosColors.slate,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(
-                      color: PosColors.line,
-                      height: 1,
-                      thickness: 0.5,
-                    ),
                     ...lines.map((line) {
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
@@ -4119,8 +4212,9 @@ class _ReviewStep extends StatelessWidget {
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
                           isCollapsed: true,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                          ),
                           hintText: '0',
                           hintStyle: TextStyle(
                             fontFamily: tfFontFamily(context),
@@ -4612,5 +4706,3 @@ class _WizardTableCell extends StatelessWidget {
     );
   }
 }
-
-

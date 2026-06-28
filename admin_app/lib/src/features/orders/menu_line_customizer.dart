@@ -84,11 +84,7 @@ class MenuLineSelection {
   }
 }
 
-MenuLineSelection regularMenuLine(
-  MenuItem item, {
-  int qty = 1,
-  String? note,
-}) {
+MenuLineSelection regularMenuLine(MenuItem item, {int qty = 1, String? note}) {
   return MenuLineSelection(
     item: item,
     option: _baseMenuOption,
@@ -186,10 +182,13 @@ List<MenuLineOption> configuredMenuLineOptionsFor(MenuItem item) {
 }
 
 bool menuLineNeedsCustomization(MenuItem item) {
-  final needs = configuredMenuLineOptionsFor(item).isNotEmpty ||
+  final needs =
+      configuredMenuLineOptionsFor(item).isNotEmpty ||
       item.extras.addOns.isNotEmpty;
   if (!needs) {
-    debugPrint('[POS] Item does NOT need customization: ${item.name} id=${item.id} optionsCount=${item.extras.options.length} addOnsCount=${item.extras.addOns.length}');
+    debugPrint(
+      '[POS] Item does NOT need customization: ${item.name} id=${item.id} optionsCount=${item.extras.options.length} addOnsCount=${item.extras.addOns.length}',
+    );
   }
   return needs;
 }
@@ -253,9 +252,7 @@ class _MenuLineCustomizerDialog extends StatefulWidget {
 }
 
 class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
-  late final List<MenuLineOption> _options = menuLineOptionsFor(
-    widget.item,
-  );
+  late final List<MenuLineOption> _options = menuLineOptionsFor(widget.item);
   late final bool _hasOptions = _options.any(
     (option) => option.label.trim().isNotEmpty || option.hasPriceDelta,
   );

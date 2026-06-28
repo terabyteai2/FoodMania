@@ -61,6 +61,8 @@ class _OrderFlowController extends PosAppController {
     OrderServiceType? serviceType,
     int? covers,
     OrderPaymentMethod? paymentMethod,
+    String? discountLabel,
+    double discountAmount = 0,
   }) async {
     createManualOrderCalls++;
     final now = DateTime(2026, 5, 24, 12);

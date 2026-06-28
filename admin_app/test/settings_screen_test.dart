@@ -28,7 +28,10 @@ Widget _scoped(PosAppController controller, Widget child) {
       ],
       theme: AppTheme.light(),
       home: Scaffold(
-        body: SingleChildScrollView(padding: const EdgeInsets.all(12), child: child),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(12),
+          child: child,
+        ),
       ),
     ),
   );
@@ -93,57 +96,51 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets(
-    'manager settings follow the requested visible order, '
-    'with restaurant identity fields up top and no Restaurant/Restaurant '
-    'Details detour',
-    (tester) async {
-      final controller = PosAppController()
-        ..language = AppLanguage.en
-        ..demoManagerLoginEnabled = true;
+  testWidgets('manager settings follow the requested visible order, '
+      'with restaurant identity fields up top and no Restaurant/Restaurant '
+      'Details detour', (tester) async {
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..demoManagerLoginEnabled = true;
 
-      await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
-      const expected = [
-        'Name',
-        'Restaurant name',
-        'Restaurant phone',
-        'Website URL',
-        'Restaurant Logo',
-        'Set Table Numbers',
-        'All QR Codes',
-        'Website image/video',
-        'Website Theme',
-        'ChatBot',
-        'Connect Printer',
-        'Reports',
-        'About Us',
-        'Privacy Policy',
-        'Log Out',
-      ];
-      final textValues = tester
-          .widgetList<Text>(find.byType(Text))
-          .map((widget) => widget.data)
-          .whereType<String>()
-          .toList(growable: false);
-      final positions = [
-        for (final label in expected) textValues.indexOf(label),
-      ];
+    const expected = [
+      'Name',
+      'Restaurant name',
+      'Restaurant phone',
+      'Website URL',
+      'Restaurant Logo',
+      'Set Table Numbers',
+      'All QR Codes',
+      'Website image/video',
+      'Website Theme',
+      'ChatBot',
+      'Connect Printer',
+      'About Us',
+      'Privacy Policy',
+      'Log Out',
+    ];
+    final textValues = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .toList(growable: false);
+    final positions = [for (final label in expected) textValues.indexOf(label)];
 
-      expect(positions, everyElement(greaterThanOrEqualTo(0)));
-      expect(positions, orderedEquals([...positions]..sort()));
-      // The old "Restaurant Details" sub-page and the deferred "Restaurant"
-      // entry are both gone — their fields live in the flat list above now.
-      expect(find.text('Restaurant Details'), findsNothing);
-      expect(find.text('Employee Account Management'), findsNothing);
-      expect(find.text('Inventory settings'), findsNothing);
-      expect(find.text('Display Size'), findsNothing);
-      expect(find.text('Wipe restaurant data'), findsNothing);
-      expect(find.text('Diagnostics'), findsNothing);
+    expect(positions, everyElement(greaterThanOrEqualTo(0)));
+    expect(positions, orderedEquals([...positions]..sort()));
+    // The old "Restaurant Details" sub-page and the deferred "Restaurant"
+    // entry are both gone — their fields live in the flat list above now.
+    expect(find.text('Restaurant Details'), findsNothing);
+    expect(find.text('Employee Account Management'), findsNothing);
+    expect(find.text('Inventory settings'), findsNothing);
+    expect(find.text('Display Size'), findsNothing);
+    expect(find.text('Wipe restaurant data'), findsNothing);
+    expect(find.text('Diagnostics'), findsNothing);
 
-      controller.dispose();
-    },
-  );
+    controller.dispose();
+  });
 
   testWidgets(
     'tapping a restaurant identity row opens a bottom sheet, not a page',
@@ -224,18 +221,6 @@ void main() {
     );
     expect(find.text('AI Scan Images'), findsOneWidget);
     expect(find.text('Terafoods Cloud Backend'), findsOneWidget);
-
-    controller.dispose();
-  });
-
-  testWidgets('reports page exposes a top-left back button', (tester) async {
-    final controller = PosAppController()..language = AppLanguage.en;
-
-    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
-    await tester.tap(find.text('Reports'));
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
 
     controller.dispose();
   });

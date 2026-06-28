@@ -54,8 +54,12 @@ class ServerConfig {
       tableCount: tableCount ?? this.tableCount,
       customerMenuTheme: customerMenuTheme ?? this.customerMenuTheme,
       deliveryCharge: deliveryCharge ?? this.deliveryCharge,
-      logoUrl: identical(logoUrl, _sentinel) ? this.logoUrl : logoUrl as String?,
-      logoBitmapUrl: identical(logoBitmapUrl, _sentinel) ? this.logoBitmapUrl : logoBitmapUrl as String?,
+      logoUrl: identical(logoUrl, _sentinel)
+          ? this.logoUrl
+          : logoUrl as String?,
+      logoBitmapUrl: identical(logoBitmapUrl, _sentinel)
+          ? this.logoBitmapUrl
+          : logoBitmapUrl as String?,
     );
   }
 }

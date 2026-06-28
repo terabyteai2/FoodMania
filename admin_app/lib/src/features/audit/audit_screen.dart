@@ -196,7 +196,9 @@ class _AuditRow extends StatelessWidget {
                   TfText(
                     entry.orderSerial != null
                         ? text.auditOrderRef(entry.orderSerial!)
-                        : (text.isBn ? entry.action.labelBn : entry.action.label),
+                        : (text.isBn
+                              ? entry.action.labelBn
+                              : entry.action.label),
                     style: const TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w700,
@@ -346,7 +348,9 @@ class _AuditDetailSheet extends StatelessWidget {
                   TfText(
                     entry.orderSerial != null
                         ? text.auditOrderRef(entry.orderSerial!)
-                        : (text.isBn ? entry.action.labelBn : entry.action.label),
+                        : (text.isBn
+                              ? entry.action.labelBn
+                              : entry.action.label),
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
@@ -356,19 +360,17 @@ class _AuditDetailSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              _DetailSection(label: text.isBn ? 'কে' : 'Who', children: [
-                _DetailRow(
-                  label: text.isBn ? 'নাম' : 'Name',
-                  value: who,
-                ),
-                if (roleLabel.isNotEmpty)
-                  _DetailRow(label: 'Role', value: roleLabel),
-                _DetailRow(
-                  label: text.isBn ? 'সময়' : 'Time',
-                  value: ts,
-                ),
-              ]),
-              if (entry.amount != null || (entry.reason ?? '').trim().isNotEmpty) ...[
+              _DetailSection(
+                label: text.isBn ? 'কে' : 'Who',
+                children: [
+                  _DetailRow(label: text.isBn ? 'নাম' : 'Name', value: who),
+                  if (roleLabel.isNotEmpty)
+                    _DetailRow(label: 'Role', value: roleLabel),
+                  _DetailRow(label: text.isBn ? 'সময়' : 'Time', value: ts),
+                ],
+              ),
+              if (entry.amount != null ||
+                  (entry.reason ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _DetailSection(
                   label: text.isBn ? 'বিবরণ' : 'Details',
@@ -390,12 +392,12 @@ class _AuditDetailSheet extends StatelessWidget {
                 const SizedBox(height: 16),
                 _DetailSection(
                   label: text.isBn ? 'আইটেম' : 'Items',
-                  children: entry.items.map(
-                    (item) => _DetailRow(
-                      label: item.name,
-                      value: '×${item.qty}',
-                    ),
-                  ).toList(),
+                  children: entry.items
+                      .map(
+                        (item) =>
+                            _DetailRow(label: item.name, value: '×${item.qty}'),
+                      )
+                      .toList(),
                 ),
               ],
             ],

@@ -20,7 +20,7 @@ QuickBytes is a mobile-first POS for small/medium Bangladeshi restaurants. A sin
 |---|---|---|---|
 | Insight tab | **Analytics** | **Control Tower ("Live")** | — |
 | Tables · Orders | ✓ | ✓ | ✓ |
-| Stock | ✓ | ✓ | — |
+| Stock | ✓ | - | — |
 | Menu management | ✓ | ✓ | view only |
 | Messages (chat takeover) | ✓ | ✓ | — |
 | Staff invite | ✓ (incl. Manager) | ✓ (Waiter only) | — |

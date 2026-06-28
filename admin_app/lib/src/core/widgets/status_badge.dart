@@ -62,12 +62,12 @@ class StatusBadge extends StatelessWidget {
     final background = _backgroundFor(color);
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: dense ? 6 : 7,
-        vertical: dense ? 3 : 4,
+        horizontal: dense ? PosSpacing.sp2 : PosSpacing.sp2 + 1,
+        vertical: dense ? PosSpacing.sp1 - 1 : PosSpacing.sp1,
       ),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(PosRadii.xs),
+        borderRadius: BorderRadius.circular(PosRadii.pill),
         border: Border.all(color: foreground.withValues(alpha: 0.14), width: 1),
       ),
       child: Row(
@@ -101,8 +101,9 @@ class StatusBadge extends StatelessWidget {
   }
 
   static Color _foregroundFor(Color color) {
-    if (color == PosColors.primary) return PosColors.accentInk;
-    if (color == PosColors.info) return PosColors.info;
+    if (color == PosColors.primary || color == PosColors.info) {
+      return PosColors.accentStrong;
+    }
     return color;
   }
 
@@ -111,7 +112,7 @@ class StatusBadge extends StatelessWidget {
       case OrderStatus.pending:
         return PosColors.warning;
       case OrderStatus.accepted:
-        return PosColors.primaryDark;
+        return PosColors.primary;
       case OrderStatus.completed:
         return PosColors.success;
       case OrderStatus.rejected:

@@ -77,8 +77,7 @@ class AppStrings {
   String get range30Days => isBn ? '৩০ দিন' : '30 days';
   String get ordersCompleted => isBn ? 'সম্পন্ন অর্ডার' : 'Orders Completed';
   String get grossSales => isBn ? 'গ্রস সেলস' : 'Gross Sales';
-  String get discountByStaff =>
-      isBn ? 'স্টাফ ডিসকাউন্ট' : 'Discount by Staff';
+  String get discountByStaff => isBn ? 'স্টাফ ডিসকাউন্ট' : 'Discount by Staff';
   String get netSales => isBn ? 'নেট সেলস' : 'Net Sales';
   String get totalCollection => isBn ? 'মোট কালেকশন' : 'Total Collection';
   String get salesSummary => isBn ? 'সেলস সারাংশ' : 'Sales Summary';
@@ -95,17 +94,65 @@ class AppStrings {
   String get taxesIncl => isBn ? 'ট্যাক্স (অন্তর্ভুক্ত)' : 'Taxes incl.';
   String get grossProfit => isBn ? 'গ্রস প্রফিট' : 'Gross Profit';
   String get popularDishes => isBn ? 'জনপ্রিয় ডিশ' : 'Popular Dishes';
+  // QS analytics — chart toggle, 9-tile grid, mini-rows, item drill-down.
+  String get revenue => isBn ? 'রেভিনিউ' : 'Revenue';
+  String get noOfOrders => isBn ? 'অর্ডার সংখ্যা' : 'No of Orders';
+  String get discountAndCommission =>
+      isBn ? 'ডিসকাউন্ট ও কমিশন' : 'Discount & Commission';
+  String get otherIncome => isBn ? 'অন্যান্য আয়' : 'Other Income';
+  String get taxAndDuty => isBn ? 'ট্যাক্স ও ডিউটি' : 'Tax and Duty';
+  String get dueReceivable => isBn ? 'বকেয়া ও প্রাপ্য' : 'Due & Receivable';
+  String get duePaid => isBn ? 'বকেয়া পরিশোধ' : 'Due Paid';
+  String get otherIncomeNote => isBn
+      ? '*অন্যান্য আয় = সার্ভিস চার্জ + কাস্টমার ফি + ডেলিভারি চার্জ'
+      : '*Other Income = Service Charge + Customer Fee + Delivery Charge';
+  String get costOfGoodsSold => isBn ? 'পণ্যের খরচ' : 'Cost of Goods Sold';
+  String get performance => isBn ? 'পারফরম্যান্স' : 'Performance';
+  String salesOfLastDays(int n) =>
+      isBn ? 'শেষ $n দিনের সেলস' : 'Sales of last $n days';
+  String get avgUnitPrice => isBn ? 'গড় একক দাম' : 'Avg. Unit Price';
+  String get totalPrice => isBn ? 'মোট দাম' : 'Total Price';
+  // Reports section
+  String get reportsHubSubtitle => isBn
+      ? 'সেলস, কালেকশন ও প্রফিট রিপোর্ট'
+      : 'Sales, collection & profit reports';
+  String get salesBreakdownReport =>
+      isBn ? 'সেলস ব্রেকডাউন রিপোর্ট' : 'Sales Breakdown';
+  String get itemWiseReport => isBn ? 'আইটেম ওয়াইজ সেলস' : 'Item-wise Sales';
+  String get performanceReport =>
+      isBn ? 'পারফরম্যান্স রিপোর্ট' : 'Performance Report';
+  String get successOrders => isBn ? 'সফল অর্ডার' : 'Success Orders';
+  String get cancelledOrders => isBn ? 'বাতিল অর্ডার' : 'Cancelled';
+  String get complimentaryOrders => isBn ? 'কমপ্লিমেন্টারি' : 'Complimentary';
+  String get paymentInformation =>
+      isBn ? 'পেমেন্ট তথ্য' : 'Payment Information';
+  String get performanceReportHint => isBn
+      ? 'নির্বাচিত সময়ের আগের সেলস অনুযায়ী আইটেম-ভিত্তিক রিপোর্ট পান।'
+      : "Item-wise report based on the selected period's sales.";
+  String get apply => isBn ? 'প্রয়োগ করুন' : 'Apply';
+  String get downloadPdf => isBn ? 'PDF ডাউনলোড' : 'Download PDF';
+  String get downloadExcel => isBn ? 'Excel ডাউনলোড' : 'Download Excel';
+  String get daily => isBn ? 'দৈনিক' : 'Daily';
+  String get weekly => isBn ? 'সাপ্তাহিক' : 'Weekly';
+  String get daysLabel => isBn ? 'দিন' : 'Days';
+  String get allServices => isBn ? 'সব সার্ভিস' : 'All Services';
+  String get allPaymentModes => isBn ? 'সব পেমেন্ট' : 'All Payment Modes';
+  String get ordersCount => isBn ? 'অর্ডার সংখ্যা' : 'No of orders';
   String get noData => isBn ? 'কোনো ডেটা নেই' : 'No data';
   String get analyticsErrorTitle =>
       isBn ? 'অ্যানালিটিক্স লোড হয়নি' : 'Analytics unavailable';
   String get analyticsErrorMessage => isBn
       ? 'ক্লাউড সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'
       : 'Check your cloud connection and pull to retry.';
-  String get analyticsNoItemsTitle =>
-      isBn ? 'কোনো বিক্রি নেই' : 'No sales yet';
+  String get analyticsNoItemsTitle => isBn ? 'কোনো বিক্রি নেই' : 'No sales yet';
   String get analyticsNoItemsMessage => isBn
       ? 'এই সময়ের মধ্যে কোনো আইটেম বিক্রি হয়নি।'
       : 'No items were sold in this period.';
+  String get analyticsNoDataTitle =>
+      isBn ? 'এখনো কোনো অ্যানালিটিক্স নেই' : 'No analytics yet';
+  String get analyticsNoDataMessage => isBn
+      ? 'এই সময়ের মধ্যে কোনো বিক্রি নেই। অর্ডার এলে এখানে রিপোর্ট দেখা যাবে।'
+      : 'No sales in this period yet. Reports will appear here once orders come in.';
   String get stockTab => isBn ? 'স্টক' : 'Stock';
   String get manageSection => isBn ? 'ম্যানেজ' : 'Manage';
   String get messages => isBn ? 'মেসেজ' : 'Messages';
@@ -228,10 +275,10 @@ class AppStrings {
   String get tableQrLabelsSubtitle => isBn
       ? 'প্রিন্টার দিয়ে আলাদা টেবিল QR স্টিকার প্রিন্ট করুন।'
       : 'Print individual table QR stickers via Bluetooth/USB printer.';
-  String get tableLabelPrinted => isBn ? 'এর লেবেল প্রিন্ট হয়েছে' : 'label printed';
-  String get noTablesConfigured => isBn
-      ? 'কোনো টেবিল কনফিগার করা নেই'
-      : 'No tables configured';
+  String get tableLabelPrinted =>
+      isBn ? 'এর লেবেল প্রিন্ট হয়েছে' : 'label printed';
+  String get noTablesConfigured =>
+      isBn ? 'কোনো টেবিল কনফিগার করা নেই' : 'No tables configured';
   String get orderingUrl => isBn ? 'অর্ডারিং URL' : 'Ordering URL';
   String get orderingUrlHint => isBn
       ? 'যেমন: https://order.myrestaurant.com'
@@ -401,8 +448,9 @@ class AppStrings {
   String get websiteImageVideoTitle =>
       isBn ? 'ওয়েবসাইটের ছবি/ভিডিও' : 'Website image/video';
   String get setUpLabel => isBn ? 'সেট আপ করুন' : 'Set up';
-  String get urlNameTooShort =>
-      isBn ? 'URL নাম কমপক্ষে ৩ অক্ষরের হতে হবে।' : 'URL name must be at least 3 characters.';
+  String get urlNameTooShort => isBn
+      ? 'URL নাম কমপক্ষে ৩ অক্ষরের হতে হবে।'
+      : 'URL name must be at least 3 characters.';
   // Orders
   String get newOrder => isBn ? 'নতুন অর্ডার' : 'New order';
   String get createNewOrder =>
@@ -498,8 +546,7 @@ class AppStrings {
   String get printKotAction => isBn ? 'KOT প্রিন্ট' : 'Print KOT';
   String kotPrinted(String seq) =>
       isBn ? '${_digits(seq)}-এর KOT প্রিন্ট হয়েছে' : 'KOT printed for $seq';
-  String get kotNotPrinted =>
-      isBn ? 'KOT প্রিন্ট হয়নি' : 'KOT not printed';
+  String get kotNotPrinted => isBn ? 'KOT প্রিন্ট হয়নি' : 'KOT not printed';
   String get noOngoingOrders =>
       isBn ? 'কোনো চলমান অর্ডার নেই।' : 'No ongoing orders.';
   String get noCompletedOrders =>
@@ -808,6 +855,17 @@ class AppStrings {
   String get editItemsAction => isBn ? 'আইটেম সম্পাদনা' : 'Edit items';
   String get searchMenuItems => isBn ? 'আইটেম খুঁজুন' : 'Search menu items…';
   String get categoryAll => isBn ? 'সব' : 'All';
+  // Add-items step (Petpooja "Items" grid).
+  String itemsTitle(String context) =>
+      isBn ? 'আইটেম ($context)' : 'Items ($context)';
+  String get searchByName => isBn ? 'নাম দিয়ে খুঁজুন' : 'Search by name';
+  String get addFavourite => isBn ? 'ফেভারিটে যোগ করুন' : 'Add to favourites';
+  String get removeFavourite =>
+      isBn ? 'ফেভারিট থেকে সরান' : 'Remove from favourites';
+  String get setShortCode => isBn ? 'শর্ট কোড সেট করুন' : 'Set short code';
+  String get shortCodeFieldHint =>
+      isBn ? 'শর্ট কোড (সংখ্যা)' : 'Short code (number)';
+  String get clearShortCode => isBn ? 'কোড মুছুন' : 'Clear code';
   String get tableBusyBadge => isBn ? 'বসা' : 'Busy';
   String get tableFreeBadge => isBn ? 'খালি' : 'Free';
   String tableNumberLabel(int n) => isBn ? 'T${_n(n)}' : 'T$n';
@@ -910,6 +968,8 @@ class AppStrings {
   String get menuSearchHint => isBn ? 'আইটেম খুঁজুন' : 'Search items';
   String get shortCodeSearchHint =>
       isBn ? 'শর্ট কোড লিখুন' : 'Enter short code';
+  String noItemForCode(String code) =>
+      isBn ? 'কোড #$code-এর কোনো আইটেম নেই' : 'No item for code #$code';
   String get shortCodeLabel => isBn ? 'শর্ট কোড' : 'Short code';
   String get shortCodeAutoHint =>
       isBn ? 'স্বয়ংক্রিয় (সিরিয়াল)' : 'Auto (serial)';
@@ -927,6 +987,15 @@ class AppStrings {
   String get menuActionScan => isBn ? 'স্ক্যান' : 'Scan';
   String get menuActionDiscounts => isBn ? 'ডিসকাউন্ট' : 'Discounts';
   String get menuActionSettings => isBn ? 'সেটিংস' : 'Settings';
+  String get menuScanCardButton =>
+      isBn ? 'মেনু কার্ড স্ক্যান' : 'Scan menu card';
+  String get menuGroupOpen =>
+      isBn ? 'মেনু ম্যানেজমেন্ট' : 'Open Menu management';
+  String get menuColStatus => isBn ? 'স্ট্যাটাস' : 'Status';
+  String get menuColName => isBn ? 'নাম' : 'Name';
+  String get menuColMarkAs => isBn ? 'মার্ক করুন' : 'Mark as';
+  String get menuMarkOn => isBn ? 'চালু' : 'ON';
+  String get menuMarkOff => isBn ? 'বন্ধ' : 'OFF';
   String get menuDeliveryOn => isBn ? 'ডেলিভারি চালু' : 'Delivery on';
   String get menuDeliveryOff => isBn ? 'ডেলিভারি বন্ধ' : 'Delivery off';
   String get menuScan => isBn ? 'AI স্ক্যান' : 'AI scan';
@@ -1428,11 +1497,9 @@ class AppStrings {
 
   // Unified inventory scan (bill OR count sheet → auto-routed)
   String get scanStock => isBn ? 'স্ক্যান' : 'Scan';
-  String get scanStockHint =>
-      isBn ? 'বিল বা গণনার শিট' : 'Bill or count sheet';
+  String get scanStockHint => isBn ? 'বিল বা গণনার শিট' : 'Bill or count sheet';
   String get scanningStock => isBn ? 'স্ক্যান হচ্ছে…' : 'Scanning…';
-  String get countScanUnmatched =>
-      isBn ? 'মেলানো যায়নি' : 'Couldn\'t match';
+  String get countScanUnmatched => isBn ? 'মেলানো যায়নি' : 'Couldn\'t match';
 
   // Daily report
   String get unexplainedVariance =>

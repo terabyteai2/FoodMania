@@ -125,6 +125,9 @@ class MenuItem(Base):
     # Short code — serial-by-default, editable; powers fast numeric item lookup
     # in the POS (the ⚡ search toggle). NULL = not yet assigned.
     short_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Outlet-wide favourite flag — favourited items float to the top of the POS
+    # item picker. NULL/false = not favourited.
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
     category: Mapped[str | None] = mapped_column(Text)
     category_en: Mapped[str | None] = mapped_column(Text)
     category_bn: Mapped[str | None] = mapped_column(Text)

@@ -213,9 +213,7 @@ class _RoleSwitcher extends StatelessWidget {
       child: Row(
         children: [
           for (final role in AccountRole.values)
-            Expanded(
-              child: _seg(role, app.accountRole == role),
-            ),
+            Expanded(child: _seg(role, app.accountRole == role)),
         ],
       ),
     );
@@ -277,11 +275,7 @@ class _ManageGroup extends StatelessWidget {
         MenuManagementScreen(onNavigateToOrders: onNavigateToOrders),
       );
       add(Icons.groups_outlined, text.staff, const StaffScreen());
-      add(
-        Icons.fact_check_outlined,
-        text.auditTrail,
-        const AuditScreen(),
-      );
+      add(Icons.fact_check_outlined, text.auditTrail, const AuditScreen());
     }
 
     if (rows.isEmpty) {

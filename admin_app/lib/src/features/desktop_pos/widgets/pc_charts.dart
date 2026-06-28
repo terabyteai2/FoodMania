@@ -20,12 +20,12 @@ class PcSpark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: height,
-        width: double.infinity,
-        child: CustomPaint(
-          painter: _SparkPainter(points, color ?? Pc.accent, fill),
-        ),
-      );
+    height: height,
+    width: double.infinity,
+    child: CustomPaint(
+      painter: _SparkPainter(points, color ?? Pc.accent, fill),
+    ),
+  );
 }
 
 class _SparkPainter extends CustomPainter {
@@ -49,8 +49,7 @@ class _SparkPainter extends CustomPainter {
       } else {
         final px = dx * (i - 1);
         final cx = px + dx / 2;
-        final py = padY +
-            innerH - points[i - 1].clamp(0, 1) * innerH;
+        final py = padY + innerH - points[i - 1].clamp(0, 1) * innerH;
         path.cubicTo(cx, py, cx, y, x, y);
       }
     }
@@ -118,18 +117,18 @@ class PcBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: height,
-        width: double.infinity,
-        child: CustomPaint(
-          painter: _BarPainter(
-            bars: bars,
-            accent: accent ?? Pc.accent,
-            peakIndex: peakIndex,
-            peakLabel: peakLabel,
-            yAxis: yAxis,
-          ),
-        ),
-      );
+    height: height,
+    width: double.infinity,
+    child: CustomPaint(
+      painter: _BarPainter(
+        bars: bars,
+        accent: accent ?? Pc.accent,
+        peakIndex: peakIndex,
+        peakLabel: peakLabel,
+        yAxis: yAxis,
+      ),
+    ),
+  );
 }
 
 class _BarPainter extends CustomPainter {
@@ -154,9 +153,7 @@ class _BarPainter extends CustomPainter {
     final innerH = size.height - padT - padB;
     final maxV = math.max(
       1.0,
-      bars
-              .map((b) => math.max(b.value, b.vs ?? 0))
-              .fold<double>(0, math.max) *
+      bars.map((b) => math.max(b.value, b.vs ?? 0)).fold<double>(0, math.max) *
           1.1,
     );
     const ticks = 4;
@@ -171,8 +168,15 @@ class _BarPainter extends CustomPainter {
       canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), grid);
       if (yAxis != null) {
         final value = maxV * (1 - i / ticks);
-        _text(canvas, yAxis!(value), Offset(padL - 6, y),
-            align: TextAlign.right, color: Pc.textTer, mono: true, size: 10);
+        _text(
+          canvas,
+          yAxis!(value),
+          Offset(padL - 6, y),
+          align: TextAlign.right,
+          color: Pc.textTer,
+          mono: true,
+          size: 10,
+        );
       }
     }
     final slot = innerW / bars.length;
@@ -184,7 +188,11 @@ class _BarPainter extends CustomPainter {
       if (b.vs != null && b.vs! > 0) {
         final vsH = b.vs! / maxV * innerH;
         final rect = Rect.fromLTWH(
-            cx - barW / 2 - 2, padT + innerH - vsH, barW + 4, vsH);
+          cx - barW / 2 - 2,
+          padT + innerH - vsH,
+          barW + 4,
+          vsH,
+        );
         canvas.drawRRect(
           RRect.fromRectAndRadius(rect, const Radius.circular(2)),
           Paint()..color = Pc.borderStrong.withValues(alpha: 0.5),
@@ -197,27 +205,48 @@ class _BarPainter extends CustomPainter {
         RRect.fromRectAndRadius(rect, const Radius.circular(2)),
         Paint()..color = isPeak ? Pc.ink : accent,
       );
-      _text(canvas, b.label, Offset(cx, size.height - padB + 14),
-          align: TextAlign.center, color: Pc.textSec, mono: true, size: 10);
+      _text(
+        canvas,
+        b.label,
+        Offset(cx, size.height - padB + 14),
+        align: TextAlign.center,
+        color: Pc.textSec,
+        mono: true,
+        size: 10,
+      );
       if (isPeak && peakLabel != null) {
         final top = padT + innerH - h - 20;
         final badge = Rect.fromCenter(
-            center: Offset(cx, top + 9), width: 74, height: 18);
+          center: Offset(cx, top + 9),
+          width: 74,
+          height: 18,
+        );
         canvas.drawRRect(
           RRect.fromRectAndRadius(badge, const Radius.circular(3)),
           Paint()..color = Pc.ink,
         );
-        _text(canvas, peakLabel!, Offset(cx, top + 3),
-            align: TextAlign.center, color: Colors.white, mono: true, size: 9);
+        _text(
+          canvas,
+          peakLabel!,
+          Offset(cx, top + 3),
+          align: TextAlign.center,
+          color: Colors.white,
+          mono: true,
+          size: 9,
+        );
       }
     }
   }
 
-  void _text(Canvas canvas, String text, Offset at,
-      {required TextAlign align,
-      required Color color,
-      bool mono = false,
-      double size = 10}) {
+  void _text(
+    Canvas canvas,
+    String text,
+    Offset at, {
+    required TextAlign align,
+    required Color color,
+    bool mono = false,
+    double size = 10,
+  }) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
@@ -292,25 +321,36 @@ class PcDonut extends StatelessWidget {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                            color: s.color,
-                            borderRadius: BorderRadius.circular(2)),
+                          color: s.color,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(s.label,
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w600)),
+                        child: Text(
+                          s.label,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       Text(
                         '${total == 0 ? 0 : (s.value / total * 100).round()}%',
-                        style: Pc.num(12,
-                            weight: FontWeight.w400, color: Pc.textSec),
+                        style: Pc.num(
+                          12,
+                          weight: FontWeight.w400,
+                          color: Pc.textSec,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       SizedBox(
                         width: 56,
-                        child: Text(pcMoney(s.value),
-                            textAlign: TextAlign.right, style: Pc.num(12.5)),
+                        child: Text(
+                          pcMoney(s.value),
+                          textAlign: TextAlign.right,
+                          style: Pc.num(12.5),
+                        ),
                       ),
                     ],
                   ),

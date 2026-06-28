@@ -395,8 +395,8 @@ class _DailySummaryCard extends StatelessWidget {
     // Prefer cloud summary, fall back to local metrics.
     final revenue = ds?.moneyFirst.earnedToday ?? metrics.totalSales;
     final orders = ds?.moneyFirst.kpis.orders ?? metrics.todayOrders;
-    final avgTicket = ds?.moneyFirst.kpis.avgTicket ??
-        (orders > 0 ? revenue / orders : 0);
+    final avgTicket =
+        ds?.moneyFirst.kpis.avgTicket ?? (orders > 0 ? revenue / orders : 0);
     final deltaPct = ds?.moneyFirst.deltaPct;
     final hasDelta = deltaPct != null && deltaPct != 0;
 
@@ -433,8 +433,7 @@ class _DailySummaryCard extends StatelessWidget {
                   ),
                 )
               else if (error != null)
-                Icon(Icons.cloud_off_rounded,
-                    size: 16, color: PosColors.muted)
+                Icon(Icons.cloud_off_rounded, size: 16, color: PosColors.muted)
               else if (hasDelta)
                 Row(
                   mainAxisSize: MainAxisSize.min,

@@ -26,11 +26,16 @@ class InventorySummary {
       alerts: _parseInt(json['alerts']),
       categories: ((json['categories'] as List?) ?? const [])
           .whereType<Map>()
-          .map((row) => InventoryCategoryBucket.fromJson(row.cast<String, Object?>()))
+          .map(
+            (row) =>
+                InventoryCategoryBucket.fromJson(row.cast<String, Object?>()),
+          )
           .toList(growable: false),
       items: ((json['items'] as List?) ?? const [])
           .whereType<Map>()
-          .map((row) => InventorySummaryItem.fromJson(row.cast<String, Object?>()))
+          .map(
+            (row) => InventorySummaryItem.fromJson(row.cast<String, Object?>()),
+          )
           .toList(growable: false),
     );
   }

@@ -155,7 +155,9 @@ class _StockInScreenState extends State<StockInScreen> {
   Future<void> _saveAll() async {
     if (_saving) return;
     final valid = _lines.where((l) => l.canSave).toList(growable: false);
-    if (valid.isEmpty && _existingCtrls.values.every((c) => c.text.trim().isEmpty)) return;
+    if (valid.isEmpty &&
+        _existingCtrls.values.every((c) => c.text.trim().isEmpty))
+      return;
     setState(() => _saving = true);
     final app = AppScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
@@ -1030,14 +1032,11 @@ class _ExistingItemsSection extends StatelessWidget {
         for (final item in items)
           _ExistingStockInRow(
             item: item,
-            controller: controllers.putIfAbsent(
-              item.id,
-              () {
-                final ctrl = TextEditingController();
-                ctrl.addListener(onChanged);
-                return ctrl;
-              },
-            ),
+            controller: controllers.putIfAbsent(item.id, () {
+              final ctrl = TextEditingController();
+              ctrl.addListener(onChanged);
+              return ctrl;
+            }),
             text: text,
           ),
       ],
@@ -1163,10 +1162,9 @@ class _ExistingStockInRow extends StatelessWidget {
     );
   }
 
-  static String _fmtQty(double value) =>
-      value == value.roundToDouble()
-          ? value.toInt().toString()
-          : value.toStringAsFixed(1);
+  static String _fmtQty(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
 }
 
 class _DashedBorderPainter extends CustomPainter {

@@ -15,10 +15,7 @@ enum OrderDateRange {
 
 /// Filters applied on the orders screen (date + channel).
 class OrderListFilters {
-  const OrderListFilters({
-    this.dateRange = OrderDateRange.all,
-    this.source,
-  });
+  const OrderListFilters({this.dateRange = OrderDateRange.all, this.source});
 
   final OrderDateRange dateRange;
   final OrderSource? source;

@@ -335,9 +335,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
       chrome: chrome,
       activeNav: PcNav.counter,
       title: '',
-      child: const Center(
-        child: Text('Section not available for your role.'),
-      ),
+      child: const Center(child: Text('Section not available for your role.')),
     );
   }
 

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,6 +14,7 @@ from routers.menu import _ensure_outlet
 from schemas import ok
 
 router = APIRouter()
+logger = logging.getLogger("quickbytes.analytics")
 
 # Restaurants run on Bangladesh local time (UTC+6) — pick the day boundary in
 # that zone so "today" matches what an owner sees on a wall clock.
@@ -1488,26 +1490,115 @@ def _line_cost(item: dict[str, Any]) -> float:
     return float(cost) * float(_item_qty(item))
 
 
+def _bdt_date_key(when: datetime) -> str:
+    """Local Dhaka calendar date (yyyy-mm-dd) for a UTC timestamp."""
+    if when is None:
+        return ""
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when.astimezone(timezone(BDT_OFFSET)).strftime("%Y-%m-%d")
+
+
+def _day_keys(cur_start: datetime, cur_end: datetime) -> list[str]:
+    """Ordered local-date keys covering [cur_start, cur_end) (capped at 366)."""
+    keys: list[str] = []
+    cursor = cur_start
+    while cursor < cur_end and len(keys) < 366:
+        keys.append(_bdt_date_key(cursor))
+        cursor += timedelta(days=1)
+    if not keys:
+        keys.append(_bdt_date_key(cur_start))
+    return keys
+
+
+def _order_matches_report_filters(
+    order: Order,
+    service: str | None,
+    payment_method: str | None,
+    shift_id: str | None,
+    user: str | None,
+) -> bool:
+    """Optional report filters — None/"all" means "don't filter on this axis"."""
+    if service and service != "all" and _service_key(order.service_type) != service:
+        return False
+    if payment_method and payment_method != "all":
+        if (order.payment_method or "").strip().lower() != payment_method.strip().lower():
+            return False
+    if shift_id and (order.shift_id or "") != shift_id:
+        return False
+    if user and (order.created_by_account_id or "") != user:
+        return False
+    return True
+
+
+def _log_payload_summary(
+    range_key: str,
+    orders_completed: int,
+    net_sales: float,
+    total_collection: float,
+    trend: list,
+    item_wise: list,
+    *,
+    used_order_total_fallback: bool = False,
+):
+    trend_revenue = sum(p.get("revenue", 0) for p in trend)
+    trend_orders = sum(p.get("orders", 0) for p in trend)
+    logger.info(
+        "summary response range=%s ordersCompleted=%s netSales=%.2f "
+        "totalCollection=%.2f trendPoints=%s trendRevenue=%.2f "
+        "trendOrders=%s itemWiseCategories=%s orderTotalFallback=%s",
+        range_key,
+        orders_completed,
+        net_sales,
+        total_collection,
+        len(trend),
+        trend_revenue,
+        trend_orders,
+        len(item_wise),
+        used_order_total_fallback,
+    )
+
+
 @router.get("/outlets/{outlet_id}/analytics/summary")
 async def analytics_summary(
     outlet_id: str,
     range_: str = Query("today", alias="range"),
     start: str | None = None,
     end: str | None = None,
+    service: str | None = None,
+    payment_method: str | None = None,
+    shift_id: str | None = None,
+    user: str | None = None,
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
     """QuicklyServices-style plain BD analytics (spec Part B).
 
     Sales Summary · Collection Summary · Service-wise Sales · Profit Estimation
-    · Popular Dishes · Item-wise Sales. No AOV/cohort/LTV/forecast jargon.
+    · Popular Dishes · Item-wise Sales · Revenue/Orders trend. No AOV/cohort/
+    LTV/forecast jargon. Optional filters (service/payment_method/shift_id/user)
+    power the Sales Breakdown + Item-wise reports; null/"all" = unfiltered.
     """
     _ensure_outlet(current_outlet, outlet_id)
     now = datetime.now(timezone.utc)
     cur_start, cur_end, _prev_start, _prev_end = _analytics_period(
         range_, start, end, now
     )
+    logger.info(
+        "summary request range=%s curStart=%s curEnd=%s outlet=%s "
+        "service=%s paymentMethod=%s shift=%s userFilter=%s",
+        range_,
+        cur_start.isoformat(),
+        cur_end.isoformat(),
+        outlet_id,
+        service or "all",
+        payment_method or "all",
+        "set" if shift_id else "all",
+        "set" if user else "all",
+    )
 
+    # Exclude rejected/cancelled at the DB so they never travel to Python.
+    # Mirrors _is_rejected_status (strip + lower) so the result set is identical.
     orders = (
         (
             await db.execute(
@@ -1515,23 +1606,37 @@ async def analytics_summary(
                 .where(Order.outlet_id == outlet_id)
                 .where(Order.created_at >= cur_start)
                 .where(Order.created_at < cur_end)
+                .where(
+                    func.lower(func.trim(Order.status)).notin_(
+                        tuple(REJECTED_STATUSES)
+                    )
+                )
             )
         )
         .scalars()
         .all()
     )
-    orders = [o for o in orders if not _is_rejected_status(o.status)]
+    orders = [
+        o
+        for o in orders
+        if _order_matches_report_filters(o, service, payment_method, shift_id, user)
+    ]
+    logger.info("summary orders fetched count=%s", len(orders))
 
     # Menu lookup: menuItemId -> (name, category) for item-wise grouping.
+    # Project only the columns used — full MenuItem rows carry image_url,
+    # tags_json and descriptions we don't need, wasting RAM on big menus.
     menu_rows = (
-        (
-            await db.execute(
-                select(MenuItem).where(MenuItem.outlet_id == outlet_id)
-            )
+        await db.execute(
+            select(
+                MenuItem.id,
+                MenuItem.category_en,
+                MenuItem.category,
+                MenuItem.name_en,
+                MenuItem.name,
+            ).where(MenuItem.outlet_id == outlet_id)
         )
-        .scalars()
-        .all()
-    )
+    ).all()
     menu_cat = {m.id: (m.category_en or m.category or "General") for m in menu_rows}
     menu_name = {m.id: (m.name_en or m.name) for m in menu_rows}
 
@@ -1543,21 +1648,31 @@ async def analytics_summary(
     delivery_total = 0.0
     tax_total = 0.0
     prep_cost = 0.0
+    due_receivable = 0.0
     collection: dict[str, float] = defaultdict(float)
     service: dict[str, float] = defaultdict(float)
+    # local-date -> revenue / order-count (Revenue trend chart)
+    trend_rev: dict[str, float] = defaultdict(float)
+    trend_ord: dict[str, int] = defaultdict(int)
     # item_id -> [units, sales]
     item_agg: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
 
     for order in orders:
         total = float(order.total_amount or 0)
         discount = float(order.discount_amount or 0)
+        method = (order.payment_method or "cash").strip().lower() or "cash"
         total_collection += total
         discount_total += discount
         service_charge_total += float(order.service_charge_amount or 0)
         delivery_total += float(order.delivery_charge or 0)
         tax_total += float(order.vat_amount or 0)
-        collection[(order.payment_method or "cash").strip().lower() or "cash"] += total
+        if method == "pay_later":
+            due_receivable += total
+        collection[method] += total
         service[_service_key(order.service_type)] += total
+        day = _bdt_date_key(order.created_at)
+        trend_rev[day] += total
+        trend_ord[day] += 1
         lines = _line_items(order.items)
         for line in lines:
             rev = _item_revenue(line)
@@ -1567,7 +1682,26 @@ async def analytics_summary(
             item_agg[key][0] += _item_qty(line)
             item_agg[key][1] += rev
 
+    used_order_total_fallback = False
+    if orders_completed > 0 and gross_sales == 0 and total_collection > 0:
+        gross_sales = total_collection
+        used_order_total_fallback = True
     net_sales = gross_sales - discount_total
+    # QS Home stat tiles. Commission / Customer Fee / Due-paid have no data
+    # source -> null so the UI hides those tiles (never zero-fill, per invariant).
+    discount_and_commission = discount_total
+    other_income = service_charge_total + delivery_total
+    tax_and_duty = tax_total
+
+    day_keys = _day_keys(cur_start, cur_end)
+    trend = [
+        {
+            "date": d,
+            "revenue": round(trend_rev.get(d, 0.0), 2),
+            "orders": int(trend_ord.get(d, 0)),
+        }
+        for d in day_keys
+    ]
 
     # Wastage cost in the window (stock adjustments marked waste).
     wastage = float(
@@ -1613,6 +1747,7 @@ async def analytics_summary(
         cat = menu_cat.get(key, "General")
         cat_groups[cat].append(
             {
+                "menuItemId": key,
                 "name": menu_name.get(key, key),
                 "units": int(units),
                 "avgUnitPrice": round(_safe_div(sales, units), 2),
@@ -1636,50 +1771,287 @@ async def analytics_summary(
             if totals.get(k, 0.0) != 0
         ]
 
+    payload = {
+        "rangeStart": cur_start.isoformat(),
+        "rangeEnd": cur_end.isoformat(),
+        "salesSummary": {
+            "ordersCompleted": orders_completed,
+            "grossSales": round(gross_sales, 2),
+            "discountByStaff": round(discount_total, 2),
+            "netSales": round(net_sales, 2),
+        },
+        "totalCollection": round(total_collection, 2),
+        "discountAndCommission": round(discount_and_commission, 2),
+        "otherIncome": round(other_income, 2),
+        "taxAndDuty": round(tax_and_duty, 2),
+        "dueReceivable": round(due_receivable, 2) if due_receivable > 0 else None,
+        "duePaid": None,
+        "trend": trend,
+        "collection": [
+            {
+                "key": k,
+                "label": k.upper() if len(k) <= 4 else k.capitalize(),
+                "valueBdt": round(v, 2),
+            }
+            for k, v in sorted(collection.items(), key=lambda kv: kv[1], reverse=True)
+        ],
+        "serviceWise": [
+            {
+                "key": k,
+                "label": label,
+                "valueBdt": round(service.get(k, 0.0), 2),
+            }
+            for k, label in (
+                ("dineIn", "Dine-in"),
+                ("takeaway", "Takeaway"),
+                ("delivery", "Delivery Service"),
+            )
+        ],
+        "profit": {
+            "netSales": round(net_sales, 2),
+            "serviceCharge": round(service_charge_total, 2),
+            "deliveryCharge": round(delivery_total, 2),
+            "preparationCost": round(prep_cost, 2),
+            "wastage": round(wastage, 2),
+            "paymentFee": round(payment_fee, 2),
+            "taxes": round(tax_total, 2),
+            "grossProfit": round(gross_profit, 2),
+        },
+        "popularDishes": popular,
+        "itemWise": item_wise,
+    }
+    _log_payload_summary(
+        range_,
+        orders_completed,
+        net_sales,
+        total_collection,
+        trend,
+        item_wise,
+        used_order_total_fallback=used_order_total_fallback,
+    )
+    return ok(payload)
+
+
+@router.get("/outlets/{outlet_id}/analytics/item/{menu_item_id}")
+async def analytics_item_detail(
+    outlet_id: str,
+    menu_item_id: str,
+    range_: str = Query("month", alias="range"),
+    start: str | None = None,
+    end: str | None = None,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Daily sales series for one menu item — drives the Item drill-down screen."""
+    _ensure_outlet(current_outlet, outlet_id)
+    now = datetime.now(timezone.utc)
+    cur_start, cur_end, _ps, _pe = _analytics_period(range_, start, end, now)
+
+    orders = (
+        (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= cur_start)
+                .where(Order.created_at < cur_end)
+                .where(
+                    func.lower(func.trim(Order.status)).notin_(
+                        tuple(REJECTED_STATUSES)
+                    )
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    menu_row = (
+        await db.execute(
+            select(MenuItem.name_en, MenuItem.name)
+            .where(MenuItem.outlet_id == outlet_id)
+            .where(MenuItem.id == menu_item_id)
+        )
+    ).first()
+    name = (menu_row.name_en or menu_row.name) if menu_row else menu_item_id
+
+    daily: dict[str, float] = defaultdict(float)
+    total = 0.0
+    units = 0
+    for order in orders:
+        day = _bdt_date_key(order.created_at)
+        for line in _line_items(order.items):
+            if str(line.get("menuItemId") or "") != menu_item_id:
+                continue
+            rev = _item_revenue(line)
+            daily[day] += rev
+            total += rev
+            units += _item_qty(line)
+
+    series = [
+        {"date": d, "salesBdt": round(daily.get(d, 0.0), 2)}
+        for d in _day_keys(cur_start, cur_end)
+    ]
+    return ok(
+        {
+            "menuItemId": menu_item_id,
+            "name": name,
+            "totalBdt": round(total, 2),
+            "units": int(units),
+            "dailySales": series,
+        }
+    )
+
+
+@router.get("/outlets/{outlet_id}/reports/performance")
+async def reports_performance(
+    outlet_id: str,
+    granularity: str = "daily",
+    category: str | None = None,
+    start: str | None = None,
+    days: int = Query(30, ge=1, le=366),
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Item-wise performance over a window (QS Performance Report)."""
+    _ensure_outlet(current_outlet, outlet_id)
+    now = datetime.now(timezone.utc)
+    if start:
+        cur_start, _ = _bdt_day_bounds(_parse_as_of(start))
+    else:
+        today_start, _ = _bdt_day_bounds(now)
+        cur_start = today_start - timedelta(days=days - 1)
+    cur_end = cur_start + timedelta(days=days)
+
+    orders = (
+        (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= cur_start)
+                .where(Order.created_at < cur_end)
+                .where(
+                    func.lower(func.trim(Order.status)).notin_(
+                        tuple(REJECTED_STATUSES)
+                    )
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    menu_rows = (
+        await db.execute(
+            select(
+                MenuItem.id,
+                MenuItem.category_en,
+                MenuItem.category,
+                MenuItem.name_en,
+                MenuItem.name,
+            ).where(MenuItem.outlet_id == outlet_id)
+        )
+    ).all()
+    menu_cat = {m.id: (m.category_en or m.category or "General") for m in menu_rows}
+    menu_name = {m.id: (m.name_en or m.name) for m in menu_rows}
+
+    item_agg: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    for order in orders:
+        for line in _line_items(order.items):
+            key = str(line.get("menuItemId") or line.get("name") or "?")
+            cat = menu_cat.get(key, "General")
+            if category and category != "all" and cat != category:
+                continue
+            item_agg[key][0] += _item_qty(line)
+            item_agg[key][1] += _item_revenue(line)
+
+    items = sorted(
+        (
+            {
+                "menuItemId": key,
+                "name": menu_name.get(key, key),
+                "category": menu_cat.get(key, "General"),
+                "qty": int(units),
+                "salesBdt": round(sales, 2),
+                "avgUnitPrice": round(_safe_div(sales, units), 2),
+            }
+            for key, (units, sales) in item_agg.items()
+        ),
+        key=lambda r: r["salesBdt"],
+        reverse=True,
+    )
+    return ok(
+        {
+            "granularity": granularity,
+            "category": category,
+            "days": days,
+            "rangeStart": cur_start.isoformat(),
+            "rangeEnd": cur_end.isoformat(),
+            "items": items,
+        }
+    )
+
+
+@router.get("/outlets/{outlet_id}/reports/order-buckets")
+async def reports_order_buckets(
+    outlet_id: str,
+    range_: str = Query("today", alias="range"),
+    start: str | None = None,
+    end: str | None = None,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reports-hub landing cards — counts + totals per order bucket."""
+    _ensure_outlet(current_outlet, outlet_id)
+    now = datetime.now(timezone.utc)
+    cur_start, cur_end, _ps, _pe = _analytics_period(range_, start, end, now)
+
+    orders = (
+        (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= cur_start)
+                .where(Order.created_at < cur_end)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    success_n = cancelled_n = comp_n = 0
+    success_v = cancelled_v = comp_v = 0.0
+    collection: dict[str, float] = defaultdict(float)
+    for order in orders:
+        total = float(order.total_amount or 0)
+        if _is_rejected_status(order.status):
+            cancelled_n += 1
+            cancelled_v += total
+            continue
+        success_n += 1
+        success_v += total
+        if total <= 0:
+            comp_n += 1
+            comp_v += total
+        collection[(order.payment_method or "cash").strip().lower() or "cash"] += total
+
+    buckets = [
+        {"key": "success", "label": "Success Orders", "count": success_n, "totalBdt": round(success_v, 2)},
+        {"key": "cancelled", "label": "Cancelled", "count": cancelled_n, "totalBdt": round(cancelled_v, 2)},
+        {"key": "complimentary", "label": "Complimentary", "count": comp_n, "totalBdt": round(comp_v, 2)},
+    ]
+    payments = [
+        {
+            "key": k,
+            "label": k.upper() if len(k) <= 4 else k.capitalize(),
+            "totalBdt": round(v, 2),
+        }
+        for k, v in sorted(collection.items(), key=lambda kv: kv[1], reverse=True)
+    ]
     return ok(
         {
             "rangeStart": cur_start.isoformat(),
             "rangeEnd": cur_end.isoformat(),
-            "salesSummary": {
-                "ordersCompleted": orders_completed,
-                "grossSales": round(gross_sales, 2),
-                "discountByStaff": round(discount_total, 2),
-                "netSales": round(net_sales, 2),
-            },
-            "totalCollection": round(total_collection, 2),
-            "collection": [
-                {
-                    "key": k,
-                    "label": k.upper() if len(k) <= 4 else k.capitalize(),
-                    "valueBdt": round(v, 2),
-                }
-                for k, v in sorted(
-                    collection.items(), key=lambda kv: kv[1], reverse=True
-                )
-            ],
-            "serviceWise": [
-                {
-                    "key": k,
-                    "label": label,
-                    "valueBdt": round(service.get(k, 0.0), 2),
-                }
-                for k, label in (
-                    ("dineIn", "Dine-in"),
-                    ("takeaway", "Takeaway"),
-                    ("delivery", "Delivery Service"),
-                )
-            ],
-            "profit": {
-                "netSales": round(net_sales, 2),
-                "serviceCharge": round(service_charge_total, 2),
-                "deliveryCharge": round(delivery_total, 2),
-                "preparationCost": round(prep_cost, 2),
-                "wastage": round(wastage, 2),
-                "paymentFee": round(payment_fee, 2),
-                "taxes": round(tax_total, 2),
-                "grossProfit": round(gross_profit, 2),
-            },
-            "popularDishes": popular,
-            "itemWise": item_wise,
+            "buckets": buckets,
+            "payments": payments,
         }
     )

@@ -28,12 +28,16 @@ class OrdersScreen extends StatelessWidget {
       chrome: chrome,
       activeNav: PcNav.orders,
       title: tr('Orders', 'অর্ডার'),
-      sub: tr('${orders.length} tickets · newest first',
-          '${orders.length} টিকেট · নতুন প্রথমে'),
+      sub: tr(
+        '${orders.length} tickets · newest first',
+        '${orders.length} টিকেট · নতুন প্রথমে',
+      ),
       child: sorted.isEmpty
           ? Center(
-              child: Text(tr('No orders yet today.', 'আজ এখনো অর্ডার নেই।'),
-                  style: const TextStyle(color: Pc.textSec)),
+              child: Text(
+                tr('No orders yet today.', 'আজ এখনো অর্ডার নেই।'),
+                style: const TextStyle(color: Pc.textSec),
+              ),
             )
           : ListView(
               padding: const EdgeInsets.all(20),
@@ -62,8 +66,10 @@ class OrdersScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(Pc.rSm),
                   ),
                   alignment: Alignment.center,
-                  child: Text(o.displaySequence,
-                      style: Pc.num(13, color: open ? Pc.accent : Pc.textSec)),
+                  child: Text(
+                    o.displaySequence,
+                    style: Pc.num(13, color: open ? Pc.accent : Pc.textSec),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -75,7 +81,9 @@ class OrdersScreen extends StatelessWidget {
                             ? _serviceLabel(o)
                             : tr('Table ${o.tableNo}', 'টেবিল ${o.tableNo}'),
                         style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -88,7 +96,11 @@ class OrdersScreen extends StatelessWidget {
                 if (o.settledAt != null)
                   const Padding(
                     padding: EdgeInsets.only(right: 12),
-                    child: PcPill(label: 'SETTLED', tone: PcTone.good, dot: true),
+                    child: PcPill(
+                      label: 'SETTLED',
+                      tone: PcTone.good,
+                      dot: true,
+                    ),
                   ),
                 Text(pcMoney(o.total), style: Pc.num(16)),
               ],

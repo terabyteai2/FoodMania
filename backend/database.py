@@ -375,6 +375,7 @@ async def _ensure_menu_columns(conn) -> None:
         ("tags_json", "TEXT"),
         ("cost_price", "NUMERIC(10, 2)"),
         ("short_code", "INTEGER"),
+        ("is_favorite", "BOOLEAN DEFAULT FALSE"),
     ]
     if dialect == "sqlite":
         for column, column_type in columns:

@@ -930,11 +930,7 @@ void showTopNotificationToast(
 }
 
 class _TopToastCard extends StatelessWidget {
-  const _TopToastCard({
-    required this.title,
-    required this.body,
-    this.onTap,
-  });
+  const _TopToastCard({required this.title, required this.body, this.onTap});
 
   final String title;
   final String body;

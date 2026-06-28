@@ -150,8 +150,8 @@ void main() {
   testWidgets('scan menu floating action is manager only', (tester) async {
     final manager = PosAppController()..language = AppLanguage.en;
     await tester.pumpWidget(_scoped(manager, const MenuManagementScreen()));
-    // The menu screen surfaces the source-of-truth action row for managers.
-    expect(find.text('Scan'), findsOneWidget);
+    // The menu screen surfaces the Scan menu card bottom action for managers.
+    expect(find.text('Scan menu card'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -178,7 +178,7 @@ void main() {
     await tester.pumpWidget(_scoped(controller, const MenuManagementScreen()));
     await tester.pump();
 
-    expect(find.text('স্ক্যান'), findsOneWidget);
+    expect(find.text('মেনু কার্ড স্ক্যান'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     controller.dispose();
@@ -284,7 +284,7 @@ void main() {
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
       expect(find.text('What type of restaurant?'), findsOneWidget);
-      expect(find.text('FoodCart'), findsOneWidget);
+      expect(find.text('Food Cart'), findsOneWidget);
       expect(find.text('Cafe'), findsOneWidget);
       expect(find.text('Restaurant'), findsOneWidget);
       expect(find.text('Enterprise'), findsOneWidget);

@@ -296,7 +296,7 @@ class _RestaurantTypeCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TfText(
-                      option.tier.displayName,
+                      isBn ? option.labelBn : option.label,
                       style: TextStyle(
                         color: foreground,
                         fontSize: 15,
@@ -337,11 +337,15 @@ class _RestaurantTypeCard extends StatelessWidget {
 class _RestaurantTypeOption {
   const _RestaurantTypeOption({
     required this.tier,
+    required this.label,
+    required this.labelBn,
     required this.subtitle,
     required this.subtitleBn,
   });
 
   final BusinessTier tier;
+  final String label;
+  final String labelBn;
   final String subtitle;
   final String subtitleBn;
 }
@@ -349,21 +353,29 @@ class _RestaurantTypeOption {
 const _restaurantTypeOptions = [
   _RestaurantTypeOption(
     tier: BusinessTier.simple,
+    label: 'Food Cart',
+    labelBn: 'ফুড কার্ট',
     subtitle: 'Counter service',
     subtitleBn: 'কাউন্টার সার্ভিস',
   ),
   _RestaurantTypeOption(
     tier: BusinessTier.standard,
+    label: 'Cafe',
+    labelBn: 'ক্যাফে',
     subtitle: '1-10 tables',
     subtitleBn: '১-১০টি টেবিল',
   ),
   _RestaurantTypeOption(
     tier: BusinessTier.advanced,
+    label: 'Restaurant',
+    labelBn: 'রেস্টুরেন্ট',
     subtitle: '11-20 tables',
     subtitleBn: '১১-২০টি টেবিল',
   ),
   _RestaurantTypeOption(
     tier: BusinessTier.enterprise,
+    label: 'Enterprise',
+    labelBn: 'এন্টারপ্রাইজ',
     subtitle: '20+ tables',
     subtitleBn: '২০টির বেশি টেবিল',
   ),

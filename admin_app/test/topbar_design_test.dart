@@ -108,6 +108,6 @@ void main() {
           .ancestor(of: find.text('Tables'), matching: find.byType(Padding))
           .first,
     );
-    expect(padding.padding, const EdgeInsets.fromLTRB(16, 6, 16, 12));
+    expect(padding.padding, const EdgeInsets.fromLTRB(16, 8, 16, 12));
   });
 }

@@ -112,15 +112,25 @@ class _InventoryScreenState extends State<InventoryScreen>
     if (tf == TfTimeframe.week) {
       final s = now.subtract(const Duration(days: 6));
       start = DateTime(s.year, s.month, s.day).toUtc().toIso8601String();
-      end = DateTime(now.year, now.month, now.day, 23, 59, 59)
-          .toUtc()
-          .toIso8601String();
+      end = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        23,
+        59,
+        59,
+      ).toUtc().toIso8601String();
     } else if (tf == TfTimeframe.month) {
       final s = DateTime(now.year, now.month, 1);
       start = s.toUtc().toIso8601String();
-      end = DateTime(now.year, now.month, now.day, 23, 59, 59)
-          .toUtc()
-          .toIso8601String();
+      end = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        23,
+        59,
+        59,
+      ).toUtc().toIso8601String();
     }
 
     AppScope.read(context).refreshInventorySummary(start: start, end: end);
@@ -138,9 +148,14 @@ class _InventoryScreenState extends State<InventoryScreen>
 
     if (s != null && e != null) {
       final start = s.toUtc().toIso8601String();
-      final end = DateTime(e.year, e.month, e.day, 23, 59, 59)
-          .toUtc()
-          .toIso8601String();
+      final end = DateTime(
+        e.year,
+        e.month,
+        e.day,
+        23,
+        59,
+        59,
+      ).toUtc().toIso8601String();
       AppScope.read(context).refreshInventorySummary(start: start, end: end);
     }
   }
@@ -343,7 +358,6 @@ class _InventoryScreenState extends State<InventoryScreen>
         title: text.stockTab,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
-
       ),
       showDatePill: false,
       pinHeader: true,
@@ -361,6 +375,7 @@ class _InventoryScreenState extends State<InventoryScreen>
           const SizedBox(height: 12),
           Row(
             children: [
+              const TfMicroLabel('INVENTORY'),
               const Spacer(),
               AdvToggle(
                 value: _advanced,
@@ -645,7 +660,8 @@ class _StockTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final heroW = advanced ? 64.0 : 92.0;
+    final heroW = advanced ? 64.0 : 88.0;
+    final valueW = advanced ? 0.0 : 70.0;
     return Container(
       padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
       decoration: BoxDecoration(
@@ -689,10 +705,19 @@ class _StockTable extends StatelessWidget {
                     dir: dir,
                     onTap: () => onSort(_StockSort.net),
                   ),
+                ] else ...[
+                  const SizedBox(width: 10),
+                  _HCell(
+                    label: text.colValue,
+                    width: valueW,
+                    active: sort == _StockSort.value,
+                    dir: dir,
+                    onTap: () => onSort(_StockSort.value),
+                  ),
                 ],
                 const SizedBox(width: 12),
                 _HCell(
-                  label: text.colOnHand,
+                  label: advanced ? text.colCover : 'QTY',
                   width: heroW,
                   active: sort == _StockSort.qty,
                   dir: dir,
@@ -708,6 +733,7 @@ class _StockTable extends StatelessWidget {
               last: i == items.length - 1,
               advanced: advanced,
               heroW: heroW,
+              valueW: valueW,
               onTap: () => onRowTap(items[i]),
             ),
         ],
@@ -778,6 +804,7 @@ class _StockRow extends StatelessWidget {
     required this.last,
     required this.advanced,
     required this.heroW,
+    required this.valueW,
     required this.onTap,
   });
 
@@ -786,6 +813,7 @@ class _StockRow extends StatelessWidget {
   final bool last;
   final bool advanced;
   final double heroW;
+  final double valueW;
   final VoidCallback onTap;
 
   @override
@@ -905,61 +933,98 @@ class _StockRow extends StatelessWidget {
               const SizedBox(width: 12),
               SizedBox(
                 width: 54,
-                child: Builder(builder: (context) {
-                  final net = item.todayIn - item.todayOut;
-                  if (net == 0) {
-                    return const TfText(
-                      '—',
+                child: Builder(
+                  builder: (context) {
+                    final net = item.todayIn - item.todayOut;
+                    if (net == 0) {
+                      return const TfText(
+                        '—',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: PosColors.mutedSoft,
+                        ),
+                      );
+                    }
+                    return TfText(
+                      '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         fontSize: 13,
-                        color: PosColors.mutedSoft,
+                        fontWeight: FontWeight.w700,
+                        color: net > 0 ? PosColors.success : PosColors.danger,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     );
-                  }
-                  return TfText(
-                    '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: net > 0 ? PosColors.success : PosColors.danger,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  );
-                }),
+                  },
+                ),
+              ),
+            ] else ...[
+              const SizedBox(width: 10),
+              SizedBox(
+                width: valueW,
+                child: TfText(
+                  tfFormatCurrency(context, _itemValue(item)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.text,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
               ),
             ],
             const SizedBox(width: 12),
             SizedBox(
               width: heroW,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TfText(
-                    _formatQty(context, item.onHand),
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                      color: qtyColor,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  TfText(
-                    unit,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: PosColors.muted,
-                    ),
-                  ),
-                ],
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: advanced
+                      ? TfText(
+                          _formatCover(context, item),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: qtyColor,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TfText(
+                              _formatQty(context, item.onHand),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                                color: qtyColor,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            TfText(
+                              unit,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: PosColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
             ),
           ],
@@ -971,6 +1036,12 @@ class _StockRow extends StatelessWidget {
   static String _formatQty(BuildContext context, double value) {
     if (value == value.roundToDouble()) return tfFormatNumber(context, value);
     return tfFormatNumber(context, value, decimalDigits: 1);
+  }
+
+  static String _formatCover(BuildContext context, InventorySummaryItem item) {
+    final ratio = _ratio(item);
+    if (ratio >= 99) return 'OK';
+    return '${tfFormatNumber(context, ratio, decimalDigits: 1)}x';
   }
 }
 

@@ -17,11 +17,17 @@ import '../desktop_pos/widgets/menu_line_customizer.dart';
    and the order wizard share the same menu-picker UI.
    ============================================================ */
 
-enum MenuLayoutMode { list, grid }
-
 // ── Menu add-items step (search, categories, content, cart footer) ──
 
-class MenuStep extends StatelessWidget {
+// Card chrome tuned to the Petpooja "Items" source of truth — rounder than the
+// global PosRadii.card (7) with a soft drop shadow (PosShadows.card is empty).
+const double _kCardRadius = 14;
+const List<BoxShadow> _kCardShadow = [
+  BoxShadow(color: Color(0x0A14180E), blurRadius: 2, offset: Offset(0, 1)),
+  BoxShadow(color: Color(0x0D14180E), blurRadius: 8, offset: Offset(0, 2)),
+];
+
+class MenuStep extends StatefulWidget {
   const MenuStep({
     required this.visibleItems,
     required this.categories,
@@ -32,16 +38,20 @@ class MenuStep extends StatelessWidget {
     required this.totalQty,
     required this.searchCtrl,
     required this.query,
-    required this.layoutMode,
-    required this.gridCols,
+    required this.codeMode,
     required this.onSearchChanged,
-    required this.onLayoutChanged,
-    required this.onGridColsChanged,
+    required this.onToggleCodeMode,
+    required this.onCodeSubmit,
     required this.onCategorySelected,
     required this.onTap,
     required this.onDecrement,
+    required this.onToggleFavorite,
+    required this.onSetShortCode,
     this.categoryCounts,
     this.onSubmit,
+    this.title,
+    this.onBack,
+    this.leadingIsClose = false,
     super.key,
   });
 
@@ -54,326 +64,242 @@ class MenuStep extends StatelessWidget {
   final int totalQty;
   final TextEditingController searchCtrl;
   final String query;
-  final MenuLayoutMode layoutMode;
-  final int gridCols;
+
+  /// When true the search bar becomes a numeric short-code entry and the body
+  /// switches from the card grid to the short-code list (the ⚡ quick-pick mode).
+  final bool codeMode;
   final Map<String, int>? categoryCounts;
   final ValueChanged<String> onSearchChanged;
-  final ValueChanged<MenuLayoutMode> onLayoutChanged;
-  final ValueChanged<int> onGridColsChanged;
+  final VoidCallback onToggleCodeMode;
+  final ValueChanged<String> onCodeSubmit;
   final ValueChanged<String> onCategorySelected;
   final ValueChanged<MenuItem> onTap;
   final ValueChanged<String> onDecrement;
+  final ValueChanged<MenuItem> onToggleFavorite;
+  final ValueChanged<MenuItem> onSetShortCode;
   final VoidCallback? onSubmit;
+
+  /// Optional Petpooja-style top bar (back/close + title). When null the host
+  /// already supplies its own header (e.g. Tables counter mode under AppScaffold).
+  final String? title;
+  final VoidCallback? onBack;
+  final bool leadingIsClose;
+
+  @override
+  State<MenuStep> createState() => _MenuStepState();
+}
+
+class _MenuStepState extends State<MenuStep> {
+  bool _searchExpanded = false;
+
+  void _toggleSearch() {
+    setState(() {
+      _searchExpanded = !_searchExpanded;
+      if (!_searchExpanded && !widget.codeMode) {
+        widget.searchCtrl.clear();
+        widget.onSearchChanged('');
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    // Code mode forces the (numeric) entry bar open; otherwise the search field
+    // is revealed only when the top-right search icon is tapped.
+    final searchVisible = _searchExpanded || widget.codeMode;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: searchCtrl,
-                  onChanged: onSearchChanged,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: text.searchMenuItems,
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: PosColors.muted,
-                    ),
-                    suffixIcon: query.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () {
-                              searchCtrl.clear();
-                              onSearchChanged('');
-                            },
-                            icon: Icon(
-                              Icons.close_rounded,
-                              color: PosColors.muted,
-                            ),
-                          ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _ViewToggle(
-                mode: layoutMode,
-                cols: gridCols,
-                onModeChanged: onLayoutChanged,
-                onColsChanged: onGridColsChanged,
-              ),
-            ],
+        _TopControls(
+          title: widget.title,
+          onLeading: widget.onBack,
+          leadingIsClose: widget.leadingIsClose,
+          codeActive: widget.codeMode,
+          onToggleCode: widget.onToggleCodeMode,
+          searchActive: searchVisible,
+          onToggleSearch: _toggleSearch,
+        ),
+        if (searchVisible)
+          _MenuSearchBar(
+            searchCtrl: widget.searchCtrl,
+            query: widget.query,
+            codeMode: widget.codeMode,
+            onSearchChanged: widget.onSearchChanged,
+            onCodeSubmit: widget.onCodeSubmit,
           ),
-        ),
-        CategoryChips(
-          categories: categories,
-          selected: selectedCategory,
-          counts: categoryCounts,
-          onSelected: onCategorySelected,
-        ),
+        if (!widget.codeMode)
+          CategoryChips(
+            categories: widget.categories,
+            selected: widget.selectedCategory,
+            counts: widget.categoryCounts,
+            onSelected: widget.onCategorySelected,
+          ),
         Expanded(
-          child: _MenuContent(
-            items: visibleItems,
-            categories: categories,
-            selectedCategory: selectedCategory,
-            cart: cart,
-            mode: layoutMode,
-            gridCols: gridCols,
-            onTap: onTap,
-            onDecrement: onDecrement,
-          ),
+          child: widget.codeMode
+              ? _ShortCodeList(items: widget.visibleItems, onTap: widget.onTap)
+              : _MenuContent(
+                  items: widget.visibleItems,
+                  cart: widget.cart,
+                  onTap: widget.onTap,
+                  onDecrement: widget.onDecrement,
+                  onToggleFavorite: widget.onToggleFavorite,
+                  onSetShortCode: widget.onSetShortCode,
+                ),
         ),
-        CartFooter(onSubmit: onSubmit),
+        CartFooter(onSubmit: widget.onSubmit),
       ],
     );
   }
 }
 
-// ── View toggle (segmented list|grid + column picker) ──
+// ── Top control bar (optional back/close + title · ⚡ short-code · 🔍 search) ──
 
-class _ViewToggle extends StatefulWidget {
-  const _ViewToggle({
-    required this.mode,
-    required this.cols,
-    required this.onModeChanged,
-    required this.onColsChanged,
+class _TopControls extends StatelessWidget {
+  const _TopControls({
+    required this.title,
+    required this.onLeading,
+    required this.leadingIsClose,
+    required this.codeActive,
+    required this.onToggleCode,
+    required this.searchActive,
+    required this.onToggleSearch,
   });
 
-  final MenuLayoutMode mode;
-  final int cols;
-  final ValueChanged<MenuLayoutMode> onModeChanged;
-  final ValueChanged<int> onColsChanged;
-
-  @override
-  State<_ViewToggle> createState() => _ViewToggleState();
-}
-
-class _ViewToggleState extends State<_ViewToggle> {
-  OverlayEntry? _overlay;
-  final _colBtnKey = GlobalKey();
-
-  void _openColMenu() {
-    final box = _colBtnKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final pos = box.localToGlobal(Offset.zero);
-    final size = box.size;
-
-    _overlay = OverlayEntry(builder: (ctx) {
-      return Stack(
-        children: [
-          // Dismiss scrim
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _closeColMenu,
-            ),
-          ),
-          // Dropdown
-          Positioned(
-            top: pos.dy + size.height + 4,
-            left: pos.dx + size.width - 122,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: 122,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: PosColors.surface,
-                  border: Border.all(color: PosColors.lineStrong),
-                  borderRadius: BorderRadius.circular(PosRadii.card),
-                  boxShadow: PosShadows.raised,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [2, 3, 4].map((n) {
-                    final sel = n == widget.cols;
-                    return GestureDetector(
-                      onTap: () {
-                        widget.onColsChanged(n);
-                        _closeColMenu();
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 9,
-                          horizontal: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: sel
-                              ? PosColors.primarySoft
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(PosRadii.chip),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.grid_view_rounded,
-                              size: 15,
-                              color: sel
-                                  ? PosColors.accentStrong
-                                  : PosColors.ink2,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$n columns',
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: sel
-                                      ? PosColors.accentStrong
-                                      : PosColors.ink2,
-                                ),
-                              ),
-                            ),
-                            if (sel)
-                              Icon(
-                                Icons.check_rounded,
-                                size: 15,
-                                color: PosColors.accentStrong,
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    });
-    Overlay.of(context).insert(_overlay!);
-    setState(() {});
-  }
-
-  void _closeColMenu() {
-    _overlay?.remove();
-    _overlay = null;
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    _overlay?.remove();
-    super.dispose();
-  }
+  final String? title;
+  final VoidCallback? onLeading;
+  final bool leadingIsClose;
+  final bool codeActive;
+  final VoidCallback onToggleCode;
+  final bool searchActive;
+  final VoidCallback onToggleSearch;
 
   @override
   Widget build(BuildContext context) {
-    final isGrid = widget.mode == MenuLayoutMode.grid;
-    final colMenuOpen = _overlay != null;
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        border: Border.all(color: PosColors.line),
-        borderRadius: BorderRadius.circular(PosRadii.card),
-      ),
+    final text = AppScope.of(context).strings;
+    final hasTitle = title != null;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, hasTitle ? 12 : 6, 16, 8),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          _SegBtn(
-            icon: Icons.list_rounded,
-            active: widget.mode == MenuLayoutMode.list,
-            width: 40,
-            height: 38,
-            onTap: () => widget.onModeChanged(MenuLayoutMode.list),
-          ),
-          const SizedBox(width: 2),
-          _SegBtn(
-            icon: Icons.grid_view_rounded,
-            active: isGrid && !colMenuOpen,
-            width: 40,
-            height: 38,
-            onTap: () {
-              widget.onModeChanged(MenuLayoutMode.grid);
-              _closeColMenu();
-            },
-          ),
-          if (isGrid) ...[
-            const SizedBox(width: 2),
-            _SegBtn(
-              key: _colBtnKey,
-              label: '${widget.cols}',
-              icon: Icons.keyboard_arrow_down_rounded,
-              active: colMenuOpen,
-              width: 46,
-              height: 38,
-              onTap: colMenuOpen ? _closeColMenu : _openColMenu,
+          if (onLeading != null) ...[
+            TfIconButton(
+              icon: leadingIsClose ? TfNavIcon.close : TfNavIcon.back,
+              tooltip: leadingIsClose
+                  ? (text.isBn ? 'বাতিল' : 'Close')
+                  : (text.isBn ? 'পেছনে' : 'Back'),
+              onPressed: onLeading,
             ),
+            const SizedBox(width: 12),
           ],
+          if (hasTitle)
+            Expanded(
+              child: TfText(
+                title!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: PosColors.slate,
+                  height: 1.15,
+                ),
+              ),
+            )
+          else
+            const Spacer(),
+          _SquareToggle(
+            icon: Icons.bolt_rounded,
+            active: codeActive,
+            onTap: onToggleCode,
+          ),
+          const SizedBox(width: 8),
+          _SquareToggle(
+            icon: Icons.search_rounded,
+            active: searchActive,
+            onTap: onToggleSearch,
+          ),
         ],
       ),
     );
   }
 }
 
-class _SegBtn extends StatelessWidget {
-  const _SegBtn({
-    required this.width,
-    required this.height,
+class _SquareToggle extends StatelessWidget {
+  const _SquareToggle({
+    required this.icon,
     required this.active,
     required this.onTap,
-    this.icon,
-    this.label,
-    super.key,
   });
 
-  final double width;
-  final double height;
+  final IconData icon;
   final bool active;
   final VoidCallback onTap;
-  final IconData? icon;
-  final String? label;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: width,
-        height: height,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
-          color: active ? PosColors.surface : Colors.transparent,
-          borderRadius: BorderRadius.circular(PosRadii.chip),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: PosColors.primaryDark.withValues(alpha: 0.06),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ]
-              : [],
+          color: active ? PosColors.primary : PosColors.surfaceSunk,
+          border: Border.all(
+            color: active ? PosColors.primary : PosColors.line,
+          ),
+          borderRadius: BorderRadius.circular(PosRadii.card),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (label != null)
-              Text(
-                label!,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: active ? PosColors.primaryDark : PosColors.muted,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+        child: Icon(
+          icon,
+          size: 20,
+          color: active ? PosColors.accentInk : PosColors.ink2,
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuSearchBar extends StatelessWidget {
+  const _MenuSearchBar({
+    required this.searchCtrl,
+    required this.query,
+    required this.codeMode,
+    required this.onSearchChanged,
+    required this.onCodeSubmit,
+  });
+
+  final TextEditingController searchCtrl;
+  final String query;
+  final bool codeMode;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onCodeSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: TextField(
+        controller: searchCtrl,
+        onChanged: onSearchChanged,
+        autofocus: true,
+        keyboardType: codeMode ? TextInputType.number : TextInputType.text,
+        textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
+        onSubmitted: codeMode ? onCodeSubmit : null,
+        decoration: InputDecoration(
+          hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
+          prefixIcon: Icon(
+            codeMode ? Icons.tag_rounded : Icons.search_rounded,
+            color: PosColors.muted,
+          ),
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    searchCtrl.clear();
+                    onSearchChanged('');
+                  },
+                  icon: Icon(Icons.close_rounded, color: PosColors.muted),
                 ),
-              ),
-            if (icon != null)
-              Icon(
-                icon,
-                size: label != null ? 14 : 18,
-                color: active ? PosColors.primaryDark : PosColors.muted,
-              ),
-          ],
         ),
       ),
     );
@@ -423,28 +349,24 @@ class CategoryChips extends StatelessWidget {
   }
 }
 
-// ── Menu content (grouped list or grid) ──
+// ── Menu content (Petpooja "Items" card grid, 2-col) ──
 
 class _MenuContent extends StatelessWidget {
   const _MenuContent({
     required this.items,
-    required this.categories,
-    required this.selectedCategory,
     required this.cart,
-    required this.mode,
-    required this.gridCols,
     required this.onTap,
     required this.onDecrement,
+    required this.onToggleFavorite,
+    required this.onSetShortCode,
   });
 
   final List<MenuItem> items;
-  final List<String> categories;
-  final String selectedCategory;
   final Map<String, int> cart;
-  final MenuLayoutMode mode;
-  final int gridCols;
   final ValueChanged<MenuItem> onTap;
   final ValueChanged<String> onDecrement;
+  final ValueChanged<MenuItem> onToggleFavorite;
+  final ValueChanged<MenuItem> onSetShortCode;
 
   @override
   Widget build(BuildContext context) {
@@ -463,92 +385,25 @@ class _MenuContent extends StatelessWidget {
       );
     }
 
-    const padding = EdgeInsets.fromLTRB(16, 12, 16, 16);
-
-    if (mode == MenuLayoutMode.list) {
-      // Build category groups: when 'All', group by each category in order;
-      // when a specific category is selected, one group with that header.
-      final groups = <(String, List<MenuItem>)>[];
-      if (selectedCategory == 'All') {
-        for (final cat in categories) {
-          if (cat == 'All') continue;
-          final group = items.where((i) => i.category == cat).toList();
-          if (group.isNotEmpty) groups.add((cat, group));
-        }
-      } else {
-        groups.add((selectedCategory, items));
-      }
-
-      const eyebrowStyle = TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.6, // 12 * 0.05em
-        color: PosColors.muted,
-      );
-
-      return CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: padding,
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                for (final (cat, catItems) in groups) ...[
-                  // Category eyebrow header
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(cat.toUpperCase(), style: eyebrowStyle),
-                        Text(
-                          '${catItems.length}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: PosColors.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Items (10px gap between, 18px after last = group bottom margin)
-                  for (int i = 0; i < catItems.length; i++) ...[
-                    _MenuListRow(
-                      item: catItems[i],
-                      qty: cart[catItems[i].id] ?? 0,
-                      onTap: () => onTap(catItems[i]),
-                      onDecrement: () => onDecrement(catItems[i].id),
-                    ),
-                    SizedBox(height: i < catItems.length - 1 ? 10 : 18),
-                  ],
-                ],
-              ]),
-            ),
-          ),
-        ],
-      );
-    }
-
-    // Fixed card height: 54 image + 8 gap + ~58 text + 16 padding (8 each side).
-    const mainAxisExtent = 136.0;
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: padding,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: gridCols,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              mainAxisExtent: mainAxisExtent,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              mainAxisExtent: 112,
             ),
             delegate: SliverChildBuilderDelegate(
               (_, i) => _GridTile(
                 item: items[i],
                 qty: cart[items[i].id] ?? 0,
-                cols: gridCols,
                 onTap: () => onTap(items[i]),
                 onDecrement: () => onDecrement(items[i].id),
+                onToggleFavorite: () => onToggleFavorite(items[i]),
+                onSetShortCode: () => onSetShortCode(items[i]),
               ),
               childCount: items.length,
             ),
@@ -559,134 +414,7 @@ class _MenuContent extends StatelessWidget {
   }
 }
 
-// ── List-mode item row ──
-
-class _MenuListRow extends StatelessWidget {
-  const _MenuListRow({
-    required this.item,
-    required this.qty,
-    required this.onTap,
-    required this.onDecrement,
-  });
-
-  final MenuItem item;
-  final int qty;
-  final VoidCallback onTap;
-  final VoidCallback onDecrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final inCart = qty > 0;
-    final off = !(item.isAvailable);
-    final extras = item.extras;
-    final iconKey = resolveMenuIconKey(
-      iconKey: extras.iconKey,
-      name: item.name,
-      category: item.category,
-    );
-
-    return GestureDetector(
-      // Only tap whole row when not yet in cart; once in cart use the stepper.
-      onTap: off || inCart ? null : onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: inCart ? PosColors.primarySoft : PosColors.surface,
-          border: Border.all(
-            color: inCart ? PosColors.primaryDeep : PosColors.line,
-          ),
-          borderRadius: BorderRadius.circular(PosRadii.lg),
-        ),
-        child: Opacity(
-          opacity: off ? 0.5 : 1.0,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Thumb
-              ClipRRect(
-                borderRadius: BorderRadius.circular(PosRadii.card),
-                child: SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: ItemImage(url: item.imageUrl ?? '', iconKey: iconKey, category: item.category),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Mid
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TfText(
-                      item.localizedName(app.language),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (item.description.isNotEmpty) ...[
-                      const SizedBox(height: 1),
-                      TfText(
-                        item.description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: PosColors.muted,
-                        ),
-                      ),
-                    ],
-                    // Low stock indicator omitted — isAvailable covers stock state
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Trail
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TfText(
-                    tfFormatCurrency(context, item.price),
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (off)
-                    Text(
-                      "86'd",
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.danger,
-                      ),
-                    )
-                  else if (inCart)
-                    _QtyStepperInline(
-                      qty: qty,
-                      onDecrement: onDecrement,
-                      onIncrement: onTap,
-                    )
-                  else
-                    _AddBtn(onTap: onTap),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Qty stepper (list row trail) ──
+// ── Qty stepper (item sheet) ──
 
 class _QtyStepperInline extends StatelessWidget {
   const _QtyStepperInline({
@@ -755,209 +483,368 @@ class _StepperBtn extends StatelessWidget {
   }
 }
 
-// ── Add button (lime, 44×44) ──
+// ── Grid card tile (Petpooja "Items": centered name · price/qty top-right ·
+//    inline stepper when in cart · long-press for favourite + short code) ──
 
-class _AddBtn extends StatelessWidget {
-  const _AddBtn({required this.onTap});
+class _GridTile extends StatelessWidget {
+  const _GridTile({
+    required this.item,
+    required this.qty,
+    required this.onTap,
+    required this.onDecrement,
+    required this.onToggleFavorite,
+    required this.onSetShortCode,
+  });
+
+  final MenuItem item;
+  final int qty;
   final VoidCallback onTap;
+  final VoidCallback onDecrement;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onSetShortCode;
 
   @override
   Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final inCart = qty > 0;
+    final off = !item.isAvailable;
+
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: PosColors.primary,
-          borderRadius: BorderRadius.circular(PosRadii.card),
-        ),
-        child: const Icon(
-          Icons.add_rounded,
-          size: 20,
-          color: PosColors.accentInk,
+      onTap: off ? null : onTap,
+      onLongPress: () => _showItemActions(
+        context,
+        item: item,
+        onToggleFavorite: onToggleFavorite,
+        onSetShortCode: onSetShortCode,
+      ),
+      child: Opacity(
+        opacity: off ? 0.5 : 1.0,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          padding: EdgeInsets.fromLTRB(10, 10, 10, inCart ? 8 : 10),
+          decoration: BoxDecoration(
+            color: inCart ? PosColors.primarySoft : PosColors.surface,
+            border: Border.all(
+              color: inCart ? PosColors.primary : PosColors.line,
+            ),
+            borderRadius: BorderRadius.circular(_kCardRadius),
+            boxShadow: _kCardShadow,
+          ),
+          child: Stack(
+            children: [
+              // Centered name, with the inline stepper pinned to the bottom
+              // once the item is in the cart.
+              Positioned.fill(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 14, 4, 2),
+                          child: TfText(
+                            item.localizedName(app.language),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: PosColors.primaryDark,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (inCart && !off)
+                      _TileStepper(
+                        qty: qty,
+                        onDecrement: onDecrement,
+                        onIncrement: onTap,
+                      ),
+                  ],
+                ),
+              ),
+              // Top-right: price when idle, running count when in cart.
+              Positioned(
+                top: 0,
+                right: 0,
+                child: inCart
+                    ? _CountBadge(qty: qty)
+                    : _PriceTag(price: item.price),
+              ),
+              if (off) const Positioned(bottom: 0, left: 0, child: _OffBadge()),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Grid-mode tile ──
-
-class _GridTile extends StatelessWidget {
-  const _GridTile({
-    required this.item,
+// Full-width navy qty stepper, shown on cards that are in the cart.
+class _TileStepper extends StatelessWidget {
+  const _TileStepper({
     required this.qty,
-    required this.cols,
-    required this.onTap,
     required this.onDecrement,
+    required this.onIncrement,
   });
 
-  final MenuItem item;
   final int qty;
-  final int cols;
-  final VoidCallback onTap;
   final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: PosColors.secondary,
+        borderRadius: BorderRadius.circular(PosRadii.lg),
+      ),
+      child: Row(
+        children: [
+          _TileStepBtn(icon: Icons.remove_rounded, onTap: onDecrement),
+          Expanded(
+            child: Center(
+              child: TfText(
+                tfFormatNumber(context, qty),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: PosColors.onSecondary,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+          _TileStepBtn(icon: Icons.add_rounded, onTap: onIncrement),
+        ],
+      ),
+    );
+  }
+}
+
+class _TileStepBtn extends StatelessWidget {
+  const _TileStepBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: 40,
+        height: 34,
+        child: Icon(icon, size: 18, color: PosColors.onSecondary),
+      ),
+    );
+  }
+}
+
+// Running-count badge (top-right of an in-cart card).
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.qty});
+  final int qty;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 22),
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: PosColors.secondary,
+        borderRadius: BorderRadius.all(Radius.circular(999)),
+      ),
+      child: TfText(
+        tfFormatNumber(context, qty),
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w800,
+          color: PosColors.onSecondary,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
+}
+
+// Price label (top-right of an idle card).
+class _PriceTag extends StatelessWidget {
+  const _PriceTag({required this.price});
+  final double price;
+
+  @override
+  Widget build(BuildContext context) {
+    return TfText(
+      tfFormatCurrency(context, price),
+      style: const TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w700,
+        color: PosColors.ink2,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
+    );
+  }
+}
+
+class _OffBadge extends StatelessWidget {
+  const _OffBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
+      decoration: BoxDecoration(
+        color: PosColors.danger,
+        borderRadius: BorderRadius.circular(PosRadii.sm),
+      ),
+      child: const Text(
+        "86'd",
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+// Long-press sheet: toggle favourite + set/clear short code.
+Future<void> _showItemActions(
+  BuildContext context, {
+  required MenuItem item,
+  required VoidCallback onToggleFavorite,
+  required VoidCallback onSetShortCode,
+}) {
+  final text = AppScope.of(context).strings;
+  return showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                item.isFavorite
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                color: item.isFavorite ? PosColors.warning : PosColors.ink2,
+              ),
+              title: TfText(
+                item.isFavorite ? text.removeFavourite : text.addFavourite,
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onToggleFavorite();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.tag_rounded, color: PosColors.ink2),
+              title: TfText(
+                item.shortCode == null
+                    ? text.setShortCode
+                    : '${text.setShortCode} (#${item.shortCode})',
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onSetShortCode();
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+// ── Short-code list (⚡ mode): short code + name, no price, no thumbnail ──
+
+class _ShortCodeList extends StatelessWidget {
+  const _ShortCodeList({required this.items, required this.onTap});
+
+  final List<MenuItem> items;
+  final ValueChanged<MenuItem> onTap;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final inCart = qty > 0;
-    final off = !(item.isAvailable);
-    final extras = item.extras;
-    final iconKey = resolveMenuIconKey(
-      iconKey: extras.iconKey,
-      name: item.name,
-      category: item.category,
-    );
-
-    return GestureDetector(
-      onTap: off ? null : onTap,
-      child: Opacity(
-        opacity: off ? 0.5 : 1.0,
-        child: Container(
-          padding: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: PosColors.surface,
-            border: Border.all(
-              color: inCart ? PosColors.primaryDeep : PosColors.line,
-            ),
-            borderRadius: BorderRadius.circular(PosRadii.lg),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Image section — full-width tint, inner padding for badges
-              Container(
-                height: 54,
-                color: resolveCategoryBg(item.category),
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Stack(
-                    clipBehavior: Clip.antiAlias,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: ItemImage(
-                          url: item.imageUrl ?? '',
-                          iconKey: iconKey,
-                          category: item.category,
-                        ),
-                      ),
-                      if (inCart) ...[
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            constraints: const BoxConstraints(minWidth: 22),
-                            height: 22,
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            decoration: BoxDecoration(
-                              color: PosColors.primary,
-                              borderRadius: BorderRadius.circular(11),
-                            ),
-                            alignment: Alignment.center,
-                            child: TfText(
-                              tfFormatNumber(context, qty),
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: PosColors.accentInk,
-                                fontFeatures: [FontFeature.tabularFigures()],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          child: GestureDetector(
-                            onTap: onDecrement,
-                            child: Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: PosColors.surface,
-                                borderRadius: BorderRadius.circular(PosRadii.md),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x2E1B2330),
-                                    blurRadius: 3,
-                                    offset: Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.remove_rounded,
-                                size: 16,
-                                color: PosColors.danger,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (off)
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 3,
-                              horizontal: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: PosColors.danger,
-                              borderRadius: BorderRadius.circular(PosRadii.sm),
-                            ),
-                            child: const Text(
-                              "86'd",
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Name — 14/600, --ink
-                    TfText(
+    if (items.isEmpty) {
+      return Center(
+        child: TfText(
+          app.strings.noItemsInCategory,
+          style: const TextStyle(color: PosColors.muted),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: items.length,
+      separatorBuilder: (_, _) =>
+          const Divider(height: 1, color: PosColors.line),
+      itemBuilder: (_, i) {
+        final item = items[i];
+        final off = !item.isAvailable;
+        return InkWell(
+          onTap: off ? null : () => onTap(item),
+          child: Opacity(
+            opacity: off ? 0.5 : 1.0,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+              child: Row(
+                children: [
+                  _CodeBadge(shortCode: item.shortCode),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TfText(
                       item.localizedName(app.language),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: cols == 4 ? 12.0 : 13.0,
-                        fontWeight: FontWeight.w500,
-                        color: PosColors.primaryDark,
-                        height: 1.25,
-                      ),
-                    ),
-                    // Price — 14/700 tabular, --ink
-                    TfText(
-                      tfFormatCurrency(context, item.price),
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: PosColors.primaryDark,
-                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
+        );
+      },
+    );
+  }
+}
+
+// ── Short-code badge (shown on cards in ⚡ code mode) ──
+
+class _CodeBadge extends StatelessWidget {
+  const _CodeBadge({required this.shortCode});
+
+  final int? shortCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: PosColors.primarySoft,
+        borderRadius: BorderRadius.circular(PosRadii.sm),
+      ),
+      child: TfText(
+        shortCode == null ? '#—' : '#$shortCode',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: PosColors.accentStrong,
+          fontFeatures: [FontFeature.tabularFigures()],
         ),
       ),
     );
@@ -967,7 +854,12 @@ class _GridTile extends StatelessWidget {
 // ── Menu item image ──
 
 class ItemImage extends StatelessWidget {
-  const ItemImage({required this.url, required this.iconKey, this.category, super.key});
+  const ItemImage({
+    required this.url,
+    required this.iconKey,
+    this.category,
+    super.key,
+  });
 
   final String url;
   final String iconKey;
@@ -1019,10 +911,7 @@ class ItemImage extends StatelessWidget {
 // ── Cart footer (white bar, single "Review order" primary button) ──
 
 class CartFooter extends StatelessWidget {
-  const CartFooter({
-    this.onSubmit,
-    super.key,
-  });
+  const CartFooter({this.onSubmit, super.key});
 
   final VoidCallback? onSubmit;
 
@@ -1088,7 +977,9 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
 
   double get _unitPrice {
     final base = widget.item.price;
-    final optDelta = _hasOptions ? _options[_selectedOptionIdx].priceDelta : 0.0;
+    final optDelta = _hasOptions
+        ? _options[_selectedOptionIdx].priceDelta
+        : 0.0;
     final addOnTotal = _selectedAddOnIdxs.fold<double>(
       0,
       (sum, i) => sum + _addOns[i].price,
@@ -1099,8 +990,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
   double get _lineTotal => _unitPrice * _qty;
 
   DesktopMenuLineSelection _buildSelection() {
-    final note =
-        _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
+    final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
     final DesktopMenuOption opt;
     if (_hasOptions) {
       final o = _options[_selectedOptionIdx];
@@ -1242,10 +1132,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
-                        Text(
-                          isBn ? 'অপশন' : 'OPTIONS',
-                          style: eyebrowStyle,
-                        ),
+                        Text(isBn ? 'অপশন' : 'OPTIONS', style: eyebrowStyle),
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1397,8 +1284,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () =>
-                            Navigator.pop(context, _buildSelection()),
+                        onTap: () => Navigator.pop(context, _buildSelection()),
                         child: Container(
                           height: 52,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1410,9 +1296,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  isBn
-                                      ? 'অর্ডারে যোগ করুন'
-                                      : 'Add to order',
+                                  isBn ? 'অর্ডারে যোগ করুন' : 'Add to order',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -1426,9 +1310,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
                                   color: PosColors.accentInk,
-                                  fontFeatures: [
-                                    FontFeature.tabularFigures(),
-                                  ],
+                                  fontFeatures: [FontFeature.tabularFigures()],
                                 ),
                               ),
                             ],
@@ -1461,7 +1343,8 @@ class _OptionBtn extends StatelessWidget {
   final String label;
   final double priceDelta;
   final bool selected;
-  final bool isRadio; // true = circular radio indicator, false = square checkbox
+  final bool
+  isRadio; // true = circular radio indicator, false = square checkbox
   final VoidCallback onTap;
 
   @override
@@ -1485,7 +1368,9 @@ class _OptionBtn extends StatelessWidget {
               height: 20,
               decoration: BoxDecoration(
                 shape: isRadio ? BoxShape.circle : BoxShape.rectangle,
-                borderRadius: isRadio ? null : BorderRadius.circular(PosRadii.sm),
+                borderRadius: isRadio
+                    ? null
+                    : BorderRadius.circular(PosRadii.sm),
                 border: Border.all(
                   color: selected
                       ? PosColors.accentStrong

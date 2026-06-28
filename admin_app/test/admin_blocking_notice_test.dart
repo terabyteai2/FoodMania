@@ -224,8 +224,9 @@ void main() {
     },
   );
 
-  testWidgets('blocking notice screen shows default layout without extras',
-      (tester) async {
+  testWidgets('blocking notice screen shows default layout without extras', (
+    tester,
+  ) async {
     var retryCount = 0;
     await tester.pumpWidget(
       MaterialApp(
@@ -257,8 +258,9 @@ void main() {
     expect(retryCount, 1);
   });
 
-  testWidgets('blocking notice screen shows image when imageUrl is set',
-      (tester) async {
+  testWidgets('blocking notice screen shows image when imageUrl is set', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -279,83 +281,87 @@ void main() {
     expect(find.text('Please wait.'), findsOneWidget);
   });
 
-  testWidgets('blocking notice screen shows input field when inputField is true',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: AdminBlockingNoticeScreen(
-          notice: const AdminBlockingNotice(
-            enabled: true,
-            title: 'Maintenance',
-            message: 'Enter your contact info.',
-            inputField: true,
-            inputLabel: 'Your email',
-            updatedAt: null,
+  testWidgets(
+    'blocking notice screen shows input field when inputField is true',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AdminBlockingNoticeScreen(
+            notice: const AdminBlockingNotice(
+              enabled: true,
+              title: 'Maintenance',
+              message: 'Enter your contact info.',
+              inputField: true,
+              inputLabel: 'Your email',
+              updatedAt: null,
+            ),
+            refreshing: false,
+            onRetry: () {},
           ),
-          refreshing: false,
-          onRetry: () {},
         ),
-      ),
-    );
+      );
 
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('Your email'), findsOneWidget);
-  });
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Your email'), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'blocking notice screen hides input field when inputField is false',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: AdminBlockingNoticeScreen(
-          notice: const AdminBlockingNotice(
-            enabled: true,
-            title: 'Maintenance',
-            message: 'Please wait.',
-            inputField: false,
-            updatedAt: null,
+    'blocking notice screen hides input field when inputField is false',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AdminBlockingNoticeScreen(
+            notice: const AdminBlockingNotice(
+              enabled: true,
+              title: 'Maintenance',
+              message: 'Please wait.',
+              inputField: false,
+              updatedAt: null,
+            ),
+            refreshing: false,
+            onRetry: () {},
           ),
-          refreshing: false,
-          onRetry: () {},
         ),
-      ),
-    );
+      );
 
-    expect(find.byType(TextField), findsNothing);
-  });
+      expect(find.byType(TextField), findsNothing);
+    },
+  );
 
   testWidgets(
-      'blocking notice screen calls onRespond before onRetry when input present',
-      (tester) async {
-    var responded = '';
-    var retried = false;
+    'blocking notice screen calls onRespond before onRetry when input present',
+    (tester) async {
+      var responded = '';
+      var retried = false;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: AdminBlockingNoticeScreen(
-          notice: const AdminBlockingNotice(
-            enabled: true,
-            title: 'Maintenance',
-            message: 'Please respond.',
-            inputField: true,
-            inputLabel: 'Your message',
-            updatedAt: null,
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AdminBlockingNoticeScreen(
+            notice: const AdminBlockingNotice(
+              enabled: true,
+              title: 'Maintenance',
+              message: 'Please respond.',
+              inputField: true,
+              inputLabel: 'Your message',
+              updatedAt: null,
+            ),
+            refreshing: false,
+            onRetry: () => retried = true,
+            onRespond: (r) async => responded = r,
           ),
-          refreshing: false,
-          onRetry: () => retried = true,
-          onRespond: (r) async => responded = r,
         ),
-      ),
-    );
+      );
 
-    await tester.enterText(find.byType(TextField), 'Contact: 01XXX');
-    await tester.tap(find.text('Check again'));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Contact: 01XXX');
+      await tester.tap(find.text('Check again'));
+      await tester.pump();
 
-    expect(responded, 'Contact: 01XXX');
-    expect(retried, isTrue);
-  });
+      expect(responded, 'Contact: 01XXX');
+      expect(retried, isTrue);
+    },
+  );
 }

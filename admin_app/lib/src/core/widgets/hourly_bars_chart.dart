@@ -73,13 +73,7 @@ class _TickRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (count <= 0) return const SizedBox.shrink();
-    final ticks = <int>{
-      0,
-      count ~/ 4,
-      count ~/ 2,
-      (count * 3) ~/ 4,
-      count - 1,
-    };
+    final ticks = <int>{0, count ~/ 4, count ~/ 2, (count * 3) ~/ 4, count - 1};
     return Row(
       children: [
         for (var i = 0; i < count; i++)

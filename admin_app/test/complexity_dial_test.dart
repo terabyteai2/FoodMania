@@ -29,9 +29,8 @@ void main() {
       expect(find.byKey(ValueKey('complexity-dial-${tier.key}')), findsOne);
       expect(find.text(tier.displayName), findsWidgets);
     }
-    expect(find.text('FoodCart'), findsOneWidget);
-    expect(find.text('Restaurant'), findsOneWidget);
-    expect(find.text('Enterprise'), findsOneWidget);
+    expect(find.text('Simple'), findsWidgets);
+    expect(find.text('Advanced'), findsWidgets);
 
     await tester.tap(find.byKey(const ValueKey('complexity-dial-enterprise')));
     await tester.pumpAndSettle();

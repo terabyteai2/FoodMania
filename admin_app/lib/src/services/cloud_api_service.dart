@@ -2130,6 +2130,10 @@ class CloudApiService {
     String range = 'today',
     String? start,
     String? end,
+    String? service,
+    String? paymentMethod,
+    String? shiftId,
+    String? user,
   }) async {
     final config = _requireServerConfig();
     final uri = _uri(
@@ -2138,6 +2142,10 @@ class CloudApiService {
         'range': range,
         'start': ?start,
         'end': ?end,
+        'service': ?service,
+        'payment_method': ?paymentMethod,
+        'shift_id': ?shiftId,
+        'user': ?user,
       },
     );
     if (uri == null) {
@@ -2147,6 +2155,79 @@ class CloudApiService {
     final data = json['data'];
     if (data is! Map) {
       throw CloudApiException('Analytics summary response was malformed.');
+    }
+    return Map<String, Object?>.from(data);
+  }
+
+  /// Daily sales series for one menu item — drives the Item drill-down screen.
+  Future<Map<String, Object?>> fetchItemAnalytics({
+    required String menuItemId,
+    String range = 'month',
+    String? start,
+    String? end,
+  }) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/analytics/item/$menuItemId',
+      queryParameters: {'range': range, 'start': ?start, 'end': ?end},
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Item analytics response was malformed.');
+    }
+    return Map<String, Object?>.from(data);
+  }
+
+  /// QS Performance Report — item-wise performance over a trailing window.
+  Future<Map<String, Object?>> fetchPerformanceReport({
+    String granularity = 'daily',
+    String? category,
+    String? start,
+    int days = 30,
+  }) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/reports/performance',
+      queryParameters: {
+        'granularity': granularity,
+        'category': ?category,
+        'start': ?start,
+        'days': '$days',
+      },
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Performance report response was malformed.');
+    }
+    return Map<String, Object?>.from(data);
+  }
+
+  /// Reports-hub landing cards — order buckets (success/cancelled/comp) + modes.
+  Future<Map<String, Object?>> fetchOrderBuckets({
+    String range = 'today',
+    String? start,
+    String? end,
+  }) async {
+    final config = _requireServerConfig();
+    final uri = _uri(
+      '/outlets/${config.outletId}/reports/order-buckets',
+      queryParameters: {'range': range, 'start': ?start, 'end': ?end},
+    );
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final json = await _sendJson('GET', uri);
+    final data = json['data'];
+    if (data is! Map) {
+      throw CloudApiException('Order buckets response was malformed.');
     }
     return Map<String, Object?>.from(data);
   }

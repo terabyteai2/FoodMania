@@ -15,6 +15,7 @@ class MenuItem {
     required this.updatedAt,
     this.costPrice,
     this.shortCode,
+    this.isFavorite = false,
     this.nameEn = '',
     this.nameBn = '',
     this.descriptionEn = '',
@@ -48,6 +49,10 @@ class MenuItem {
   /// Serial-by-default, editable short code for fast numeric item lookup in the
   /// POS (the ⚡ search toggle). Null until the backend assigns a serial.
   final int? shortCode;
+
+  /// Outlet-wide favourite flag — favourited items float to the top of the POS
+  /// item picker. Defaults false ("not favourited").
+  final bool isFavorite;
   final String? imageUrl;
   final bool isAvailable;
   final int? preparationTimeMinutes;
@@ -73,6 +78,8 @@ class MenuItem {
     double? costPrice,
     bool clearCostPrice = false,
     int? shortCode,
+    bool clearShortCode = false,
+    bool? isFavorite,
     String? imageUrl,
     bool? isAvailable,
     int? preparationTimeMinutes,
@@ -97,7 +104,8 @@ class MenuItem {
       categoryBn: categoryBn ?? this.categoryBn,
       price: price ?? this.price,
       costPrice: clearCostPrice ? null : costPrice ?? this.costPrice,
-      shortCode: shortCode ?? this.shortCode,
+      shortCode: clearShortCode ? null : shortCode ?? this.shortCode,
+      isFavorite: isFavorite ?? this.isFavorite,
       imageUrl: imageUrl ?? this.imageUrl,
       isAvailable: isAvailable ?? this.isAvailable,
       preparationTimeMinutes:
@@ -126,6 +134,7 @@ class MenuItem {
       'price': price,
       'costPrice': costPrice,
       'shortCode': shortCode,
+      'isFavorite': isFavorite ? 1 : 0,
       'imageUrl': imageUrl,
       'isAvailable': isAvailable ? 1 : 0,
       'preparationTimeMinutes': preparationTimeMinutes,
@@ -153,6 +162,7 @@ class MenuItem {
       'price': price,
       'costPrice': costPrice,
       'shortCode': shortCode,
+      'isFavorite': isFavorite,
       'imageUrl': imageUrl,
       'isAvailable': isAvailable,
       'preparationTimeMinutes': preparationTimeMinutes,
@@ -184,6 +194,7 @@ class MenuItem {
       price: (map['price'] as num).toDouble(),
       costPrice: (map['costPrice'] as num?)?.toDouble(),
       shortCode: (map['shortCode'] as num?)?.toInt(),
+      isFavorite: _decodeFlag(map['isFavorite']),
       imageUrl: map['imageUrl'] as String?,
       isAvailable: _decodeBool(map['isAvailable']),
       preparationTimeMinutes: map['preparationTimeMinutes'] as int?,
@@ -259,6 +270,15 @@ class MenuItem {
     if (value is num) return value == 1;
     if (value is String) return value.toLowerCase() == 'true' || value == '1';
     return true;
+  }
+
+  /// Like [_decodeBool] but defaults to false for missing/unknown values —
+  /// used for opt-in flags such as [isFavorite].
+  static bool _decodeFlag(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value == 1;
+    if (value is String) return value.toLowerCase() == 'true' || value == '1';
+    return false;
   }
 
   static List<String> _decodeTags(Object? rawTags) {

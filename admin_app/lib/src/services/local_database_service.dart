@@ -26,6 +26,12 @@ import '../models/stock_adjustment.dart';
 import '../models/sync_event.dart';
 import '../models/sync_status.dart';
 
+/// Hard safety ceiling for [LocalDatabaseService.getOrders] when a caller
+/// passes no `limit`. Well above the in-memory order cap (500) so paginated
+/// reads are never truncated, but it prevents an accidental full-table load
+/// from pulling thousands of orders (+ their items) into RAM at once.
+const int kMaxOrdersQueryLimit = 1000;
+
 class DatabaseValidationException implements Exception {
   DatabaseValidationException(this.message);
 
@@ -119,7 +125,7 @@ class LocalDatabaseService {
 
     _database = await openDatabase(
       databasePath,
-      version: 16,
+      version: 17,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
@@ -307,6 +313,20 @@ class LocalDatabaseService {
     return updated;
   }
 
+  Future<MenuItem> toggleMenuFavorite(String id, bool isFavorite) async {
+    final existing = await getMenuItemById(id);
+    if (existing == null) {
+      throw DatabaseValidationException('Menu item was not found.');
+    }
+    final updated = existing.copyWith(
+      isFavorite: isFavorite,
+      syncStatus: SyncStatus.pending,
+      updatedAt: DateTime.now(),
+    );
+    await upsertMenuItem(updated);
+    return updated;
+  }
+
   Future<List<OrderModel>> getOrders({
     OrderStatus? status,
     OrderSource? source,
@@ -325,12 +345,15 @@ class LocalDatabaseService {
       whereArgs.add(source.value);
     }
 
+    // Never run an unbounded query — a null limit falls back to a safe ceiling
+    // so a caller can't accidentally load the entire orders table into memory.
+    final effectiveLimit = limit ?? kMaxOrdersQueryLimit;
     final orderRows = await db.query(
       'orders',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'sequenceNo DESC, createdAt DESC',
-      limit: limit,
+      limit: effectiveLimit,
       offset: offset,
     );
     if (orderRows.isEmpty) {
@@ -1174,6 +1197,7 @@ class LocalDatabaseService {
         price REAL NOT NULL,
         costPrice REAL,
         shortCode INTEGER,
+        isFavorite INTEGER NOT NULL DEFAULT 0,
         imageUrl TEXT,
         isAvailable INTEGER NOT NULL,
         preparationTimeMinutes INTEGER,
@@ -1360,6 +1384,14 @@ class LocalDatabaseService {
         'menu_items',
         'shortCode',
         'shortCode INTEGER',
+      );
+    }
+    if (oldVersion < 17) {
+      await _addColumnIfMissing(
+        db,
+        'menu_items',
+        'isFavorite',
+        'isFavorite INTEGER NOT NULL DEFAULT 0',
       );
     }
   }

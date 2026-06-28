@@ -120,9 +120,7 @@ class AuditEntry {
           ? rawItems
                 .whereType<Map>()
                 .map(
-                  (e) => AuditLineItem.fromJson(
-                    Map<String, Object?>.from(e),
-                  ),
+                  (e) => AuditLineItem.fromJson(Map<String, Object?>.from(e)),
                 )
                 .where((i) => i.name.isNotEmpty)
                 .toList(growable: false)

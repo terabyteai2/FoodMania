@@ -12,9 +12,12 @@ class LoadingView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(PosSpacing.sp6),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 26, vertical: 22),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PosSpacing.sp6,
+            vertical: PosSpacing.sp5,
+          ),
           decoration: BoxDecoration(
             color: PosColors.surface,
             borderRadius: BorderRadius.circular(PosRadii.card),
@@ -29,18 +32,18 @@ class LoadingView extends StatelessWidget {
                 height: 56,
                 decoration: BoxDecoration(
                   color: PosColors.primarySoft,
-                  borderRadius: BorderRadius.circular(PosRadii.tile),
+                  borderRadius: BorderRadius.circular(PosRadii.lg),
                   border: Border.all(color: PosColors.line),
                 ),
-                child: Padding(
-                  padding: EdgeInsets.all(14),
+                child: const Padding(
+                  padding: EdgeInsets.all(PosSpacing.sp4),
                   child: CircularProgressIndicator(
-                    color: PosColors.primaryDark,
+                    color: PosColors.primary,
                     strokeWidth: 2.6,
                   ),
                 ),
               ),
-              SizedBox(height: 14),
+              const SizedBox(height: PosSpacing.sp3),
               TfText(
                 message,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(

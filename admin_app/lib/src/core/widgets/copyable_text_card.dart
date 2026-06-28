@@ -20,7 +20,7 @@ class CopyableTextCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final canCopy = value.trim().isNotEmpty && !value.contains('Unavailable');
     return TfCard(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(PosSpacing.sp4),
       color: PosColors.surface,
       child: Row(
         children: [
@@ -29,12 +29,12 @@ class CopyableTextCard extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
               color: PosColors.primarySoft,
-              borderRadius: BorderRadius.circular(PosRadii.tile),
+              borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(color: PosColors.line),
             ),
-            child: Icon(icon, color: PosColors.primaryDark, size: 20),
+            child: Icon(icon, color: PosColors.accentStrong, size: 20),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: PosSpacing.sp3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,7 +48,7 @@ class CopyableTextCard extends StatelessWidget {
                     letterSpacing: 0.04 * 12,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: PosSpacing.sp1),
                 SelectableText(
                   value,
                   maxLines: 2,
@@ -64,9 +64,9 @@ class CopyableTextCard extends StatelessWidget {
           ),
           Material(
             color: PosColors.surface,
-            borderRadius: BorderRadius.circular(PosRadii.sm),
+            borderRadius: BorderRadius.circular(PosRadii.md),
             child: InkWell(
-              borderRadius: BorderRadius.circular(PosRadii.sm),
+              borderRadius: BorderRadius.circular(PosRadii.md),
               onTap: canCopy
                   ? () async {
                       await Clipboard.setData(ClipboardData(text: value));
@@ -77,15 +77,15 @@ class CopyableTextCard extends StatelessWidget {
                     }
                   : null,
               child: Container(
-                padding: EdgeInsets.all(9),
+                padding: const EdgeInsets.all(PosSpacing.sp2 + 1),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(PosRadii.sm),
-                  border: Border.all(color: PosColors.line),
+                  borderRadius: BorderRadius.circular(PosRadii.md),
+                  border: Border.all(color: PosColors.lineStrong),
                 ),
                 child: Icon(
                   Icons.copy_rounded,
                   size: 17,
-                  color: canCopy ? PosColors.primaryDark : PosColors.muted,
+                  color: canCopy ? PosColors.accentStrong : PosColors.muted,
                 ),
               ),
             ),

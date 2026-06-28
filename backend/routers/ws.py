@@ -25,15 +25,25 @@ class ConnectionManager:
         self._room(outlet_id).append(ws)
 
     def disconnect(self, outlet_id: str, ws: WebSocket) -> None:
-        room = self._room(outlet_id)
+        # Use get() (not _room/setdefault) so disconnecting never creates a
+        # room, and drop the key once empty — otherwise every outlet that ever
+        # connects leaves a permanent empty list in _connections (slow leak).
+        room = self._connections.get(outlet_id)
+        if room is None:
+            return
         if ws in room:
             room.remove(ws)
+        if not room:
+            self._connections.pop(outlet_id, None)
 
     async def broadcast(self, outlet_id: str, payload: dict) -> None:
+        room = self._connections.get(outlet_id)
+        if not room:
+            return
         payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
         message = json.dumps(payload)
         dead: list[WebSocket] = []
-        for ws in list(self._room(outlet_id)):
+        for ws in list(room):
             try:
                 await ws.send_text(message)
             except Exception:

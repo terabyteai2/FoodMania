@@ -23,7 +23,11 @@ class PcSplitPlan {
 
 /// A single line on the bill, used for the "by item" split tab.
 class PcSplitItem {
-  const PcSplitItem({required this.id, required this.label, required this.lineTotal});
+  const PcSplitItem({
+    required this.id,
+    required this.label,
+    required this.lineTotal,
+  });
   final String id;
   final String label;
   final double lineTotal;
@@ -141,7 +145,10 @@ class _PcSplitBillDialogState extends State<PcSplitBillDialog> {
                       const SizedBox(height: 10),
                       Text(
                         _error!,
-                        style: const TextStyle(color: Pc.danger, fontSize: 12.5),
+                        style: const TextStyle(
+                          color: Pc.danger,
+                          fontSize: 12.5,
+                        ),
                       ),
                     ],
                   ],
@@ -268,8 +275,14 @@ class _PcSplitBillDialogState extends State<PcSplitBillDialog> {
                 value: _itemPayers[item.id],
                 underline: const SizedBox.shrink(),
                 items: [
-                  DropdownMenuItem(value: 0, child: Text(tr('Payer 1', 'পরি. ১'))),
-                  DropdownMenuItem(value: 1, child: Text(tr('Payer 2', 'পরি. ২'))),
+                  DropdownMenuItem(
+                    value: 0,
+                    child: Text(tr('Payer 1', 'পরি. ১')),
+                  ),
+                  DropdownMenuItem(
+                    value: 1,
+                    child: Text(tr('Payer 2', 'পরি. ২')),
+                  ),
                 ],
                 onChanged: (v) => setState(() => _itemPayers[item.id] = v!),
               ),
@@ -317,7 +330,8 @@ class _PcSplitBillDialogState extends State<PcSplitBillDialog> {
         double.tryParse(_pctA.text) ?? 0,
         double.tryParse(_pctB.text) ?? 0,
       ];
-      if (values.any((v) => v <= 0) || (values[0] + values[1] - 100).abs() > 0.001) {
+      if (values.any((v) => v <= 0) ||
+          (values[0] + values[1] - 100).abs() > 0.001) {
         setState(
           () => _error = tr(
             'Percentages must be positive and add up to 100%.',

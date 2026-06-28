@@ -12,10 +12,7 @@ void main() {
     expect(menuLineNeedsCustomization(plain), isFalse);
     expect(menuLineOptionsFor(plain).single.label, isEmpty);
     expect(menuLineNeedsCustomization(withOption), isTrue);
-    expect(
-      configuredMenuLineOptionsFor(withSizeAlias).single.label,
-      'Medium',
-    );
+    expect(configuredMenuLineOptionsFor(withSizeAlias).single.label, 'Medium');
     expect(menuLineNeedsCustomization(withAddOn), isTrue);
   });
 

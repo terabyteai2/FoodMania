@@ -55,7 +55,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    // Menu management reads the menu (items/categories), account (manager gate),
+    // and language — not orders/printer/sync.
+    final app = AppScope.selectMany(context, const [
+      AppAspect.menu,
+      AppAspect.account,
+      AppAspect.language,
+    ]);
     final text = app.strings;
     final language = app.language;
     final categories = [text.allCategories, ...app.categories];
@@ -118,21 +124,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             onNavigateToOrders: widget.onNavigateToOrders,
                             onNavigateToTarget: widget.onNavigateToTarget,
                           ),
-                          if (app.isManager) ...[
-                            const SizedBox(height: 12),
-                            _MenuActionRow(
-                              text: text,
-                              scanning: _scanBusy,
-                              deliveryOn: app.serverConfig.deliveryCharge > 0,
-                              onDelivery: () =>
-                                  _openDeliveryChargeEditor(context),
-                              onScan: _scanBusy
-                                  ? null
-                                  : () => _scanMenu(context),
-                              onDiscounts: () => _openDiscountsAction(context),
-                              onSettings: () => _openMenuSettings(context),
-                            ),
-                          ],
                           SizedBox(height: 12),
                           Row(
                             children: [
@@ -213,9 +204,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                             _MenuList(
                               items: items,
                               language: language,
-                              showCode: _codeMode,
                               selectedIds: _selectedItemIds,
-                              selectionMode: _selectedItemIds.isNotEmpty,
                               onEdit: app.isManager
                                   ? (item) => _openMenuForm(context, item: item)
                                   : (_) {},
@@ -227,9 +216,20 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                   }
                                 });
                               },
-                              onDelete: app.isManager
-                                  ? (item) => _confirmDelete(context, item)
-                                  : (_) {},
+                              onSelectAll: (selectAll) {
+                                if (!app.isManager) return;
+                                setState(() {
+                                  if (selectAll) {
+                                    _selectedItemIds.addAll(
+                                      items.map((i) => i.id),
+                                    );
+                                  } else {
+                                    _selectedItemIds.removeAll(
+                                      items.map((i) => i.id),
+                                    );
+                                  }
+                                });
+                              },
                               onAvailabilityChanged: (item, value) async {
                                 if (!app.isManager) return;
                                 await app.toggleMenuAvailability(
@@ -237,9 +237,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                                   value,
                                 );
                               },
-                              onAddImage: app.isManager
-                                  ? (item) => _addImageToItem(context, item)
-                                  : (_) {},
                             ),
                           ],
                         ],
@@ -251,11 +248,27 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             ),
             if (app.isManager)
               TfStickyCTA(
-                child: TfButton(
-                  label: text.menuNewButton,
-                  icon: Icons.add_rounded,
-                  size: TfButtonSize.lg,
-                  onPressed: () => _openMenuForm(context),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TfButton(
+                        label: text.menuScanCardButton,
+                        icon: Icons.document_scanner_outlined,
+                        variant: TfButtonVariant.dark,
+                        size: TfButtonSize.lg,
+                        onPressed: _scanBusy ? null : () => _scanMenu(context),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TfButton(
+                        label: text.menuNewButton,
+                        icon: Icons.add_rounded,
+                        size: TfButtonSize.lg,
+                        onPressed: () => _openMenuForm(context),
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -514,7 +527,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _scanMenu(BuildContext context) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     try {
       final pages = await _pickMenuScanPages(context);
@@ -571,7 +584,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _applyBulkDiscount(BuildContext context) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final selected = app.menuItems
         .where((item) => _selectedItemIds.contains(item.id))
         .toList(growable: false);
@@ -580,22 +593,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   // Discounts action row entry: apply to the current selection, or to every
   // item when nothing is selected.
-  Future<void> _openDiscountsAction(BuildContext context) async {
-    final app = AppScope.of(context);
-    final selected = app.menuItems
-        .where((item) => _selectedItemIds.contains(item.id))
-        .toList(growable: false);
-    final target = selected.isNotEmpty ? selected : app.menuItems;
-    if (target.isEmpty) return;
-    await _applyDiscountToItems(
-      context,
-      target,
-      clearSelection: selected.isNotEmpty,
-    );
-  }
-
   Future<void> _openMenuSettings(BuildContext context) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final action = await showModalBottomSheet<_MenuSettingsAction>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -633,23 +632,8 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     }
   }
 
-  Future<void> _openDeliveryChargeEditor(BuildContext context) async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final value = await showModalBottomSheet<double>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) =>
-          _DeliveryChargeSheet(initialValue: app.serverConfig.deliveryCharge),
-    );
-    if (value == null || !context.mounted) return;
-    await app.updateDeliveryCharge(value);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: TfText(text.menuDeliveryChargeSaved)));
-  }
+  Future<void> _openDeliveryChargeEditor(BuildContext context) =>
+      showMenuDeliveryChargeEditor(context);
 
   Future<void> _applyDiscountToItems(
     BuildContext context,
@@ -678,36 +662,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     _BulkDiscountResult result, {
     required bool clearSelection,
   }) async {
-    final app = AppScope.of(context);
-    for (final item in items) {
-      final extras = item.extras.copyWith(
-        discountPercent: result.mode == _DiscountMode.percent
-            ? result.value
-            : null,
-        discountFlat: result.mode == _DiscountMode.flat ? result.value : null,
-        clearDiscount: result.mode == _DiscountMode.none,
-      );
-      await app.saveMenuItem(
-        id: item.id,
-        name: item.name,
-        nameEn: item.nameEn,
-        nameBn: item.nameBn,
-        description: item.description,
-        descriptionEn: item.descriptionEn,
-        descriptionBn: item.descriptionBn,
-        category: item.category,
-        categoryEn: item.categoryEn,
-        categoryBn: item.categoryBn,
-        price: item.price,
-        imageUrl: item.imageUrl,
-        isAvailable: item.isAvailable,
-        preparationTimeMinutes: item.preparationTimeMinutes,
-        tags: extras.toTags(),
-        createdAt: item.createdAt,
-        syncAfterSave: false,
-      );
-    }
-    await app.syncNow();
+    await _applyMenuDiscountResult(AppScope.read(context), items, result);
     if (mounted && clearSelection) setState(_selectedItemIds.clear);
   }
 
@@ -825,7 +780,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _openMenuForm(BuildContext context, {MenuItem? item}) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     final result = await showModalBottomSheet<_MenuFormResult>(
       context: context,
@@ -872,7 +827,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _addImageToItem(BuildContext context, MenuItem item) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     try {
       final picked = await _scanImageService.pickRawMenuImageBytes();
@@ -933,7 +888,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _confirmDelete(BuildContext context, MenuItem item) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     TfConfirmSheet.show(
       context,
@@ -950,6 +905,81 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       },
     );
   }
+}
+
+/// Opens the delivery-charge editor sheet and persists the result. Reusable from
+/// both the Menu screen and the nav drawer's collapsible Menu group.
+Future<void> showMenuDeliveryChargeEditor(BuildContext context) async {
+  final app = AppScope.read(context);
+  final text = app.strings;
+  final value = await showModalBottomSheet<double>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) =>
+        _DeliveryChargeSheet(initialValue: app.serverConfig.deliveryCharge),
+  );
+  if (value == null || !context.mounted) return;
+  await app.updateDeliveryCharge(value);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: TfText(text.menuDeliveryChargeSaved)));
+}
+
+/// Opens the bulk-discount sheet and applies the chosen discount to *every* menu
+/// item. Reusable from the nav drawer's Menu group, where there is no in-screen
+/// selection to scope to.
+Future<void> showMenuDiscountsSheet(BuildContext context) async {
+  final app = AppScope.read(context);
+  final items = app.menuItems;
+  if (items.isEmpty) return;
+  final result = await showModalBottomSheet<_BulkDiscountResult>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _BulkDiscountSheet(),
+  );
+  if (result == null || !context.mounted) return;
+  await _applyMenuDiscountResult(app, items, result);
+}
+
+/// Shared per-item discount writer used by both the Menu screen and the top-level
+/// [showMenuDiscountsSheet]. Writes each item's discount tags then syncs once.
+Future<void> _applyMenuDiscountResult(
+  PosAppController app,
+  List<MenuItem> items,
+  _BulkDiscountResult result,
+) async {
+  for (final item in items) {
+    final extras = item.extras.copyWith(
+      discountPercent: result.mode == _DiscountMode.percent
+          ? result.value
+          : null,
+      discountFlat: result.mode == _DiscountMode.flat ? result.value : null,
+      clearDiscount: result.mode == _DiscountMode.none,
+    );
+    await app.saveMenuItem(
+      id: item.id,
+      name: item.name,
+      nameEn: item.nameEn,
+      nameBn: item.nameBn,
+      description: item.description,
+      descriptionEn: item.descriptionEn,
+      descriptionBn: item.descriptionBn,
+      category: item.category,
+      categoryEn: item.categoryEn,
+      categoryBn: item.categoryBn,
+      price: item.price,
+      imageUrl: item.imageUrl,
+      isAvailable: item.isAvailable,
+      preparationTimeMinutes: item.preparationTimeMinutes,
+      tags: extras.toTags(),
+      createdAt: item.createdAt,
+      syncAfterSave: false,
+    );
+  }
+  await app.syncNow();
 }
 
 class _DesktopBulkToolbar extends StatelessWidget {
@@ -1626,122 +1656,6 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
   }
 }
 
-/// Icon action row (spec §4.10) — Delivery · Scan · Discounts · Settings.
-class _MenuActionRow extends StatelessWidget {
-  const _MenuActionRow({
-    required this.text,
-    required this.scanning,
-    required this.deliveryOn,
-    required this.onDelivery,
-    required this.onScan,
-    required this.onDiscounts,
-    required this.onSettings,
-  });
-
-  final AppStrings text;
-  final bool scanning;
-  final bool deliveryOn;
-  final VoidCallback onDelivery;
-  final VoidCallback? onScan;
-  final VoidCallback onDiscounts;
-  final VoidCallback onSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _MenuActionButton(
-          icon: Icons.delivery_dining_outlined,
-          label: deliveryOn ? text.menuDeliveryOn : text.menuDeliveryOff,
-          active: deliveryOn,
-          onTap: onDelivery,
-        ),
-        const SizedBox(width: 8),
-        _MenuActionButton(
-          icon: Icons.document_scanner_outlined,
-          label: scanning ? text.menuScanningShort : text.menuActionScan,
-          onTap: onScan,
-        ),
-        const SizedBox(width: 8),
-        _MenuActionButton(
-          icon: Icons.percent_rounded,
-          label: text.menuActionDiscounts,
-          onTap: onDiscounts,
-        ),
-        const SizedBox(width: 8),
-        _MenuActionButton(
-          icon: Icons.tune_rounded,
-          label: text.menuActionSettings,
-          onTap: onSettings,
-        ),
-      ],
-    );
-  }
-}
-
-class _MenuActionButton extends StatelessWidget {
-  const _MenuActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final disabled = onTap == null;
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 11),
-          decoration: BoxDecoration(
-            color: active ? PosColors.primarySoft : PosColors.surface,
-            borderRadius: BorderRadius.circular(PosRadii.card),
-            border: Border.all(
-              color: active ? PosColors.primaryWash : PosColors.lineStrong,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: disabled
-                    ? PosColors.muted
-                    : active
-                    ? PosColors.accentStrong
-                    : PosColors.inkSoft,
-              ),
-              const SizedBox(height: 5),
-              TfText(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: disabled
-                      ? PosColors.muted
-                      : active
-                      ? PosColors.accentStrong
-                      : PosColors.inkSoft,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BulkMenuToolbar extends StatelessWidget {
   const _BulkMenuToolbar({
     required this.count,
@@ -1900,155 +1814,274 @@ class _BulkDiscountSheetState extends State<_BulkDiscountSheet> {
   }
 }
 
+/// Petpooja "Management"-style item table: a column header (select-all · Status ·
+/// Name · Mark as) over flat rows of [checkbox · status dot · name · ON/OFF
+/// toggle]. Thumbnail/price/code intentionally dropped — tap a row to edit for
+/// the rest. The category filter chips above still scope which items show.
 class _MenuList extends StatelessWidget {
   const _MenuList({
     required this.items,
     required this.language,
-    required this.showCode,
     required this.selectedIds,
-    required this.selectionMode,
     required this.onEdit,
     required this.onSelect,
-    required this.onDelete,
+    required this.onSelectAll,
     required this.onAvailabilityChanged,
-    required this.onAddImage,
   });
 
   final List<MenuItem> items;
   final AppLanguage language;
-  final bool showCode;
   final Set<String> selectedIds;
-  final bool selectionMode;
   final ValueChanged<MenuItem> onEdit;
   final ValueChanged<MenuItem> onSelect;
-  final ValueChanged<MenuItem> onDelete;
+  final ValueChanged<bool> onSelectAll;
   final void Function(MenuItem item, bool value) onAvailabilityChanged;
-  final ValueChanged<MenuItem> onAddImage;
 
   @override
   Widget build(BuildContext context) {
-    final grouped = <String, List<MenuItem>>{};
-    for (final item in items) {
-      final category = item.localizedCategory(language).trim().isEmpty
-          ? 'General'
-          : item.localizedCategory(language).trim();
-      grouped.putIfAbsent(category, () => <MenuItem>[]).add(item);
-    }
-    final categoryNames = grouped.keys.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final category in categoryNames) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(2, 0, 2, 11),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TfMicroLabel(
-                    category.toUpperCase(),
-                    color: PosColors.muted,
-                  ),
-                ),
-                TfText(
-                  tfFormatNumber(context, grouped[category]!.length),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.muted,
-                  ),
-                ),
-              ],
+    final allSelected =
+        items.isNotEmpty && items.every((i) => selectedIds.contains(i.id));
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.lg),
+        border: Border.all(color: PosColors.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _MenuListHeader(
+            allSelected: allSelected,
+            onToggleAll: () => onSelectAll(!allSelected),
+          ),
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0)
+              const Divider(height: 1, thickness: 1, color: PosColors.line),
+            _MenuManageRow(
+              item: items[i],
+              language: language,
+              selected: selectedIds.contains(items[i].id),
+              onToggleSelect: () => onSelect(items[i]),
+              onEdit: () => onEdit(items[i]),
+              onAvailabilityChanged: (value) =>
+                  onAvailabilityChanged(items[i], value),
             ),
-          ),
-          Column(
-            children: [
-              for (final item in grouped[category]!) ...[
-                _buildRow(context, item),
-                const SizedBox(height: 10),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
+          ],
         ],
-      ],
+      ),
     );
   }
+}
 
-  Widget _buildRow(BuildContext context, MenuItem item) {
+/// Column header row for [_MenuList] — select-all checkbox + Status/Name/Mark as
+/// labels. Fixed column widths keep it aligned with [_MenuManageRow].
+class _MenuListHeader extends StatelessWidget {
+  const _MenuListHeader({required this.allSelected, required this.onToggleAll});
+
+  final bool allSelected;
+  final VoidCallback onToggleAll;
+
+  @override
+  Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    final priceDecimals = item.price == item.price.roundToDouble() ? 0 : 2;
-    final extras = item.extras;
-    final discounted = extras.discountedPrice(item.price);
-    final showDiscount = extras.hasDiscount && discounted < item.price;
-    final hasImage = (item.imageUrl ?? '').trim().isNotEmpty;
-    final iconKey = resolveMenuIconKey(
-      iconKey: extras.iconKey,
-      name: item.name,
-      category: item.category,
+    const style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: PosColors.muted,
+      letterSpacing: 0.3,
     );
+    return Container(
+      color: PosColors.surfaceSunk,
+      padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _kMenuColCheckbox,
+            child: _MenuCheckbox(
+              value: allSelected,
+              onChanged: (_) => onToggleAll(),
+            ),
+          ),
+          SizedBox(
+            width: _kMenuColStatus,
+            child: Center(
+              child: Text(text.menuColStatus.toUpperCase(), style: style),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(child: Text(text.menuColName.toUpperCase(), style: style)),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: _kMenuColMarkAs,
+            child: Center(
+              child: Text(text.menuColMarkAs.toUpperCase(), style: style),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    final icon = ClipRRect(
-      borderRadius: BorderRadius.circular(PosRadii.tile),
-      child: SizedBox(
-        width: 52,
-        height: 52,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            MenuImageView(imageUrl: item.imageUrl, iconKey: iconKey),
-            if (!hasImage)
-              Align(
-                alignment: Alignment.bottomRight,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: PosColors.surface,
-                    borderRadius: BorderRadius.circular(PosRadii.tag),
-                    border: Border.all(color: PosColors.line, width: 1),
-                  ),
-                  child: const Icon(
-                    Icons.add_photo_alternate_outlined,
-                    size: 11,
-                    color: PosColors.primaryDark,
+/// One menu item rendered as a Petpooja Management row: checkbox · status dot ·
+/// name · ON/OFF "Mark as" toggle. Tapping the row opens the editor; the
+/// checkbox toggles multi-select.
+class _MenuManageRow extends StatelessWidget {
+  const _MenuManageRow({
+    required this.item,
+    required this.language,
+    required this.selected,
+    required this.onToggleSelect,
+    required this.onEdit,
+    required this.onAvailabilityChanged,
+  });
+
+  final MenuItem item;
+  final AppLanguage language;
+  final bool selected;
+  final VoidCallback onToggleSelect;
+  final VoidCallback onEdit;
+  final ValueChanged<bool> onAvailabilityChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final available = item.isAvailable;
+    return Material(
+      color: selected ? PosColors.primarySoft : PosColors.surface,
+      child: InkWell(
+        onTap: onEdit,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+          child: Row(
+            children: [
+              SizedBox(
+                width: _kMenuColCheckbox,
+                child: _MenuCheckbox(
+                  value: selected,
+                  onChanged: (_) => onToggleSelect(),
+                ),
+              ),
+              SizedBox(
+                width: _kMenuColStatus,
+                child: Center(
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: available ? PosColors.success : PosColors.muted,
+                    ),
                   ),
                 ),
               ),
-          ],
+              const SizedBox(width: 4),
+              Expanded(
+                child: TfText(
+                  item.localizedName(language),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: PosColors.text,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: _kMenuColMarkAs,
+                child: Center(
+                  child: _MarkAsToggle(
+                    value: available,
+                    onChanged: onAvailabilityChanged,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+}
 
-    final discountLabel = showDiscount
-        ? (text.isBn
-              ? tfToBnNumbers(extras.discountBadgeLabel())
-              : extras.discountBadgeLabel())
-        : null;
+const double _kMenuColCheckbox = 36;
+const double _kMenuColStatus = 44;
+const double _kMenuColMarkAs = 58;
 
-    return _SourceMenuRow(
-      icon: icon,
-      title: item.localizedName(language),
-      price: tfFormatCurrency(
-        context,
-        item.price,
-        decimalDigits: priceDecimals,
+/// Compact square checkbox used in the menu management table.
+class _MenuCheckbox extends StatelessWidget {
+  const _MenuCheckbox({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Checkbox(
+      value: value,
+      onChanged: onChanged,
+      activeColor: PosColors.primary,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+}
+
+/// Petpooja-style labeled ON/OFF "Mark as" switch (availability). Green track +
+/// "ON" when available, neutral track + "OFF" when paused — green=success token,
+/// never red (paused is not destructive).
+class _MarkAsToggle extends StatelessWidget {
+  const _MarkAsToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final on = value;
+    final label = Text(
+      on ? text.menuMarkOn : text.menuMarkOff,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        color: on ? Colors.white : PosColors.muted,
+        letterSpacing: 0.3,
       ),
-      discountPrice: showDiscount
-          ? tfFormatCurrency(context, discounted, decimalDigits: priceDecimals)
-          : null,
-      discountLabel: discountLabel,
-      codeBadge: showCode
-          ? (item.shortCode != null ? '#${item.shortCode}' : '#—')
-          : null,
-      available: item.isAvailable,
-      onTap: () => selectionMode ? onSelect(item) : onEdit(item),
-      onLongPress: () => onSelect(item),
-      selected: selectedIds.contains(item.id),
-      selectionMode: selectionMode,
-      onSelect: () => onSelect(item),
-      onAddImage: () => onAddImage(item),
-      onAvailabilityChanged: (value) => onAvailabilityChanged(item, value),
+    );
+    const knob = DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 2)],
+      ),
+      child: SizedBox(width: 16, height: 16),
+    );
+    return Semantics(
+      label: text.menuColMarkAs,
+      toggled: on,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onChanged(!on),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 56,
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          decoration: BoxDecoration(
+            color: on ? PosColors.success : PosColors.surfaceSunk,
+            borderRadius: BorderRadius.circular(PosRadii.pill),
+            border: Border.all(color: on ? Colors.transparent : PosColors.line),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: on ? [label, knob] : [knob, label],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2085,192 +2118,6 @@ class _CodeModeButton extends StatelessWidget {
             size: 22,
             color: active ? PosColors.accentInk : PosColors.muted,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SourceMenuRow extends StatelessWidget {
-  const _SourceMenuRow({
-    required this.icon,
-    required this.title,
-    required this.price,
-    required this.available,
-    required this.onAvailabilityChanged,
-    this.discountPrice,
-    this.discountLabel,
-    this.codeBadge,
-    this.selected = false,
-    this.selectionMode = false,
-    this.onTap,
-    this.onLongPress,
-    this.onSelect,
-    this.onAddImage,
-  });
-
-  final Widget icon;
-  final String title;
-  final String price;
-  final String? discountPrice;
-  final String? discountLabel;
-  final String? codeBadge;
-  final bool available;
-  final bool selected;
-  final bool selectionMode;
-  final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
-  final VoidCallback? onSelect;
-  final VoidCallback? onAddImage;
-  final ValueChanged<bool> onAvailabilityChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
-    final hidden = !available;
-    return Opacity(
-      opacity: hidden ? 0.58 : 1.0,
-      child: Material(
-        color: selected ? PosColors.primarySoft : PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.lg),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 76),
-            padding: const EdgeInsets.all(13),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(PosRadii.lg),
-              border: Border.all(
-                color: selected ? PosColors.primaryWash : PosColors.line,
-              ),
-            ),
-            child: Row(
-              children: [
-                if (selectionMode) ...[
-                  Checkbox(value: selected, onChanged: (_) => onSelect?.call()),
-                  const SizedBox(width: 6),
-                ],
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onAddImage,
-                  child: SizedBox(width: 52, height: 52, child: icon),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TfText(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: PosColors.text,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (codeBadge != null)
-                            _MiniMenuTag(
-                              label: codeBadge!,
-                              color: PosColors.accentStrong,
-                              fill: PosColors.primarySoft,
-                            ),
-                          if (discountPrice != null) ...[
-                            TfText(
-                              price,
-                              style: const TextStyle(
-                                color: PosColors.textTer,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                decoration: TextDecoration.lineThrough,
-                              ),
-                            ),
-                            TfText(
-                              discountPrice!,
-                              style: const TextStyle(
-                                color: PosColors.danger,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ] else
-                            TfText(
-                              price,
-                              style: const TextStyle(
-                                color: PosColors.text,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          if (discountLabel != null)
-                            _MiniMenuTag(
-                              label: discountLabel!,
-                              color: PosColors.danger,
-                              fill: PosColors.dangerSoft,
-                            ),
-                          if (hidden)
-                            _MiniMenuTag(
-                              label: text.menuHidden,
-                              color: PosColors.muted,
-                              fill: PosColors.surfaceSunk,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                TfToggle(
-                  value: available,
-                  onChanged: onAvailabilityChanged,
-                  semanticLabel: text.menuAvailable,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniMenuTag extends StatelessWidget {
-  const _MiniMenuTag({
-    required this.label,
-    required this.color,
-    required this.fill,
-  });
-
-  final String label;
-  final Color color;
-  final Color fill;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(PosRadii.xs),
-      ),
-      child: TfText(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          height: 1.1,
         ),
       ),
     );

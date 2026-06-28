@@ -7,8 +7,7 @@ bool routesToDesktopPos({
   required bool isWindows,
   required bool isLinux,
   required bool isMacOS,
-}) =>
-    !isWeb && (isWindows || isLinux || isMacOS);
+}) => !isWeb && (isWindows || isLinux || isMacOS);
 
 bool get isNativeDesktop => routesToDesktopPos(
   isWeb: kIsWeb,

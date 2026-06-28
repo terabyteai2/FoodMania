@@ -68,10 +68,9 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
         );
       });
 
-  static String _fmtQty(double value) =>
-      value == value.roundToDouble()
-          ? value.toInt().toString()
-          : value.toStringAsFixed(1);
+  static String _fmtQty(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
 
   Future<void> _pickAndScan() async {
     if (_scanning) return;
@@ -202,7 +201,8 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
                   _CountLine(
                     item: item,
                     controller: _controller(item),
-                    onTouched: () => setState(() => _touchedItemIds.add(item.id)),
+                    onTouched: () =>
+                        setState(() => _touchedItemIds.add(item.id)),
                   ),
               ],
             ),
@@ -265,7 +265,11 @@ class _UnmatchedBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.help_outline_rounded, size: 19, color: PosColors.warning),
+          const Icon(
+            Icons.help_outline_rounded,
+            size: 19,
+            color: PosColors.warning,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -300,7 +304,11 @@ class _UnmatchedBanner extends StatelessWidget {
 }
 
 class _CountLine extends StatefulWidget {
-  const _CountLine({required this.item, required this.controller, this.onTouched});
+  const _CountLine({
+    required this.item,
+    required this.controller,
+    this.onTouched,
+  });
   final InventoryItem item;
   final TextEditingController controller;
   final VoidCallback? onTouched;
@@ -480,8 +488,7 @@ class _CountLineState extends State<_CountLine> {
     );
   }
 
-  static String _fmt(double value) =>
-      value == value.roundToDouble()
-          ? value.toInt().toString()
-          : value.toStringAsFixed(1);
+  static String _fmt(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
 }

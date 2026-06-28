@@ -22,7 +22,12 @@ class TfGlobalTopBar extends StatelessWidget {
     this.onNavigateToOrders,
     this.onNavigateToTarget,
     this.extraActions = const [],
-    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 10),
+    this.padding = const EdgeInsets.fromLTRB(
+      PosSpacing.sp4,
+      PosSpacing.sp3,
+      PosSpacing.sp4,
+      PosSpacing.sp3 - 2,
+    ),
     this.showTrailing = true,
     super.key,
   });
@@ -92,9 +97,7 @@ class _AvatarDropdown extends StatelessWidget {
     if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return trimmed
-        .substring(0, trimmed.length >= 2 ? 2 : 1)
-        .toUpperCase();
+    return trimmed.substring(0, trimmed.length >= 2 ? 2 : 1).toUpperCase();
   }
 
   @override
@@ -108,10 +111,10 @@ class _AvatarDropdown extends StatelessWidget {
       tooltip: '',
       offset: const Offset(0, 52),
       color: PosColors.surface,
-      elevation: 10,
-      shadowColor: const Color(0x22000000),
+      elevation: 8,
+      shadowColor: const Color(0x1A141928),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(PosRadii.md),
+        borderRadius: BorderRadius.circular(PosRadii.xl),
         side: BorderSide(color: PosColors.line),
       ),
       constraints: const BoxConstraints(minWidth: 224, maxWidth: 280),

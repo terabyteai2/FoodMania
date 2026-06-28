@@ -30,7 +30,9 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    // This card only reads the language (for localised item names); subscribe
+    // to just that aspect so order cards don't rebuild on printer/sync ticks.
+    final app = AppScope.select(context, AppAspect.language);
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 2);
     final createdTime = DateFormat('MMM d, h:mm a').format(order.createdAt);
     final accent = _accentForStatus(order.status);

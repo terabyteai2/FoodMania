@@ -50,10 +50,7 @@ class ScreenBlocker extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (leading != null) ...[
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: leading!,
-                        ),
+                        Align(alignment: Alignment.centerLeft, child: leading!),
                         const SizedBox(height: PosSpacing.sp5),
                       ],
                       ?body,

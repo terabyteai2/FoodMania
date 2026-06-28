@@ -252,7 +252,10 @@ class _ReportSnapshot extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                       decoration: const BoxDecoration(
                         border: Border(
-                          bottom: BorderSide(color: PosColors.divider, width: 1),
+                          bottom: BorderSide(
+                            color: PosColors.divider,
+                            width: 1,
+                          ),
                         ),
                       ),
                       child: Row(
@@ -279,7 +282,11 @@ class _ReportSnapshot extends StatelessWidget {
                           const SizedBox(width: 12),
                           TfText(
                             fmt.format(row.salesBdt),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.2),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              height: 1.2,
+                            ),
                           ),
                         ],
                       ),
@@ -333,7 +340,12 @@ class _ReportMetric extends StatelessWidget {
         if (detail != null)
           TfText(
             detail!,
-            style: const TextStyle(color: PosColors.textSec, fontSize: 14, fontWeight: FontWeight.w400, height: 1.45),
+            style: const TextStyle(
+              color: PosColors.textSec,
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              height: 1.45,
+            ),
           ),
       ],
     ),

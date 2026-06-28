@@ -502,7 +502,12 @@ class TfUnifiedTopNav extends StatelessWidget {
     this.leading,
     this.trailing = const [],
     this.below,
-    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 10),
+    this.padding = const EdgeInsets.fromLTRB(
+      PosSpacing.sp4,
+      PosSpacing.sp3,
+      PosSpacing.sp4,
+      PosSpacing.sp3 - 2,
+    ),
     super.key,
   });
 
@@ -528,11 +533,11 @@ class TfUnifiedTopNav extends StatelessWidget {
             fontSize: 26,
             fontWeight: FontWeight.w700,
             height: 1.15,
-            letterSpacing: -0.52,
+            letterSpacing: 0,
           ),
         ),
         if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: PosSpacing.sp1),
           TfText(
             subtitle!,
             maxLines: 1,
@@ -558,21 +563,27 @@ class TfUnifiedTopNav extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (leading != null) ...[leading!, const SizedBox(width: 12)],
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: PosSpacing.sp3),
+              ],
               Expanded(child: titleBlock),
               if (trailing.isNotEmpty) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: PosSpacing.sp2),
                 Wrap(
                   alignment: WrapAlignment.end,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 7,
-                  runSpacing: 8,
+                  spacing: PosSpacing.sp2,
+                  runSpacing: PosSpacing.sp2,
                   children: trailing,
                 ),
               ],
             ],
           ),
-          if (below != null) ...[const SizedBox(height: 12), below!],
+          if (below != null) ...[
+            const SizedBox(height: PosSpacing.sp3),
+            below!,
+          ],
         ],
       ),
     );
@@ -868,8 +879,8 @@ class TfButton extends StatelessWidget {
     final borderColor = switch (variant) {
       TfButtonVariant.primary => Colors.transparent,
       TfButtonVariant.dark => Colors.transparent,
-      TfButtonVariant.ghost => PosColors.line,
-      TfButtonVariant.paper => PosColors.line,
+      TfButtonVariant.ghost => PosColors.lineStrong,
+      TfButtonVariant.paper => PosColors.lineStrong,
       TfButtonVariant.accent => PosColors.primaryWash,
     };
 
@@ -877,7 +888,7 @@ class TfButton extends StatelessWidget {
         height ??
         switch (size) {
           TfButtonSize.lg => 52.0,
-          TfButtonSize.md => 44.0,
+          TfButtonSize.md => 48.0,
           TfButtonSize.sm => 36.0,
         };
     final isCompact = effHeight <= 38;
@@ -897,7 +908,7 @@ class TfButton extends StatelessWidget {
         child: InkWell(
           onTap: disabled || busy ? null : onPressed,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
@@ -905,50 +916,53 @@ class TfButton extends StatelessWidget {
                 width: 1,
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (busy || icon != null) ...[
-                  if (busy)
-                    SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          disabled ? PosColors.muted : colors.$2,
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (busy || icon != null) ...[
+                      if (busy)
+                        SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              disabled ? PosColors.muted : colors.$2,
+                            ),
+                          ),
+                        )
+                      else
+                        Icon(
+                          icon,
+                          size: 18,
+                          color: disabled ? PosColors.muted : colors.$2,
                         ),
+                      const SizedBox(width: 8),
+                    ],
+                    TfText(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: disabled ? PosColors.muted : colors.$2,
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w700,
                       ),
-                    )
-                  else
-                    Icon(
-                      icon,
-                      size: 18,
-                      color: disabled ? PosColors.muted : colors.$2,
                     ),
-                  const SizedBox(width: 8),
-                ],
-                Flexible(
-                  child: TfText(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: disabled ? PosColors.muted : colors.$2,
-                      fontSize: fontSize,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                    if (trailingIcon != null) ...[
+                      const SizedBox(width: 8),
+                      Icon(
+                        trailingIcon,
+                        size: 18,
+                        color: disabled ? PosColors.muted : colors.$2,
+                      ),
+                    ],
+                  ],
                 ),
-                if (trailingIcon != null) ...[
-                  const SizedBox(width: 8),
-                  Icon(
-                    trailingIcon,
-                    size: 18,
-                    color: disabled ? PosColors.muted : colors.$2,
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -963,7 +977,7 @@ class TfButton extends StatelessWidget {
 class TfCard extends StatelessWidget {
   const TfCard({
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(PosSpacing.sp4),
     this.color = PosColors.surface,
     this.borderColor = PosColors.line,
     this.clip = false,
@@ -986,6 +1000,7 @@ class TfCard extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(PosRadii.card),
         border: Border.all(color: borderColor, width: 1),
+        boxShadow: PosShadows.card,
       ),
       child: padded ? Padding(padding: padding, child: child) : child,
     );
@@ -1008,6 +1023,7 @@ class TfListCard extends StatelessWidget {
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(PosRadii.card),
         border: Border.all(color: PosColors.line, width: 1),
+        boxShadow: PosShadows.card,
       ),
       child: child,
     );
@@ -1482,6 +1498,7 @@ class AdvToggle extends StatelessWidget {
     );
   }
 }
+
 // ---------------------------------------------------------------------------
 enum TfStatusKind { pending, accepted, late, served, info, warning }
 
@@ -1503,12 +1520,12 @@ class TfStatusBadge extends StatelessWidget {
         ? kind as TfStatusKind
         : _parseKind(kind.toString());
     final spec = switch (resolved) {
-      TfStatusKind.pending => (PosColors.primarySoft, PosColors.primaryDark),
+      TfStatusKind.pending => (PosColors.warningSoft, PosColors.warning),
       TfStatusKind.accepted => (PosColors.successSoft, PosColors.success),
       TfStatusKind.late => (PosColors.dangerSoft, PosColors.danger),
       TfStatusKind.served => (PosColors.successSoft, PosColors.success),
       TfStatusKind.warning => (PosColors.warningSoft, PosColors.warning),
-      TfStatusKind.info => (PosColors.background, PosColors.muted),
+      TfStatusKind.info => (PosColors.primarySoft, PosColors.accentStrong),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1784,150 +1801,6 @@ class TfFab extends StatelessWidget {
           child: InkWell(
             onTap: onPressed,
             child: Icon(icon, color: PosColors.accentInk),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// TfBottomNav — Dynamic contextual footer layout tracking bar.
-// ---------------------------------------------------------------------------
-class TfBottomNavItem {
-  const TfBottomNavItem({
-    required this.icon,
-    required this.label,
-    this.labelBn,
-    this.selectedIcon,
-    this.badge,
-  });
-  final IconData icon;
-  final String label;
-  final String? labelBn;
-  final IconData? selectedIcon;
-  final int? badge;
-}
-
-class TfBottomNav extends StatelessWidget {
-  const TfBottomNav({
-    required this.items,
-    required this.activeIndex,
-    required this.onChanged,
-    super.key,
-  });
-
-  final List<TfBottomNavItem> items;
-  final int activeIndex;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final isBn = tfIsBn(context);
-    return Container(
-      decoration: const BoxDecoration(
-        color: PosColors.surface,
-        border: Border(top: BorderSide(color: PosColors.line, width: 1)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 70,
-          child: Row(
-            children: List.generate(items.length, (i) {
-              final it = items[i];
-              final selected = i == activeIndex;
-              final text = isBn && (it.labelBn?.isNotEmpty ?? false)
-                  ? it.labelBn!
-                  : it.label;
-              return Expanded(
-                child: InkWell(
-                  onTap: () => onChanged(i),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? PosColors.primarySoft
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(
-                                  PosRadii.pill,
-                                ),
-                              ),
-                              child: Icon(
-                                selected
-                                    ? (it.selectedIcon ?? it.icon)
-                                    : it.icon,
-                                size: 22,
-                                color: selected
-                                    ? PosColors.primary
-                                    : PosColors.muted,
-                              ),
-                            ),
-                            if (it.badge != null && it.badge! > 0)
-                              Positioned(
-                                top: -2,
-                                right: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: PosColors.danger,
-                                    borderRadius: BorderRadius.circular(
-                                      PosRadii.pill,
-                                    ),
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 16,
-                                    minHeight: 16,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    it.badge! > 99 ? '99+' : '${it.badge}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        TfText(
-                          isBn ? tfToBnNumbers(text) : text,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: selected
-                                ? PosColors.primary
-                                : PosColors.muted,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
           ),
         ),
       ),
@@ -2232,7 +2105,7 @@ class TfSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 56,
+      height: 48,
       child: TextField(
         controller: controller,
         onChanged: onChanged,
@@ -2241,28 +2114,24 @@ class TfSearchField extends StatelessWidget {
         style: TextStyle(
           fontFamily: tfFontFamily(context),
           color: PosColors.slate,
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
-        cursorColor: PosColors.primaryDark,
+        cursorColor: PosColors.primary,
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(
             fontFamily: tfFontFamily(context),
-            color: PosColors.textTer,
-            fontSize: 16,
+            color: PosColors.mutedSoft,
+            fontSize: 14,
             fontWeight: FontWeight.w400,
           ),
-          prefixIcon: Icon(
-            prefixIcon,
-            size: 20,
-            color: PosColors.textSec,
-          ),
+          prefixIcon: Icon(prefixIcon, size: 20, color: PosColors.textSec),
           prefixIconConstraints: const BoxConstraints(minWidth: 44),
           filled: true,
           fillColor: PosColors.surface,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
+            horizontal: PosSpacing.sp4,
             vertical: 0,
           ),
           border: OutlineInputBorder(
@@ -2275,7 +2144,7 @@ class TfSearchField extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(PosRadii.input),
-            borderSide: const BorderSide(color: PosColors.lineStrong, width: 1),
+            borderSide: const BorderSide(color: PosColors.primary, width: 1),
           ),
         ),
       ),
@@ -2433,7 +2302,9 @@ class TfSegToggle extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: selected ? PosColors.accentStrong : PosColors.muted,
+                      color: selected
+                          ? PosColors.accentStrong
+                          : PosColors.muted,
                     ),
                   ),
                 ),
@@ -2470,14 +2341,23 @@ class TfEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(PosSpacing.sp7),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: PosColors.muted.withValues(alpha: 0.6)),
-            const SizedBox(height: 16),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: PosColors.primarySoft,
+                borderRadius: BorderRadius.circular(PosRadii.lg),
+                border: Border.all(color: PosColors.line),
+              ),
+              child: Icon(icon, size: 30, color: PosColors.accentStrong),
+            ),
+            const SizedBox(height: PosSpacing.sp4),
             TfText(
               tfPick(context, en: title, bn: titleBn),
               textAlign: TextAlign.center,
@@ -2487,7 +2367,7 @@ class TfEmptyState extends StatelessWidget {
                 color: PosColors.slate,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: PosSpacing.sp2),
             TfText(
               tfPick(context, en: message, bn: messageBn),
               textAlign: TextAlign.center,
@@ -2497,7 +2377,10 @@ class TfEmptyState extends StatelessWidget {
                 height: 1.45,
               ),
             ),
-            if (action != null) ...[const SizedBox(height: 20), action!],
+            if (action != null) ...[
+              const SizedBox(height: PosSpacing.sp5),
+              action!,
+            ],
           ],
         ),
       ),
@@ -2520,21 +2403,29 @@ class TfLoading extends StatelessWidget {
         : null;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(PosSpacing.sp6),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: PosColors.primaryDark,
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: PosColors.primarySoft,
+                borderRadius: BorderRadius.circular(PosRadii.lg),
+                border: Border.all(color: PosColors.line),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(PosSpacing.sp4),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: PosColors.primary,
+                ),
               ),
             ),
             if (label != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: PosSpacing.sp3),
               TfText(
                 label,
                 style: const TextStyle(
@@ -4350,4 +4241,350 @@ class TfMenuPerfHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// TfAreaChart — single filled series (QS Revenue / item drill-down).
+// Blue stroke + primarySoft fill, light gridlines, K-formatted axis. No lib.
+// ---------------------------------------------------------------------------
+class TfAreaChart extends StatelessWidget {
+  const TfAreaChart({
+    required this.values,
+    this.height = 160,
+    this.xLabels = const [],
+    this.money = true,
+    super.key,
+  });
+
+  final List<double> values;
+  final double height;
+  final List<String> xLabels;
+
+  /// When true the right-axis labels use ৳K formatting; otherwise plain counts.
+  final bool money;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(double.infinity, height),
+      painter: _AreaChartPainter(
+        values: values,
+        xLabels: xLabels,
+        money: money,
+      ),
+    );
+  }
+}
+
+class _AreaChartPainter extends CustomPainter {
+  _AreaChartPainter({
+    required this.values,
+    required this.xLabels,
+    required this.money,
+  });
+
+  final List<double> values;
+  final List<String> xLabels;
+  final bool money;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double padL = 8;
+    const double padR = 48;
+    const double padTop = 14;
+    const double padBot = 22;
+    final double innerW = size.width - padL - padR;
+    final double innerH = size.height - padTop - padBot;
+    if (innerW <= 0 || innerH <= 0) return;
+
+    final double maxVal = values.isEmpty
+        ? 1.0
+        : (values.reduce((a, b) => a > b ? a : b) * 1.12).clamp(
+            1.0,
+            double.infinity,
+          );
+
+    final gridPaint = Paint()
+      ..color = PosColors.divider
+      ..strokeWidth = 0.5;
+    for (int i = 0; i <= 4; i++) {
+      final y = padTop + innerH - (i / 4) * innerH;
+      canvas.drawLine(Offset(padL, y), Offset(padL + innerW, y), gridPaint);
+      _paintText(
+        canvas,
+        money ? _kfmt(maxVal * i / 4) : (maxVal * i / 4).round().toString(),
+        Offset(padL + innerW + 4, y - 5),
+        9,
+        PosColors.textTer,
+      );
+    }
+
+    if (values.length < 2) return;
+
+    Offset posAt(int i) {
+      final x = padL + (i / (values.length - 1)) * innerW;
+      final y = padTop + innerH - (values[i] / maxVal) * innerH;
+      return Offset(x, y);
+    }
+
+    final linePath = Path();
+    for (int i = 0; i < values.length; i++) {
+      final p = posAt(i);
+      if (i == 0) {
+        linePath.moveTo(p.dx, p.dy);
+      } else {
+        linePath.lineTo(p.dx, p.dy);
+      }
+    }
+
+    final fillPath = Path.from(linePath)
+      ..lineTo(padL + innerW, padTop + innerH)
+      ..lineTo(padL, padTop + innerH)
+      ..close();
+    canvas.drawPath(
+      fillPath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x4D2F4FE0), Color(0x0D2F4FE0)],
+        ).createShader(Rect.fromLTWH(padL, padTop, innerW, innerH)),
+    );
+    canvas.drawPath(
+      linePath,
+      Paint()
+        ..color = PosColors.primary
+        ..strokeWidth = 2.0
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // X labels (first / mid / last) to keep the axis legible.
+    if (xLabels.isNotEmpty) {
+      final picks = <int>{0, xLabels.length ~/ 2, xLabels.length - 1};
+      for (final i in picks) {
+        if (i < 0 || i >= xLabels.length) continue;
+        final x = padL + (i / (xLabels.length - 1).clamp(1, 9999)) * innerW;
+        _paintText(
+          canvas,
+          xLabels[i],
+          Offset(x - 14, padTop + innerH + 6),
+          9,
+          PosColors.textSec,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AreaChartPainter old) =>
+      old.values != values || old.xLabels != xLabels;
+}
+
+// ---------------------------------------------------------------------------
+// TfBarChart — vertical bars (QS Service-wise Sales). Blue gradient bars.
+// ---------------------------------------------------------------------------
+class TfBarDatum {
+  const TfBarDatum({required this.label, required this.value});
+  final String label;
+  final double value;
+}
+
+class TfBarChart extends StatelessWidget {
+  const TfBarChart({required this.bars, this.height = 170, super.key});
+
+  final List<TfBarDatum> bars;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(double.infinity, height),
+      painter: _BarChartPainter(bars: bars),
+    );
+  }
+}
+
+class _BarChartPainter extends CustomPainter {
+  _BarChartPainter({required this.bars});
+
+  final List<TfBarDatum> bars;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double padL = 8;
+    const double padR = 44;
+    const double padTop = 12;
+    const double padBot = 26;
+    final double innerW = size.width - padL - padR;
+    final double innerH = size.height - padTop - padBot;
+    if (innerW <= 0 || innerH <= 0 || bars.isEmpty) return;
+
+    final double maxVal =
+        (bars.map((b) => b.value).reduce((a, b) => a > b ? a : b) * 1.12).clamp(
+          1.0,
+          double.infinity,
+        );
+
+    final gridPaint = Paint()
+      ..color = PosColors.divider
+      ..strokeWidth = 0.5;
+    for (int i = 0; i <= 4; i++) {
+      final y = padTop + innerH - (i / 4) * innerH;
+      canvas.drawLine(Offset(padL, y), Offset(padL + innerW, y), gridPaint);
+      _paintText(
+        canvas,
+        _kfmt(maxVal * i / 4),
+        Offset(padL + innerW + 4, y - 5),
+        9,
+        PosColors.textTer,
+      );
+    }
+
+    final slot = innerW / bars.length;
+    final double barW = (slot * 0.46).clamp(12.0, 56.0);
+    for (int i = 0; i < bars.length; i++) {
+      final cx = padL + slot * i + slot / 2;
+      final h = (bars[i].value / maxVal) * innerH;
+      final rect = Rect.fromLTWH(cx - barW / 2, padTop + innerH - h, barW, h);
+      canvas.drawRRect(
+        RRect.fromRectAndCorners(
+          rect,
+          topLeft: const Radius.circular(4),
+          topRight: const Radius.circular(4),
+        ),
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [PosColors.primary, Color(0xFF5E74EC)],
+          ).createShader(rect),
+      );
+      _paintText(
+        canvas,
+        bars[i].label,
+        Offset(cx - slot / 2 + 2, padTop + innerH + 6),
+        9,
+        PosColors.textSec,
+        maxWidth: slot - 4,
+        center: true,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BarChartPainter old) => old.bars != bars;
+}
+
+// ---------------------------------------------------------------------------
+// TfChartMetricToggle — blue radio pair under a chart (Revenue / No of Orders).
+// ---------------------------------------------------------------------------
+class TfChartMetricToggle extends StatelessWidget {
+  const TfChartMetricToggle({
+    required this.options,
+    required this.selectedIndex,
+    required this.onChanged,
+    super.key,
+  });
+
+  final List<String> options;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (int i = 0; i < options.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(i),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _Radio(selected: i == selectedIndex),
+                  const SizedBox(width: 6),
+                  TfText(
+                    options[i],
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: i == selectedIndex
+                          ? PosColors.primaryDark
+                          : PosColors.textSec,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _Radio extends StatelessWidget {
+  const _Radio({required this.selected});
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected ? PosColors.primary : PosColors.lineStrong,
+          width: 2,
+        ),
+      ),
+      child: selected
+          ? Center(
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: PosColors.primary,
+                ),
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+String _kfmt(double v) {
+  if (v >= 100000) return '${(v / 1000).toStringAsFixed(0)}K';
+  if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
+  return v.round().toString();
+}
+
+void _paintText(
+  Canvas canvas,
+  String text,
+  Offset at,
+  double size,
+  Color color, {
+  double? maxWidth,
+  bool center = false,
+}) {
+  final tp = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(fontSize: size, color: color, fontFamily: 'Inter'),
+    ),
+    textDirection: ui.TextDirection.ltr,
+    maxLines: 1,
+    ellipsis: '…',
+  )..layout(maxWidth: maxWidth ?? 80);
+  final dx = center && maxWidth != null
+      ? at.dx + (maxWidth - tp.width) / 2
+      : at.dx;
+  tp.paint(canvas, Offset(dx, at.dy));
 }

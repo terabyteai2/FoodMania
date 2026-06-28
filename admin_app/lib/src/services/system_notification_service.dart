@@ -262,7 +262,9 @@ class SystemNotificationService {
     final channelId = _channelIdForType(type, actionTarget);
     final channelName = _channelNameForType(type, actionTarget);
     final iosSound = _iosSoundForType(type, actionTarget);
-    final androidSound = playSound ? _androidSoundForType(type, actionTarget) : null;
+    final androidSound = playSound
+        ? _androidSoundForType(type, actionTarget)
+        : null;
 
     final androidDetails = AndroidNotificationDetails(
       channelId,

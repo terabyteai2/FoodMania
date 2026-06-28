@@ -19,7 +19,6 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../services/menu_image_service.dart';
 import '../../services/printer_service.dart';
-import '../reports/reports_screen.dart';
 import 'customer_menu_themes.dart';
 import 'qr_pdf_screen.dart';
 import 'table_qr_labels_screen.dart';
@@ -194,17 +193,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? text.connected
                       : text.connect,
                   onTap: _openReceiptPrinter,
-                ),
-              ],
-            ),
-            _SettingsGroupData(
-              label: text.adminGroup,
-              items: [
-                _SettingActionData(
-                  title: text.reports,
-                  subtitle: text.reportsSubtitle,
-                  icon: Icons.assessment_outlined,
-                  onTap: _openReports,
                 ),
               ],
             ),
@@ -418,7 +406,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {});
     messenger.showSnackBar(
-      SnackBar(content: TfText(ok ? text.detailsPushed : (app.lastError ?? text.saveFailed))),
+      SnackBar(
+        content: TfText(
+          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
+        ),
+      ),
     );
   }
 
@@ -502,7 +494,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final result = await app.cloudApiService.uploadOutletLogo(dataUrl);
       final url = result['logoUrl'];
       final bitmapUrl = result['logoBitmapUrl'];
-      debugPrint('[QB-LOGO] _openRestaurantLogoUpload result logoUrl="$url" logoBitmapUrl="$bitmapUrl"');
+      debugPrint(
+        '[QB-LOGO] _openRestaurantLogoUpload result logoUrl="$url" logoBitmapUrl="$bitmapUrl"',
+      );
       if (mounted) {
         if (url != null) AppScope.of(context).setLogoUrl(url);
         if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
@@ -527,15 +521,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTableQrLabels() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const TableQrLabelsScreen()));
-  }
-
-  Future<void> _openReports() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const ReportsScreen()));
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const TableQrLabelsScreen()),
+    );
   }
 
   Future<void> _openReceiptPrinter() async {
@@ -820,7 +808,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     return message;
   }
-
 }
 
 Widget _settingsCard({
@@ -1058,7 +1045,9 @@ class _SingleFieldEditSheetState extends State<_SingleFieldEditSheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: PosColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.card)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PosRadii.card),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -1087,7 +1076,10 @@ class _SingleFieldEditSheetState extends State<_SingleFieldEditSheet> {
                           padding: const EdgeInsets.only(right: 12),
                           child: TfText(
                             widget.suffixText!,
-                            style: const TextStyle(color: PosColors.muted, fontSize: 13),
+                            style: const TextStyle(
+                              color: PosColors.muted,
+                              fontSize: 13,
+                            ),
                           ),
                         )
                       : null,
@@ -1097,7 +1089,11 @@ class _SingleFieldEditSheetState extends State<_SingleFieldEditSheet> {
                   autofocus: true,
                 ),
                 const SizedBox(height: 14),
-                TfButton(label: widget.saveLabel, icon: Icons.check_rounded, onPressed: _save),
+                TfButton(
+                  label: widget.saveLabel,
+                  icon: Icons.check_rounded,
+                  onPressed: _save,
+                ),
               ],
             ),
           ),
@@ -2330,7 +2326,9 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       final info = data['data'] is Map
           ? Map<String, dynamic>.from(data['data'] as Map)
           : <String, dynamic>{};
-      debugPrint('[QB-LOGO] _fetchOutletInfo raw logoUrl="${info['logoUrl']}" logoBitmapUrl="${info['logoBitmapUrl']}"');
+      debugPrint(
+        '[QB-LOGO] _fetchOutletInfo raw logoUrl="${info['logoUrl']}" logoBitmapUrl="${info['logoBitmapUrl']}"',
+      );
       final rawGallery = info['galleryImages'];
       setState(() {
         _gallery = rawGallery is List
@@ -2342,9 +2340,9 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         if (mounted) AppScope.of(context).setLogoUrl(_currentLogoUrl);
         final bitmapUrl = info['logoBitmapUrl']?.toString().trim();
         if (mounted) {
-          AppScope.of(context).setLogoBitmapUrl(
-            bitmapUrl?.isNotEmpty == true ? bitmapUrl : null,
-          );
+          AppScope.of(
+            context,
+          ).setLogoBitmapUrl(bitmapUrl?.isNotEmpty == true ? bitmapUrl : null);
         }
         _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true
             ? null
@@ -2367,7 +2365,9 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       final result = await widget.cloudApiService.uploadOutletLogo(dataUrl);
       final url = result['logoUrl'] as String?;
       final bitmapUrl = result['logoBitmapUrl'] as String?;
-      debugPrint('[QB-LOGO] _pickAndUploadLogo result logoUrl="$url" logoBitmapUrl="$bitmapUrl"');
+      debugPrint(
+        '[QB-LOGO] _pickAndUploadLogo result logoUrl="$url" logoBitmapUrl="$bitmapUrl"',
+      );
       setState(() {
         _currentLogoUrl = url;
         _saving = false;
@@ -2540,7 +2540,10 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return Scaffold(
-      appBar: AppBar(title: TfText(text.websiteImageVideoTitle), centerTitle: false),
+      appBar: AppBar(
+        title: TfText(text.websiteImageVideoTitle),
+        centerTitle: false,
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

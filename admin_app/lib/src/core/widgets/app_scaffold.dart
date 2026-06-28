@@ -44,7 +44,6 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const spacingScale = 1.0;
     return Scaffold(
       backgroundColor: PosColors.background,
       floatingActionButton: floatingActionButton,
@@ -70,16 +69,16 @@ class AppScaffold extends StatelessWidget {
                       Expanded(
                         child: fillBody
                             ? removeHorizontalPadding
-                                ? child
-                                : Padding(
-                                    padding: EdgeInsets.fromLTRB(
-                                      _horizontalPadding(context),
-                                      0,
-                                      _horizontalPadding(context),
-                                      0,
-                                    ),
-                                    child: child,
-                                  )
+                                  ? child
+                                  : Padding(
+                                      padding: EdgeInsets.fromLTRB(
+                                        _horizontalPadding(context),
+                                        0,
+                                        _horizontalPadding(context),
+                                        0,
+                                      ),
+                                      child: child,
+                                    )
                             : CustomScrollView(
                                 slivers: [
                                   SliverPadding(
@@ -87,7 +86,7 @@ class AppScaffold extends StatelessWidget {
                                       _horizontalPadding(context),
                                       0,
                                       _horizontalPadding(context),
-                                      24 * spacingScale,
+                                      PosSpacing.sp6,
                                     ),
                                     sliver: SliverToBoxAdapter(child: child),
                                   ),
@@ -124,7 +123,7 @@ class AppScaffold extends StatelessWidget {
                           _horizontalPadding(context),
                           0,
                           _horizontalPadding(context),
-                          24 * spacingScale,
+                          PosSpacing.sp6,
                         ),
                         sliver: SliverToBoxAdapter(child: child),
                       ),
@@ -139,17 +138,27 @@ class AppScaffold extends StatelessWidget {
   double _horizontalPadding(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final base = width >= 1200
-        ? 32.0
+        ? PosSpacing.sp7
         : width >= 700
-        ? 22.0
-        : 16.0;
-    return base.clamp(13.0, 38.0).toDouble();
+        ? PosSpacing.sp5 + 2
+        : PosSpacing.sp4;
+    return base.clamp(PosSpacing.sp3, PosSpacing.sp8).toDouble();
   }
 
   EdgeInsets _headerPadding() {
     return showBackButton
-        ? const EdgeInsets.fromLTRB(14, 4, 14, 12)
-        : const EdgeInsets.fromLTRB(16, 6, 16, 12);
+        ? const EdgeInsets.fromLTRB(
+            PosSpacing.sp3,
+            PosSpacing.sp1,
+            PosSpacing.sp3,
+            PosSpacing.sp3,
+          )
+        : const EdgeInsets.fromLTRB(
+            PosSpacing.sp4,
+            PosSpacing.sp2,
+            PosSpacing.sp4,
+            PosSpacing.sp3,
+          );
   }
 }
 
@@ -213,7 +222,7 @@ class _Header extends StatelessWidget {
               ),
             ),
             if (subtitle != null) ...[
-              SizedBox(height: 1),
+              const SizedBox(height: PosSpacing.sp1),
               TfText(
                 subtitle!,
                 maxLines: 1,
@@ -236,7 +245,7 @@ class _Header extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Padding(
-                    padding: EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.only(right: PosSpacing.sp2),
                     child: Transform.translate(
                       offset: const Offset(-8, 0),
                       child: Tooltip(
@@ -274,12 +283,12 @@ class _Header extends StatelessWidget {
             children: [
               Center(child: titleArea),
               if (actions.isNotEmpty) ...[
-                SizedBox(height: 10),
+                const SizedBox(height: PosSpacing.sp3 - 2),
                 Center(
                   child: Wrap(
                     alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: PosSpacing.sp2,
+                    runSpacing: PosSpacing.sp2,
                     children: actions,
                   ),
                 ),
@@ -297,12 +306,12 @@ class _Header extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(child: titleArea),
-            SizedBox(width: 10),
+            const SizedBox(width: PosSpacing.sp3 - 2),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (var i = 0; i < actions.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
+                  if (i > 0) const SizedBox(width: PosSpacing.sp2),
                   actions[i],
                 ],
               ],

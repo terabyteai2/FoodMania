@@ -81,7 +81,7 @@ void main() {
     expect(find.text('COVER'), findsNothing);
 
     // Flip the Advanced toggle → cover column appears.
-    await tester.tap(find.byType(TfToggle));
+    await tester.tap(find.byType(AdvToggle));
     await tester.pump();
     expect(find.text('COVER'), findsOneWidget);
 

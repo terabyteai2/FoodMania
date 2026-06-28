@@ -20,7 +20,7 @@ class SyncEventTile extends StatelessWidget {
       SyncStatus.failed => PosColors.danger,
     };
     return TfCard(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(PosSpacing.sp4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -33,19 +33,19 @@ class SyncEventTile extends StatelessWidget {
                   : event.status == SyncStatus.synced
                   ? PosColors.successSoft
                   : PosColors.warningSoft,
-              borderRadius: BorderRadius.circular(PosRadii.tile),
+              borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(color: PosColors.line),
             ),
             child: Icon(Icons.sync_alt, color: accent, size: 20),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: PosSpacing.sp3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
+                  spacing: PosSpacing.sp2,
+                  runSpacing: PosSpacing.sp2 - 2,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     TfText(
@@ -55,7 +55,7 @@ class SyncEventTile extends StatelessWidget {
                     StatusBadge.sync(event.status),
                   ],
                 ),
-                SizedBox(height: 5),
+                const SizedBox(height: PosSpacing.sp1 + 1),
                 TfText(
                   event.entityId,
                   maxLines: 1,
@@ -69,7 +69,7 @@ class SyncEventTile extends StatelessWidget {
                   ),
                 ),
                 if (event.lastError != null) ...[
-                  SizedBox(height: 6),
+                  const SizedBox(height: PosSpacing.sp2 - 2),
                   TfText(
                     event.lastError!,
                     maxLines: 2,
@@ -84,7 +84,7 @@ class SyncEventTile extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: PosSpacing.sp2),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -96,9 +96,12 @@ class SyncEventTile extends StatelessWidget {
                   fontSize: 12,
                 ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: PosSpacing.sp1),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: PosSpacing.sp2,
+                  vertical: PosSpacing.sp1 - 1,
+                ),
                 decoration: BoxDecoration(
                   color: PosColors.background,
                   borderRadius: BorderRadius.circular(PosRadii.pill),

@@ -55,13 +55,18 @@ class AppScope extends InheritedNotifier<PosAppController> {
 
   /// Subscribe to a single [aspect]: the widget rebuilds only when that
   /// aspect's underlying state changes.
+  ///
+  /// Falls back to [of] (whole-controller subscription) when no [AppModel]
+  /// ancestor is present — e.g. a widget test that wraps a screen in [AppScope]
+  /// directly. Production always has [AppModel], so granularity is preserved.
   static PosAppController select(BuildContext context, AppAspect aspect) {
     final model = InheritedModel.inheritFrom<AppModel>(context, aspect: aspect);
-    assert(model != null, 'AppModel was not found in the widget tree.');
-    return model!.controller;
+    if (model != null) return model.controller;
+    return of(context);
   }
 
-  /// Subscribe to several [aspects] at once.
+  /// Subscribe to several [aspects] at once. Falls back to [of] when no
+  /// [AppModel] ancestor is present (see [select]).
   static PosAppController selectMany(
     BuildContext context,
     List<AppAspect> aspects,
@@ -70,9 +75,8 @@ class AppScope extends InheritedNotifier<PosAppController> {
     for (final aspect in aspects) {
       model = InheritedModel.inheritFrom<AppModel>(context, aspect: aspect);
     }
-    model ??= context.getInheritedWidgetOfExactType<AppModel>();
-    assert(model != null, 'AppModel was not found in the widget tree.');
-    return model!.controller;
+    if (model != null) return model.controller;
+    return of(context);
   }
 }
 

@@ -72,7 +72,10 @@ class _FloorScreenState extends State<FloorScreen> {
       chrome: widget.chrome,
       activeNav: PcNav.floor,
       title: tr('Dine-in · floor', 'ডাইন-ইন · ফ্লোর'),
-      sub: tr('Live table map · auto-refresh', 'লাইভ টেবিল ম্যাপ · অটো-রিফ্রেশ'),
+      sub: tr(
+        'Live table map · auto-refresh',
+        'লাইভ টেবিল ম্যাপ · অটো-রিফ্রেশ',
+      ),
       topActions: [
         if (widget.onConfigure != null)
           PcBtn(
@@ -91,7 +94,13 @@ class _FloorScreenState extends State<FloorScreen> {
         children: [
           Expanded(child: _floor(openByTable, counts, totalTables)),
           _snapshotRail(
-              occupied, totalTables, coversSeated, avgDwell, lateCount, lateOrder),
+            occupied,
+            totalTables,
+            coversSeated,
+            avgDwell,
+            lateCount,
+            lateOrder,
+          ),
         ],
       ),
     );
@@ -116,21 +125,42 @@ class _FloorScreenState extends State<FloorScreen> {
                   runSpacing: 6,
                   children: [
                     _filterChip(null, tr('All', 'সব'), totalTables),
-                    _filterChip(PcTableState.idle, tr('Free', 'খালি'),
-                        counts[PcTableState.idle] ?? 0),
-                    _filterChip(PcTableState.seated, tr('Seated', 'বসা'),
-                        counts[PcTableState.seated] ?? 0),
-                    _filterChip(PcTableState.kitchen, tr('In kitchen', 'রান্নাঘরে'),
-                        counts[PcTableState.kitchen] ?? 0),
-                    _filterChip(PcTableState.bill, tr('Bill ready', 'বিল প্রস্তুত'),
-                        counts[PcTableState.bill] ?? 0),
-                    _filterChip(PcTableState.late, tr('Late', 'দেরি'),
-                        counts[PcTableState.late] ?? 0),
+                    _filterChip(
+                      PcTableState.idle,
+                      tr('Free', 'খালি'),
+                      counts[PcTableState.idle] ?? 0,
+                    ),
+                    _filterChip(
+                      PcTableState.seated,
+                      tr('Seated', 'বসা'),
+                      counts[PcTableState.seated] ?? 0,
+                    ),
+                    _filterChip(
+                      PcTableState.kitchen,
+                      tr('In kitchen', 'রান্নাঘরে'),
+                      counts[PcTableState.kitchen] ?? 0,
+                    ),
+                    _filterChip(
+                      PcTableState.bill,
+                      tr('Bill ready', 'বিল প্রস্তুত'),
+                      counts[PcTableState.bill] ?? 0,
+                    ),
+                    _filterChip(
+                      PcTableState.late,
+                      tr('Late', 'দেরি'),
+                      counts[PcTableState.late] ?? 0,
+                    ),
                   ],
                 ),
               ),
-              Text(tr('Auto-refresh · live', 'অটো-রিফ্রেশ · লাইভ'),
-                  style: Pc.mono(11.5, weight: FontWeight.w600, color: Pc.textSec)),
+              Text(
+                tr('Auto-refresh · live', 'অটো-রিফ্রেশ · লাইভ'),
+                style: Pc.mono(
+                  11.5,
+                  weight: FontWeight.w600,
+                  color: Pc.textSec,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -140,14 +170,19 @@ class _FloorScreenState extends State<FloorScreen> {
                 for (final zone in widget.settings.floorLayout) ...[
                   Row(
                     children: [
-                      Text(zone.name,
-                          style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700)),
+                      Text(
+                        zone.name,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(width: 10),
                       const Expanded(child: Divider(height: 1)),
                       const SizedBox(width: 10),
                       PcEyebrow(
-                          '${zone.tables.length} ${tr('tables', 'টেবিল')}'),
+                        '${zone.tables.length} ${tr('tables', 'টেবিল')}',
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -200,17 +235,22 @@ class _FloorScreenState extends State<FloorScreen> {
                 ),
                 const SizedBox(width: 6),
               ],
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: on ? Pc.onInk : Pc.text)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: on ? Pc.onInk : Pc.text,
+                ),
+              ),
               const SizedBox(width: 7),
-              Text('$count',
-                  style: Pc.mono(10.5,
-                      color: on
-                          ? Colors.white.withValues(alpha: 0.85)
-                          : Pc.textTer)),
+              Text(
+                '$count',
+                style: Pc.mono(
+                  10.5,
+                  color: on ? Colors.white.withValues(alpha: 0.85) : Pc.textTer,
+                ),
+              ),
             ],
           ),
         ),
@@ -250,8 +290,10 @@ class _FloorScreenState extends State<FloorScreen> {
                     top: -6,
                     right: 6,
                     child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: state == PcTableState.late ? Pc.late : Pc.ink,
                         borderRadius: BorderRadius.circular(4),
@@ -268,24 +310,35 @@ class _FloorScreenState extends State<FloorScreen> {
                   children: [
                     Row(
                       children: [
-                        Text('T${table.label}',
-                            style: Pc.num(18,
-                                color: style.fg, letterSpacing: -0.3)),
+                        Text(
+                          'T${table.label}',
+                          style: Pc.num(
+                            18,
+                            color: style.fg,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
                         const Spacer(),
                         Container(
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                              color: style.dot, shape: BoxShape.circle),
+                            color: style.dot,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ],
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(style.label,
-                            style: Pc.mono(10,
-                                color: style.fg.withValues(alpha: 0.75))),
+                        Text(
+                          style.label,
+                          style: Pc.mono(
+                            10,
+                            color: style.fg.withValues(alpha: 0.75),
+                          ),
+                        ),
                         const SizedBox(height: 5),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -295,14 +348,18 @@ class _FloorScreenState extends State<FloorScreen> {
                               order == null
                                   ? '${table.seats}P'
                                   : '${order.covers ?? table.seats}P${dwell == null ? '' : ' · ${dwell}m'}',
-                              style: Pc.num(11,
-                                  weight: FontWeight.w600,
-                                  color: style.fg.withValues(alpha: 0.85)),
+                              style: Pc.num(
+                                11,
+                                weight: FontWeight.w600,
+                                color: style.fg.withValues(alpha: 0.85),
+                              ),
                             ),
                             const Spacer(),
                             if (order != null && order.total > 0)
-                              Text(pcMoney(order.total),
-                                  style: Pc.num(13, color: style.fg)),
+                              Text(
+                                pcMoney(order.total),
+                                style: Pc.num(13, color: style.fg),
+                              ),
                           ],
                         ),
                       ],
@@ -337,16 +394,28 @@ class _FloorScreenState extends State<FloorScreen> {
         children: [
           PcEyebrow(tr('Service snapshot · live', 'লাইভ স্ন্যাপশট')),
           const SizedBox(height: 14),
-          _stat(tr('Tables open', 'খোলা টেবিল'), '$occupied / $total',
-              tr('${total - occupied} free', '${total - occupied} খালি')),
-          _stat(tr('Covers seated', 'বসা কভার'), '$covers',
-              tr('dine-in guests', 'ডাইন-ইন গেস্ট')),
-          _stat(tr('Avg dwell', 'গড় সময়'), '${avgDwell}m',
-              tr('per occupied table', 'প্রতি টেবিল')),
-          _stat(tr('Late tables', 'দেরি টেবিল'), '$lateCount',
-              lateOrder == null ? tr('none', 'নেই') : 'T${lateOrder.tableNo}',
-              tone: lateCount > 0 ? Pc.late : null,
-              last: true),
+          _stat(
+            tr('Tables open', 'খোলা টেবিল'),
+            '$occupied / $total',
+            tr('${total - occupied} free', '${total - occupied} খালি'),
+          ),
+          _stat(
+            tr('Covers seated', 'বসা কভার'),
+            '$covers',
+            tr('dine-in guests', 'ডাইন-ইন গেস্ট'),
+          ),
+          _stat(
+            tr('Avg dwell', 'গড় সময়'),
+            '${avgDwell}m',
+            tr('per occupied table', 'প্রতি টেবিল'),
+          ),
+          _stat(
+            tr('Late tables', 'দেরি টেবিল'),
+            '$lateCount',
+            lateOrder == null ? tr('none', 'নেই') : 'T${lateOrder.tableNo}',
+            tone: lateCount > 0 ? Pc.late : null,
+            last: true,
+          ),
           const Spacer(),
           if (lateOrder != null)
             Container(
@@ -367,7 +436,10 @@ class _FloorScreenState extends State<FloorScreen> {
                       'T${lateOrder.tableNo} বসেছে ${DateTime.now().difference(lateOrder.createdAt).inMinutes} মিনিট',
                     ),
                     style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: Pc.text),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Pc.text,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -380,8 +452,7 @@ class _FloorScreenState extends State<FloorScreen> {
                     variant: PcVariant.dark,
                     size: PcSize.sm,
                     full: true,
-                    onTap: () =>
-                        widget.onTable(lateOrder.tableNo!, lateOrder),
+                    onTap: () => widget.onTable(lateOrder.tableNo!, lateOrder),
                   ),
                 ],
               ),
@@ -391,8 +462,13 @@ class _FloorScreenState extends State<FloorScreen> {
     );
   }
 
-  Widget _stat(String label, String value, String sub,
-      {Color? tone, bool last = false}) {
+  Widget _stat(
+    String label,
+    String value,
+    String sub, {
+    Color? tone,
+    bool last = false,
+  }) {
     return Container(
       padding: const EdgeInsets.only(bottom: 12),
       margin: const EdgeInsets.only(bottom: 12),
@@ -406,7 +482,15 @@ class _FloorScreenState extends State<FloorScreen> {
         children: [
           PcEyebrow(label, color: tone ?? Pc.textSec),
           const SizedBox(height: 6),
-          Text(value, style: Pc.num(26, color: tone ?? Pc.ink, letterSpacing: -0.5, height: 1)),
+          Text(
+            value,
+            style: Pc.num(
+              26,
+              color: tone ?? Pc.ink,
+              letterSpacing: -0.5,
+              height: 1,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(sub, style: const TextStyle(fontSize: 11.5, color: Pc.textSec)),
         ],

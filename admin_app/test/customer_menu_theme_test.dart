@@ -4,12 +4,7 @@ import 'package:local_pos/src/features/settings/customer_menu_themes.dart';
 
 // Must stay in lockstep with ALLOWED_MENU_THEMES in backend/routers/menu.py
 // and the keys in customer_menu/frontend/src/themes/index.js.
-const _expectedSlugs = <String>{
-  'sultans_hearth',
-  'brick',
-  'lantern',
-  'marble',
-};
+const _expectedSlugs = <String>{'sultans_hearth', 'brick', 'lantern', 'marble'};
 
 void main() {
   test('exposes exactly the four expected themes with unique slugs', () {
@@ -21,8 +16,11 @@ void main() {
 
   test('each theme exposes a 5-colour palette', () {
     for (final theme in customerMenuThemes) {
-      expect(theme.palette, hasLength(5),
-          reason: '${theme.slug} should expose 5 swatches');
+      expect(
+        theme.palette,
+        hasLength(5),
+        reason: '${theme.slug} should expose 5 swatches',
+      );
     }
   });
 
@@ -33,8 +31,10 @@ void main() {
 
   test('resolver falls back to default on unknown slug', () {
     expect(resolveCustomerMenuTheme(null).slug, defaultCustomerMenuTheme);
-    expect(resolveCustomerMenuTheme('not_a_theme').slug,
-        defaultCustomerMenuTheme);
+    expect(
+      resolveCustomerMenuTheme('not_a_theme').slug,
+      defaultCustomerMenuTheme,
+    );
     expect(resolveCustomerMenuTheme('brick').slug, 'brick');
   });
 }

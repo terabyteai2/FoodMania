@@ -474,34 +474,66 @@ class _CounterModeState extends State<_CounterMode> {
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   String _query = '';
-  MenuLayoutMode _menuLayoutMode = MenuLayoutMode.list;
-  int _gridCols = 4;
+  bool _codeMode = false;
 
   // ── Computed ──────────────────────────────────────────────────
 
-  List<String> _categories(List<MenuItem> items) {
+  // Menu memo: the favourite partition, category list, and per-item lowercased
+  // search blob are computed once per menu identity (the controller replaces
+  // the list wholesale on change) instead of on every build/keystroke.
+  List<MenuItem>? _menuMemoKey;
+  List<MenuItem> _partitionedMenu = const [];
+  List<String> _categoriesMemo = const ['All'];
+  Map<String, String> _searchBlobs = const {};
+
+  void _ensureMenuMemo(List<MenuItem> items) {
+    if (identical(_menuMemoKey, items)) return;
+    _menuMemoKey = items;
+    // Stable partition: favourites first, otherwise menu order. Filtering
+    // below preserves this order.
+    _partitionedMenu = [
+      ...items.where((i) => i.isFavorite),
+      ...items.where((i) => !i.isFavorite),
+    ];
     final cats = items.map((i) => i.category).toSet().toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return ['All', ...cats];
-  }
-
-  List<MenuItem> _visibleItems(List<MenuItem> items) => items
-      .where((i) {
-        final matchesCategory =
-            _selectedCategory == 'All' || i.category == _selectedCategory;
-        if (!matchesCategory) return false;
-        final query = _query.trim().toLowerCase();
-        if (query.isEmpty) return true;
-        final searchable = [
+    _categoriesMemo = ['All', ...cats];
+    _searchBlobs = {
+      for (final i in items)
+        i.id: [
           i.name,
           i.nameEn,
           i.nameBn,
           i.category,
           i.description,
-        ].whereType<String>().join(' ').toLowerCase();
-        return searchable.contains(query);
-      })
-      .toList(growable: false);
+        ].whereType<String>().join(' ').toLowerCase(),
+    };
+  }
+
+  List<String> _categories(List<MenuItem> items) {
+    _ensureMenuMemo(items);
+    return _categoriesMemo;
+  }
+
+  List<MenuItem> _visibleItems(List<MenuItem> items) {
+    _ensureMenuMemo(items);
+    final rawQuery = _query.trim();
+    final lowerQuery = rawQuery.toLowerCase();
+    final selectedCategory = _selectedCategory;
+    final codeMode = _codeMode;
+    return _partitionedMenu
+        .where((i) {
+          if (selectedCategory != 'All' && i.category != selectedCategory) {
+            return false;
+          }
+          if (rawQuery.isEmpty) return true;
+          if (codeMode) {
+            return (i.shortCode?.toString() ?? '').startsWith(rawQuery);
+          }
+          return (_searchBlobs[i.id] ?? '').contains(lowerQuery);
+        })
+        .toList(growable: false);
+  }
 
   Map<String, int> get _cartQtyByItemId {
     final out = <String, int>{};
@@ -514,8 +546,10 @@ class _CounterModeState extends State<_CounterMode> {
   int get _totalQty => _cartLines.fold(0, (s, line) => s + line.qty);
 
   double get _total {
-    final subtotal =
-        _cartLines.fold<double>(0, (sum, line) => sum + line.lineTotal);
+    final subtotal = _cartLines.fold<double>(
+      0,
+      (sum, line) => sum + line.lineTotal,
+    );
     return double.parse(subtotal.toStringAsFixed(2));
   }
 
@@ -527,7 +561,7 @@ class _CounterModeState extends State<_CounterMode> {
         ? await showDesktopMenuLineCustomizerLines(
             context,
             item: item,
-            isBn: AppScope.of(context).strings.isBn,
+            isBn: AppScope.read(context).strings.isBn,
           )
         : [desktopRegularMenuLine(item)];
     if (selections == null || selections.isEmpty || !mounted) return;
@@ -571,14 +605,86 @@ class _CounterModeState extends State<_CounterMode> {
     });
   }
 
-  void _selectMenuLayout(MenuLayoutMode mode) {
-    if (_menuLayoutMode == mode) return;
-    setState(() => _menuLayoutMode = mode);
+  void _toggleCodeMode() {
+    setState(() {
+      _codeMode = !_codeMode;
+      _query = '';
+      _searchCtrl.clear();
+    });
   }
 
-  void _selectGridCols(int cols) {
-    if (_gridCols == cols) return;
-    setState(() => _gridCols = cols);
+  void _onCodeSubmit(String raw) {
+    final code = int.tryParse(raw.trim());
+    if (code == null) return;
+    final items = AppScope.read(context).menuItems;
+    MenuItem? match;
+    for (final item in items) {
+      if (item.shortCode == code && item.isAvailable) {
+        match = item;
+        break;
+      }
+    }
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: TfText(AppScope.read(context).strings.noItemForCode(raw)),
+        ),
+      );
+      return;
+    }
+    unawaited(_tap(match));
+    setState(() => _query = '');
+    _searchCtrl.clear();
+  }
+
+  Future<void> _toggleFavorite(MenuItem item) async {
+    HapticFeedback.selectionClick();
+    await AppScope.read(context).setMenuItemFavorite(item.id, !item.isFavorite);
+  }
+
+  static const String _kClearShortCode = '__clear__';
+
+  Future<void> _setShortCode(MenuItem item) async {
+    final scope = AppScope.read(context);
+    final text = scope.strings;
+    final controller = TextEditingController(
+      text: item.shortCode?.toString() ?? '',
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: TfText(text.setShortCode),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(hintText: text.shortCodeFieldHint),
+          onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, _kClearShortCode),
+            child: TfText(text.clearShortCode),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: TfText(text.cancel),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: TfText(text.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return; // dismissed
+    final code = result == _kClearShortCode ? null : int.tryParse(result);
+    if (result != _kClearShortCode && result.isNotEmpty && code == null) {
+      return; // non-numeric input — ignore
+    }
+    await scope.setMenuItemShortCode(item.id, code);
   }
 
   void _onSearchChanged(String value) {
@@ -612,7 +718,9 @@ class _CounterModeState extends State<_CounterMode> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    // Counter mode only reads the menu here (cart is local state); localized
+    // item names are resolved by MenuStep's own widgets.
+    final app = AppScope.select(context, AppAspect.menu);
     final menuItems = app.menuItems.where((i) => i.isAvailable).toList();
     final cartQty = _cartQtyByItemId;
     final categoryCounts = <String, int>{'All': menuItems.length};
@@ -633,15 +741,16 @@ class _CounterModeState extends State<_CounterMode> {
             totalQty: _totalQty,
             searchCtrl: _searchCtrl,
             query: _query,
-            layoutMode: _menuLayoutMode,
-            gridCols: _gridCols,
+            codeMode: _codeMode,
             categoryCounts: categoryCounts,
             onSearchChanged: _onSearchChanged,
-            onLayoutChanged: _selectMenuLayout,
-            onGridColsChanged: _selectGridCols,
+            onToggleCodeMode: _toggleCodeMode,
+            onCodeSubmit: _onCodeSubmit,
             onCategorySelected: (c) => setState(() => _selectedCategory = c),
             onTap: _tap,
             onDecrement: _decrement,
+            onToggleFavorite: (item) => unawaited(_toggleFavorite(item)),
+            onSetShortCode: (item) => unawaited(_setShortCode(item)),
             onSubmit: _cartLines.isNotEmpty ? _openReviewWizard : null,
           ),
         ),

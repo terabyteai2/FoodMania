@@ -127,6 +127,45 @@ class PrinterRuntimeState {
       lastPrintedAt: lastPrintedAt ?? this.lastPrintedAt,
     );
   }
+
+  // Value equality so the controller can skip notifyListeners() on no-op
+  // emits, and so the AppModel printer-aspect diff doesn't rebuild printer
+  // widgets when nothing actually changed. The stream emits a fresh instance
+  // on every internal poke (connection probe, busy toggle), many identical.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PrinterRuntimeState &&
+          autoPrintEnabled == other.autoPrintEnabled &&
+          connected == other.connected &&
+          busy == other.busy &&
+          activeTransport == other.activeTransport &&
+          builtInPrinterAvailable == other.builtInPrinterAvailable &&
+          usbPrinterAvailable == other.usbPrinterAvailable &&
+          selectedPrinterName == other.selectedPrinterName &&
+          selectedPrinterAddress == other.selectedPrinterAddress &&
+          selectedWindowsQueueName == other.selectedWindowsQueueName &&
+          windowsPaperWidthMm == other.windowsPaperWidthMm &&
+          lastError == other.lastError &&
+          lastPrintedOrderNo == other.lastPrintedOrderNo &&
+          lastPrintedAt == other.lastPrintedAt;
+
+  @override
+  int get hashCode => Object.hash(
+    autoPrintEnabled,
+    connected,
+    busy,
+    activeTransport,
+    builtInPrinterAvailable,
+    usbPrinterAvailable,
+    selectedPrinterName,
+    selectedPrinterAddress,
+    selectedWindowsQueueName,
+    windowsPaperWidthMm,
+    lastError,
+    lastPrintedOrderNo,
+    lastPrintedAt,
+  );
 }
 
 /// Localised receipt labels — switches between English and Bangla.
@@ -1170,9 +1209,7 @@ class PrinterService {
         ok = await _printSystemTableQrPdfFallback(tableLabel, qrUrl);
       }
       if (!ok) {
-        throw PrinterException(
-          'Printing QR label for $tableLabel failed.',
-        );
+        throw PrinterException('Printing QR label for $tableLabel failed.');
       }
       _emit(
         _state.copyWith(
@@ -1192,19 +1229,25 @@ class PrinterService {
     String qrUrl,
   ) async {
     final paperWidthPx = (_paperSize == PaperSize.mm80 ? 576 : 384).toDouble();
-    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes tableLabel="$tableLabel" paperWidthPx=$paperWidthPx');
+    debugPrint(
+      '[QB-PRINTER-DIAG] _buildTableQrLabelBytes tableLabel="$tableLabel" paperWidthPx=$paperWidthPx',
+    );
     final pngBytes = await TicketBitmapRenderer.renderTableQrLabel(
       tableLabel: tableLabel,
       qrUrl: qrUrl,
       paperWidthPx: paperWidthPx,
     );
-    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes pngBytes=${pngBytes.length}');
+    debugPrint(
+      '[QB-PRINTER-DIAG] _buildTableQrLabelBytes pngBytes=${pngBytes.length}',
+    );
 
     final decoded = img.decodePng(pngBytes);
     if (decoded == null) {
       throw PrinterException('Could not decode table QR label bitmap.');
     }
-    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes decoded width=${decoded.width} height=${decoded.height}');
+    debugPrint(
+      '[QB-PRINTER-DIAG] _buildTableQrLabelBytes decoded width=${decoded.width} height=${decoded.height}',
+    );
 
     final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
         ? img.copyResize(decoded, width: 576)
@@ -1217,7 +1260,9 @@ class PrinterService {
       ...generator.feed(4),
       ...generator.cut(),
     ];
-    debugPrint('[QB-PRINTER-DIAG] _buildTableQrLabelBytes escPosBytes=${bytes.length}');
+    debugPrint(
+      '[QB-PRINTER-DIAG] _buildTableQrLabelBytes escPosBytes=${bytes.length}',
+    );
     return bytes;
   }
 
@@ -1251,9 +1296,7 @@ class PrinterService {
             120,
             marginAll: 4,
           ),
-          build: (_) => pw.Center(
-            child: pw.Image(pw.MemoryImage(pngBytes)),
-          ),
+          build: (_) => pw.Center(child: pw.Image(pw.MemoryImage(pngBytes))),
         ),
       );
       final pageFormat = PdfPageFormat(
@@ -1352,17 +1395,25 @@ class PrinterService {
       return null;
     }
     if (logoUrl == _cachedLogoUrl && _cachedLogoBytes != null) {
-      debugPrint('[QB-LOGO] _fetchLogoBytes cache HIT url="$logoUrl" bytes=${_cachedLogoBytes!.length}');
+      debugPrint(
+        '[QB-LOGO] _fetchLogoBytes cache HIT url="$logoUrl" bytes=${_cachedLogoBytes!.length}',
+      );
       return _cachedLogoBytes;
     }
     debugPrint('[QB-LOGO] _fetchLogoBytes downloading url="$logoUrl"');
     try {
-      final res = await http.get(Uri.parse(logoUrl)).timeout(const Duration(seconds: 5));
-      debugPrint('[QB-LOGO] _fetchLogoBytes status=${res.statusCode} contentLength=${res.bodyBytes.length}');
+      final res = await http
+          .get(Uri.parse(logoUrl))
+          .timeout(const Duration(seconds: 5));
+      debugPrint(
+        '[QB-LOGO] _fetchLogoBytes status=${res.statusCode} contentLength=${res.bodyBytes.length}',
+      );
       if (res.statusCode == 200) {
         _cachedLogoUrl = logoUrl;
         _cachedLogoBytes = res.bodyBytes;
-        debugPrint('[QB-LOGO] _fetchLogoBytes cached url="$logoUrl" bytes=${_cachedLogoBytes!.length}');
+        debugPrint(
+          '[QB-LOGO] _fetchLogoBytes cached url="$logoUrl" bytes=${_cachedLogoBytes!.length}',
+        );
         return _cachedLogoBytes;
       }
     } catch (e) {
@@ -1673,10 +1724,7 @@ class PrinterService {
     final note = driverNote?.trim();
     return UtilityTicketData(
       title: labels.pick('DELIVERY COPY', 'ডেলিভারি কপি'),
-      warning: labels.pick(
-        'DO NOT SHOW TO CUSTOMER',
-        'কাস্টমারকে দেখাবেন না',
-      ),
+      warning: labels.pick('DO NOT SHOW TO CUSTOMER', 'কাস্টমারকে দেখাবেন না'),
       headerRows: [
         TicketSummaryRow(
           label: labels.pick('Order #', 'অর্ডার #'),
@@ -1753,10 +1801,7 @@ class PrinterService {
           label: labels.pick('Action', 'অ্যাকশন'),
           value: action.toUpperCase(),
         ),
-        TicketSummaryRow(
-          label: labels.pick('Reason', 'কারণ'),
-          value: reason,
-        ),
+        TicketSummaryRow(label: labels.pick('Reason', 'কারণ'), value: reason),
       ],
       sections: [
         UtilityTicketSection(
@@ -1950,7 +1995,9 @@ class PrinterService {
       buffer.writeln('${labels.nameLabel}: ${order.customerName!.trim()}');
     }
     if (order.deliveryAddress?.trim().isNotEmpty == true) {
-      buffer.writeln('${labels.addressLabel}: ${order.deliveryAddress!.trim()}');
+      buffer.writeln(
+        '${labels.addressLabel}: ${order.deliveryAddress!.trim()}',
+      );
     }
     if (order.mobileNumber?.trim().isNotEmpty == true) {
       buffer.writeln('${labels.phoneLabel}: ${order.mobileNumber!.trim()}');
@@ -2162,8 +2209,8 @@ class PrinterService {
     final label = method == null
         ? labels.pick('Cash', 'ক্যাশ')
         : labels.language == AppLanguage.bn
-              ? method.banglaLabel
-              : method.label;
+        ? method.banglaLabel
+        : method.label;
     return '${labels.pick('PAYMENT', 'পেমেন্ট')}: ${labels.digits(label.toUpperCase())}';
   }
 
@@ -2214,7 +2261,9 @@ class PrinterService {
       serialLabel: labels.pick('Serial #', 'সিরিয়াল #'),
       serialValue: labels.orderNo(order.displaySequence),
       dateLabel: labels.pick('Date', 'তারিখ'),
-      dateValue: labels.digits(DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal())),
+      dateValue: labels.digits(
+        DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal()),
+      ),
       timeLabel: labels.pick('Time', 'সময়'),
       timeValue: labels.digits(_formatKotTime(order.createdAt)),
       typeLabel: labels.pick('Type', 'ধরন'),

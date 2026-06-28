@@ -43,30 +43,35 @@ class TfTimeframeSelector extends StatelessWidget {
                 borderRadius: BorderRadius.circular(PosRadii.sm),
                 boxShadow: selected == o.$1 ? PosShadows.e1 : null,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (o.$1 == TfTimeframe.custom) ...[
-                    Icon(
-                      Icons.calendar_month_rounded,
-                      size: 14,
-                      color: selected == o.$1
-                          ? PosColors.text
-                          : PosColors.muted,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (o.$1 == TfTimeframe.custom) ...[
+                      Icon(
+                        Icons.calendar_month_rounded,
+                        size: 14,
+                        color: selected == o.$1
+                            ? PosColors.text
+                            : PosColors.muted,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    TfText(
+                      o.$2,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selected == o.$1
+                            ? PosColors.text
+                            : PosColors.muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    const SizedBox(width: 6),
                   ],
-                  TfText(
-                    o.$2,
-                    style: TextStyle(
-                      color: selected == o.$1
-                          ? PosColors.text
-                          : PosColors.muted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -112,12 +117,12 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
   }
 
   void _prev() => setState(() {
-        _viewMonth = DateTime(_viewMonth.year, _viewMonth.month - 1, 1);
-      });
+    _viewMonth = DateTime(_viewMonth.year, _viewMonth.month - 1, 1);
+  });
 
   void _next() => setState(() {
-        _viewMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 1);
-      });
+    _viewMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 1);
+  });
 
   void _tapDay(DateTime day) {
     final s = widget.start;
@@ -144,8 +149,18 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
 
   String _fmtDate(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${d.day} ${months[d.month - 1]}';
   }
@@ -153,8 +168,18 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
   @override
   Widget build(BuildContext context) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final monthLabel = '${months[_viewMonth.month - 1]} ${_viewMonth.year}';
     final daysInMonth = DateTime(_viewMonth.year, _viewMonth.month + 1, 0).day;
@@ -167,8 +192,12 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
     final summary = (s != null && e != null)
         ? '${_fmtDate(s)} – ${_fmtDate(e)}'
         : (s != null
-            ? '${tfPick(context, en: 'Start', bn: 'শুরু')}: ${_fmtDate(s)}'
-            : tfPick(context, en: 'Tap a date to start', bn: 'তারিখ নির্বাচন করুন'));
+              ? '${tfPick(context, en: 'Start', bn: 'শুরু')}: ${_fmtDate(s)}'
+              : tfPick(
+                  context,
+                  en: 'Tap a date to start',
+                  bn: 'তারিখ নির্বাচন করুন',
+                ));
 
     final now = DateTime.now();
     final todayNormalized = DateTime(now.year, now.month, now.day);
@@ -188,8 +217,11 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
             children: [
               TfIconButton(
                 icon: Icons.chevron_left_rounded,
-                tooltip:
-                    tfPick(context, en: 'Previous month', bn: 'পূর্ববর্তী মাস'),
+                tooltip: tfPick(
+                  context,
+                  en: 'Previous month',
+                  bn: 'পূর্ববর্তী মাস',
+                ),
                 onPressed: _prev,
               ),
               Expanded(
@@ -277,7 +309,10 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
                           color: bg,
                           borderRadius: BorderRadius.circular(PosRadii.sm),
                           border: isToday && !isStart && !isEnd
-                              ? Border.all(color: PosColors.lineStrong, width: 1)
+                              ? Border.all(
+                                  color: PosColors.lineStrong,
+                                  width: 1,
+                                )
                               : null,
                         ),
                         child: TfText(
@@ -309,8 +344,11 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.schedule_rounded,
-                    size: 15, color: PosColors.muted),
+                const Icon(
+                  Icons.schedule_rounded,
+                  size: 15,
+                  color: PosColors.muted,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: TfText(

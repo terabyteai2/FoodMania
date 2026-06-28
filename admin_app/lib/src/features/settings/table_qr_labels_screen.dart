@@ -32,24 +32,35 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     try {
       final app = AppScope.of(context);
 
-      debugPrint('[TableQrLabels] serverConfig.tableCount=${app.serverConfig.tableCount}');
+      debugPrint(
+        '[TableQrLabels] serverConfig.tableCount=${app.serverConfig.tableCount}',
+      );
       debugPrint('[TableQrLabels] publicSlug="${app.serverConfig.publicSlug}"');
 
       final settings = await app.loadDesktopPosSettings();
       final tableCount = settings.tableCount;
-      debugPrint('[TableQrLabels] loaded floorLayout zones=${settings.floorLayout.length} tableCount=$tableCount');
+      debugPrint(
+        '[TableQrLabels] loaded floorLayout zones=${settings.floorLayout.length} tableCount=$tableCount',
+      );
 
       for (var zi = 0; zi < settings.floorLayout.length; zi++) {
         final zone = settings.floorLayout[zi];
-        debugPrint('[TableQrLabels]   zone[$zi] id="${zone.id}" name="${zone.name}" tables=${zone.tables.length}');
+        debugPrint(
+          '[TableQrLabels]   zone[$zi] id="${zone.id}" name="${zone.name}" tables=${zone.tables.length}',
+        );
         for (var ti = 0; ti < zone.tables.length; ti++) {
           final t = zone.tables[ti];
-          debugPrint('[TableQrLabels]     table[$ti] id="${t.id}" label="${t.label}" seats=${t.seats} order=${t.sortOrder}');
+          debugPrint(
+            '[TableQrLabels]     table[$ti] id="${t.id}" label="${t.label}" seats=${t.seats} order=${t.sortOrder}',
+          );
         }
       }
 
       final raw = app.serverConfig.publicSlug.trim().toLowerCase();
-      final slug = RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$').hasMatch(raw) ? raw : null;
+      final slug =
+          RegExp(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$').hasMatch(raw)
+          ? raw
+          : null;
       debugPrint('[TableQrLabels] slug validated="${slug ?? "(none)"}"');
 
       if (!mounted) return;
@@ -69,7 +80,8 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     }
   }
 
-  String _tableUrl(String tableLabel) => 'https://$_slug.quickbytes.buzz/tableorder/$tableLabel';
+  String _tableUrl(String tableLabel) =>
+      'https://$_slug.quickbytes.buzz/tableorder/$tableLabel';
 
   List<PosFloorTable> _allTables() {
     final settings = _settings;
@@ -100,15 +112,19 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     final slug = _slug;
     if (slug == null) return;
 
-    debugPrint('[TableQrLabels] printLabel label="$label" slug="$slug" url=${_tableUrl(label)}');
-    debugPrint('[TableQrLabels] printerState connected=${app.printerState.connected} hasSelected=${app.printerState.hasSelectedPrinter}');
+    debugPrint(
+      '[TableQrLabels] printLabel label="$label" slug="$slug" url=${_tableUrl(label)}',
+    );
+    debugPrint(
+      '[TableQrLabels] printerState connected=${app.printerState.connected} hasSelected=${app.printerState.hasSelectedPrinter}',
+    );
 
     if (!app.printerState.connected && !app.printerState.hasSelectedPrinter) {
       debugPrint('[TableQrLabels] print aborted — no printer connected');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(text.printerNotConnectedHint)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(text.printerNotConnectedHint)));
       return;
     }
 
@@ -126,9 +142,9 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     } catch (e) {
       debugPrint('[TableQrLabels] print error label="$label" error=$e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${text.printFailed}: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${text.printFailed}: $e')));
     } finally {
       if (mounted) setState(() => _printing.remove(label));
     }
@@ -162,7 +178,9 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  printerConnected ? Icons.print_rounded : Icons.print_disabled_rounded,
+                  printerConnected
+                      ? Icons.print_rounded
+                      : Icons.print_disabled_rounded,
                   size: 18,
                   color: printerConnected ? PosColors.success : PosColors.muted,
                 ),
@@ -172,7 +190,9 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: printerConnected ? PosColors.success : PosColors.muted,
+                    color: printerConnected
+                        ? PosColors.success
+                        : PosColors.muted,
                   ),
                 ),
               ],
@@ -196,11 +216,19 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline_rounded, size: 56, color: PosColors.danger),
+              Icon(
+                Icons.error_outline_rounded,
+                size: 56,
+                color: PosColors.danger,
+              ),
               const SizedBox(height: 12),
               TfText(
                 'Load error',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: PosColors.slate),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.slate,
+                ),
               ),
               const SizedBox(height: 6),
               TfText(
@@ -209,7 +237,16 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              TfButton(label: 'Retry', onPressed: () { setState(() { _loading = true; _loadError = null; }); _load(); }),
+              TfButton(
+                label: 'Retry',
+                onPressed: () {
+                  setState(() {
+                    _loading = true;
+                    _loadError = null;
+                  });
+                  _load();
+                },
+              ),
             ],
           ),
         ),
@@ -228,7 +265,11 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
               const SizedBox(height: 12),
               TfText(
                 text.qrUrlSetupRequired,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: PosColors.slate),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: PosColors.slate,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
@@ -253,7 +294,11 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.table_restaurant_outlined, size: 56, color: PosColors.muted),
+              Icon(
+                Icons.table_restaurant_outlined,
+                size: 56,
+                color: PosColors.muted,
+              ),
               const SizedBox(height: 12),
               TfText(
                 text.noTablesConfigured,
@@ -343,9 +388,13 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
                   height: 44,
                   child: IconButton(
                     icon: Icon(
-                      isPrinting ? Icons.hourglass_top_rounded : Icons.print_rounded,
+                      isPrinting
+                          ? Icons.hourglass_top_rounded
+                          : Icons.print_rounded,
                       size: 20,
-                      color: isPrinting ? PosColors.muted : PosColors.accentStrong,
+                      color: isPrinting
+                          ? PosColors.muted
+                          : PosColors.accentStrong,
                     ),
                     onPressed: isPrinting ? null : () => _printLabel(table),
                     tooltip: text.print,
@@ -384,18 +433,29 @@ class _DiagnosticBanner extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline_rounded, size: 14, color: PosColors.accentStrong),
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: PosColors.accentStrong,
+                ),
                 const SizedBox(width: 6),
                 TfText(
                   'Diagnostics',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: PosColors.accentStrong),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: PosColors.accentStrong,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             _diagRow('Slug', slug),
             _diagRow('Tables loaded', '$tablesCount'),
-            _diagRow('Printer', printerConnected ? 'Connected' : 'Disconnected'),
+            _diagRow(
+              'Printer',
+              printerConnected ? 'Connected' : 'Disconnected',
+            ),
             _diagRow('QR base URL', 'https://$slug.quickbytes.buzz'),
           ],
         ),
@@ -410,7 +470,11 @@ class _DiagnosticBanner extends StatelessWidget {
         children: [
           TfText(
             '$label: ',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: PosColors.inkSoft),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: PosColors.inkSoft,
+            ),
           ),
           Expanded(
             child: TfText(

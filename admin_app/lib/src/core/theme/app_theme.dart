@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 enum PosThemeTone { dark, light }
 
 // ---------------------------------------------------------------------------
-// PosColors — QuickBytes POS blue design system (redesign_source_of_truth.md §2)
+// PosColors — QuickBytes POS blue design system (DESIGN.md §7a)
 // Petpooja clone, recolored: --primary #2F4FE0 royal-indigo = brand + main CTA.
 // Navy (#1E2A44) = secondary action. Green ONLY for success/profit. Red ONLY
 // for destructive. Pastel tints carry states. Soft rounded white cards.
@@ -21,7 +21,9 @@ class PosColors {
   static const Color blue400 = Color(0xFF5E74EC);
   static const Color blue500 = Color(0xFF2F4FE0); // primary
   static const Color blue600 = Color(0xFF2440C2); // press
-  static const Color blue700 = Color(0xFF1D339B); // primary-strong (text on white)
+  static const Color blue700 = Color(
+    0xFF1D339B,
+  ); // primary-strong (text on white)
   static const Color blue800 = Color(0xFF182A7D);
   static const Color blue900 = Color(0xFF131F5A);
 
@@ -44,7 +46,9 @@ class PosColors {
   static const Color primaryMid = blue400; // secondary emphasis
   static const Color primarySoft = blue50; // primary-tint #EEF1FE
   static const Color primaryWash = blue100; // #DCE3FD
-  static const Color accentInk = Color(0xFFFFFFFF); // WHITE text/icon on blue fills
+  static const Color accentInk = Color(
+    0xFFFFFFFF,
+  ); // WHITE text/icon on blue fills
   static const Color accentSoftInk = blue700; // text on primarySoft (tint)
   static const Color accentStrong = blue700; // #1D339B blue text on white
   static const Color accentOnInk = blue300; // light blue on dark backgrounds
@@ -152,7 +156,7 @@ class PosColors {
 }
 
 // ---------------------------------------------------------------------------
-// PosSpacing — base-4 spatial scale (design_rules.md §4)
+// PosSpacing — base-4 spatial scale (DESIGN.md §7a)
 // ---------------------------------------------------------------------------
 class PosSpacing {
   static const double sp1 = 4;
@@ -166,44 +170,57 @@ class PosSpacing {
 }
 
 // ---------------------------------------------------------------------------
-// PosRadii — crisp square-leaning corners ≤12px (design_rules.md §4)
+// PosRadii — soft rounded POS geometry (DESIGN.md §7a)
 // ---------------------------------------------------------------------------
 class PosRadii {
-  static const double xs = 3; // badges, signal chips
-  static const double sm = 5; // inputs, small buttons, tags
-  static const double md = 7; // cards, sheets, dialogs
-  static const double lg = 9; // larger cards
-  static const double xl = 12; // max radius
-  static const double pill = 999; // toggles only
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 14;
+  static const double xl = 16;
+  static const double pill = 999;
   // Backward-compatible aliases
-  static const double card = md;
-  static const double input = sm;
-  static const double tile = md;
-  static const double chip = sm; // crisp chips, not pill
-  static const double toggle = 999;
-  static const double tag = xs;
+  static const double card = lg;
+  static const double input = md;
+  static const double tile = lg;
+  static const double chip = pill;
+  static const double toggle = pill;
+  static const double tag = sm;
 }
 
 // ---------------------------------------------------------------------------
-// PosShadows — minimal, only for sheets/modals/sticky bars (§4)
+// PosShadows — soft POS elevations (DESIGN.md §7a)
 // ---------------------------------------------------------------------------
 class PosShadows {
   static const List<BoxShadow> e1 = [
-    BoxShadow(color: Color(0x0F14180E), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0A141928), blurRadius: 2, offset: Offset(0, 1)),
   ];
-  static const List<BoxShadow> soft = [];
+  static const List<BoxShadow> soft = [
+    BoxShadow(color: Color(0x0A141928), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0D141928), blurRadius: 8, offset: Offset(0, 2)),
+  ];
   static const List<BoxShadow> glow = [
-    BoxShadow(color: Color(0x0D14180E), blurRadius: 16, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x1A141928), blurRadius: 18, offset: Offset(0, 8)),
   ];
   static const List<BoxShadow> bar = [
-    BoxShadow(color: Color(0x0D14180E), blurRadius: 16, offset: Offset(0, -4)),
+    BoxShadow(color: Color(0x0F141928), blurRadius: 12, offset: Offset(0, -2)),
   ];
+  static const List<BoxShadow> eUp = bar;
   static const List<BoxShadow> raised = [
-    BoxShadow(color: Color(0x1414180E), blurRadius: 32, offset: Offset(0, 12)),
+    BoxShadow(color: Color(0x17141928), blurRadius: 24, offset: Offset(0, 10)),
+  ];
+  static const List<BoxShadow> e3 = [
+    BoxShadow(color: Color(0x1A141928), blurRadius: 24, offset: Offset(0, 12)),
+    BoxShadow(color: Color(0x0A141928), blurRadius: 4, offset: Offset(0, 2)),
   ];
   static const List<BoxShadow> fab = [
     // blue glow — 0 8px 22px -6px rgba(47,79,224,.55)
-    BoxShadow(color: Color(0x8C2F4FE0), blurRadius: 22, offset: Offset(0, 8), spreadRadius: -6),
+    BoxShadow(
+      color: Color(0x8C2F4FE0),
+      blurRadius: 22,
+      offset: Offset(0, 8),
+      spreadRadius: -6,
+    ),
   ];
   static const List<BoxShadow> card = soft;
 }
@@ -241,18 +258,15 @@ class AppTheme {
   static ThemeData _build({required bool dark}) {
     double s(double value) => value;
 
-    // Dark overrides (design_rules.md §2)
+    // Dark overrides are retained for compatibility; admin_app currently runs
+    // the light tone from DESIGN.md.
     final bg = dark ? const Color(0xFF0E120D) : PosColors.background;
     final surf = dark ? const Color(0xFF181D16) : PosColors.surface;
     final surf2 = dark ? const Color(0xFF212720) : PosColors.surfaceSunk;
     final ink = dark ? const Color(0xFFF1F4EC) : PosColors.primaryDark;
     final mut = dark ? const Color(0xFF7E8576) : PosColors.muted;
-    final ln = dark
-        ? const Color(0x17FFFFFF)
-        : PosColors.line;
-    final ln2 = dark
-        ? const Color(0x29FFFFFF)
-        : PosColors.lineStrong;
+    final ln = dark ? const Color(0x17FFFFFF) : PosColors.line;
+    final ln2 = dark ? const Color(0x29FFFFFF) : PosColors.lineStrong;
 
     final colorScheme = dark
         ? ColorScheme.dark(
@@ -340,11 +354,7 @@ class AppTheme {
           color: mut,
           height: 1.45,
         ),
-        bodySmall: baseText.copyWith(
-          fontSize: s(12),
-          color: mut,
-          height: 1.30,
-        ),
+        bodySmall: baseText.copyWith(fontSize: s(12), color: mut, height: 1.30),
         // Label / status: 12-13/500-600
         labelLarge: baseText.copyWith(
           fontSize: s(13),
@@ -366,13 +376,13 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
       ),
       cardTheme: CardThemeData(
-        elevation: 0,
-        shadowColor: Colors.transparent,
+        elevation: 1,
+        shadowColor: const Color(0x14141928),
         color: surf,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.lg),
+          borderRadius: BorderRadius.circular(PosRadii.card),
           side: BorderSide(color: ln, width: 1),
         ),
       ),
@@ -389,10 +399,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(PosRadii.md),
-          borderSide: BorderSide(
-            color: dark ? PosColors.primary : PosColors.accentStrong,
-            width: 1,
-          ),
+          borderSide: BorderSide(color: PosColors.primary, width: 1),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(PosRadii.md),
@@ -402,9 +409,16 @@ class AppTheme {
           borderRadius: BorderRadius.circular(PosRadii.md),
           borderSide: BorderSide(color: PosColors.danger, width: 1),
         ),
-        contentPadding: EdgeInsets.symmetric(horizontal: s(16), vertical: s(14)),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: s(16),
+          vertical: s(13),
+        ),
         labelStyle: TextStyle(color: mut, fontWeight: FontWeight.w500),
-        hintStyle: TextStyle(color: mut, fontSize: 14, fontWeight: FontWeight.w400),
+        hintStyle: TextStyle(
+          color: PosColors.mutedSoft,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
         prefixIconColor: mut,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -481,11 +495,11 @@ class AppTheme {
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: surf,
-        selectedIconTheme: IconThemeData(color: ink, size: s(21)),
+        selectedIconTheme: IconThemeData(color: PosColors.primary, size: s(21)),
         unselectedIconTheme: IconThemeData(color: mut, size: s(20)),
         selectedLabelTextStyle: TextStyle(
-          color: ink,
-          fontWeight: FontWeight.w600,
+          color: PosColors.primary,
+          fontWeight: FontWeight.w700,
           fontSize: s(12),
         ),
         unselectedLabelTextStyle: TextStyle(
@@ -499,18 +513,14 @@ class AppTheme {
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.selected)
-                ? surf
-                : surf2,
+            (states) => states.contains(WidgetState.selected) ? surf : surf2,
           ),
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? ink
-                : ink,
+                ? PosColors.accentStrong
+                : mut,
           ),
-          side: WidgetStateProperty.all(
-            BorderSide(color: ln, width: 1),
-          ),
+          side: WidgetStateProperty.all(BorderSide(color: ln, width: 1)),
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(PosRadii.sm),
@@ -536,28 +546,25 @@ class AppTheme {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.sm),
+          borderRadius: BorderRadius.circular(PosRadii.chip),
         ),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (states) => Colors.white,
-        ),
+        thumbColor: WidgetStateProperty.resolveWith((states) => Colors.white),
         trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? PosColors.primary
-              : surf2,
+          (states) =>
+              states.contains(WidgetState.selected) ? PosColors.primary : surf2,
         ),
         trackOutlineColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? Colors.transparent
-              : ln,
+          (states) =>
+              states.contains(WidgetState.selected) ? Colors.transparent : ln,
         ),
       ),
       dividerTheme: DividerThemeData(color: ln, thickness: 1, space: 1),
       dialogTheme: DialogThemeData(
         backgroundColor: surf,
-        elevation: 0,
+        elevation: 8,
+        shadowColor: const Color(0x1A141928),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PosRadii.xl),

@@ -5,11 +5,12 @@ import '../../features/messaging/messages_screen.dart';
 import '../../models/pos_notification.dart';
 import '../theme/app_theme.dart';
 import 'notification_center.dart';
+import 'shell_nav_scope.dart';
 import 'tf_design_system.dart';
 
-/// Shared primary-tab header used on every bottom-nav root screen.
+/// Shared primary-tab header used on every root admin screen.
 ///
-/// Renders the lime bolt mark + [title] + outlet name on the left; on the
+/// Renders the blue bolt mark + [title] + outlet name on the left; on the
 /// right, the Messages icon (manager+ roles only), and the notification bell.
 ///
 /// Pushed / detail screens keep their own [AppScaffold] with a back button.
@@ -32,11 +33,28 @@ class AppPageHeader extends StatelessWidget {
     final app = AppScope.of(context);
     final text = app.strings;
     final outletName = app.outletName.trim();
+    // Present only on the phone shell (MainShell narrow layout). On the wide
+    // NavigationRail layout and on pushed detail routes the scope is absent, so
+    // no hamburger shows there.
+    final shellNav = ShellNavScope.maybeOf(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.fromLTRB(
+        PosSpacing.sp4,
+        PosSpacing.sp2,
+        PosSpacing.sp4,
+        PosSpacing.sp3,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          if (shellNav != null) ...[
+            TfIconButton(
+              icon: Icons.menu_rounded,
+              tooltip: text.menu,
+              onPressed: shellNav.openDrawer,
+            ),
+            const SizedBox(width: PosSpacing.sp2),
+          ],
           Expanded(
             child: brand
                 ? TfBrandHeader(
@@ -53,7 +71,7 @@ class AppPageHeader extends StatelessWidget {
                 context,
               ).push(MaterialPageRoute(builder: (_) => const MessagesScreen())),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: PosSpacing.sp2),
           ],
           HeaderNotificationBell(
             onNavigateToOrders: onNavigateToOrders ?? () {},

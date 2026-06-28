@@ -14,6 +14,7 @@ class MenuImageService {
   static const int menuPhotoEdgePx = 720;
   static const int menuPhotoJpegQuality = 82;
   static int maxBinaryBytes = 1200 * 1024;
+
   /// Cap multi-pick scans so we don't accumulate too many byte buffers in RAM.
   static const int maxScanPages = 6;
 

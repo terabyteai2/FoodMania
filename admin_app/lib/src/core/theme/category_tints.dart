@@ -23,3 +23,30 @@ Color resolveCategoryBg(String category) {
   }
   return _tintsList[(key.hashCode & 0x7FFFFFFF) % _tintsList.length];
 }
+
+/// Saturated per-category accent palette — distinct from the pale
+/// [kCategoryBgTints] image tints. Used as the left color-code stripe on the
+/// add-items picker cards so each category reads at a glance.
+const Map<String, Color> kCategoryAccents = {
+  'Burgers': Color(0xFFE0982E),
+  'Pizza': Color(0xFFE0524E),
+  'Rice & Curry': Color(0xFF3FA85C),
+  'Kebab': Color(0xFFD9722E),
+  'Sides': Color(0xFF3E7BC0),
+  'Salads': Color(0xFF5BA84F),
+  'Beverages': Color(0xFF7C5CD6),
+  'Desserts': Color(0xFFE06AA6),
+  'Seafood': Color(0xFF2BA7A7),
+  'Breakfast': Color(0xFFE0B33A),
+  'Combos': Color(0xFF5A6475),
+};
+
+final _accentsList = kCategoryAccents.values.toList();
+
+Color resolveCategoryAccent(String category) {
+  final key = category.toLowerCase().trim();
+  for (final entry in kCategoryAccents.entries) {
+    if (entry.key.toLowerCase() == key) return entry.value;
+  }
+  return _accentsList[(key.hashCode & 0x7FFFFFFF) % _accentsList.length];
+}

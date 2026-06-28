@@ -205,7 +205,10 @@ class _Metric extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        TfText(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        TfText(
+          value,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
       ],
     ),
   );

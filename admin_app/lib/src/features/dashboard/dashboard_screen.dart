@@ -1078,7 +1078,10 @@ class _FcSummaryCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: PosColors.primarySoft,
                   borderRadius: BorderRadius.circular(999),
@@ -1193,10 +1196,7 @@ class _FcEyebrow extends StatelessWidget {
 }
 
 class _FcSearchField extends StatefulWidget {
-  const _FcSearchField({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _FcSearchField({required this.controller, required this.onChanged});
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -1422,7 +1422,8 @@ class _FcRingupTile extends StatelessWidget {
       name: item.name,
       category: item.category,
     );
-    final hasImage = (item.imageUrl ?? '').trim().isNotEmpty ||
+    final hasImage =
+        (item.imageUrl ?? '').trim().isNotEmpty ||
         (iconKey ?? '').trim().isNotEmpty;
 
     return Material(
@@ -2217,6 +2218,22 @@ class _QuickSellEditorPageState extends State<_QuickSellEditorPage> {
   late final List<String> _ids;
   bool _saving = false;
 
+  // The available-item list + id lookup depend only on the menu, not on _ids,
+  // so memoise them by menu identity instead of rebuilding on every setState
+  // (tap to add/remove/reorder).
+  List<MenuItem>? _menuMemoKey;
+  List<MenuItem> _availableItems = const [];
+  Map<String, MenuItem> _byId = const {};
+
+  void _ensureMenuMemo(List<MenuItem> menuItems) {
+    if (identical(_menuMemoKey, menuItems)) return;
+    _menuMemoKey = menuItems;
+    _availableItems = menuItems
+        .where((item) => item.isAvailable)
+        .toList(growable: false);
+    _byId = {for (final item in _availableItems) item.id: item};
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2254,10 +2271,9 @@ class _QuickSellEditorPageState extends State<_QuickSellEditorPage> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final items = app.menuItems
-        .where((item) => item.isAvailable)
-        .toList(growable: false);
-    final byId = {for (final item in items) item.id: item};
+    _ensureMenuMemo(app.menuItems);
+    final items = _availableItems;
+    final byId = _byId;
     final selected = [
       for (final id in _ids)
         if (byId[id] != null) byId[id]!,

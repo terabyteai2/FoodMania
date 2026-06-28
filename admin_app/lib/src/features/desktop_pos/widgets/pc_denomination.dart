@@ -25,13 +25,12 @@ class PcDenominationGrid extends StatefulWidget {
 class _PcDenominationGridState extends State<PcDenominationGrid> {
   final Map<int, int> _counts = {for (final d in kPcDenominations) d: 0};
 
-  double get _total =>
-      _counts.entries.fold(0, (s, e) => s + e.key * e.value);
+  double get _total => _counts.entries.fold(0, (s, e) => s + e.key * e.value);
 
   Map<String, int> get _denoms => {
-        for (final e in _counts.entries)
-          if (e.value > 0) '${e.key}': e.value,
-      };
+    for (final e in _counts.entries)
+      if (e.value > 0) '${e.key}': e.value,
+  };
 
   void _bump(int denom, int delta) {
     setState(() {
@@ -60,13 +59,22 @@ class _PcDenominationGridState extends State<PcDenominationGrid> {
             ),
             child: Row(
               children: [
-                Expanded(flex: 3, child: Text('DENOM', style: Pc.mono(9.5, color: Pc.textSec))),
-                Expanded(flex: 4, child: Text('COUNT', style: Pc.mono(9.5, color: Pc.textSec))),
                 Expanded(
-                    flex: 3,
-                    child: Text('TOTAL',
-                        textAlign: TextAlign.right,
-                        style: Pc.mono(9.5, color: Pc.textSec))),
+                  flex: 3,
+                  child: Text('DENOM', style: Pc.mono(9.5, color: Pc.textSec)),
+                ),
+                Expanded(
+                  flex: 4,
+                  child: Text('COUNT', style: Pc.mono(9.5, color: Pc.textSec)),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    'TOTAL',
+                    textAlign: TextAlign.right,
+                    style: Pc.mono(9.5, color: Pc.textSec),
+                  ),
+                ),
               ],
             ),
           ),
@@ -107,8 +115,7 @@ class _PcDenominationGridState extends State<PcDenominationGrid> {
             child: Text(
               pcMoney(lineTotal),
               textAlign: TextAlign.right,
-              style: Pc.num(14,
-                  color: count > 0 ? Pc.text : Pc.textTer),
+              style: Pc.num(14, color: count > 0 ? Pc.text : Pc.textTer),
             ),
           ),
         ],

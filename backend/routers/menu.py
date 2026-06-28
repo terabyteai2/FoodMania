@@ -75,6 +75,7 @@ def _item_to_dict(item: MenuItem) -> dict:
         "price": float(item.price),
         "costPrice": float(item.cost_price) if item.cost_price is not None else None,
         "shortCode": item.short_code,
+        "isFavorite": bool(item.is_favorite),
         "category": item.category,
         "categoryEn": item.category_en or item.category or "General",
         "categoryBn": item.category_bn or "",
@@ -116,6 +117,7 @@ def _apply_menu_payload(
     # missing value never wipes an existing/auto-assigned code.
     if body.shortCode is not None:
         item.short_code = body.shortCode
+    item.is_favorite = body.isFavorite
     item.category = category_en
     item.category_en = category_en
     item.category_bn = category_bn

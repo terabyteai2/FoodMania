@@ -27,8 +27,7 @@ class AdminBlockingNoticeScreen extends StatefulWidget {
       _AdminBlockingNoticeScreenState();
 }
 
-class _AdminBlockingNoticeScreenState
-    extends State<AdminBlockingNoticeScreen> {
+class _AdminBlockingNoticeScreenState extends State<AdminBlockingNoticeScreen> {
   final _inputController = TextEditingController();
 
   @override

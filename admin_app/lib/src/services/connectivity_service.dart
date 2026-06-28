@@ -55,7 +55,10 @@ class ConnectivityService {
   Future<bool> hasInternetAccess() async {
     final hasRoute = await hasNetworkRoute();
     if (!hasRoute) return false;
-    return _hostLookupSucceeds('example.com', timeout: const Duration(seconds: 3));
+    return _hostLookupSucceeds(
+      'example.com',
+      timeout: const Duration(seconds: 3),
+    );
   }
 
   Future<GoogleAuthPreflightResult> runGoogleAuthPreflight() async {
@@ -97,7 +100,10 @@ class ConnectivityService {
     ];
     var googleDns = false;
     for (final host in googleHosts) {
-      if (await _hostLookupSucceeds(host, timeout: const Duration(seconds: 3))) {
+      if (await _hostLookupSucceeds(
+        host,
+        timeout: const Duration(seconds: 3),
+      )) {
         googleDns = true;
         break;
       }
@@ -121,10 +127,7 @@ class ConnectivityService {
     ];
     Uri? successfulProbe;
     for (final uri in probeUris) {
-      final ok = await _probeHttps204(
-        uri,
-        timeout: const Duration(seconds: 4),
-      );
+      final ok = await _probeHttps204(uri, timeout: const Duration(seconds: 4));
       if (ok) {
         successfulProbe = uri;
         break;
@@ -167,10 +170,7 @@ class ConnectivityService {
     }
   }
 
-  Future<bool> _probeHttps204(
-    Uri uri, {
-    required Duration timeout,
-  }) async {
+  Future<bool> _probeHttps204(Uri uri, {required Duration timeout}) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final request = await client.getUrl(uri).timeout(timeout);

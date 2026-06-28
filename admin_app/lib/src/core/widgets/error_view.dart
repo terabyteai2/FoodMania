@@ -14,7 +14,7 @@ class ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return TfCard(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(PosSpacing.sp4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -23,16 +23,16 @@ class ErrorView extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
               color: PosColors.dangerSoft,
-              borderRadius: BorderRadius.circular(PosRadii.tile),
+              borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(color: PosColors.line),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.error_outline_rounded,
               color: PosColors.danger,
               size: 22,
             ),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: PosSpacing.sp3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -42,10 +42,10 @@ class ErrorView extends StatelessWidget {
                   text.somethingWentWrong,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: PosSpacing.sp1),
                 TfText(message, style: Theme.of(context).textTheme.bodyMedium),
                 if (onRetry != null) ...[
-                  SizedBox(height: 12),
+                  const SizedBox(height: PosSpacing.sp3),
                   TfButton(
                     label: text.retry,
                     icon: Icons.refresh,

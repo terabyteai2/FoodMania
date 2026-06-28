@@ -172,10 +172,7 @@ class _HoverableState extends State<_Hoverable> {
     if (widget.onTap == null) return widget.child;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: widget.child,
-      ),
+      child: GestureDetector(onTap: widget.onTap, child: widget.child),
     );
   }
 }

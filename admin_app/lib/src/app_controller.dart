@@ -228,6 +228,7 @@ class PosAppController extends ChangeNotifier {
   bool? _lastInternetOnline;
   bool _lastIsSyncing = false;
   bool _coalesceNextOrderAlertBatch = false;
+
   /// Chat conversations already surfaced while in manager-help state.
   final BoundedStringSet _alertedNeedsHelpChatIds = BoundedStringSet(
     cap: kAlertSetCap,
@@ -415,7 +416,9 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> setLogoBitmapUrl(String? url) async {
     final cleaned = url?.trim().isEmpty == true ? null : url?.trim();
-    debugPrint('[QB-LOGO] setLogoBitmapUrl input="$url" cleaned="$cleaned" current="${serverConfig.logoBitmapUrl}"');
+    debugPrint(
+      '[QB-LOGO] setLogoBitmapUrl input="$url" cleaned="$cleaned" current="${serverConfig.logoBitmapUrl}"',
+    );
     if (serverConfig.logoBitmapUrl == cleaned) return;
     serverConfig = serverConfig.copyWith(logoBitmapUrl: cleaned);
     final preferences = await SharedPreferences.getInstance();
@@ -429,13 +432,19 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> _applyOutletConfigUpdate(Map<String, Object?> settings) async {
     final newBitmapUrl = settings['logoBitmapUrl']?.toString();
-    final cleanedBitmap = newBitmapUrl?.trim().isEmpty == true ? null : newBitmapUrl?.trim();
+    final cleanedBitmap = newBitmapUrl?.trim().isEmpty == true
+        ? null
+        : newBitmapUrl?.trim();
     if (cleanedBitmap != null && cleanedBitmap != serverConfig.logoBitmapUrl) {
-      debugPrint('[QB-LOGO] _applyOutletConfigUpdate logoBitmapUrl="$cleanedBitmap" (was "${serverConfig.logoBitmapUrl}")');
+      debugPrint(
+        '[QB-LOGO] _applyOutletConfigUpdate logoBitmapUrl="$cleanedBitmap" (was "${serverConfig.logoBitmapUrl}")',
+      );
       await setLogoBitmapUrl(cleanedBitmap);
     }
     final newLogoUrl = settings['logoUrl']?.toString();
-    final cleanedLogo = newLogoUrl?.trim().isEmpty == true ? null : newLogoUrl?.trim();
+    final cleanedLogo = newLogoUrl?.trim().isEmpty == true
+        ? null
+        : newLogoUrl?.trim();
     if (cleanedLogo != null && cleanedLogo != serverConfig.logoUrl) {
       await setLogoUrl(cleanedLogo);
     }
@@ -545,7 +554,9 @@ class PosAppController extends ChangeNotifier {
         logoUrl: preferences.getString(_logoUrlKey),
         logoBitmapUrl: preferences.getString(_logoBitmapUrlKey),
       );
-      debugPrint('[QB-LOGO] initialize loaded logoUrl="${serverConfig.logoUrl}" logoBitmapUrl="${serverConfig.logoBitmapUrl}"');
+      debugPrint(
+        '[QB-LOGO] initialize loaded logoUrl="${serverConfig.logoUrl}" logoBitmapUrl="${serverConfig.logoBitmapUrl}"',
+      );
       // Auto-migrate stale URLs: any previously stored ngrok tunnel is treated
       // as expired and replaced with the compile-time default (now the VPS).
       final storedCloudUrl = preferences.getString(_cloudApiUrlKey);
@@ -640,6 +651,10 @@ class PosAppController extends ChangeNotifier {
       );
       _subscriptions.add(
         printerService.stateStream.listen((state) {
+          // The printer stream emits a fresh state on every internal poke
+          // (connection probe, busy toggle) — frequently with identical
+          // values. Skip the app-wide notify when nothing actually changed.
+          if (printerState == state) return;
           printerState = state;
           if (state.connected &&
               !_isInfrastructurePrintError(state.lastError)) {
@@ -665,8 +680,20 @@ class PosAppController extends ChangeNotifier {
           }
           final syncFinished = _lastIsSyncing && !state.isSyncing;
           _lastIsSyncing = state.isSyncing;
+          final prev = syncState;
           syncState = state;
-          notifyListeners();
+          // The sync stream also emits on every appended log line; repaint
+          // only when a field the UI actually shows changed, not on log churn.
+          final visibleChanged =
+              prev.isSyncing != state.isSyncing ||
+              prev.cloudConnected != state.cloudConnected ||
+              prev.pendingCount != state.pendingCount ||
+              prev.failedCount != state.failedCount ||
+              prev.lastSyncAt != state.lastSyncAt ||
+              prev.lastError != state.lastError;
+          if (visibleChanged) {
+            notifyListeners();
+          }
           if (syncFinished) {
             unawaited(_syncChatEscalationNotifications({}));
           }
@@ -1278,11 +1305,68 @@ class PosAppController extends ChangeNotifier {
     String range = 'today',
     String? start,
     String? end,
+    String? service,
+    String? paymentMethod,
+    String? shiftId,
+    String? user,
   }) {
     if (!isCloudReady || !cloudConfig.canSync) {
       return Future.error(CloudApiException('Cloud sync not configured.'));
     }
     return cloudApiService.fetchAnalyticsSummary(
+      range: range,
+      start: start,
+      end: end,
+      service: service,
+      paymentMethod: paymentMethod,
+      shiftId: shiftId,
+      user: user,
+    );
+  }
+
+  Future<Map<String, Object?>> fetchItemAnalytics({
+    required String menuItemId,
+    String range = 'month',
+    String? start,
+    String? end,
+  }) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchItemAnalytics(
+      menuItemId: menuItemId,
+      range: range,
+      start: start,
+      end: end,
+    );
+  }
+
+  Future<Map<String, Object?>> fetchPerformanceReport({
+    String granularity = 'daily',
+    String? category,
+    String? start,
+    int days = 30,
+  }) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchPerformanceReport(
+      granularity: granularity,
+      category: category,
+      start: start,
+      days: days,
+    );
+  }
+
+  Future<Map<String, Object?>> fetchOrderBuckets({
+    String range = 'today',
+    String? start,
+    String? end,
+  }) {
+    if (!isCloudReady || !cloudConfig.canSync) {
+      return Future.error(CloudApiException('Cloud sync not configured.'));
+    }
+    return cloudApiService.fetchOrderBuckets(
       range: range,
       start: start,
       end: end,
@@ -1508,10 +1592,12 @@ class PosAppController extends ChangeNotifier {
         phone: phone,
       );
       serverConfig = serverConfig.copyWith(
-        restaurantName: data['restaurantName']?.toString().trim().isNotEmpty == true
+        restaurantName:
+            data['restaurantName']?.toString().trim().isNotEmpty == true
             ? data['restaurantName'].toString().trim()
             : serverConfig.restaurantName,
-        outletPhone: data['outletPhone']?.toString() ?? serverConfig.outletPhone,
+        outletPhone:
+            data['outletPhone']?.toString() ?? serverConfig.outletPhone,
       );
       await _persistSettings();
     });
@@ -2327,9 +2413,9 @@ class PosAppController extends ChangeNotifier {
       return;
     }
     if (type == 'chat_updated') {
-        _chatEventController.add(event);
-        unawaited(_syncChatEscalationNotifications(event));
-        return;
+      _chatEventController.add(event);
+      unawaited(_syncChatEscalationNotifications(event));
+      return;
     }
     if (type == 'admin_blocking_notice_changed' && data is Map) {
       unawaited(
@@ -2379,15 +2465,13 @@ class PosAppController extends ChangeNotifier {
         !_alertedNeedsHelpChatIds.contains(changedConversationId)) {
       final eventData = event['data'];
       if (eventData is Map) {
-        final status =
-            (eventData['status'] as String?)?.trim().toLowerCase();
+        final status = (eventData['status'] as String?)?.trim().toLowerCase();
         if (status == 'needs') {
           _alertedNeedsHelpChatIds.add(changedConversationId);
           final name =
               (eventData['name'] as String?)?.trim() ?? 'Messenger customer';
           final reason = (eventData['reason'] as String?)?.trim();
-          final lastMsg =
-              (eventData['lastUserMessage'] as String?)?.trim();
+          final lastMsg = (eventData['lastUserMessage'] as String?)?.trim();
           final detail = (reason?.isNotEmpty ?? false)
               ? reason!
               : (lastMsg ?? '');
@@ -2499,7 +2583,9 @@ class PosAppController extends ChangeNotifier {
     } finally {
       _checkingAdminBlockingNotice = false;
       adminBlockingNoticeRefreshing = false;
-      notifyListeners();
+      // The refreshing flag is only visible while a blocking notice is shown;
+      // otherwise (the common case) the 30s poll repaints nothing.
+      if (hasAdminBlockingNotice) notifyListeners();
     }
   }
 
@@ -2545,13 +2631,19 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> _applyAdminBlockingNotice(AdminBlockingNotice notice) async {
+    // Polled every 30s — bail out (no disk write, no notify) when the notice
+    // is unchanged, which is the steady state for nearly every outlet.
+    final nextNotice = notice.isBlocking ? notice : null;
+    final prevKey = adminBlockingNotice == null
+        ? ''
+        : jsonEncode(adminBlockingNotice!.toJson());
+    final nextKey = nextNotice == null ? '' : jsonEncode(nextNotice.toJson());
+    if (prevKey == nextKey && adminBlockingNoticeError == null) return;
+
     final preferences = await SharedPreferences.getInstance();
-    if (notice.isBlocking) {
-      adminBlockingNotice = notice;
-      await preferences.setString(
-        _adminBlockingNoticeKey,
-        jsonEncode(notice.toJson()),
-      );
+    if (nextNotice != null) {
+      adminBlockingNotice = nextNotice;
+      await preferences.setString(_adminBlockingNoticeKey, nextKey);
     } else {
       adminBlockingNotice = null;
       await preferences.remove(_adminBlockingNoticeKey);
@@ -2735,7 +2827,9 @@ class PosAppController extends ChangeNotifier {
       logoUrl: result.logoUrl,
       logoBitmapUrl: result.logoBitmapUrl,
     );
-    debugPrint('[QB-LOGO] _applyAdminLoginResult logoUrl="${result.logoUrl}" logoBitmapUrl="${result.logoBitmapUrl}"');
+    debugPrint(
+      '[QB-LOGO] _applyAdminLoginResult logoUrl="${result.logoUrl}" logoBitmapUrl="${result.logoBitmapUrl}"',
+    );
     cloudConfig = cloudConfig.copyWith(
       baseUrl: resolvedBase,
       enabled: true,
@@ -3034,6 +3128,37 @@ class PosAppController extends ChangeNotifier {
     await _syncWithFreshTenantToken();
   }
 
+  /// Outlet-wide favourite toggle. Optimistically updates the in-memory
+  /// [menuItems] so the picker re-sorts (favourites first) immediately, then
+  /// persists + syncs.
+  Future<void> setMenuItemFavorite(String id, bool isFavorite) async {
+    final index = menuItems.indexWhere((item) => item.id == id);
+    if (index >= 0) {
+      menuItems = [...menuItems]
+        ..[index] = menuItems[index].copyWith(isFavorite: isFavorite);
+      notifyListeners();
+    }
+    await database.toggleMenuFavorite(id, isFavorite);
+    await _syncWithFreshTenantToken();
+  }
+
+  /// Assigns (or clears, when [code] is null) the quick-pick short code for a
+  /// menu item. Mirrors [setMenuItemFavorite]: optimistic in-memory update,
+  /// persist via upsert, then push to cloud.
+  Future<void> setMenuItemShortCode(String id, int? code) async {
+    final index = menuItems.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+    final updated = menuItems[index].copyWith(
+      shortCode: code,
+      clearShortCode: code == null,
+      updatedAt: DateTime.now(),
+    );
+    menuItems = [...menuItems]..[index] = updated;
+    notifyListeners();
+    await database.upsertMenuItem(updated);
+    await _syncWithFreshTenantToken();
+  }
+
   // ── Inventory ─────────────────────────────────────────────────────────────
 
   double inventoryTodaySpend = 0;
@@ -3219,6 +3344,8 @@ class PosAppController extends ChangeNotifier {
     OrderServiceType? serviceType,
     int? covers,
     OrderPaymentMethod? paymentMethod,
+    String? discountLabel,
+    double discountAmount = 0,
   }) async {
     final order = await database.createOrder(
       requestedItems: requestedItems,
@@ -3228,6 +3355,8 @@ class PosAppController extends ChangeNotifier {
       serviceType: serviceType,
       covers: covers,
       paymentMethod: paymentMethod,
+      discountLabel: discountLabel,
+      discountAmount: discountAmount,
       deliveryCharge: serviceType == OrderServiceType.delivery
           ? serverConfig.deliveryCharge
           : 0,
@@ -3493,7 +3622,6 @@ class PosAppController extends ChangeNotifier {
   Future<bool> retryFailedSync() async {
     return _runBusy(syncService.retryFailed);
   }
-
 
   Future<void> setBusinessTier(BusinessTier tier) async {
     if (businessTier == tier) return;
@@ -3797,7 +3925,9 @@ class PosAppController extends ChangeNotifier {
 
   Future<bool> printCustomerInvoice(OrderModel order) async {
     final usedUrl = serverConfig.logoBitmapUrl ?? serverConfig.logoUrl;
-    debugPrint('[QB-LOGO] printCustomerInvoice logoBitmapUrl="${serverConfig.logoBitmapUrl}" logoUrl="${serverConfig.logoUrl}" usedUrl="$usedUrl"');
+    debugPrint(
+      '[QB-LOGO] printCustomerInvoice logoBitmapUrl="${serverConfig.logoBitmapUrl}" logoUrl="${serverConfig.logoUrl}" usedUrl="$usedUrl"',
+    );
     final ok = await printerService.printCustomerInvoice(
       order,
       restaurantName: restaurantName,
@@ -3971,7 +4101,6 @@ class PosAppController extends ChangeNotifier {
     );
     notifyListeners();
   }
-
 
   Future<void> setCounterModeEnabled(bool value) async {
     if (counterModeEnabled == value) return;
@@ -4235,7 +4364,9 @@ class PosAppController extends ChangeNotifier {
         final becamePending =
             !wasKnown ||
             (previousStatus != null && previousStatus != OrderStatus.pending);
-        if (becamePending && !_alertedPendingOrderIds.contains(id) && !isCurrentUserCreator) {
+        if (becamePending &&
+            !_alertedPendingOrderIds.contains(id) &&
+            !isCurrentUserCreator) {
           _alertedPendingOrderIds.add(id);
           orderNotifications.add(
             _QueuedPosNotification(
@@ -4573,7 +4704,9 @@ class PosAppController extends ChangeNotifier {
       logoUrl: tenant.logoUrl,
       logoBitmapUrl: tenant.logoBitmapUrl,
     );
-    debugPrint('[QB-LOGO] bootstrap logoUrl="${tenant.logoUrl}" logoBitmapUrl="${tenant.logoBitmapUrl}"');
+    debugPrint(
+      '[QB-LOGO] bootstrap logoUrl="${tenant.logoUrl}" logoBitmapUrl="${tenant.logoBitmapUrl}"',
+    );
     // /tenants/bootstrap returns a token that only carries outlet_id. If the
     // user is already logged in, their existing token also carries account_id
     // (required by manager-only endpoints like /admin/staff). Keep the

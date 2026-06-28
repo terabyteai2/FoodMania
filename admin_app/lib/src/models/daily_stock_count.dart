@@ -9,6 +9,7 @@ class DailyStockCount {
 
   final String id;
   final String inventoryItemId;
+
   /// Calendar day `yyyy-MM-dd`.
   final String countDate;
   final double quantity;
