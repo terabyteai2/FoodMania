@@ -126,7 +126,9 @@ export const api = {
     },
   ) => request<OrderWire>(`/outlets/${outletId}/pos/orders/${orderId}/settle`, { method: 'POST', body }),
   auditOrder: (outletId: string, orderId: string, body: Record<string, unknown>) =>
-    request<OrderWire>(`/outlets/${outletId}/pos/orders/${orderId}/audit`, { method: 'POST', body }),
+    request<{ eventId: string; action: string }>(
+      `/outlets/${outletId}/pos/orders/${orderId}/audit`, { method: 'POST', body },
+    ),
 };
 
 export function wsUrl(outletId: string, token: string): string {

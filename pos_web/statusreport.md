@@ -1,7 +1,7 @@
 # QuickBytes POS Web — STATUS REPORT & BUILD CONTEXT
 
 > Read this top-to-bottom before working on `pos_web/`. Update it at the end of EVERY phase.
-> Last updated: 2026-07-05 (Phase 1 complete)
+> Last updated: 2026-07-05 (Phase 2 complete)
 
 ## What this product is
 
@@ -40,7 +40,7 @@ feature (menu OCR, receipt OCR).
 | Picture | Screen | Status |
 |---|---|---|
 | petpooja13/14 | Billing (category rail, item grid, search + short-code, cart, service tabs, payment radios, Save/Save&Print/KOT/KOT&Print/Hold, Settle & Save, favorites) | ✅ Phase 1 |
-| petpooja15 | Table View (zones, dashed vacant tiles, legend, +Add Table, online-order Accept/Reject + accept modal) | Phase 2 — TODO |
+| petpooja15 | Table View (zones, dashed vacant tiles, legend, +Add Table, online-order Accept/Reject + accept modal) | ✅ Phase 2 |
 | petpooja16 | Operations hub icon grid (subset) | Phase 2/3 — TODO |
 | petpooja17 | Day-end report cards | Phase 3 — TODO |
 | petpooja10/18/19/20 | Analytics dashboards | Phase B (later) |
@@ -114,7 +114,32 @@ Billing screen per petpooja13/14 + the full browser printing stack.
 - Carry-over: tables/orders nav still placeholder (Phase 2); item-tile edge is neutral,
   blue when in cart (veg markers dropped, per plan).
 
-### Phase 2 — table view + orders + realtime — TODO
+### ✅ Phase 2 — table view + orders + realtime (2026-07-05)
+petpooja15 Table View + Orders list + the realtime socket.
+- **Nav store** (`state/nav.ts`): section routing lifted out of Shell so Tables/Orders can
+  route into Billing after prepping the cart (tap vacant → dine-in + table prefilled; tap
+  occupied → `cart.loadOrder`; Delivery / Pick Up quick-starts; top-bar New Order clears cart).
+- **Realtime** (`api/ws.ts`): reconnecting WebSocket (exponential backoff, jitter, ping/pong
+  keepalive). Any order/kot/settle event → `orders.refresh` (server wins, no trust in body).
+  Top-bar shows a live/reconnecting dot.
+- **Orders store** (`state/orders.ts`): recent-orders cache + pure derivations
+  (`pendingOnline`, `ongoingOrders`, `completedOrders`, `occupiedTables`, `tableStateOf`),
+  online accept/reject, and **void** = manager audit event + status→rejected (mirrors the
+  mobile `app_controller` flow — audit endpoint alone does NOT change status). New online
+  orders bump an unseen badge + play a WebAudio chime.
+- **Table View** (`screens/Tables.tsx`): zone sections from `pos.settings.floorLayout`, live
+  tiles (vacant dashed / running blue / running-KOT amber / paid green) with running amount +
+  elapsed, online-order rail (Accept modal w/ prep-time stepper + optional KOT print / Reject),
+  legend, and a **floor-layout editor** behind + Add Table (add/rename/remove zones & tables →
+  PATCH pos settings → reload).
+- **Orders** (`screens/Orders.tsx`): Ongoing / Completed tabs, Open-to-edit, receipt Reprint,
+  manager-only Void with reason modal.
+- **Shell**: boots menu + pos + orders and opens the socket on session; badge clears on Tables.
+- **Tests** (vitest, 29 passing total; +5 for order derivations). tsc clean, build green
+  (214 KB JS / 67 KB gzip).
+- Notes: `updateOrderDetails({prepMinutes})` on accept is best-effort (advisory, non-blocking).
+  "Paid" tile state is rare in our lifecycle (settle completes the order → table frees).
+
 ### Phase 3 — shift + day-end — TODO
 ### Phase 4 — offline outbox hardening — TODO
 ### Phase B — back-office (menu/inventory/analytics/reports) — LATER

@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { useSession } from '../state/session';
 import { useMenu } from '../state/menu';
 import { usePos } from '../state/pos';
+import { useCart } from '../state/cart';
+import { useNav, type NavSection } from '../state/nav';
+import { useOrders } from '../state/orders';
 import { t } from '../i18n/strings';
 import { Billing } from './Billing';
+import { Tables } from './Tables';
+import { Orders } from './Orders';
 import { Ops } from './Ops';
 import './shell.css';
-
-export type NavSection = 'billing' | 'tables' | 'orders' | 'ops';
 
 const NAV: { id: NavSection; icon: string; labelEn: string; labelBn: string }[] = [
   { id: 'billing', icon: '🧾', labelEn: 'Billing', labelBn: 'বিলিং' },
@@ -18,10 +21,13 @@ const NAV: { id: NavSection; icon: string; labelEn: string; labelBn: string }[] 
 
 export function Shell() {
   const { session, lang, setLang, logout } = useSession();
-  const [section, setSection] = useState<NavSection>('billing');
+  const section = useNav((s) => s.section);
+  const go = useNav((s) => s.go);
   const [online, setOnline] = useState(navigator.onLine);
   const loadMenu = useMenu((s) => s.load);
   const loadPos = usePos((s) => s.load);
+  const clearCart = useCart((s) => s.clear);
+  const orders = useOrders();
 
   useEffect(() => {
     const up = () => setOnline(true);
@@ -34,14 +40,29 @@ export function Shell() {
     };
   }, []);
 
-  // boot data: menu + POS settings/shift
+  // boot data: menu + POS settings/shift + orders, then open the realtime socket
   useEffect(() => {
     if (!session) return;
     void loadMenu(session.outletId);
     void loadPos(session.outletId);
-  }, [session, loadMenu, loadPos]);
+    void orders.load(session.outletId);
+    orders.connect(session.outletId, session.deviceToken);
+    return () => orders.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  // viewing Tables clears the "new online order" badge
+  useEffect(() => {
+    if (section === 'tables') orders.markSeen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
 
   if (!session) return null;
+
+  const newOrder = () => {
+    clearCart();
+    go('billing');
+  };
 
   return (
     <div className="shell-root">
@@ -51,7 +72,7 @@ export function Shell() {
           <span className="topbar-outlet">{session.outletName}</span>
         </div>
 
-        <button className="btn btn-primary topbar-new-order" onClick={() => setSection('billing')}>
+        <button className="btn btn-primary topbar-new-order" onClick={newOrder}>
           {t('newOrder', lang)}
         </button>
 
@@ -63,15 +84,19 @@ export function Shell() {
               key={n.id}
               className={`topbar-nav-btn ${section === n.id ? 'active' : ''}`}
               title={lang === 'bn' ? n.labelBn : n.labelEn}
-              onClick={() => setSection(n.id)}
+              onClick={() => go(n.id)}
             >
               <span className="topbar-nav-icon">{n.icon}</span>
               <span className="topbar-nav-label">{lang === 'bn' ? n.labelBn : n.labelEn}</span>
+              {n.id === 'tables' && orders.unseen > 0 && (
+                <span className="topbar-nav-badge">{orders.unseen}</span>
+              )}
             </button>
           ))}
         </nav>
 
         <div className="topbar-right">
+          <span className={`topbar-conn ${orders.connected ? 'up' : 'down'}`} title={orders.connected ? 'Live' : 'Reconnecting'} />
           <button
             className="topbar-lang"
             onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
@@ -85,13 +110,9 @@ export function Shell() {
 
       <main className="shell-body">
         {section === 'billing' && <Billing />}
+        {section === 'tables' && <Tables />}
+        {section === 'orders' && <Orders />}
         {section === 'ops' && <Ops />}
-        {(section === 'tables' || section === 'orders') && (
-          <div className="shell-placeholder card">
-            <h2>{NAV.find((n) => n.id === section)?.[lang === 'bn' ? 'labelBn' : 'labelEn']}</h2>
-            <p>{t('comingSoon', lang)}</p>
-          </div>
-        )}
       </main>
     </div>
   );

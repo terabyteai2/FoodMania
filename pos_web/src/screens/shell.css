@@ -20,17 +20,27 @@
 
 .topbar-nav { display: flex; gap: 2px; margin-left: auto; }
 .topbar-nav-btn {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 1px; width: 74px; height: 50px;
   background: none; border: none; border-radius: var(--r-sm);
-  color: var(--ink-2);
+  color: var(--ink-2); cursor: pointer;
 }
 .topbar-nav-btn:hover { background: var(--surface-sunk); }
 .topbar-nav-btn.active { color: var(--primary); background: var(--primary-soft); }
 .topbar-nav-icon { font-size: 17px; line-height: 1; }
 .topbar-nav-label { font-size: 10.5px; font-weight: 600; }
+.topbar-nav-badge {
+  position: absolute; top: 4px; right: 12px;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  background: var(--danger); color: #fff; font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
 
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-conn { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.topbar-conn.up { background: var(--success); }
+.topbar-conn.down { background: var(--warning-line); }
 .topbar-lang {
   border: 1px solid var(--line-strong); background: var(--surface);
   border-radius: var(--r-sm); padding: 5px 10px; font-size: var(--fs-12); font-weight: 700;
