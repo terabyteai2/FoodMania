@@ -68,7 +68,8 @@ export interface MenuItemWire {
   categoryBn?: string | null;
   isAvailable: boolean;
   imageUrl?: string | null;
-  tags?: string[] | null; // "icon:pizza", "option:Large:50", "addon:30:Cheese", "size:...", short-code tag
+  tags?: string[] | null; // "icon:pizza", "option:Large:50", "addon:30:Cheese", "size:Name:price", "discount:percent:n"
+  shortCode?: number | null;
   version: number;
   updatedAt?: string | null;
   deletedAt?: string | null;

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSession } from '../state/session';
+import { useMenu } from '../state/menu';
+import { usePos } from '../state/pos';
 import { t } from '../i18n/strings';
+import { Billing } from './Billing';
+import { Ops } from './Ops';
 import './shell.css';
 
 export type NavSection = 'billing' | 'tables' | 'orders' | 'ops';
@@ -16,6 +20,8 @@ export function Shell() {
   const { session, lang, setLang, logout } = useSession();
   const [section, setSection] = useState<NavSection>('billing');
   const [online, setOnline] = useState(navigator.onLine);
+  const loadMenu = useMenu((s) => s.load);
+  const loadPos = usePos((s) => s.load);
 
   useEffect(() => {
     const up = () => setOnline(true);
@@ -27,6 +33,13 @@ export function Shell() {
       window.removeEventListener('offline', down);
     };
   }, []);
+
+  // boot data: menu + POS settings/shift
+  useEffect(() => {
+    if (!session) return;
+    void loadMenu(session.outletId);
+    void loadPos(session.outletId);
+  }, [session, loadMenu, loadPos]);
 
   if (!session) return null;
 
@@ -71,10 +84,14 @@ export function Shell() {
       {!online && <div className="offline-banner">{t('offline', lang)}</div>}
 
       <main className="shell-body">
-        <div className="shell-placeholder card">
-          <h2>{NAV.find((n) => n.id === section)?.[lang === 'bn' ? 'labelBn' : 'labelEn']}</h2>
-          <p>{t('comingSoon', lang)}</p>
-        </div>
+        {section === 'billing' && <Billing />}
+        {section === 'ops' && <Ops />}
+        {(section === 'tables' || section === 'orders') && (
+          <div className="shell-placeholder card">
+            <h2>{NAV.find((n) => n.id === section)?.[lang === 'bn' ? 'labelBn' : 'labelEn']}</h2>
+            <p>{t('comingSoon', lang)}</p>
+          </div>
+        )}
       </main>
     </div>
   );

@@ -1,7 +1,7 @@
 # QuickBytes POS Web — STATUS REPORT & BUILD CONTEXT
 
 > Read this top-to-bottom before working on `pos_web/`. Update it at the end of EVERY phase.
-> Last updated: 2026-07-04 (Phase 0 complete)
+> Last updated: 2026-07-05 (Phase 1 complete)
 
 ## What this product is
 
@@ -39,7 +39,7 @@ feature (menu OCR, receipt OCR).
 ## Picture → screen map
 | Picture | Screen | Status |
 |---|---|---|
-| petpooja13/14 | Billing (category rail, item grid, search + short-code, cart, service tabs, payment radios, Save/Save&Print/KOT/KOT&Print/Hold, Settle & Save, favorites) | Phase 1 — TODO |
+| petpooja13/14 | Billing (category rail, item grid, search + short-code, cart, service tabs, payment radios, Save/Save&Print/KOT/KOT&Print/Hold, Settle & Save, favorites) | ✅ Phase 1 |
 | petpooja15 | Table View (zones, dashed vacant tiles, legend, +Add Table, online-order Accept/Reject + accept modal) | Phase 2 — TODO |
 | petpooja16 | Operations hub icon grid (subset) | Phase 2/3 — TODO |
 | petpooja17 | Day-end report cards | Phase 3 — TODO |
@@ -52,7 +52,7 @@ feature (menu OCR, receipt OCR).
 Base = same origin in prod; dev uses `VITE_API_BASE`. Bearer = deviceToken. Envelope: `{data, error}`.
 
 - Auth: `POST /admin/login {usernameOrEmail, password, serverId}` → AuthPayload; `POST /admin/phone/send-otp {phone}` / `verify-otp {phone, code}` → `{status:'login', login: AuthPayload}`; `POST /admin/demo/manager-login` (dev-gated); `GET /admin/access` (subscription).
-- Menu: `GET /outlets/{o}/menu` — items with `_en/_bn`, tags (options `option:Name:delta`, addons `addon:price:Name`, sizes `size:Name:price`, icon, discount; short code lives in tags — verify exact key in Phase 1 against `admin_app/lib/src/models/menu_item.dart`).
+- Menu: `GET /outlets/{o}/menu` — items with `_en/_bn`, tags (options `option:Name:delta`, addons `addon:price:Name`, sizes `size:Name:price`, icon, discount). Short code is a top-level int field `shortCode` (confirmed Phase 1), NOT a tag.
 - Orders: `GET /outlets/{o}/orders?since=`; `POST /outlets/{o}/orders` (client-generated `id`); `PATCH .../orders/{id}/status|/items|/` .
 - POS: `GET/PATCH /outlets/{o}/pos/settings` (floorLayout/vat/serviceCharge/discountPresets/dailySalesTarget); `GET .../pos/shifts/current`; `POST .../pos/shifts/open`, `.../shifts/{id}/close`; `POST .../pos/orders/{id}/kot` (batchId); `POST .../pos/orders/{id}/settle` (split lines, eventId idempotent, server re-validates totals — 422 on mismatch, 409 if shift closed); `POST .../pos/orders/{id}/audit` (void/refund/comp, manager+); `GET .../pos/reports?days=`.
 - Realtime: `WS /ws/{outlet_id}?token=` — JSON events + `{type:'ping'}` keepalive. Reconnect w/ capped backoff (see `admin_app/lib/src/services/cloud_realtime_service.dart` for the reference impl).
@@ -85,10 +85,34 @@ Base = same origin in prod; dev uses `VITE_API_BASE`. Bearer = deviceToken. Enve
   `backend/build_pos.sh`; pos_web step in `deploy/redeploy.sh`.
 - Verified: `npm run build` (tsc + vite) green; `python3 -m py_compile backend/main.py` green.
 
-### ⏭ Phase 1 — billing + printing (NEXT)
-Billing screen per petpooja13/14 + full printing module. See task list. Open items to
-resolve at start: exact short-code tag key in menu tags; item-tile left-edge color policy
-(veg markers dropped → use neutral edge, blue when in cart).
+### ✅ Phase 1 — billing + printing (2026-07-05)
+Billing screen per petpooja13/14 + the full browser printing stack.
+- **Core money/menu logic** (`src/core/money.ts`, `core/tags.ts`, `state/menu.ts`,
+  `state/cart.ts`, `state/pos.ts`): totals = subtotal + VAT + service charge + delivery −
+  discount (percent/flat/fixed, clamped ≥ 0), `formatTk` (৳, lakh grouping), tag decoding
+  (options/addons/sizes/includes/icon/discount), favorites (localStorage), held drafts,
+  order create (client UUID, source `desktop_pos`, status `accepted`) / KOT (batchId) /
+  settle (eventId) via the existing API.
+  - **Short code** confirmed = top-level `MenuItem.shortCode` (int), NOT a tag. Extracted
+    `matchShortCode(items, input)` (digits-only, available-only) — unit tested.
+- **Billing screen** (`screens/Billing.tsx` + `billing.css`): 3-column grid (category rail w/
+  Favorite Items · item grid w/ search + short-code Enter · cart pane), service tabs
+  (Dine In → table modal, Delivery → address/phone sheet, Pick Up), qty steppers,
+  CustomizeModal (size/option/addon), discount modal (presets from pos settings),
+  dark payment strip (cash/card/bkash/nagad/pay_later + Split), actions Save / Save & Print /
+  KOT / KOT & Print / Hold / Settle & Save, held-orders modal, shift-open gate modal.
+- **Printing** (`src/print/*`): `escpos.ts` raster encoder (canvas → 1-bit threshold →
+  `GS v 0` bands + init/feed/cut/drawer-kick), `ticketRenderer.ts` (canvas KOT / receipt /
+  test-ticket painters, 384/576 dots, Bengali via canvas fonts), `webusb.ts` (bulk-out,
+  16KB chunks), `webbluetooth.ts` (BLE GATT, 180B chunks), `printManager.ts` (per-role
+  bill/KOT prefs in localStorage + `window.print()` fallback), `PrinterSettings.tsx` in Ops.
+- **Ops hub** (`screens/Ops.tsx`): petpooja16-style tile grid — Printers pane live; shift
+  status tile; Day End / Sync tiles stubbed for later phases.
+- **Tests** (vitest, 24 passing): money math, ESC/POS encoder bytes, short-code matcher.
+- Verified: `tsc --noEmit` clean, `vitest run` 24/24 green, `npm run build` green
+  (198 KB JS / 63 KB gzip), fonts copied into `pos_dist/fonts/`.
+- Carry-over: tables/orders nav still placeholder (Phase 2); item-tile edge is neutral,
+  blue when in cart (veg markers dropped, per plan).
 
 ### Phase 2 — table view + orders + realtime — TODO
 ### Phase 3 — shift + day-end — TODO
