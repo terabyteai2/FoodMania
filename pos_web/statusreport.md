@@ -1,7 +1,7 @@
 # QuickBytes POS Web — STATUS REPORT & BUILD CONTEXT
 
 > Read this top-to-bottom before working on `pos_web/`. Update it at the end of EVERY phase.
-> Last updated: 2026-07-05 (Phase 3 complete)
+> Last updated: 2026-07-05 (Phase 4 complete — core POS done)
 
 ## What this product is
 
@@ -159,7 +159,39 @@ petpooja17 Day-End + full shift open/close with cash counting.
   `paymentSplit` keyed by lowercase payment_method; `auditCounts` keyed by action.
 - 29 tests still green; tsc clean; build green (221 KB JS / 69 KB gzip).
 
-### Phase 4 — offline outbox hardening — TODO
+### ✅ Phase 4 — offline outbox hardening (2026-07-05)
+IndexedDB cache + mutation outbox so the core FOH loop survives a network blip.
+- **`offline/db.ts`**: `idb`-backed store — a `kv` cache (menu / settings / shift /
+  orders snapshots, keyed by `type:outletId`) and an autoincrement `outbox` store.
+  All helpers are best-effort (swallow + no-op if IDB is unavailable).
+- **`offline/outbox.ts`** (pure, unit-tested): op union (createOrder / updateOrderItems /
+  updateOrderStatus / sendKot / settleOrder / auditOrder), `enqueue` (idempotent per key),
+  `dispatch`, `classifyError` (offline/5xx/408/429 = transient; 4xx = permanent), and
+  `replayOutbox` — FIFO, **stops at the first transient failure to preserve ordering**,
+  **dead-letters permanent failures** so the rest drains. Decoupled via `OutboxStore` /
+  `OutboxApi` interfaces (tested with in-memory fakes).
+- **`state/sync.ts`**: owns the IDB outbox + real api, exposes `queued` / `dead` /
+  `replaying`, `enqueue`, `flush(outletId)` (replay → refetch orders to reconcile),
+  `discardDead`.
+- **Boot hydration**: menu/pos/orders `load()` are now network-first with an IDB fallback
+  and write-through, so an offline boot still paints the menu, floor and open orders.
+- **Optimistic writes**: `cart.saveOrder / sendKot / settle` catch offline/5xx, enqueue the
+  op (reusing the existing idempotency keys: order UUID, KOT batchId, settle by order id),
+  and apply the result locally so billing/KOT/settle keep working offline. (accept/reject/
+  void stay online-only — they act on orders that only arrive over the network anyway, and
+  it avoids an orders↔sync import cycle.)
+- **Triggers**: flush on `online` event, on WS (re)connect, and on boot (drains a prior
+  offline session). Top bar shows a "⇅ N" queued chip + a "⚠ N" failed chip (→ Operations);
+  Ops has a Sync tile + dead-letter list with Retry / Discard.
+- **Tests** (vitest, 36 passing total; +7 outbox engine). tsc clean; build green
+  (230 KB JS / 72 KB gzip incl. idb).
+- Manual test still owed: kill the network in DevTools mid-KOT/settle, confirm queue +
+  replay-on-reconnect (needs the deployed API / a browser).
+
+---
+
+**Core POS (Phases 0–4) is complete.** Remaining work is Phase B (back-office).
+
 ### Phase B — back-office (menu/inventory/analytics/reports) — LATER
 
 ## Dev workflow

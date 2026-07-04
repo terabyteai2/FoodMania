@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from '../api/client';
 import type { MenuItemWire } from '../api/types';
 import { parseExtras, effectiveUnitPrice, type MenuExtras } from '../core/tags';
+import { cacheGet, cacheSet } from '../offline/db';
 
 const FAV_KEY = 'qbpos.favorites';
 
@@ -37,26 +38,33 @@ export const useMenu = create<MenuState>((set, get) => ({
   loading: false,
   error: null,
 
+  // Network-first with an IndexedDB fallback so the menu is available on an offline boot.
   load: async (outletId) => {
     set({ loading: true, error: null });
+    let wire: MenuItemWire[] | null = null;
     try {
-      const wire = await api.fetchMenu(outletId);
-      const items = wire
-        .filter((w) => !w.deletedAt)
-        .map((raw): PosMenuItem => {
-          const extras = parseExtras(raw.tags);
-          return {
-            raw,
-            extras,
-            price: effectiveUnitPrice(raw.price, extras),
-            category: (raw.categoryEn || raw.category || 'Uncategorized').trim() || 'Uncategorized',
-          };
-        });
-      const categories = [...new Set(items.map((i) => i.category))].sort((a, b) => a.localeCompare(b));
-      set({ items, categories, loading: false });
+      wire = await api.fetchMenu(outletId);
+      await cacheSet(`menu:${outletId}`, wire);
     } catch (e) {
-      set({ loading: false, error: e instanceof Error ? e.message : String(e) });
+      wire = await cacheGet<MenuItemWire[]>(`menu:${outletId}`);
+      if (!wire) {
+        set({ loading: false, error: e instanceof Error ? e.message : String(e) });
+        return;
+      }
     }
+    const items = wire
+      .filter((w) => !w.deletedAt)
+      .map((raw): PosMenuItem => {
+        const extras = parseExtras(raw.tags);
+        return {
+          raw,
+          extras,
+          price: effectiveUnitPrice(raw.price, extras),
+          category: (raw.categoryEn || raw.category || 'Uncategorized').trim() || 'Uncategorized',
+        };
+      });
+    const categories = [...new Set(items.map((i) => i.category))].sort((a, b) => a.localeCompare(b));
+    set({ items, categories, loading: false });
   },
 
   toggleFavorite: (itemId) => {

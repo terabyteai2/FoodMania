@@ -3,7 +3,7 @@
 // further edits PATCH items; KOT and settle use the /pos endpoints.
 
 import { create } from 'zustand';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import type {
   OrderLineWire, OrderWire, PaymentMethod, PosSettlementLineWire, ServiceType,
 } from '../api/types';
@@ -11,6 +11,12 @@ import { computeTotals, type BillTotals, type DiscountInput } from '../core/mone
 import { round2 } from '../core/tags';
 import { useSession } from './session';
 import { usePos } from './pos';
+import { useSync } from './sync';
+
+/** Should this failed write be queued for offline replay (vs. surfaced as an error)? */
+function shouldQueue(e: unknown): boolean {
+  return e instanceof ApiError && (e.offline || e.status === 0 || e.status >= 500);
+}
 
 const HELD_KEY = 'qbpos.heldOrders';
 
@@ -239,7 +245,7 @@ export const useCart = create<CartState>((set, get) => ({
 
       let order: OrderWire;
       if (s.order) {
-        order = await api.updateOrderItems(session.outletId, s.order.id, {
+        const itemsBody = {
           items: common.items,
           subtotal: common.subtotal,
           totalAmount: common.totalAmount,
@@ -247,18 +253,39 @@ export const useCart = create<CartState>((set, get) => ({
           vatAmount: common.vatAmount,
           deliveryCharge: common.deliveryCharge,
           updatedAt: nowIso,
-        });
+        };
+        try {
+          order = await api.updateOrderItems(session.outletId, s.order.id, itemsBody);
+        } catch (e) {
+          if (!shouldQueue(e)) throw e;
+          await useSync.getState().enqueue(
+            { kind: 'updateOrderItems', outletId: session.outletId, orderId: s.order.id, body: itemsBody },
+            `items:${s.order.id}:${nowIso}`,
+          );
+          order = { ...s.order, ...common, id: s.order.id, serialNumber: s.order.serialNumber, updatedAt: nowIso } as OrderWire;
+        }
       } else {
-        order = await api.createOrder(session.outletId, {
-          id: crypto.randomUUID(),
+        const id = crypto.randomUUID();
+        const createBody = {
+          id,
           serialNumber: 0,
           source: 'desktop_pos',
-          status: 'accepted',
+          status: 'accepted' as const,
           createdByAccountId: session.account.id,
           createdByRole: session.role,
           createdAt: nowIso,
           ...common,
-        });
+        };
+        try {
+          order = await api.createOrder(session.outletId, createBody);
+        } catch (e) {
+          if (!shouldQueue(e)) throw e;
+          await useSync.getState().enqueue(
+            { kind: 'createOrder', outletId: session.outletId, body: createBody },
+            `create:${id}`,
+          );
+          order = createBody as unknown as OrderWire;
+        }
       }
       set({ order });
       return order;
@@ -277,17 +304,24 @@ export const useCart = create<CartState>((set, get) => ({
     set({ busy: true });
     try {
       const batchId = crypto.randomUUID();
-      const updated = await api.sendKot(session.outletId, order.id, {
-        batchId,
-        itemIds: pending.map((l) => l.lineId),
-        note,
-      });
+      const body = { batchId, itemIds: pending.map((l) => l.lineId), note };
       const sentAt = new Date().toISOString();
-      set({
-        order: updated,
-        lines: get().lines.map((l) => (l.kotSentAt ? l : { ...l, kotSentAt: sentAt })),
-      });
-      return { order: updated, batchLines: pending, batchId };
+      const markSent = () =>
+        set((prev) => ({ lines: prev.lines.map((l) => (l.kotSentAt ? l : { ...l, kotSentAt: sentAt })) }));
+      try {
+        const updated = await api.sendKot(session.outletId, order.id, body);
+        set({ order: updated });
+        markSent();
+        return { order: updated, batchLines: pending, batchId };
+      } catch (e) {
+        if (!shouldQueue(e)) throw e;
+        await useSync.getState().enqueue(
+          { kind: 'sendKot', outletId: session.outletId, orderId: order.id, body },
+          `kot:${batchId}`,
+        );
+        markSent();
+        return { order, batchLines: pending, batchId };
+      }
     } finally {
       set({ busy: false });
     }
@@ -301,19 +335,35 @@ export const useCart = create<CartState>((set, get) => ({
     if (!shift) throw new Error('Open a shift before settling');
     const order = s.order ?? (await get().saveOrder());
     const totals = get().totals();
+    const body = {
+      shiftId: shift.id,
+      discountPresetId: s.discount?.presetId ?? null,
+      customDiscountLabel: s.discount?.presetId ? null : s.discount?.label ?? null,
+      discountAmount: totals.discountAmount,
+      serviceChargeRatePercent: s.serviceType === 'dine_in' ? settings?.serviceChargePercent ?? 0 : 0,
+      serviceChargeAmount: totals.serviceChargeAmount,
+      totalAmount: totals.total,
+      settlements,
+    };
     set({ busy: true });
     try {
-      const settled = await api.settleOrder(session.outletId, order.id, {
-        shiftId: shift.id,
-        discountPresetId: s.discount?.presetId ?? null,
-        customDiscountLabel: s.discount?.presetId ? null : s.discount?.label ?? null,
-        discountAmount: totals.discountAmount,
-        serviceChargeRatePercent: s.serviceType === 'dine_in' ? settings?.serviceChargePercent ?? 0 : 0,
-        serviceChargeAmount: totals.serviceChargeAmount,
+      return await api.settleOrder(session.outletId, order.id, body);
+    } catch (e) {
+      if (!shouldQueue(e)) throw e;
+      // Queue the settlement (server dedupes by settlement eventId) and complete locally.
+      await useSync.getState().enqueue(
+        { kind: 'settleOrder', outletId: session.outletId, orderId: order.id, body },
+        `settle:${order.id}`,
+      );
+      return {
+        ...order,
+        status: 'completed',
+        settledAt: new Date().toISOString(),
+        paymentMethod: (settlements[0]?.paymentMethod ?? s.paymentMethod) as PaymentMethod,
         totalAmount: totals.total,
-        settlements,
-      });
-      return settled;
+        serviceChargeAmount: totals.serviceChargeAmount,
+        discountAmount: totals.discountAmount,
+      } as OrderWire;
     } finally {
       set({ busy: false });
     }

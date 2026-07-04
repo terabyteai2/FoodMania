@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { api, wsUrl } from '../api/client';
 import { connectRealtime, type RealtimeHandle, type WsEvent } from '../api/ws';
+import { cacheGet, cacheSet } from '../offline/db';
 import type { OrderWire, ServiceType } from '../api/types';
 
 interface OrdersState {
@@ -70,12 +71,22 @@ export const useOrders = create<OrdersState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const orders = await api.fetchOrders(outletId);
+      await cacheSet(`orders:${outletId}`, orders);
       set({
         orders,
         loading: false,
         knownPendingIds: orders.filter((o) => o.status === 'pending').map((o) => o.id),
       });
     } catch (e) {
+      const cached = await cacheGet<OrderWire[]>(`orders:${outletId}`);
+      if (cached) {
+        set({
+          orders: cached,
+          loading: false,
+          knownPendingIds: cached.filter((o) => o.status === 'pending').map((o) => o.id),
+        });
+        return;
+      }
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   },
@@ -83,6 +94,7 @@ export const useOrders = create<OrdersState>((set, get) => ({
   refresh: async (outletId) => {
     try {
       const orders = await api.fetchOrders(outletId);
+      void cacheSet(`orders:${outletId}`, orders);
       const prev = new Set(get().knownPendingIds);
       const pending = orders.filter((o) => o.status === 'pending');
       const fresh = pending.filter((o) => !prev.has(o.id));

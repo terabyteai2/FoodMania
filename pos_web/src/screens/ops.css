@@ -38,3 +38,14 @@ button.ops-tile:hover { border-color: var(--primary); color: var(--primary); }
 .printer-drawer { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); }
 .printer-msg { font-size: var(--fs-13); font-weight: 600; color: var(--ink-2); }
 .printer-note { font-size: var(--fs-12); color: var(--muted); max-width: 640px; line-height: 1.5; }
+
+.ops-sync { padding: 16px; display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.ops-sync h3 { font-size: var(--fs-15); font-weight: 700; }
+.ops-sync-line { display: flex; align-items: center; gap: 12px; font-size: var(--fs-13); color: var(--ink-2); }
+.ops-sync-line .btn { margin-left: auto; }
+.ops-dead {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 10px; border: 1px solid var(--danger); border-radius: 8px; background: var(--danger-soft);
+}
+.ops-dead-kind { font-weight: 700; font-size: var(--fs-13); margin-right: 8px; }
+.ops-dead-err { font-size: var(--fs-12); color: var(--ink-2); }

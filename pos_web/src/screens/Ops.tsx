@@ -6,6 +6,7 @@ import { PrinterSettings } from '../components/PrinterSettings';
 import { DayEnd } from './DayEnd';
 import { usePos } from '../state/pos';
 import { useSession } from '../state/session';
+import { useSync } from '../state/sync';
 import { formatTk } from '../core/money';
 import './ops.css';
 
@@ -15,6 +16,7 @@ export function Ops() {
   const [pane, setPane] = useState<OpsPane>('home');
   const pos = usePos();
   const session = useSession((s) => s.session)!;
+  const sync = useSync();
 
   if (pane === 'printers') {
     return (
@@ -53,11 +55,37 @@ export function Ops() {
           <span className="ops-tile-icon">💵</span>
           <span>{pos.shift ? `Shift open · ${formatTk(pos.shift.openingCash)} float` : 'Open shift'}</span>
         </button>
-        <div className="ops-tile card ops-tile-static ops-tile-soon">
+        <button
+          className="ops-tile card"
+          onClick={() => sync.flush(session.outletId)}
+          disabled={sync.replaying}
+        >
           <span className="ops-tile-icon">🔄</span>
-          <span>Sync (Phase 4)</span>
-        </div>
+          <span>
+            {sync.replaying ? 'Syncing…' : sync.queued > 0 ? `Sync now · ${sync.queued} queued` : 'All synced'}
+          </span>
+        </button>
       </div>
+
+      {(sync.queued > 0 || sync.dead.length > 0) && (
+        <section className="card ops-sync">
+          <h3>Offline sync</h3>
+          <p className="ops-sync-line">
+            {sync.queued} queued · {sync.dead.length} failed
+            <button className="btn btn-outline btn-sm" disabled={sync.replaying}
+              onClick={() => sync.flush(session.outletId)}>Retry now</button>
+          </p>
+          {sync.dead.map((r) => (
+            <div className="ops-dead" key={r.seq}>
+              <div>
+                <span className="ops-dead-kind">{r.op.kind}</span>
+                <span className="ops-dead-err">{r.lastError ?? 'rejected by server'}</span>
+              </div>
+              <button className="btn btn-danger-outline btn-sm" onClick={() => sync.discardDead(r.seq)}>Discard</button>
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }

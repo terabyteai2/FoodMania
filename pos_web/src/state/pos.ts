@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import type { PosSettingsWire, PosShiftWire } from '../api/types';
+import { cacheGet, cacheSet } from '../offline/db';
 
 interface PosState {
   settings: PosSettingsWire | null;
@@ -20,6 +21,7 @@ export const usePos = create<PosState>((set, get) => ({
   loading: false,
   error: null,
 
+  // Network-first with an IndexedDB fallback (floor layout + tax rates must render offline).
   load: async (outletId) => {
     set({ loading: true, error: null });
     try {
@@ -27,8 +29,16 @@ export const usePos = create<PosState>((set, get) => ({
         api.fetchPosSettings(outletId),
         api.fetchCurrentShift(outletId),
       ]);
+      await cacheSet(`settings:${outletId}`, settings);
+      await cacheSet(`shift:${outletId}`, shift ?? null);
       set({ settings, shift, loading: false });
     } catch (e) {
+      const settings = await cacheGet<PosSettingsWire>(`settings:${outletId}`);
+      if (settings) {
+        const shift = await cacheGet<PosShiftWire | null>(`shift:${outletId}`);
+        set({ settings, shift: shift ?? null, loading: false });
+        return;
+      }
       set({ loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   },

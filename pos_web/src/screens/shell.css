@@ -41,6 +41,11 @@
 .topbar-conn { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .topbar-conn.up { background: var(--success); }
 .topbar-conn.down { background: var(--warning-line); }
+.topbar-sync {
+  font-size: var(--fs-12); font-weight: 700; padding: 3px 8px; border-radius: 999px;
+  background: var(--warning-line); color: #3a2e00; border: none;
+}
+.topbar-sync.bad { background: var(--danger); color: #fff; cursor: pointer; }
 .topbar-lang {
   border: 1px solid var(--line-strong); background: var(--surface);
   border-radius: var(--r-sm); padding: 5px 10px; font-size: var(--fs-12); font-weight: 700;

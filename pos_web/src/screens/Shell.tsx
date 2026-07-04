@@ -5,6 +5,7 @@ import { usePos } from '../state/pos';
 import { useCart } from '../state/cart';
 import { useNav, type NavSection } from '../state/nav';
 import { useOrders } from '../state/orders';
+import { useSync } from '../state/sync';
 import { t } from '../i18n/strings';
 import { Billing } from './Billing';
 import { Tables } from './Tables';
@@ -28,9 +29,14 @@ export function Shell() {
   const loadPos = usePos((s) => s.load);
   const clearCart = useCart((s) => s.clear);
   const orders = useOrders();
+  const sync = useSync();
 
   useEffect(() => {
-    const up = () => setOnline(true);
+    const up = () => {
+      setOnline(true);
+      const outletId = useSession.getState().session?.outletId;
+      if (outletId) void useSync.getState().flush(outletId);
+    };
     const down = () => setOnline(false);
     window.addEventListener('online', up);
     window.addEventListener('offline', down);
@@ -47,9 +53,18 @@ export function Shell() {
     void loadPos(session.outletId);
     void orders.load(session.outletId);
     orders.connect(session.outletId, session.deviceToken);
+    // drain anything queued from a previous (offline) session
+    void useSync.getState().refreshCounts();
+    void useSync.getState().flush(session.outletId);
     return () => orders.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  // flush the outbox whenever the realtime socket (re)connects
+  useEffect(() => {
+    if (orders.connected && session) void useSync.getState().flush(session.outletId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders.connected]);
 
   // viewing Tables clears the "new online order" badge
   useEffect(() => {
@@ -96,6 +111,17 @@ export function Shell() {
         </nav>
 
         <div className="topbar-right">
+          {sync.queued > 0 && (
+            <span className="topbar-sync" title="Writes queued offline — will sync when back online">
+              ⇅ {sync.queued}{sync.replaying ? '…' : ''}
+            </span>
+          )}
+          {sync.dead.length > 0 && (
+            <button
+              className="topbar-sync bad" title="Failed writes — open Operations"
+              onClick={() => go('ops')}
+            >⚠ {sync.dead.length}</button>
+          )}
           <span className={`topbar-conn ${orders.connected ? 'up' : 'down'}`} title={orders.connected ? 'Live' : 'Reconnecting'} />
           <button
             className="topbar-lang"
