@@ -73,6 +73,20 @@ say "Building platform admin"
 VITE_BASE_PATH=/admin/ npm run build --silent 2>/dev/null || die "Platform admin build failed"
 cd "${REPO_ROOT}"
 
+if [[ -d "${REPO_ROOT}/pos_web" ]]; then
+  say "Installing POS web dependencies"
+  cd "${REPO_ROOT}/pos_web"
+  if [[ -f package-lock.json ]]; then
+    npm ci --silent 2>/dev/null || die "POS web npm ci failed"
+  else
+    npm install --silent 2>/dev/null || die "POS web npm install failed"
+  fi
+
+  say "Building POS web app"
+  npm run build --silent 2>/dev/null || die "POS web build failed"
+  cd "${REPO_ROOT}"
+fi
+
 if [[ -f "${REPO_ROOT}/backend/.env" ]]; then
   say "Syncing backend .env to VPS"
   bash "${SCRIPT_DIR}/push-backend-env.sh" || true

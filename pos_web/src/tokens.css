@@ -1,0 +1,136 @@
+/* ============================================================
+   QuickBytes POS — design tokens
+   Source of truth: admin_app/context_pictures/petpooja13..23.png
+   One substitution only: Petpooja red (#E23744 family) → blue #2F4FE0.
+   Everything else copies the pictures.
+   ============================================================ */
+
+/* ---------- fonts (self-hosted) ---------- */
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-Regular.ttf'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-Medium.ttf'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-SemiBold.ttf'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-Bold.ttf'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-ExtraBold.ttf'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Hind Siliguri'; src: url('/pos/fonts/HindSiliguri-Regular.ttf'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Hind Siliguri'; src: url('/pos/fonts/HindSiliguri-Medium.ttf'); font-weight: 500 700; font-display: swap; }
+
+:root {
+  /* ---------- brand (the one substitution) ---------- */
+  --primary: #2F4FE0;          /* every Petpooja red CTA/tab/highlight */
+  --primary-dark: #2440B8;     /* hover/pressed */
+  --primary-soft: #EEF1FE;     /* selected wash */
+  --secondary: #1E2A44;        /* navy (Petpooja dark secondary buttons) */
+
+  /* ---------- neutrals (from pictures) ---------- */
+  --bg: #F3F4F6;               /* page background */
+  --surface: #FFFFFF;
+  --surface-sunk: #F1F3F6;
+  --line: #E3E6EA;
+  --line-strong: #C9CFD8;
+  --ink: #23262B;
+  --ink-2: #5A6475;
+  --muted: #8A93A3;
+
+  /* dark chrome (billing left rail + payment strip, petpooja13) */
+  --rail-bg: #3A4048;
+  --rail-item: #454C55;
+  --rail-line: #2F343B;
+  --strip-bg: #2E3237;         /* dark payment/settlement strip */
+  --strip-ink: #FFFFFF;
+
+  /* ---------- signals (unchanged per rules) ---------- */
+  --success: #1E9E5A;
+  --success-soft: #E3F4EA;
+  --favorite: #3FA45B;         /* green "Favorite Items" rail entry */
+  --warning: #F7C948;          /* running/occupied yellow family */
+  --warning-ink: #5C4A00;
+  --warning-line: #DFAF2B;
+  --danger: #D8434A;           /* destructive only */
+  --danger-soft: #FBE9EA;
+
+  /* table states (petpooja15 legend; mobile occupied-yellow convention) */
+  --state-running: #F7C948;    /* running KOT table */
+  --state-printed: #9DB2F2;    /* printed table */
+  --state-paid: #57BE7F;       /* paid table */
+
+  /* ---------- geometry (measured at 1920w) ---------- */
+  --topbar-h: 60px;
+  --rail-w: 190px;
+  --cart-w: 400px;
+  --tab-h: 44px;
+  --input-h: 40px;
+  --btn-h: 42px;
+  --tile-h: 64px;
+  --table-tile: 96px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+
+  /* ---------- type ---------- */
+  --font: 'Plus Jakarta Sans', 'Hind Siliguri', system-ui, sans-serif;
+  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px;
+  --fs-15: 15px; --fs-16: 16px; --fs-18: 18px; --fs-20: 20px;
+  --fs-24: 24px; --fs-28: 28px;
+
+  --shadow-soft: 0 1px 3px rgba(20, 24, 34, 0.08);
+  --shadow-pop: 0 8px 28px rgba(20, 24, 34, 0.18);
+}
+
+/* ---------- reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--fs-14);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+h1, h2, h3, h4, p { margin: 0; }
+
+/* ---------- shared primitives ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--btn-h); padding: 0 18px;
+  border-radius: var(--r-sm); border: 1px solid transparent;
+  font-size: var(--fs-14); font-weight: 600; white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+.btn-dark { background: var(--secondary); color: #fff; }
+.btn-dark:hover:not(:disabled) { filter: brightness(1.15); }
+.btn-outline { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.btn-outline:hover:not(:disabled) { border-color: var(--ink-2); }
+.btn-danger-outline { background: var(--surface); color: var(--danger); border-color: var(--danger); }
+.btn-sm { height: 34px; padding: 0 12px; font-size: var(--fs-13); }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); }
+.input {
+  height: var(--input-h); padding: 0 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  font-size: var(--fs-14); color: var(--ink); background: var(--surface);
+  outline: none; width: 100%;
+}
+.input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-md); box-shadow: var(--shadow-soft);
+}
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(20, 24, 34, 0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal {
+  background: var(--surface); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop); max-height: 88vh; overflow: auto;
+}
+
+.error-text { color: var(--danger); font-size: var(--fs-13); }
