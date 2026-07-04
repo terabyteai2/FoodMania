@@ -1,7 +1,7 @@
 # QuickBytes POS Web — STATUS REPORT & BUILD CONTEXT
 
 > Read this top-to-bottom before working on `pos_web/`. Update it at the end of EVERY phase.
-> Last updated: 2026-07-05 (Phase 2 complete)
+> Last updated: 2026-07-05 (Phase 3 complete)
 
 ## What this product is
 
@@ -41,8 +41,8 @@ feature (menu OCR, receipt OCR).
 |---|---|---|
 | petpooja13/14 | Billing (category rail, item grid, search + short-code, cart, service tabs, payment radios, Save/Save&Print/KOT/KOT&Print/Hold, Settle & Save, favorites) | ✅ Phase 1 |
 | petpooja15 | Table View (zones, dashed vacant tiles, legend, +Add Table, online-order Accept/Reject + accept modal) | ✅ Phase 2 |
-| petpooja16 | Operations hub icon grid (subset) | Phase 2/3 — TODO |
-| petpooja17 | Day-end report cards | Phase 3 — TODO |
+| petpooja16 | Operations hub icon grid (subset: Printers, Day End, Shift) | ✅ Phase 1/3 |
+| petpooja17 | Day-end report cards | ✅ Phase 3 |
 | petpooja10/18/19/20 | Analytics dashboards | Phase B (later) |
 | petpooja11 | VAT report w/ print/download | Phase B |
 | petpooja12 | Menu bulk management (no channel toggles) | Phase B |
@@ -140,7 +140,25 @@ petpooja15 Table View + Orders list + the realtime socket.
 - Notes: `updateOrderDetails({prepMinutes})` on accept is best-effort (advisory, non-blocking).
   "Paid" tile state is rare in our lifecycle (settle completes the order → table frees).
 
-### Phase 3 — shift + day-end — TODO
+### ✅ Phase 3 — shift + day-end (2026-07-05)
+petpooja17 Day-End + full shift open/close with cash counting.
+- **DenominationCounter** (`components/DenominationCounter.tsx`): BDT note/coin grid
+  (1000…1) with live total; shared by open and close.
+- **ShiftModal** (`components/ShiftModal.tsx`): open (opening float) / close (counted
+  drawer). Billing's inline shift-open modal was replaced by this shared component, so
+  opening a shift now captures denominations everywhere. Close sends counted cash; the
+  backend computes expected/variance and returns the closed shift.
+- **Day-End** (`screens/DayEnd.tsx`): card grid from `/pos/reports?days=1` — Success
+  Orders (sales + count), Covers, Voided, Complimentary, Sales Returns (from
+  `auditCounts` void/comp/refund), Expected Drawer. Panels: payment split
+  (`paymentSplit`, lowercase method keys), cash drawer (opening float + cash taken →
+  expected; counted + variance after close), top items. Printable via **renderDayEnd**
+  (new ESC/POS template).
+- **Ops hub**: Printers / Day End / Shift tiles now route (Day End + Shift → Day-End pane).
+- Verified against backend: `close_shift` sets expected/counted/variance; report
+  `paymentSplit` keyed by lowercase payment_method; `auditCounts` keyed by action.
+- 29 tests still green; tsc clean; build green (221 KB JS / 69 KB gzip).
+
 ### Phase 4 — offline outbox hardening — TODO
 ### Phase B — back-office (menu/inventory/analytics/reports) — LATER
 

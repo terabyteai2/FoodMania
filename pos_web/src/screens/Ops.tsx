@@ -1,14 +1,15 @@
-// Operations section — petpooja16 icon-hub style, v1 subset: printers + shift status.
-// Day-end/report tiles arrive in Phase 3; sync/notifications in Phase 2/4.
+// Operations section — petpooja16 icon-hub style, v1 subset: printers, shift + day-end.
+// Sync/notifications arrive in Phase 4.
 
 import { useState } from 'react';
 import { PrinterSettings } from '../components/PrinterSettings';
+import { DayEnd } from './DayEnd';
 import { usePos } from '../state/pos';
 import { useSession } from '../state/session';
 import { formatTk } from '../core/money';
 import './ops.css';
 
-type OpsPane = 'home' | 'printers';
+type OpsPane = 'home' | 'printers' | 'dayend';
 
 export function Ops() {
   const [pane, setPane] = useState<OpsPane>('home');
@@ -24,6 +25,15 @@ export function Ops() {
     );
   }
 
+  if (pane === 'dayend') {
+    return (
+      <div className="ops-root ops-root-flush">
+        <button className="btn btn-outline btn-sm ops-back" onClick={() => setPane('home')}>← Operations</button>
+        <DayEnd />
+      </div>
+    );
+  }
+
   return (
     <div className="ops-root">
       <div className="ops-header">
@@ -35,14 +45,14 @@ export function Ops() {
           <span className="ops-tile-icon">🖨️</span>
           <span>Printers</span>
         </button>
-        <div className="ops-tile card ops-tile-static">
-          <span className="ops-tile-icon">💵</span>
-          <span>{pos.shift ? `Shift open · ${formatTk(pos.shift.openingCash)} float` : 'No open shift'}</span>
-        </div>
-        <div className="ops-tile card ops-tile-static ops-tile-soon">
+        <button className="ops-tile card" onClick={() => setPane('dayend')}>
           <span className="ops-tile-icon">🌙</span>
-          <span>Day End (Phase 3)</span>
-        </div>
+          <span>Day End</span>
+        </button>
+        <button className="ops-tile card" onClick={() => setPane('dayend')}>
+          <span className="ops-tile-icon">💵</span>
+          <span>{pos.shift ? `Shift open · ${formatTk(pos.shift.openingCash)} float` : 'Open shift'}</span>
+        </button>
         <div className="ops-tile card ops-tile-static ops-tile-soon">
           <span className="ops-tile-icon">🔄</span>
           <span>Sync (Phase 4)</span>

@@ -14,6 +14,7 @@ import type { PaymentMethod, PosSettlementLineWire } from '../api/types';
 import { Modal } from '../components/Modal';
 import { CustomizeModal, type CustomizeResult } from '../components/CustomizeModal';
 import { SplitModal } from '../components/SplitModal';
+import { ShiftModal } from '../components/ShiftModal';
 import './billing.css';
 
 const PAYMENTS: { id: PaymentMethod; label: string }[] = [
@@ -363,9 +364,10 @@ export function Billing() {
         />
       )}
       {modal?.kind === 'shiftOpen' && (
-        <ShiftOpenModal
+        <ShiftModal
+          mode="open"
           onClose={() => setModal(null)}
-          onOpened={() => { const then = modal.then; setModal(null); then?.(); }}
+          onDone={() => { const then = modal.then; setModal(null); then?.(); }}
         />
       )}
 
@@ -510,34 +512,3 @@ function HeldModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ShiftOpenModal({ onClose, onOpened }: { onClose: () => void; onOpened: () => void }) {
-  const session = useSession((s) => s.session)!;
-  const pos = usePos();
-  const [cash, setCash] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <Modal
-      title="Open shift" onClose={onClose}
-      footer={
-        <button
-          className="btn btn-primary" disabled={busy || cash === ''}
-          onClick={() => {
-            setBusy(true);
-            pos.openShift(session.outletId, Number(cash) || 0, {})
-              .then(onOpened)
-              .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-              .finally(() => setBusy(false));
-          }}
-        >Open shift</button>
-      }
-    >
-      <p className="shift-hint">Settling bills requires an open cash shift.</p>
-      <div className="field">
-        <label>Opening cash (৳)</label>
-        <input className="input" type="number" min="0" value={cash} onChange={(e) => setCash(e.target.value)} autoFocus />
-      </div>
-      {error && <div className="error-text">{error}</div>}
-    </Modal>
-  );
-}

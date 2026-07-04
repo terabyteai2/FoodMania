@@ -235,6 +235,67 @@ export function renderReceipt(
   return trim(p);
 }
 
+// ------------------------------------------------------------- Day-end -------
+export interface DayEndSummary {
+  date: string;
+  sales: number;
+  orders: number;
+  covers: number;
+  paymentSplit: Record<string, number>;
+  voids: number;
+  comps: number;
+  refunds: number;
+  openingCash?: number | null;
+  expectedCash?: number | null;
+  countedCash?: number | null;
+  varianceCash?: number | null;
+}
+
+export function renderDayEnd(width: number, ctx: TicketContext, s: DayEndSummary): HTMLCanvasElement {
+  const p = createPainter(width);
+  const u = width / 384;
+
+  textCenter(p, ctx.restaurantName, 24 * u, 800, 3);
+  if (ctx.outletName && ctx.outletName !== ctx.restaurantName) {
+    textCenter(p, ctx.outletName, 18 * u, 500, 4);
+  }
+  textCenter(p, 'DAY-END REPORT', 22 * u, 800, 4);
+  textCenter(p, s.date, 18 * u, 400, 6);
+  hline(p);
+
+  textRow(p, 'Net sales', formatTk(s.sales), 22 * u, 800, 800, 6);
+  textRow(p, 'Orders', String(s.orders), 19 * u);
+  textRow(p, 'Covers', String(s.covers), 19 * u);
+  hline(p);
+
+  textLeft(p, 'PAYMENTS', 17 * u, 700, 4);
+  const methods = Object.keys(s.paymentSplit);
+  if (methods.length === 0) textLeft(p, 'No settlements', 18 * u, 400, 4, 8 * u);
+  for (const m of methods) {
+    textRow(p, m.toUpperCase(), formatTk(s.paymentSplit[m]), 19 * u);
+  }
+  hline(p);
+
+  textRow(p, 'Voided orders', String(s.voids), 18 * u);
+  textRow(p, 'Complimentary', String(s.comps), 18 * u);
+  textRow(p, 'Refunds', String(s.refunds), 18 * u);
+
+  if (s.openingCash != null || s.countedCash != null) {
+    hline(p);
+    textLeft(p, 'CASH DRAWER', 17 * u, 700, 4);
+    if (s.openingCash != null) textRow(p, 'Opening float', formatTk(s.openingCash), 19 * u);
+    if (s.expectedCash != null) textRow(p, 'Expected', formatTk(s.expectedCash), 19 * u);
+    if (s.countedCash != null) textRow(p, 'Counted', formatTk(s.countedCash), 19 * u);
+    if (s.varianceCash != null) {
+      textRow(p, 'Variance', `${s.varianceCash > 0 ? '+' : ''}${formatTk(s.varianceCash)}`, 19 * u, 700, 700);
+    }
+  }
+
+  hline(p, false);
+  textCenter(p, 'Powered by QuickBytes', 16 * u, 400, 2);
+  return trim(p);
+}
+
 // ---------------------------------------------------------- Test ticket ------
 export function renderTestTicket(width: number, label: string): HTMLCanvasElement {
   const p = createPainter(width);

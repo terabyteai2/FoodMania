@@ -6,6 +6,10 @@
 .ops-outlet { font-size: var(--fs-13); color: var(--ink-2); }
 .ops-back { align-self: flex-start; }
 
+/* day-end pane: let the inner screen own its own scroll */
+.ops-root-flush { padding: 8px 0 0; overflow: hidden; gap: 8px; }
+.ops-root-flush .ops-back { margin: 0 18px; }
+
 .ops-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
