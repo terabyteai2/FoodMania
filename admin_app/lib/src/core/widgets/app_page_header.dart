@@ -5,13 +5,13 @@ import '../../features/messaging/messages_screen.dart';
 import '../../models/pos_notification.dart';
 import '../theme/app_theme.dart';
 import 'notification_center.dart';
-import 'shell_nav_scope.dart';
 import 'tf_design_system.dart';
 
-/// Shared primary-tab header used on every root admin screen.
+/// Shared primary-tab header used on every bottom-nav root screen.
 ///
-/// Renders the blue bolt mark + [title] + outlet name on the left; on the
-/// right, the Messages icon (manager+ roles only), and the notification bell.
+/// Renders the lime bolt mark + [title] + outlet name on the left; on the
+/// right, an optional **Advanced** toggle (Stock / Analytics / Live), the
+/// Messages icon (manager+ roles only), and the notification bell.
 ///
 /// Pushed / detail screens keep their own [AppScaffold] with a back button.
 class AppPageHeader extends StatelessWidget {
@@ -20,6 +20,9 @@ class AppPageHeader extends StatelessWidget {
     this.onNavigateToOrders,
     this.onNavigateToTarget,
     this.brand = false,
+    this.showAdvanced = false,
+    this.advancedValue = false,
+    this.onAdvancedChanged,
     super.key,
   });
 
@@ -27,34 +30,20 @@ class AppPageHeader extends StatelessWidget {
   final VoidCallback? onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
   final bool brand;
+  final bool showAdvanced;
+  final bool advancedValue;
+  final ValueChanged<bool>? onAdvancedChanged;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final text = app.strings;
     final outletName = app.outletName.trim();
-    // Present only on the phone shell (MainShell narrow layout). On the wide
-    // NavigationRail layout and on pushed detail routes the scope is absent, so
-    // no hamburger shows there.
-    final shellNav = ShellNavScope.maybeOf(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        PosSpacing.sp4,
-        PosSpacing.sp2,
-        PosSpacing.sp4,
-        PosSpacing.sp3,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (shellNav != null) ...[
-            TfIconButton(
-              icon: Icons.menu_rounded,
-              tooltip: text.menu,
-              onPressed: shellNav.openDrawer,
-            ),
-            const SizedBox(width: PosSpacing.sp2),
-          ],
           Expanded(
             child: brand
                 ? TfBrandHeader(
@@ -63,6 +52,24 @@ class AppPageHeader extends StatelessWidget {
                   )
                 : _SourceTitleHeader(title: title),
           ),
+          const SizedBox(width: 10),
+          if (showAdvanced) ...[
+            TfText(
+              text.advanced,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: advancedValue ? PosColors.text : PosColors.muted,
+              ),
+            ),
+            const SizedBox(width: 6),
+            TfToggle(
+              value: advancedValue,
+              onChanged: onAdvancedChanged ?? (_) {},
+              semanticLabel: text.advanced,
+            ),
+            const SizedBox(width: 10),
+          ],
           if (app.canMessages) ...[
             TfBarButton(
               icon: TfSourceIconName.chat,
@@ -71,7 +78,7 @@ class AppPageHeader extends StatelessWidget {
                 context,
               ).push(MaterialPageRoute(builder: (_) => const MessagesScreen())),
             ),
-            const SizedBox(width: PosSpacing.sp2),
+            const SizedBox(width: 8),
           ],
           HeaderNotificationBell(
             onNavigateToOrders: onNavigateToOrders ?? () {},

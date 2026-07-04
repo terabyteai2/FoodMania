@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/receipt_scan.dart';
@@ -139,108 +140,89 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
 
     return Scaffold(
       backgroundColor: PosColors.background,
-      appBar: AppBar(
-        backgroundColor: PosColors.background,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const TfText(
-              'Stock count',
-              style: TextStyle(fontWeight: FontWeight.w600),
+            // Shared slim pushed bar (v4 §5.1) instead of a Material AppBar.
+            TfGlobalTopBar.leaf(
+              title: text.stockCountTitle,
+              subtitle: text.countedOf(_done, total),
             ),
-            TfText(
-              '$_done of $total counted',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: PosColors.muted,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (total > 0)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: SizedBox(
-                  height: 6,
-                  child: Stack(
-                    children: [
-                      Container(color: PosColors.surfaceSunk),
-                      AnimatedFractionallySizedBox(
-                        widthFactor: _done / total,
-                        duration: const Duration(milliseconds: 200),
-                        child: Container(color: PosColors.primary),
-                      ),
-                    ],
+            if (total > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: SizedBox(
+                    height: 6,
+                    child: Stack(
+                      children: [
+                        Container(color: PosColors.surfaceSunk),
+                        AnimatedFractionallySizedBox(
+                          widthFactor: _done / total,
+                          duration: const Duration(milliseconds: 200),
+                          child: Container(color: PosColors.primary),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          if (_unmatched.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _UnmatchedBanner(
-                title: text.countScanUnmatched,
-                names: _unmatched,
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              children: [
-                for (final item in items)
-                  _CountLine(
-                    item: item,
-                    controller: _controller(item),
-                    onTouched: () =>
-                        setState(() => _touchedItemIds.add(item.id)),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-        decoration: const BoxDecoration(
-          color: PosColors.surface,
-          boxShadow: PosShadows.bar,
-        ),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 130,
-                child: TfButton(
-                  label: _scanning ? text.scanningStock : text.scanStock,
-                  icon: Icons.document_scanner_outlined,
-                  variant: TfButtonVariant.ghost,
-                  size: TfButtonSize.lg,
-                  busy: _scanning,
-                  onPressed: _scanning ? null : _pickAndScan,
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: TfButton(
-                  label: _done > 0 ? 'Finish count · $_done' : 'Finish count',
-                  size: TfButtonSize.lg,
-                  busy: _saving,
-                  onPressed: _saving || _scanning ? null : _save,
+            if (_unmatched.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _UnmatchedBanner(
+                  title: text.countScanUnmatched,
+                  names: _unmatched,
                 ),
               ),
             ],
-          ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                children: [
+                  for (final item in items)
+                    _CountLine(
+                      item: item,
+                      controller: _controller(item),
+                      onTouched: () =>
+                          setState(() => _touchedItemIds.add(item.id)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      // Paired sticky footer (v4 §5.5): navy secondary + primary, both
+      // Expanded; chrome comes from TfStickyCTA.
+      bottomNavigationBar: TfStickyCTA(
+        child: Row(
+          children: [
+            Expanded(
+              child: TfButton(
+                label: _scanning ? text.scanningStock : text.scanStock,
+                icon: Icons.document_scanner_outlined,
+                variant: TfButtonVariant.dark,
+                size: TfButtonSize.lg,
+                busy: _scanning,
+                onPressed: _scanning ? null : _pickAndScan,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TfButton(
+                label: text.finishCount(_done),
+                size: TfButtonSize.lg,
+                busy: _saving,
+                onPressed: _saving || _scanning ? null : _save,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -277,9 +259,8 @@ class _UnmatchedBanner extends StatelessWidget {
               children: [
                 TfText(
                   title,
-                  style: const TextStyle(
+                  style: TfTextStyles.bodyMuted.copyWith(
                     color: PosColors.warning,
-                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     height: 1.2,
                   ),
@@ -287,9 +268,8 @@ class _UnmatchedBanner extends StatelessWidget {
                 const SizedBox(height: 2),
                 TfText(
                   names.join(', '),
-                  style: const TextStyle(
+                  style: TfTextStyles.bodyMuted.copyWith(
                     color: PosColors.slate,
-                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                     height: 1.3,
                   ),

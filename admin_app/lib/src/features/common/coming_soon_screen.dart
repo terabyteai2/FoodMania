@@ -14,7 +14,6 @@ class ComingSoonScreen extends StatelessWidget {
     this.messageBn,
     this.icon = Icons.construction_outlined,
     this.showBackButton = false,
-    this.showDatePill = false,
     super.key,
   });
 
@@ -24,14 +23,12 @@ class ComingSoonScreen extends StatelessWidget {
   final String? messageBn;
   final IconData icon;
   final bool showBackButton;
-  final bool showDatePill;
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: title,
       showBackButton: showBackButton,
-      showDatePill: showDatePill,
       child: Padding(
         padding: const EdgeInsets.only(top: 48),
         child: TfEmptyState(

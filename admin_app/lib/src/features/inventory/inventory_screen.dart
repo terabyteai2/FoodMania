@@ -6,17 +6,14 @@ import '../../app_controller.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../core/widgets/tf_timeframe_selector.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/pos_notification.dart';
-import '../../models/receipt_scan.dart';
-import '../../services/cloud_api_service.dart';
-import '../../services/menu_image_service.dart';
 import 'end_of_day_count_screen.dart';
 import 'inventory_item_detail_screen.dart';
 import 'stock_in_screen.dart';
@@ -41,22 +38,18 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-enum _StockSort { name, inOut, net, value, qty, status }
+enum _StockSort { name, inOut, net, qty, status }
 
 class _InventoryScreenState extends State<InventoryScreen>
     with SingleTickerProviderStateMixin {
   bool _advanced = false;
-  _StockSort _sort = _StockSort.value;
+  _StockSort _sort = _StockSort.qty;
   int _dir = -1; // -1 desc, 1 asc
   bool _firstLoadKicked = false;
-  bool _scanning = false;
-  final MenuImageService _imageService = MenuImageService();
 
   TfTimeframe _timeframe = TfTimeframe.today;
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
-  bool _showCalendar = false;
-  bool _calendarClosing = false;
 
   late final AnimationController _tfController;
   late final Animation<double> _tfAnimation;
@@ -94,11 +87,6 @@ class _InventoryScreenState extends State<InventoryScreen>
   }
 
   void _updateTimeframe(TfTimeframe tf) {
-    if (tf == TfTimeframe.custom) {
-      setState(() => _showCalendar = true);
-      return;
-    }
-
     setState(() {
       _timeframe = tf;
       _rangeStart = null;
@@ -140,10 +128,7 @@ class _InventoryScreenState extends State<InventoryScreen>
     setState(() {
       _rangeStart = s;
       _rangeEnd = e;
-      if (s != null && e != null) {
-        _calendarClosing = true;
-        _timeframe = TfTimeframe.custom;
-      }
+      if (s != null && e != null) _timeframe = TfTimeframe.custom;
     });
 
     if (s != null && e != null) {
@@ -214,9 +199,8 @@ class _InventoryScreenState extends State<InventoryScreen>
         case _StockSort.status:
           r = _ratio(a) - _ratio(b);
           break;
-        case _StockSort.value:
         case _StockSort.name:
-          r = _itemValue(a) - _itemValue(b);
+          r = 0; // handled by the string compare above
       }
       if (r == 0) return 0;
       return (r > 0 ? 1 : -1) * _dir;
@@ -241,50 +225,6 @@ class _InventoryScreenState extends State<InventoryScreen>
       context,
       MaterialPageRoute(builder: (_) => const EndOfDayCountScreen()),
     );
-    if (context.mounted) await AppScope.read(context).refreshInventorySummary();
-  }
-
-  /// The hero action: snap a supplier bill OR a count sheet, let the backend
-  /// classify it, then route into the pre-filled Stock-in or End-of-day screen.
-  Future<void> _scanAndRoute(BuildContext context) async {
-    if (_scanning) return;
-    final app = AppScope.read(context);
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _scanning = true);
-    StockScanResult? result;
-    try {
-      final page = await _imageService.captureMenuScanPage(pageNumber: 1);
-      if (page == null) {
-        if (mounted) setState(() => _scanning = false);
-        return;
-      }
-      result = await app.scanInventoryStock([
-        MenuScanPageUpload(
-          bytes: page.bytes,
-          fileName: page.fileName,
-          mimeType: page.mimeType,
-        ),
-      ]);
-    } on CloudApiException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
-    } on MenuImageException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
-    } catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
-    } finally {
-      if (mounted) setState(() => _scanning = false);
-    }
-    if (result == null || !context.mounted) return;
-
-    final route = switch (result.category) {
-      StockScanCategory.count => MaterialPageRoute<void>(
-        builder: (_) => EndOfDayCountScreen(initialScan: result),
-      ),
-      StockScanCategory.stockIn => MaterialPageRoute<void>(
-        builder: (_) => StockInScreen(initialScan: result),
-      ),
-    };
-    await Navigator.push<void>(context, route);
     if (context.mounted) await AppScope.read(context).refreshInventorySummary();
   }
 
@@ -354,14 +294,30 @@ class _InventoryScreenState extends State<InventoryScreen>
 
     return AppScaffold(
       title: text.stockTab,
-      headerWidget: AppPageHeader(
+      headerWidget: TfGlobalTopBar(
         title: text.stockTab,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
+        // View control (not navigation) — the one legit extraActions use.
+        extraActions: [
+          AdvToggle(
+            value: _advanced,
+            onChanged: _onToggleAdvanced,
+            label: text.advanced,
+          ),
+        ],
       ),
-      showDatePill: false,
       pinHeader: true,
       fillBody: true,
+      // Sticky footer chrome per v4 §5.5 — full-bleed surface + bar shadow.
+      // Scan moved to the drawer's Stock group; Stock in is the hero.
+      footer: TfStickyCTA(
+        child: _StockBottomBar(
+          text: text,
+          onCount: () => _openCount(context),
+          onStockIn: () => _openStockIn(context),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -372,26 +328,27 @@ class _InventoryScreenState extends State<InventoryScreen>
             lowActive: _sort == _StockSort.status,
             onTapLow: _surfaceBelowPar,
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const TfMicroLabel('INVENTORY'),
-              const Spacer(),
-              AdvToggle(
-                value: _advanced,
-                onChanged: _onToggleAdvanced,
-                label: text.advanced,
-              ),
-            ],
-          ),
           SizeTransition(
             sizeFactor: _tfAnimation,
             alignment: Alignment.topCenter,
             child: Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: TfTimeframeSelector(
-                selected: _timeframe,
-                onChanged: _updateTimeframe,
+              child: TfPeriodWithCalendar(
+                options: [
+                  ('today', text.rangeToday),
+                  ('week', text.range7Days),
+                  ('month', text.range30Days),
+                ],
+                value: _timeframe.name,
+                start: _rangeStart,
+                end: _rangeEnd,
+                onChanged: (value, start, end) {
+                  if (value == TfPeriodWithCalendar.customValue) {
+                    _onRangeChanged(start, end);
+                  } else {
+                    _updateTimeframe(TfTimeframe.values.byName(value));
+                  }
+                },
               ),
             ),
           ),
@@ -434,46 +391,8 @@ class _InventoryScreenState extends State<InventoryScreen>
                           ],
                         ),
                       ),
-                if (_showCalendar)
-                  AnimatedOpacity(
-                    opacity: _calendarClosing ? 0.0 : 1.0,
-                    duration: const Duration(milliseconds: 400),
-                    onEnd: _calendarClosing
-                        ? () => setState(() {
-                            _showCalendar = false;
-                            _calendarClosing = false;
-                          })
-                        : null,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _showCalendar = false),
-                            child: Container(color: Colors.black26),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          left: 0,
-                          right: 0,
-                          child: TfCalendarRangePicker(
-                            start: _rangeStart,
-                            end: _rangeEnd,
-                            onRangeChanged: _onRangeChanged,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
-          ),
-          _StockBottomBar(
-            text: text,
-            scanning: _scanning,
-            onScan: () => _scanAndRoute(context),
-            onCount: () => _openCount(context),
-            onStockIn: () => _openStockIn(context),
           ),
         ],
       ),
@@ -536,11 +455,8 @@ class _SummaryStrip extends StatelessWidget {
                 tfFormatCurrency(context, stockValue),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+                style: TfTextStyles.statNumber.copyWith(
                   color: PosColors.text,
-                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -557,11 +473,8 @@ class _SummaryStrip extends StatelessWidget {
                 children: [
                   TfText(
                     tfFormatNumber(context, lowCount),
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
+                    style: TfTextStyles.statNumber.copyWith(
                       color: lowCount > 0 ? PosColors.warning : PosColors.text,
-                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(width: 5),
@@ -570,10 +483,8 @@ class _SummaryStrip extends StatelessWidget {
                       text.isBn ? 'টি আইটেম' : 'items',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
+                      style: TfTextStyles.bodyMuted.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: PosColors.muted,
                       ),
                     ),
                   ),
@@ -603,7 +514,7 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final card = Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.all(PosDensity.cardPad),
       decoration: BoxDecoration(
         color: active ? PosColors.accentSoft : PosColors.surface,
         borderRadius: BorderRadius.circular(PosRadii.card),
@@ -617,11 +528,7 @@ class _SummaryCard extends StatelessWidget {
         children: [
           TfText(
             label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: PosColors.muted,
-            ),
+            style: TfTextStyles.label.copyWith(color: PosColors.muted),
           ),
           const SizedBox(height: 3),
           child,
@@ -661,7 +568,6 @@ class _StockTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heroW = advanced ? 64.0 : 88.0;
-    final valueW = advanced ? 0.0 : 70.0;
     return Container(
       padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
       decoration: BoxDecoration(
@@ -705,19 +611,10 @@ class _StockTable extends StatelessWidget {
                     dir: dir,
                     onTap: () => onSort(_StockSort.net),
                   ),
-                ] else ...[
-                  const SizedBox(width: 10),
-                  _HCell(
-                    label: text.colValue,
-                    width: valueW,
-                    active: sort == _StockSort.value,
-                    dir: dir,
-                    onTap: () => onSort(_StockSort.value),
-                  ),
                 ],
                 const SizedBox(width: 12),
                 _HCell(
-                  label: advanced ? text.colCover : 'QTY',
+                  label: text.colQty,
                   width: heroW,
                   active: sort == _StockSort.qty,
                   dir: dir,
@@ -733,7 +630,6 @@ class _StockTable extends StatelessWidget {
               last: i == items.length - 1,
               advanced: advanced,
               heroW: heroW,
-              valueW: valueW,
               onTap: () => onRowTap(items[i]),
             ),
         ],
@@ -804,7 +700,6 @@ class _StockRow extends StatelessWidget {
     required this.last,
     required this.advanced,
     required this.heroW,
-    required this.valueW,
     required this.onTap,
   });
 
@@ -813,7 +708,6 @@ class _StockRow extends StatelessWidget {
   final bool last;
   final bool advanced;
   final double heroW;
-  final double valueW;
   final VoidCallback onTap;
 
   @override
@@ -959,23 +853,6 @@ class _StockRow extends StatelessWidget {
                   },
                 ),
               ),
-            ] else ...[
-              const SizedBox(width: 10),
-              SizedBox(
-                width: valueW,
-                child: TfText(
-                  tfFormatCurrency(context, _itemValue(item)),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.text,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
             ],
             const SizedBox(width: 12),
             SizedBox(
@@ -984,46 +861,34 @@ class _StockRow extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: advanced
-                      ? TfText(
-                          _formatCover(context, item),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: qtyColor,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        )
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TfText(
-                              _formatQty(context, item.onHand),
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.2,
-                                color: qtyColor,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 3),
-                            TfText(
-                              unit,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: PosColors.muted,
-                              ),
-                            ),
-                          ],
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TfText(
+                        _formatQty(context, item.onHand),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          color: qtyColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
+                      ),
+                      const SizedBox(width: 3),
+                      TfText(
+                        unit,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1036,12 +901,6 @@ class _StockRow extends StatelessWidget {
   static String _formatQty(BuildContext context, double value) {
     if (value == value.roundToDouble()) return tfFormatNumber(context, value);
     return tfFormatNumber(context, value, decimalDigits: 1);
-  }
-
-  static String _formatCover(BuildContext context, InventorySummaryItem item) {
-    final ratio = _ratio(item);
-    if (ratio >= 99) return 'OK';
-    return '${tfFormatNumber(context, ratio, decimalDigits: 1)}x';
   }
 }
 
@@ -1231,65 +1090,45 @@ class _AddItemButton extends StatelessWidget {
   }
 }
 
-/// Bottom actions, by hierarchy: **Scan** is the lime primary hero (the fast
-/// path — photograph a bill or a count sheet and let the backend route it);
-/// **Count** and **Stock in** are the secondary manual-entry ghosts beneath it.
+/// Bottom actions: **Stock in** is the primary hero, **Count** the ghost
+/// beside it. Scan lives in the drawer's Stock group (stock_scan_flow.dart).
 class _StockBottomBar extends StatelessWidget {
   const _StockBottomBar({
     required this.text,
-    required this.scanning,
-    required this.onScan,
     required this.onCount,
     required this.onStockIn,
   });
 
   final AppStrings text;
-  final bool scanning;
-  final VoidCallback onScan;
   final VoidCallback onCount;
   final VoidCallback onStockIn;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TfButton(
-            label: scanning ? text.scanningStock : text.scanStock,
-            icon: Icons.document_scanner_outlined,
+    // Chrome (surface + bar shadow + padding) comes from the enclosing
+    // TfStickyCTA (v4 §5.5); this is just the button row.
+    return Row(
+      children: [
+        Expanded(
+          child: TfButton(
+            label: text.countAction,
+            icon: Icons.fact_check_outlined,
+            variant: TfButtonVariant.ghost,
+            size: TfButtonSize.lg,
+            onPressed: onCount,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TfButton(
+            label: text.stockIn,
+            icon: Icons.add_box_outlined,
             variant: TfButtonVariant.primary,
             size: TfButtonSize.lg,
-            busy: scanning,
-            onPressed: scanning ? null : onScan,
+            onPressed: onStockIn,
           ),
-          const SizedBox(height: 9),
-          Row(
-            children: [
-              Expanded(
-                child: TfButton(
-                  label: text.countAction,
-                  icon: Icons.fact_check_outlined,
-                  variant: TfButtonVariant.ghost,
-                  size: TfButtonSize.md,
-                  onPressed: scanning ? null : onCount,
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: TfButton(
-                  label: text.stockIn,
-                  icon: Icons.add_box_outlined,
-                  variant: TfButtonVariant.ghost,
-                  size: TfButtonSize.md,
-                  onPressed: scanning ? null : onStockIn,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

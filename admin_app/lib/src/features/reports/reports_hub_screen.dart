@@ -5,15 +5,15 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
+import '../../core/widgets/tf_timeframe_selector.dart';
 import '../../models/pos_notification.dart';
-import 'item_wise_report_screen.dart';
 import 'performance_report_screen.dart';
-import 'sales_breakdown_report_screen.dart';
 
 // ===========================================================================
-// Reports hub — the new top-level Reports tab (sidebar: Analytics · Orders ·
-// Reports). Launcher cards for the QS reports (Sales Breakdown · Item-wise ·
-// Performance) plus order-bucket summary cards from /reports/order-buckets.
+// Reports hub — the top-level owner Reports tab. A strict launcher: the
+// Performance Report plus order-bucket summary cards (Success · Cancelled ·
+// Complimentary · Payment Information) from /reports/order-buckets. Sales
+// Breakdown & Item-wise live on the Analytics tab, not here.
 // ===========================================================================
 class ReportsHubScreen extends StatefulWidget {
   const ReportsHubScreen({this.onNavigateToTarget, super.key});
@@ -26,6 +26,8 @@ class ReportsHubScreen extends StatefulWidget {
 
 class _ReportsHubScreenState extends State<ReportsHubScreen> {
   String _range = 'today';
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
   Future<_Buckets>? _future;
 
   @override
@@ -36,14 +38,32 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
 
   Future<_Buckets> _load() async {
     final app = AppScope.read(context);
-    final json = await app.fetchOrderBuckets(range: _range);
+    final custom = _range == TfPeriodWithCalendar.customValue;
+    final start = _rangeStart;
+    final end = _rangeEnd;
+    final json = await app.fetchOrderBuckets(
+      range: _range,
+      start: custom && start != null ? start.toUtc().toIso8601String() : null,
+      end: custom && end != null
+          ? DateTime(
+              end.year,
+              end.month,
+              end.day,
+              23,
+              59,
+              59,
+            ).toUtc().toIso8601String()
+          : null,
+    );
     return _Buckets.fromJson(json);
   }
 
-  void _setRange(String r) {
-    if (r == _range) return;
+  void _setRange(String r, DateTime? start, DateTime? end) {
+    if (r == _range && start == _rangeStart && end == _rangeEnd) return;
     setState(() {
       _range = r;
+      _rangeStart = start;
+      _rangeEnd = end;
       _future = _load();
     });
   }
@@ -74,43 +94,18 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-              child: Wrap(
-                spacing: PosSpacing.sp2,
-                runSpacing: PosSpacing.sp2,
-                children: [
-                  for (final (k, l) in ranges)
-                    TfChip(
-                      label: l,
-                      active: _range == k,
-                      small: true,
-                      onTap: () => _setRange(k),
-                    ),
-                ],
+              child: TfPeriodWithCalendar(
+                options: ranges,
+                value: _range,
+                start: _rangeStart,
+                end: _rangeEnd,
+                onChanged: _setRange,
               ),
             ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                 children: [
-                  _LaunchCard(
-                    icon: Icons.summarize_outlined,
-                    tint: PosColors.tintBlue,
-                    iconColor: PosColors.iconBlue,
-                    title: text.salesBreakdownReport,
-                    subtitle: text.reportsHubSubtitle,
-                    onTap: () =>
-                        _push(SalesBreakdownReportScreen(range: _range)),
-                  ),
-                  const SizedBox(height: 10),
-                  _LaunchCard(
-                    icon: Icons.fastfood_outlined,
-                    tint: PosColors.tintPurple,
-                    iconColor: PosColors.iconPurple,
-                    title: text.itemWiseReport,
-                    subtitle: text.itemWiseTab,
-                    onTap: () => _push(ItemWiseReportScreen(range: _range)),
-                  ),
-                  const SizedBox(height: 10),
                   _LaunchCard(
                     icon: Icons.insights_outlined,
                     tint: PosColors.tintGreen,
@@ -270,7 +265,7 @@ class _AmountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return TfCard(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      color: PosColors.primarySoft,
+      color: PosColors.neutralSoft,
       child: Row(
         children: [
           Expanded(

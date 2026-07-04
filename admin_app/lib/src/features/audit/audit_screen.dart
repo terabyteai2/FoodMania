@@ -39,7 +39,6 @@ class _AuditScreenState extends State<AuditScreen> {
     final text = AppScope.of(context).strings;
     return AppScaffold(
       title: text.auditTrail,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,
@@ -269,7 +268,7 @@ class _AuditRow extends StatelessWidget {
       case AuditAction.comp:
         return const _Tone(PosColors.info, PosColors.infoSoft);
       case AuditAction.discount:
-        return const _Tone(PosColors.accentStrong, PosColors.accentSoft);
+        return const _Tone(PosColors.neutralInk, PosColors.neutralSoft);
       case AuditAction.unknown:
         return const _Tone(PosColors.muted, PosColors.surfaceSunk);
     }
@@ -416,7 +415,7 @@ class _AuditDetailSheet extends StatelessWidget {
       case AuditAction.comp:
         return const _Tone(PosColors.info, PosColors.infoSoft);
       case AuditAction.discount:
-        return const _Tone(PosColors.accentStrong, PosColors.accentSoft);
+        return const _Tone(PosColors.neutralInk, PosColors.neutralSoft);
       case AuditAction.unknown:
         return const _Tone(PosColors.muted, PosColors.surfaceSunk);
     }

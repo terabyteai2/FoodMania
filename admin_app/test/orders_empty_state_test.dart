@@ -210,6 +210,10 @@ void main() {
     await tester.pumpWidget(_scoped(controller, const OrdersScreen()));
     await tester.pumpAndSettle();
 
+    // Search is collapsed behind a top-bar icon (v4.2); open it first.
+    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pumpAndSettle();
+
     await tester.enterText(find.byType(TextField).first, 'burger');
     await tester.pumpAndSettle();
     expect(find.text('#42'), findsOneWidget);

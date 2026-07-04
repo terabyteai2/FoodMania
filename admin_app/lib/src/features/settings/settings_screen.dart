@@ -216,6 +216,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openPrivacyPolicy,
                 ),
                 _SettingActionData(
+                  title: text.appLanguage,
+                  subtitle: text.languageLabel,
+                  icon: Icons.translate_rounded,
+                  trailing: app.language == AppLanguage.bn
+                      ? text.bangla
+                      : text.english,
+                  onTap: _toggleLanguage,
+                ),
+                _SettingActionData(
                   title: text.settingsLogOut,
                   subtitle: text.logOutSubtitle,
                   icon: Icons.logout_rounded,
@@ -265,6 +274,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : 'How Terafoods handles restaurant data',
                   icon: Icons.privacy_tip_outlined,
                   onTap: _openPrivacyPolicy,
+                ),
+                _SettingActionData(
+                  title: text.appLanguage,
+                  subtitle: text.languageLabel,
+                  icon: Icons.translate_rounded,
+                  trailing: app.language == AppLanguage.bn
+                      ? text.bangla
+                      : text.english,
+                  onTap: _toggleLanguage,
                 ),
                 _SettingActionData(
                   title: text.settingsLogOut,
@@ -553,6 +571,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  void _toggleLanguage() {
+    final app = AppScope.of(context);
+    final next =
+        app.language == AppLanguage.bn ? AppLanguage.en : AppLanguage.bn;
+    app.updateLanguage(next);
   }
 
   Future<void> _confirmLogout() async {
@@ -982,7 +1007,6 @@ class _SettingsSectionPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: title,
-      showDatePill: false,
       showBackButton: true,
       child: child,
     );
@@ -1422,7 +1446,6 @@ class _FacebookOAuthWebViewPageState extends State<_FacebookOAuthWebViewPage> {
     final error = _error;
     return AppScaffold(
       title: text.facebookLoginTitle,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,
@@ -1531,7 +1554,6 @@ class _FacebookPageSelectionPageState
     final text = app.strings;
     return AppScaffold(
       title: text.selectFacebookPage,
-      showDatePill: false,
       showBackButton: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2979,15 +3001,13 @@ class _AboutUsPage extends StatelessWidget {
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: PosColors.primarySoft,
+                          color: PosColors.neutralSoft,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: PosColors.primary.withValues(alpha: 0.3),
-                          ),
+                          border: Border.all(color: PosColors.neutralWash),
                         ),
                         child: Icon(
                           Icons.restaurant_rounded,
-                          color: PosColors.primary,
+                          color: PosColors.neutralInk,
                           size: 28,
                         ),
                       ),
@@ -3372,14 +3392,14 @@ class _AboutUsPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: PosColors.primarySoft,
+        color: PosColors.neutralSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.primary.withValues(alpha: 0.25)),
+        border: Border.all(color: PosColors.neutralWash),
       ),
       child: TfText(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: PosColors.primary,
+          color: PosColors.neutralInk,
           fontWeight: FontWeight.w500,
         ),
       ),

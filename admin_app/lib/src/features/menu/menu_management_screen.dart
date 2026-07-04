@@ -6,6 +6,7 @@ import '../../app_controller.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
@@ -100,179 +101,173 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: PosColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: CustomScrollView(
-                physics: BouncingScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TfGlobalTopBar(
-                            title: text.menu,
-                            subtitle: text.menuItemsCategorySubtitle(
-                              app.menuItems.length,
-                              realCategoryCount,
-                            ),
-                            onNavigateToOrders: widget.onNavigateToOrders,
-                            onNavigateToTarget: widget.onNavigateToTarget,
-                          ),
-                          SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TfSearchField(
-                                  controller: _searchController,
-                                  hintText: _codeMode
-                                      ? text.shortCodeSearchHint
-                                      : text.menuSearchHint,
-                                  keyboardType: _codeMode
-                                      ? TextInputType.number
-                                      : null,
-                                  prefixIcon: _codeMode
-                                      ? Icons.bolt_rounded
-                                      : Icons.search_rounded,
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              _CodeModeButton(
-                                active: _codeMode,
-                                onTap: () => setState(() {
-                                  _codeMode = !_codeMode;
-                                  _searchController.clear();
-                                }),
-                              ),
-                            ],
-                          ),
-                          if (app.menuItems.isNotEmpty) ...[
-                            SizedBox(height: 12),
-                            TfFilterChipRow(
-                              chips: categories
-                                  .map(
-                                    (cat) => TfFilterChipData(
-                                      label: cat,
-                                      count: cat == text.allCategories
-                                          ? app.menuItems.length
-                                          : app.menuItems
-                                                .where(
-                                                  (i) =>
-                                                      i.localizedCategory(
-                                                        language,
-                                                      ) ==
-                                                      cat,
-                                                )
-                                                .length,
-                                      active: cat == _selectedCategory,
-                                    ),
-                                  )
-                                  .toList(),
-                              onSelected: (index) => setState(
-                                () => _selectedCategory = categories[index],
-                              ),
-                            ),
-                          ],
-                          SizedBox(height: 16),
-                          if (app.menuItems.isEmpty)
-                            TfEmptyState(
-                              title: text.menuEmptyTitle,
-                              message: text.menuEmptyMessage,
-                              icon: Icons.restaurant_menu_rounded,
-                            )
-                          else if (items.isEmpty)
-                            TfEmptyState(
-                              title: text.menuNoResultsTitle,
-                              message: text.menuNoResultsMessage,
-                              icon: Icons.search_off_rounded,
-                            )
-                          else ...[
-                            if (_selectedItemIds.isNotEmpty) ...[
-                              _BulkMenuToolbar(
-                                count: _selectedItemIds.length,
-                                onDiscount: () => _applyBulkDiscount(context),
-                                onClear: () => setState(_selectedItemIds.clear),
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-                            _MenuList(
-                              items: items,
-                              language: language,
-                              selectedIds: _selectedItemIds,
-                              onEdit: app.isManager
-                                  ? (item) => _openMenuForm(context, item: item)
-                                  : (_) {},
-                              onSelect: (item) {
-                                if (!app.isManager) return;
-                                setState(() {
-                                  if (!_selectedItemIds.add(item.id)) {
-                                    _selectedItemIds.remove(item.id);
-                                  }
-                                });
-                              },
-                              onSelectAll: (selectAll) {
-                                if (!app.isManager) return;
-                                setState(() {
-                                  if (selectAll) {
-                                    _selectedItemIds.addAll(
-                                      items.map((i) => i.id),
-                                    );
-                                  } else {
-                                    _selectedItemIds.removeAll(
-                                      items.map((i) => i.id),
-                                    );
-                                  }
-                                });
-                              },
-                              onAvailabilityChanged: (item, value) async {
-                                if (!app.isManager) return;
-                                await app.toggleMenuAvailability(
-                                  item.id,
-                                  value,
-                                );
-                              },
-                            ),
-                          ],
-                        ],
-                      ),
+    // Scrollable content area (empty state, no-results, or the item list).
+    final Widget listArea;
+    if (app.menuItems.isEmpty) {
+      listArea = TfEmptyState(
+        title: text.menuEmptyTitle,
+        message: text.menuEmptyMessage,
+        icon: Icons.restaurant_menu_rounded,
+      );
+    } else if (items.isEmpty) {
+      listArea = TfEmptyState(
+        title: text.menuNoResultsTitle,
+        message: text.menuNoResultsMessage,
+        icon: Icons.search_off_rounded,
+      );
+    } else {
+      listArea = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_selectedItemIds.isNotEmpty) ...[
+            _BulkMenuToolbar(
+              count: _selectedItemIds.length,
+              onDiscount: () => _applyBulkDiscount(context),
+              onClear: () => setState(_selectedItemIds.clear),
+            ),
+            const SizedBox(height: 16),
+          ],
+          _MenuList(
+            items: items,
+            language: language,
+            selectedIds: _selectedItemIds,
+            onEdit: app.isManager
+                ? (item) => _openMenuForm(context, item: item)
+                : (_) {},
+            onSelect: (item) {
+              if (!app.isManager) return;
+              setState(() {
+                if (!_selectedItemIds.add(item.id)) {
+                  _selectedItemIds.remove(item.id);
+                }
+              });
+            },
+            onSelectAll: (selectAll) {
+              if (!app.isManager) return;
+              setState(() {
+                if (selectAll) {
+                  _selectedItemIds.addAll(items.map((i) => i.id));
+                } else {
+                  _selectedItemIds.removeAll(items.map((i) => i.id));
+                }
+              });
+            },
+            onAvailabilityChanged: (item, value) async {
+              if (!app.isManager) return;
+              await app.toggleMenuAvailability(item.id, value);
+            },
+          ),
+        ],
+      );
+    }
+
+    return AppScaffold(
+      title: text.menu,
+      headerWidget: TfGlobalTopBar(
+        title: text.menu,
+        subtitle: text.menuItemsCategorySubtitle(
+          app.menuItems.length,
+          realCategoryCount,
+        ),
+        onNavigateToOrders: widget.onNavigateToOrders,
+        onNavigateToTarget: widget.onNavigateToTarget,
+        // Delivery charge & Discounts moved to the drawer's Menu group — the
+        // top bar stays uniform across screens.
+      ),
+      pinHeader: true,
+      fillBody: true,
+      // Search row + scroll content self-pad 16px; the filter-chip row and the
+      // sticky footer stay full-bleed (they must reach the screen edge).
+      removeHorizontalPadding: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TfSearchField(
+                    controller: _searchController,
+                    hintText: _codeMode
+                        ? text.shortCodeSearchHint
+                        : text.menuSearchHint,
+                    keyboardType: _codeMode ? TextInputType.number : null,
+                    prefixIcon: _codeMode
+                        ? Icons.bolt_rounded
+                        : Icons.search_rounded,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                TfIconButton(
+                  icon: Icons.bolt_rounded,
+                  tooltip: text.shortCodeSearchHint,
+                  dark: _codeMode,
+                  onPressed: () => setState(() {
+                    _codeMode = !_codeMode;
+                    _searchController.clear();
+                  }),
+                ),
+              ],
+            ),
+          ),
+          if (app.menuItems.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            TfFilterChipRow(
+              chips: categories
+                  .map(
+                    (cat) => TfFilterChipData(
+                      label: cat,
+                      count: cat == text.allCategories
+                          ? app.menuItems.length
+                          : app.menuItems
+                                .where(
+                                  (i) => i.localizedCategory(language) == cat,
+                                )
+                                .length,
+                      active: cat == _selectedCategory,
+                    ),
+                  )
+                  .toList(),
+              onSelected: (index) =>
+                  setState(() => _selectedCategory = categories[index]),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: listArea,
+            ),
+          ),
+          if (app.isManager)
+            TfStickyCTA(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TfButton(
+                      label: text.menuScanCardButton,
+                      icon: Icons.document_scanner_outlined,
+                      variant: TfButtonVariant.dark,
+                      size: TfButtonSize.lg,
+                      onPressed: _scanBusy ? null : () => _scanMenu(context),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TfButton(
+                      label: text.menuNewButton,
+                      icon: Icons.add_rounded,
+                      size: TfButtonSize.lg,
+                      onPressed: () => _openMenuForm(context),
                     ),
                   ),
                 ],
               ),
             ),
-            if (app.isManager)
-              TfStickyCTA(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TfButton(
-                        label: text.menuScanCardButton,
-                        icon: Icons.document_scanner_outlined,
-                        variant: TfButtonVariant.dark,
-                        size: TfButtonSize.lg,
-                        onPressed: _scanBusy ? null : () => _scanMenu(context),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TfButton(
-                        label: text.menuNewButton,
-                        icon: Icons.add_rounded,
-                        size: TfButtonSize.lg,
-                        onPressed: () => _openMenuForm(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -1885,12 +1880,7 @@ class _MenuListHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    const style = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-      color: PosColors.muted,
-      letterSpacing: 0.3,
-    );
+    final style = TfTextStyles.eyebrow.copyWith(color: PosColors.muted);
     return Container(
       color: PosColors.surfaceSunk,
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
@@ -1948,11 +1938,23 @@ class _MenuManageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final available = item.isAvailable;
     return Material(
+      // primarySoft = multi-select state; the left accent bar makes the wash
+      // read as selection, not decoration (v4 §5.4).
       color: selected ? PosColors.primarySoft : PosColors.surface,
       child: InkWell(
         onTap: onEdit,
-        child: Padding(
+        child: Container(
+          constraints: const BoxConstraints(minHeight: PosDensity.rowMin),
+          alignment: Alignment.centerLeft,
           padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: selected ? PosColors.primary : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
           child: Row(
             children: [
               SizedBox(
@@ -1981,9 +1983,7 @@ class _MenuManageRow extends StatelessWidget {
                   item.localizedName(language),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                  style: TfTextStyles.rowTitle.copyWith(
                     color: PosColors.text,
                     height: 1.25,
                   ),
@@ -2056,7 +2056,7 @@ class _MarkAsToggle extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 2)],
+        boxShadow: PosShadows.e1,
       ),
       child: SizedBox(width: 16, height: 16),
     );
@@ -2079,44 +2079,6 @@ class _MarkAsToggle extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: on ? [label, knob] : [knob, label],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// ⚡ Short-code mode toggle — square button beside the search field. Active =
-/// blue fill + white bolt; inactive = ghost outline. Mirrors Petpooja's
-/// "Short Code" quick-entry next to item search.
-class _CodeModeButton extends StatelessWidget {
-  const _CodeModeButton({required this.active, required this.onTap});
-
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: active ? PosColors.primary : PosColors.surface,
-      borderRadius: BorderRadius.circular(PosRadii.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          width: 56,
-          height: 56,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.md),
-            border: Border.all(
-              color: active ? PosColors.primary : PosColors.lineStrong,
-            ),
-          ),
-          child: Icon(
-            Icons.bolt_rounded,
-            size: 22,
-            color: active ? PosColors.accentInk : PosColors.muted,
           ),
         ),
       ),

@@ -28,11 +28,11 @@ class CopyableTextCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: PosColors.primarySoft,
+              color: PosColors.neutralSoft,
               borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(color: PosColors.line),
             ),
-            child: Icon(icon, color: PosColors.accentStrong, size: 20),
+            child: Icon(icon, color: PosColors.neutralInk, size: 20),
           ),
           const SizedBox(width: PosSpacing.sp3),
           Expanded(

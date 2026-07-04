@@ -31,7 +31,7 @@ class LoadingView extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: PosColors.primarySoft,
+                  color: PosColors.neutralSoft,
                   borderRadius: BorderRadius.circular(PosRadii.lg),
                   border: Border.all(color: PosColors.line),
                 ),

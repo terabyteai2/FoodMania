@@ -137,14 +137,14 @@ class _IconBox extends StatelessWidget {
         ? PosColors.warningSoft
         : color == PosColors.danger
         ? PosColors.dangerSoft
-        : PosColors.primarySoft;
+        : PosColors.neutralSoft;
     final ink = color == PosColors.success
         ? PosColors.success
         : color == PosColors.warning
         ? PosColors.warning
         : color == PosColors.danger
         ? PosColors.danger
-        : PosColors.accentStrong;
+        : PosColors.neutralInk;
     return Container(
       width: compact ? 34 : 38,
       height: compact ? 34 : 38,

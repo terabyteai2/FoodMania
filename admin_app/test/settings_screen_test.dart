@@ -265,9 +265,9 @@ void main() {
     expect(find.text('All QR Codes'), findsOneWidget);
     expect(find.text('About Us'), findsOneWidget);
     expect(find.text('Log Out'), findsOneWidget);
-    // Language now lives only in More's own inline toggle, not duplicated
-    // here.
-    expect(find.text('Language'), findsNothing);
+    // Language now lives only in the Settings panel — its single home after
+    // Phase 5 removed the duplicate drawer-footer and avatar-dropdown toggles.
+    expect(find.text('App language'), findsOneWidget);
 
     controller.dispose();
   });

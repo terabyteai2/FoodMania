@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app_scope.dart';
-import '../../core/enums/business_tier.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
 
@@ -16,29 +16,33 @@ class TenantSetupScreen extends StatefulWidget {
 
 class _TenantSetupScreenState extends State<TenantSetupScreen> {
   static const int _totalSteps = 3;
-  static const int _defaultTableCount = 10;
+  static const int _maxTableCount = 200;
 
-  final _managerCtrl = TextEditingController();
+  final _ownerCtrl = TextEditingController();
   final _restaurantCtrl = TextEditingController();
+  final _tablesCtrl = TextEditingController();
   final _pageController = PageController();
 
   int _step = 0;
   bool _busy = false;
-  BusinessTier? _selectedTier;
 
   @override
   void initState() {
     super.initState();
-    _managerCtrl.addListener(_refresh);
+    _ownerCtrl.addListener(_refresh);
     _restaurantCtrl.addListener(_refresh);
+    _tablesCtrl.addListener(_refresh);
   }
 
   @override
   void dispose() {
-    _managerCtrl
+    _ownerCtrl
       ..removeListener(_refresh)
       ..dispose();
     _restaurantCtrl
+      ..removeListener(_refresh)
+      ..dispose();
+    _tablesCtrl
       ..removeListener(_refresh)
       ..dispose();
     _pageController.dispose();
@@ -49,8 +53,20 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
     if (mounted) setState(() {});
   }
 
-  bool get _managerReady => _managerCtrl.text.trim().isNotEmpty;
+  bool get _ownerReady => _ownerCtrl.text.trim().isNotEmpty;
   bool get _restaurantReady => _restaurantCtrl.text.trim().isNotEmpty;
+
+  /// Parsed table count; null when the field is empty/invalid. 0 is a valid
+  /// answer and means a counter-only outlet (no table map in the order flow).
+  int? get _tableCount {
+    final raw = _tablesCtrl.text.trim();
+    if (raw.isEmpty) return null;
+    final parsed = int.tryParse(raw);
+    if (parsed == null || parsed < 0 || parsed > _maxTableCount) return null;
+    return parsed;
+  }
+
+  bool get _tablesReady => _tableCount != null;
 
   void _goTo(int step) {
     if (_busy || step < 0 || step >= _totalSteps) return;
@@ -58,19 +74,18 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
     _pageController.jumpToPage(step);
   }
 
-  Future<void> _finish(BusinessTier tier) async {
-    if (_busy || !_restaurantReady || !_managerReady) return;
-    setState(() {
-      _busy = true;
-      _selectedTier = tier;
-    });
+  Future<void> _finish() async {
+    final tableCount = _tableCount;
+    if (_busy || !_restaurantReady || !_ownerReady || tableCount == null) {
+      return;
+    }
+    setState(() => _busy = true);
     final app = AppScope.of(context);
     try {
-      await app.setBusinessTier(tier);
       await app.saveLocalSetup(
         restaurantName: _restaurantCtrl.text.trim(),
-        managerName: _managerCtrl.text.trim(),
-        tableCount: _defaultTableCount,
+        managerName: _ownerCtrl.text.trim(),
+        tableCount: tableCount,
       );
       if (!mounted) return;
       widget.onProvisioned();
@@ -140,25 +155,25 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
                   _SetupStep(
                     title: isBn ? 'আপনার নাম কী?' : 'What is your name?',
                     subtitle: isBn
-                        ? 'এই নামটি ম্যানেজার অ্যাকাউন্টে দেখানো হবে।'
-                        : 'This will appear on the manager account.',
+                        ? 'এই নামটি মালিকের অ্যাকাউন্টে দেখানো হবে।'
+                        : 'This will appear on the owner account.',
                     field: TfField(
-                      label: 'Manager name',
-                      labelBn: 'ম্যানেজারের নাম',
+                      label: 'Owner name',
+                      labelBn: 'মালিকের নাম',
                       hint: 'e.g. Ahmed Rahman',
                       hintBn: 'যেমন আহমেদ রহমান',
-                      controller: _managerCtrl,
+                      controller: _ownerCtrl,
                       autofocus: true,
                       textInputAction: TextInputAction.next,
                       onSubmitted: (_) {
-                        if (_managerReady) _goTo(1);
+                        if (_ownerReady) _goTo(1);
                       },
                     ),
                     cta: TfButton(
                       label: 'Continue',
                       labelBn: 'চালিয়ে যান',
                       trailingIcon: TfNavIcon.arrow,
-                      onPressed: _managerReady ? () => _goTo(1) : null,
+                      onPressed: _ownerReady ? () => _goTo(1) : null,
                     ),
                   ),
                   _SetupStep(
@@ -187,10 +202,35 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
                       onPressed: _restaurantReady ? () => _goTo(2) : null,
                     ),
                   ),
-                  _RestaurantTypeStep(
-                    busy: _busy,
-                    selectedTier: _selectedTier,
-                    onSelected: _finish,
+                  _SetupStep(
+                    title: isBn ? 'কয়টি টেবিল আছে?' : 'How many tables?',
+                    subtitle: isBn
+                        ? 'কাউন্টার-শুধু সার্ভিসের জন্য ০ লিখুন — অর্ডার নেওয়ার সময় টেবিল বাছাই থাকবে না।'
+                        : 'Enter 0 for counter-only service — ordering skips the table picker.',
+                    field: TfField(
+                      label: 'Number of tables',
+                      labelBn: 'টেবিলের সংখ্যা',
+                      hint: 'e.g. 12',
+                      hintBn: 'যেমন ১২',
+                      controller: _tablesCtrl,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) {
+                        if (_tablesReady) _finish();
+                      },
+                    ),
+                    cta: TfButton(
+                      label: 'Finish',
+                      labelBn: 'শেষ করুন',
+                      trailingIcon: TfNavIcon.arrow,
+                      busy: _busy,
+                      onPressed: _tablesReady && !_busy ? _finish : null,
+                    ),
                   ),
                 ],
               ),
@@ -201,185 +241,6 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
     );
   }
 }
-
-class _RestaurantTypeStep extends StatelessWidget {
-  const _RestaurantTypeStep({
-    required this.busy,
-    required this.selectedTier,
-    required this.onSelected,
-  });
-
-  final bool busy;
-  final BusinessTier? selectedTier;
-  final ValueChanged<BusinessTier> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final isBn = tfIsBn(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 54, 20, 24),
-      children: [
-        TfText(
-          isBn ? 'কী ধরনের রেস্টুরেন্ট?' : 'What type of restaurant?',
-          style: TextStyle(
-            fontFamily: tfFontFamily(context),
-            fontSize: 30,
-            fontWeight: FontWeight.w700,
-            color: PosColors.slate,
-            height: 1.08,
-          ),
-        ),
-        const SizedBox(height: 10),
-        TfText(
-          isBn
-              ? 'আপনার POS সাজাতে একটি অপশন বেছে নিন।'
-              : 'Choose one option to tailor your POS.',
-          style: const TextStyle(
-            fontSize: 15,
-            color: PosColors.muted,
-            height: 1.45,
-          ),
-        ),
-        const SizedBox(height: 24),
-        for (final option in _restaurantTypeOptions) ...[
-          _RestaurantTypeCard(
-            option: option,
-            selected: selectedTier == option.tier,
-            busy: busy,
-            onTap: () => onSelected(option.tier),
-          ),
-          if (option != _restaurantTypeOptions.last)
-            const SizedBox(height: PosSpacing.sp3),
-        ],
-      ],
-    );
-  }
-}
-
-class _RestaurantTypeCard extends StatelessWidget {
-  const _RestaurantTypeCard({
-    required this.option,
-    required this.selected,
-    required this.busy,
-    required this.onTap,
-  });
-
-  final _RestaurantTypeOption option;
-  final bool selected;
-  final bool busy;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isBn = tfIsBn(context);
-    final foreground = selected ? PosColors.primaryDark : PosColors.inkSoft;
-    return Material(
-      key: ValueKey('restaurant-type-${option.tier.key}'),
-      color: selected ? PosColors.primarySoft : PosColors.surface,
-      borderRadius: BorderRadius.circular(PosRadii.md),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: busy ? null : onTap,
-        child: Container(
-          padding: const EdgeInsets.all(PosSpacing.sp4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.md),
-            border: Border.all(
-              color: selected ? PosColors.lineStrong : PosColors.line,
-              width: 0.5,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TfText(
-                      isBn ? option.labelBn : option.label,
-                      style: TextStyle(
-                        color: foreground,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: PosSpacing.sp1),
-                    TfText(
-                      isBn ? option.subtitleBn : option.subtitle,
-                      style: TextStyle(
-                        color: selected ? PosColors.inkSoft : PosColors.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: PosSpacing.sp3),
-              if (selected && busy)
-                const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(
-                    color: PosColors.inkSoft,
-                    strokeWidth: 2,
-                  ),
-                )
-              else
-                Icon(TfNavIcon.arrow, color: foreground, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RestaurantTypeOption {
-  const _RestaurantTypeOption({
-    required this.tier,
-    required this.label,
-    required this.labelBn,
-    required this.subtitle,
-    required this.subtitleBn,
-  });
-
-  final BusinessTier tier;
-  final String label;
-  final String labelBn;
-  final String subtitle;
-  final String subtitleBn;
-}
-
-const _restaurantTypeOptions = [
-  _RestaurantTypeOption(
-    tier: BusinessTier.simple,
-    label: 'Food Cart',
-    labelBn: 'ফুড কার্ট',
-    subtitle: 'Counter service',
-    subtitleBn: 'কাউন্টার সার্ভিস',
-  ),
-  _RestaurantTypeOption(
-    tier: BusinessTier.standard,
-    label: 'Cafe',
-    labelBn: 'ক্যাফে',
-    subtitle: '1-10 tables',
-    subtitleBn: '১-১০টি টেবিল',
-  ),
-  _RestaurantTypeOption(
-    tier: BusinessTier.advanced,
-    label: 'Restaurant',
-    labelBn: 'রেস্টুরেন্ট',
-    subtitle: '11-20 tables',
-    subtitleBn: '১১-২০টি টেবিল',
-  ),
-  _RestaurantTypeOption(
-    tier: BusinessTier.enterprise,
-    label: 'Enterprise',
-    labelBn: 'এন্টারপ্রাইজ',
-    subtitle: '20+ tables',
-    subtitleBn: '২০টির বেশি টেবিল',
-  ),
-];
 
 class _SetupStep extends StatelessWidget {
   const _SetupStep({

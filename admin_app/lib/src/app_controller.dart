@@ -14,7 +14,6 @@ import 'package:uuid/uuid.dart';
 
 import 'core/constants/cloud_defaults.dart';
 import 'core/constants/google_auth_defaults.dart';
-import 'core/enums/business_tier.dart';
 import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
 import 'core/utils/bounded_string_set.dart';
@@ -274,7 +273,6 @@ class PosAppController extends ChangeNotifier {
   String? lastBkashTransactionId;
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
-  BusinessTier businessTier = BusinessTier.standard;
   String? lastError;
   bool demoManagerLoginEnabled = false;
   String phoneOtpMode = 'unconfigured';
@@ -290,9 +288,9 @@ class PosAppController extends ChangeNotifier {
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
 
-  /// Counter (quick-sell) service mode — manager+ toggle in More. When on, the
-  /// Tables tab becomes a tap-to-ring quick-sell grid instead of the FOH map.
-  bool counterModeEnabled = false;
+  /// Counter (quick-sell) outlet: no tables configured. Drives the quick-sell
+  /// Tables grid and the order wizard's skip-table flow.
+  bool get isCounterOutlet => serverConfig.tableCount == 0;
   List<MenuItem> menuItems = [];
   Map<String, int> itemPopularity = {};
   List<String> quickSellMenuItemIds = [];
@@ -390,14 +388,26 @@ class PosAppController extends ChangeNotifier {
   /// Stock & inventory — owner only (managers & waiters blocked entirely).
   bool get canManageStock => isOwner;
 
-  /// Demo-only role switch (More → profile). In production the role comes from
-  /// the authenticated session; here it lets one device preview each role's
-  /// navigation and access. Persists so it survives a relaunch.
+  /// True when the owner/manager "view as" switch (top-bar avatar dropdown)
+  /// should be offered. Stays true while a genuine owner previews the manager
+  /// surface so they can switch back, and is never set for a real manager/waiter
+  /// — the switch is the only writer and is hidden from them, so they cannot
+  /// self-elevate.
+  bool _ownerViewPreview = false;
+  bool get demoOwnerAccess => isOwner || _ownerViewPreview;
+
+  /// Owner-only demo "view as" switch (top-bar avatar dropdown). In production
+  /// the role comes from the authenticated session; here it lets an owner
+  /// preview the manager navigation/access. Persists so it survives a relaunch.
   Future<void> setAccountRoleDemo(AccountRole role) async {
     if (accountRole == role) return;
     accountRole = role;
+    // Remember when an owner is previewing the manager surface so the switch
+    // stays reachable (demoOwnerAccess) to return to the owner view.
+    _ownerViewPreview = role.isManager;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_accountRoleKey, role.value);
+    await preferences.setBool(_ownerViewPreviewKey, _ownerViewPreview);
     notifyListeners();
   }
 
@@ -525,9 +535,6 @@ class PosAppController extends ChangeNotifier {
             )
           : deviceLanguage;
       themePreference = AppThemePreference.white;
-      businessTier = BusinessTier.fromString(
-        preferences.getString(_businessTierKey),
-      );
       quickSellMenuItemIds =
           preferences.getStringList(_quickSellMenuItemIdsKey) ?? const [];
       final storedRestaurantName =
@@ -595,12 +602,13 @@ class PosAppController extends ChangeNotifier {
           (preferences.getString(_deviceTokenKey) ?? '').isEmpty) {
         accountRole = AccountRole.owner;
       }
+      _ownerViewPreview =
+          preferences.getBool(_ownerViewPreviewKey) ?? false;
       _accountPassword = preferences.getString(_accountPasswordKey) ?? '';
       notificationSoundEnabled =
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
       notificationSoundPath =
           preferences.getString(_notificationSoundPathKey) ?? '';
-      counterModeEnabled = preferences.getBool(_counterModeEnabledKey) ?? false;
       _dismissedAppUpdateVersionCode =
           preferences.getInt(_dismissedAppUpdateVersionCodeKey) ?? 0;
       isLoggedIn = preferences.getBool(_accountLoggedInKey) ?? isTenantReady;
@@ -2901,6 +2909,10 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_restaurantNameKey);
     await preferences.remove(_outletNameKey);
     await preferences.remove(_selectedPlanKey);
+    // Drop any owner "view as manager" preview so the next session's switch
+    // visibility is derived solely from the freshly authenticated role.
+    _ownerViewPreview = false;
+    await preferences.remove(_ownerViewPreviewKey);
     selectedSubscriptionPlan = '';
     // Drop the cached Google session so the next sign-in shows the account
     // chooser instead of silently re-using the previous account.
@@ -3603,6 +3615,11 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> deleteOrder(String id) async {
+    await database.queueDesktopAudit(
+      orderId: id,
+      action: 'void',
+      reason: 'Order deleted',
+    );
     await database.updateOrderStatus(id, OrderStatus.rejected);
     unawaited(syncService.syncNow());
   }
@@ -3621,14 +3638,6 @@ class PosAppController extends ChangeNotifier {
 
   Future<bool> retryFailedSync() async {
     return _runBusy(syncService.retryFailed);
-  }
-
-  Future<void> setBusinessTier(BusinessTier tier) async {
-    if (businessTier == tier) return;
-    businessTier = tier;
-    notifyListeners();
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_businessTierKey, tier.key);
   }
 
   Future<void> updateQuickSellMenuItemIds(List<String> ids) async {
@@ -4100,14 +4109,6 @@ class PosAppController extends ChangeNotifier {
       soundPath: notificationSoundPath,
     );
     notifyListeners();
-  }
-
-  Future<void> setCounterModeEnabled(bool value) async {
-    if (counterModeEnabled == value) return;
-    counterModeEnabled = value;
-    notifyListeners();
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_counterModeEnabledKey, value);
   }
 
   Future<void> setNotificationSoundPath(String path) async {
@@ -4809,10 +4810,8 @@ class PosAppController extends ChangeNotifier {
   static final String _deviceTokenKey = 'local_pos_device_token';
   static final String _cloudSyncEnabledKey = 'local_pos_cloud_sync_enabled';
   static final String _autoSyncIntervalKey = 'local_pos_auto_sync_interval';
-  static final String _businessTierKey = 'local_pos_business_tier';
   static final String _quickSellMenuItemIdsKey =
       'local_pos_quick_sell_menu_item_ids';
-  static final String _counterModeEnabledKey = 'local_pos_counter_mode_enabled';
   static final String _languageKey = 'local_pos_language';
   static final String _languagePreferenceSetKey =
       'local_pos_language_preference_set';
@@ -4826,6 +4825,7 @@ class PosAppController extends ChangeNotifier {
   static final String _accountUsernameKey = 'local_pos_account_username';
   static final String _accountDisplayNameKey = 'local_pos_account_display_name';
   static final String _accountRoleKey = 'local_pos_account_role';
+  static final String _ownerViewPreviewKey = 'local_pos_owner_view_preview';
   static final String _accountPasswordKey = 'local_pos_account_password';
   static final String _accountLoggedInKey = 'local_pos_account_logged_in';
   static final String _notificationSoundEnabledKey =

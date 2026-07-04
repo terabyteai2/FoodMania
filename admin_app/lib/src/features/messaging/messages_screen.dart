@@ -84,7 +84,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
     return AppScaffold(
       title: text.messages,
       subtitle: text.botLive,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,
@@ -553,7 +552,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     return AppScaffold(
       title: _chat.name,
       subtitle: text.viaMessenger,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,

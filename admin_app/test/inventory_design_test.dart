@@ -64,26 +64,27 @@ void main() {
     // Summary strip.
     expect(find.text('Stock value'), findsOneWidget);
     expect(find.text('Below par'), findsOneWidget);
-    // Inventory eyebrow + advanced toggle.
-    expect(find.text('INVENTORY'), findsOneWidget);
+    // Advanced view toggle lives in the top bar (no INVENTORY eyebrow row).
     expect(find.text('Advanced'), findsOneWidget);
-    // Ranked table headers (QTY is the rightmost, left-justified column).
+    // Ranked table headers — simple view is ITEM + QTY (no VALUE column).
     expect(find.text('ITEM'), findsOneWidget);
-    expect(find.text('VALUE'), findsOneWidget);
+    expect(find.text('VALUE'), findsNothing);
     expect(find.text('QTY'), findsOneWidget);
     // Items are listed.
     expect(find.text('Rice'), findsWidgets);
     expect(find.text('Mutton'), findsWidgets);
-    // Bottom-bar actions replace top-bar buttons.
+    // Bottom-bar actions (Scan moved to the drawer's Stock group).
     expect(find.text('Count'), findsOneWidget);
     expect(find.text('Stock in'), findsOneWidget);
-    // COVER column is hidden until Advanced is on.
-    expect(find.text('COVER'), findsNothing);
+    expect(find.text('Scan'), findsNothing);
 
-    // Flip the Advanced toggle → cover column appears.
+    // Flip the Advanced toggle → IN/OUT + NET appear; QTY stays (no COVER).
     await tester.tap(find.byType(AdvToggle));
     await tester.pump();
-    expect(find.text('COVER'), findsOneWidget);
+    expect(find.text('IN/OUT'), findsOneWidget);
+    expect(find.text('NET'), findsOneWidget);
+    expect(find.text('COVER'), findsNothing);
+    expect(find.text('QTY'), findsOneWidget);
 
     controller.dispose();
   });

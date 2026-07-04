@@ -52,7 +52,6 @@ class _StaffScreenState extends State<StaffScreen> {
     final text = app.strings;
     return AppScaffold(
       title: text.staff,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,
@@ -169,7 +168,7 @@ class _StaffCard extends StatelessWidget {
             height: 42,
             decoration: BoxDecoration(
               color: member.isActive
-                  ? PosColors.accentSoft
+                  ? PosColors.neutralWash
                   : PosColors.surfaceSunk,
               borderRadius: BorderRadius.circular(12),
             ),
@@ -180,7 +179,7 @@ class _StaffCard extends StatelessWidget {
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: member.isActive
-                    ? PosColors.accentStrong
+                    ? PosColors.neutralInk
                     : PosColors.muted,
               ),
             ),
@@ -252,8 +251,8 @@ class _RoleBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isManager = role == AccountRole.manager || role == AccountRole.owner;
-    final fg = isManager ? PosColors.info : PosColors.accentStrong;
-    final bg = isManager ? PosColors.infoSoft : PosColors.accentSoft;
+    final fg = PosColors.neutralInk;
+    final bg = isManager ? PosColors.neutralWash : PosColors.neutralSoft;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(

@@ -8,8 +8,10 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/report_section.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
+import '../../core/widgets/tf_timeframe_selector.dart';
 import '../../models/analytics_summary_data.dart';
 import '../../models/pos_notification.dart';
+import '../reports/report_export.dart';
 
 // ===========================================================================
 // Owner Analytics — QuicklyServices plain-BD metric set (redesign spec Part B).
@@ -23,8 +25,17 @@ const bool _analyticsDiagnosticsEnabled = bool.fromEnvironment(
 );
 
 class AnalyticsScreen extends StatefulWidget {
-  const AnalyticsScreen({this.onNavigateToTarget, super.key});
+  const AnalyticsScreen({
+    this.reduced = false,
+    this.onNavigateToOrders,
+    this.onNavigateToTarget,
+    super.key,
+  });
 
+  /// When true, renders the reduced manager "Sales Summary" cut — today-only,
+  /// with no period selector / tabs / profit / charts / item-wise / export.
+  final bool reduced;
+  final VoidCallback? onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   @override
@@ -34,6 +45,8 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   int _tab = 0; // 0 = Sales Breakdown, 1 = Item-wise Sales
   String _range = 'today';
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
   Future<AnalyticsSummaryData>? _future;
   final ScrollController _scrollController = ScrollController();
   String? _lastDiagnostics;
@@ -54,8 +67,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final app = AppScope.read(context);
     final prefix =
         'range=$_range cloudReady=${app.isCloudReady} canSync=${app.cloudConfig.canSync}';
+    final start = _rangeStart;
+    final end = _rangeEnd;
     try {
-      final json = await app.fetchAnalyticsSummary(range: _range);
+      final json = await app.fetchAnalyticsSummary(
+        range: _range,
+        start: _range == TfPeriodWithCalendar.customValue && start != null
+            ? start.toUtc().toIso8601String()
+            : null,
+        end: _range == TfPeriodWithCalendar.customValue && end != null
+            ? DateTime(
+                end.year,
+                end.month,
+                end.day,
+                23,
+                59,
+                59,
+              ).toUtc().toIso8601String()
+            : null,
+      );
       final data = AnalyticsSummaryData.fromJson(json);
       _recordDiagnostics('$prefix ${data.diagnosticSummary}');
       return data;
@@ -76,10 +106,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     developer.log(message, name: 'analytics.summary');
   }
 
-  void _setRange(String range) {
-    if (range == _range) return;
+  void _setRange(String range, DateTime? start, DateTime? end) {
+    if (range == _range && start == _rangeStart && end == _rangeEnd) return;
     setState(() {
       _range = range;
+      _rangeStart = start;
+      _rangeEnd = end;
       _future = _load();
     });
   }
@@ -95,32 +127,43 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TfGlobalTopBar(
-              title: text.analyticsTab,
-              subtitle: text.ownerViewSubtitle(app.outletName),
+              title: widget.reduced ? text.salesSummary : text.analyticsTab,
+              onNavigateToOrders: widget.onNavigateToOrders,
               onNavigateToTarget: widget.onNavigateToTarget,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-              child: _RangeChips(
-                range: _range,
-                onChanged: _setRange,
-                text: text,
+            if (!widget.reduced) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: TfPeriodWithCalendar(
+                  options: [
+                    ('today', text.rangeToday),
+                    ('week', text.range7Days),
+                    ('month', text.range30Days),
+                  ],
+                  value: _range,
+                  start: _rangeStart,
+                  end: _rangeEnd,
+                  onChanged: _setRange,
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: TfSegToggle(
-                activeIndex: _tab,
-                onChanged: (i) => setState(() => _tab = i),
-                items: [
-                  TfTabItem(
-                    label: text.salesBreakdownTab,
-                    labelBn: text.salesBreakdownTab,
-                  ),
-                  TfTabItem(label: text.itemWiseTab, labelBn: text.itemWiseTab),
-                ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: TfSegToggle(
+                  activeIndex: _tab,
+                  onChanged: (i) => setState(() => _tab = i),
+                  items: [
+                    TfTabItem(
+                      label: text.salesBreakdownTab,
+                      labelBn: text.salesBreakdownTab,
+                    ),
+                    TfTabItem(
+                      label: text.itemWiseTab,
+                      labelBn: text.itemWiseTab,
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
             Expanded(
               child: FutureBuilder<AnalyticsSummaryData>(
                 future: _future,
@@ -154,9 +197,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                      children: _tab == 0
-                          ? _salesBreakdown(context, text, data)
-                          : _itemWise(context, text, data),
+                      children: widget.reduced
+                          ? _reducedSummary(context, text, data)
+                          : (_tab == 0
+                                ? _salesBreakdown(context, text, data)
+                                : _itemWise(context, text, data)),
                     ),
                   );
                 },
@@ -200,51 +245,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
         ),
         const SizedBox(height: PosSpacing.sp4),
-        ReportSection(
-          title: text.salesSummary,
-          rows: [
-            ReportRow(
-              text.ordersCompleted,
-              tfFormatNumber(context, d.ordersCompleted),
-            ),
-            ReportRow(text.grossSales, tfFormatCurrency(context, d.grossSales)),
-            ReportRow(
-              text.discountByStaff,
-              parenCurrency(context, d.discountByStaff),
-              deduction: true,
-              indent: true,
-            ),
-            ReportRow(
-              text.netSales,
-              tfFormatCurrency(context, d.netSales),
-              bold: true,
-            ),
-          ],
-        ),
+        _salesSummarySection(context, text, d),
         const SizedBox(height: PosSpacing.sp3),
-        ReportSection(
-          title: text.collectionSummary,
-          rows: d.collection.isEmpty
-              ? [ReportRow(text.noData, tfFormatCurrency(context, 0))]
-              : [
-                  for (final c in d.collection)
-                    ReportRow(c.label, tfFormatCurrency(context, c.value)),
-                ],
-        ),
+        _collectionSection(context, text, d),
         const SizedBox(height: PosSpacing.sp3),
         if (d.serviceWise.any((s) => s.value > 0)) ...[
           _ServiceWiseChartCard(rows: d.serviceWise, text: text),
           const SizedBox(height: PosSpacing.sp3),
         ],
-        ReportSection(
-          title: text.serviceWiseSales,
-          rows: d.serviceWise.isEmpty
-              ? [ReportRow(text.noData, tfFormatCurrency(context, 0))]
-              : [
-                  for (final s in d.serviceWise)
-                    ReportRow(s.label, tfFormatCurrency(context, s.value)),
-                ],
-        ),
+        _serviceWiseSection(context, text, d),
         const SizedBox(height: PosSpacing.sp3),
         ReportSection(
           title: text.profitEstimation,
@@ -321,6 +330,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ),
         const SizedBox(height: PosSpacing.sp3),
         _PopularDishes(dishes: d.popular, text: text),
+        const SizedBox(height: PosSpacing.sp4),
+        _ExportRow(
+          onPdf: () => _exportPdf(context, text, d),
+          onCsv: () => _exportCsv(context, text, d),
+          text: text,
+        ),
       ];
     } catch (e, st) {
       _recordDiagnostics('renderError=${e.runtimeType}: $e');
@@ -453,6 +468,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ),
         const SizedBox(height: PosSpacing.sp3),
       ],
+      TfButton(
+        label: text.downloadExcel,
+        variant: TfButtonVariant.ghost,
+        icon: Icons.table_view_outlined,
+        onPressed: () => _exportItemsCsv(context, text, d),
+      ),
     ];
   }
 
@@ -476,37 +497,315 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       const SizedBox(height: PosSpacing.sp3),
     ];
   }
+
+  // -------------------------------------------------------------------------
+  // Shared report sections (owner Sales Breakdown + manager reduced summary).
+  // -------------------------------------------------------------------------
+  ReportSection _salesSummarySection(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) {
+    return ReportSection(
+      title: text.salesSummary,
+      rows: [
+        ReportRow(
+          text.ordersCompleted,
+          tfFormatNumber(context, d.ordersCompleted),
+        ),
+        ReportRow(text.grossSales, tfFormatCurrency(context, d.grossSales)),
+        ReportRow(
+          text.discountByStaff,
+          parenCurrency(context, d.discountByStaff),
+          deduction: true,
+          indent: true,
+        ),
+        ReportRow(
+          text.netSales,
+          tfFormatCurrency(context, d.netSales),
+          bold: true,
+        ),
+      ],
+    );
+  }
+
+  ReportSection _collectionSection(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) {
+    return ReportSection(
+      title: text.collectionSummary,
+      rows: d.collection.isEmpty
+          ? [ReportRow(text.noData, tfFormatCurrency(context, 0))]
+          : [
+              for (final c in d.collection)
+                ReportRow(c.label, tfFormatCurrency(context, c.value)),
+            ],
+    );
+  }
+
+  ReportSection _serviceWiseSection(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) {
+    return ReportSection(
+      title: text.serviceWiseSales,
+      rows: d.serviceWise.isEmpty
+          ? [ReportRow(text.noData, tfFormatCurrency(context, 0))]
+          : [
+              for (final s in d.serviceWise)
+                ReportRow(s.label, tfFormatCurrency(context, s.value)),
+            ],
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Manager "Sales Summary" — reduced today-only cut (no profit/charts/tabs).
+  // -------------------------------------------------------------------------
+  List<Widget> _reducedSummary(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) {
+    if (d.hasNoData) {
+      return [
+        ..._diagnosticWidgets(),
+        const SizedBox(height: PosSpacing.sp8),
+        TfEmptyState(
+          title: text.analyticsNoDataTitle,
+          message: text.analyticsNoDataMessage,
+          icon: Icons.bar_chart_outlined,
+        ),
+      ];
+    }
+    return [
+      ..._diagnosticWidgets(),
+      const SizedBox(height: 4),
+      _Eyebrow(text: text),
+      const SizedBox(height: 10),
+      _reducedStatGrid(context, text, d),
+      const SizedBox(height: PosSpacing.sp3),
+      _salesSummarySection(context, text, d),
+      const SizedBox(height: PosSpacing.sp3),
+      _collectionSection(context, text, d),
+      const SizedBox(height: PosSpacing.sp3),
+      _serviceWiseSection(context, text, d),
+      const SizedBox(height: PosSpacing.sp3),
+      _PopularDishes(dishes: d.popular, text: text, limit: 5),
+    ];
+  }
+
+  /// 2×2 headline stat grid for the reduced manager cut.
+  Widget _reducedStatGrid(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) {
+    final tiles = [
+      _StatTile(
+        tint: PosColors.tintBlue,
+        iconColor: PosColors.iconBlue,
+        icon: Icons.receipt_long_rounded,
+        value: tfFormatNumber(context, d.ordersCompleted),
+        label: text.ordersCompleted,
+      ),
+      _StatTile(
+        tint: PosColors.tintAmber,
+        iconColor: PosColors.iconAmber,
+        icon: Icons.sell_rounded,
+        value: tfFormatCurrency(context, d.grossSales),
+        label: text.grossSales,
+      ),
+      _StatTile(
+        tint: PosColors.tintGreen,
+        iconColor: PosColors.iconGreen,
+        icon: Icons.trending_up_rounded,
+        value: tfFormatCurrency(context, d.netSales),
+        label: text.netSales,
+      ),
+      _StatTile(
+        tint: PosColors.tintPurple,
+        iconColor: PosColors.iconPurple,
+        icon: Icons.account_balance_wallet_rounded,
+        value: tfFormatCurrency(context, d.totalCollection),
+        label: text.totalCollection,
+      ),
+    ];
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: tiles[0]),
+            const SizedBox(width: PosSpacing.sp3),
+            Expanded(child: tiles[1]),
+          ],
+        ),
+        const SizedBox(height: PosSpacing.sp3),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: tiles[2]),
+            const SizedBox(width: PosSpacing.sp3),
+            Expanded(child: tiles[3]),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // PDF / Excel export (owner Analytics only; reuses the Reports helper).
+  // -------------------------------------------------------------------------
+  Future<void> _exportPdf(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) async {
+    String c(double v) => tfFormatCurrency(context, v);
+    await ReportExport.sharePdf(
+      title: text.salesBreakdownReport,
+      subtitle: AppScope.read(context).outletName,
+      sections: [
+        (
+          text.salesSummary,
+          [
+            (text.ordersCompleted, '${d.ordersCompleted}'),
+            (text.grossSales, c(d.grossSales)),
+            (text.discountByStaff, c(d.discountByStaff)),
+            (text.netSales, c(d.netSales)),
+          ],
+        ),
+        (
+          text.collectionSummary,
+          [for (final r in d.collection) (r.label, c(r.value))],
+        ),
+        (
+          text.serviceWiseSales,
+          [for (final r in d.serviceWise) (r.label, c(r.value))],
+        ),
+        (
+          text.profitEstimation,
+          [
+            (text.netSales, c(d.profit.netSales)),
+            (text.serviceCharge, c(d.profit.serviceCharge)),
+            (text.deliveryCharge, c(d.profit.deliveryCharge)),
+            (text.preparationCost, c(d.profit.preparationCost)),
+            (text.wastage, c(d.profit.wastage)),
+            (text.paymentFee, c(d.profit.paymentFee)),
+            (text.taxesIncl, c(d.profit.taxes)),
+            (text.grossProfit, c(d.profit.grossProfit)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _exportCsv(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) async {
+    String c(double v) => tfFormatCurrency(context, v);
+    await ReportExport.copyCsv([
+      [text.salesBreakdownReport, ''],
+      [text.ordersCompleted, '${d.ordersCompleted}'],
+      [text.grossSales, c(d.grossSales)],
+      [text.netSales, c(d.netSales)],
+      [text.grossProfit, c(d.profit.grossProfit)],
+      for (final r in d.serviceWise) [r.label, c(r.value)],
+    ]);
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TfText(text.downloadExcel)));
+    }
+  }
+
+  Future<void> _exportItemsCsv(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) async {
+    String c(double v) => tfFormatCurrency(context, v);
+    final rows = <List<String>>[
+      [text.itemName, text.avgUnitPrice, text.totalPrice],
+    ];
+    for (final cat in d.itemWise) {
+      rows.add(['${cat.category} (${cat.units})', '', c(cat.totalPrice)]);
+      for (final item in cat.items) {
+        rows.add([
+          '${item.name} (${item.units})',
+          c(item.avgUnitPrice),
+          c(item.totalPrice),
+        ]);
+      }
+    }
+    await ReportExport.copyCsv(rows);
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TfText(text.downloadExcel)));
+    }
+  }
 }
 
-class _RangeChips extends StatelessWidget {
-  const _RangeChips({
-    required this.range,
-    required this.onChanged,
-    required this.text,
-  });
-
-  final String range;
-  final ValueChanged<String> onChanged;
+/// "TODAY'S SALES · {date}" muted eyebrow above the reduced manager summary.
+class _Eyebrow extends StatelessWidget {
+  const _Eyebrow({required this.text});
   final AppStrings text;
 
   @override
   Widget build(BuildContext context) {
-    final options = <(String, String)>[
-      ('today', text.rangeToday),
-      ('week', text.range7Days),
-      ('month', text.range30Days),
-    ];
-    return Wrap(
-      spacing: PosSpacing.sp2,
-      runSpacing: PosSpacing.sp2,
+    final date = MaterialLocalizations.of(
+      context,
+    ).formatShortDate(DateTime.now());
+    return TfText(
+      '${text.todaysSales} · $date',
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+        color: PosColors.muted,
+      ),
+    );
+  }
+}
+
+/// Ghost PDF + Excel export pair for the owner Sales Breakdown tab.
+class _ExportRow extends StatelessWidget {
+  const _ExportRow({
+    required this.onPdf,
+    required this.onCsv,
+    required this.text,
+  });
+  final VoidCallback onPdf;
+  final VoidCallback onCsv;
+  final AppStrings text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
       children: [
-        for (final (key, label) in options)
-          TfChip(
-            label: label,
-            active: range == key,
-            small: true,
-            onTap: () => onChanged(key),
+        Expanded(
+          child: TfButton(
+            label: text.downloadPdf,
+            variant: TfButtonVariant.ghost,
+            icon: Icons.picture_as_pdf_outlined,
+            onPressed: onPdf,
           ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: TfButton(
+            label: text.downloadExcel,
+            variant: TfButtonVariant.ghost,
+            icon: Icons.table_view_outlined,
+            onPressed: onCsv,
+          ),
+        ),
       ],
     );
   }
@@ -572,12 +871,18 @@ class _StatTile extends StatelessWidget {
 }
 
 class _PopularDishes extends StatelessWidget {
-  const _PopularDishes({required this.dishes, required this.text});
+  const _PopularDishes({required this.dishes, required this.text, this.limit});
   final List<AnalyticsDish> dishes;
   final AppStrings text;
 
+  /// Cap the ranked list to the top N (null = show all).
+  final int? limit;
+
   @override
   Widget build(BuildContext context) {
+    final shown = limit == null
+        ? dishes
+        : dishes.take(limit!).toList(growable: false);
     return TfCard(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
       child: Column(
@@ -592,7 +897,7 @@ class _PopularDishes extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          if (dishes.isEmpty)
+          if (shown.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: TfText(
@@ -601,7 +906,7 @@ class _PopularDishes extends StatelessWidget {
               ),
             )
           else
-            for (final dish in dishes)
+            for (final dish in shown)
               Container(
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: PosColors.line)),

@@ -1024,6 +1024,7 @@ class HeaderNotificationBell extends StatelessWidget {
       icon: TfSourceIconName.bell,
       tooltip: app.strings.notificationsTitle,
       badge: unread,
+      bare: true,
       onPressed: () => showNotificationCenter(
         context,
         onNavigateToOrders: onNavigateToOrders,

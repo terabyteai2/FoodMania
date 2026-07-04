@@ -103,12 +103,14 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
                         ),
                         _Metric(
                           label: 'Unit cost',
-                          value: '৳${item.costPerUnit.toStringAsFixed(0)}',
+                          value: tfFormatCurrency(context, item.costPerUnit),
                         ),
                         _Metric(
                           label: 'Stock value',
-                          value:
-                              '৳${(item.quantity * item.costPerUnit).toStringAsFixed(0)}',
+                          value: tfFormatCurrency(
+                            context,
+                            item.quantity * item.costPerUnit,
+                          ),
                         ),
                       ],
                     ),

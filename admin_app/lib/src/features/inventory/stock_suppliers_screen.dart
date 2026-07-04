@@ -23,7 +23,6 @@ class SuppliersScreen extends StatelessWidget {
     return AppScaffold(
       title: text.suppliers,
       subtitle: text.suppliersCount(suppliers.length),
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,

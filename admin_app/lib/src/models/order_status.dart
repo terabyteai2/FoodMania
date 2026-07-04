@@ -73,7 +73,7 @@ enum OrderStatus {
     final target = next.adminStatus;
     if (current == target) return true;
     if (current == OrderStatus.completed) {
-      return target == OrderStatus.completed;
+      return target == OrderStatus.completed || target == OrderStatus.rejected;
     }
     if (target == OrderStatus.rejected) {
       return current != OrderStatus.completed;

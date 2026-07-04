@@ -4,6 +4,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_timeframe_selector.dart';
 import '../analytics/analytics_screen.dart';
 import 'report_export.dart';
 
@@ -23,18 +24,47 @@ class PerformanceReportScreen extends StatefulWidget {
 class _PerformanceReportScreenState extends State<PerformanceReportScreen> {
   String _granularity = 'daily';
   int _days = 30;
+  // Custom window: a picked date range maps to start + inclusive day span.
+  bool _customWindow = false;
+  DateTime? _customStart;
+  DateTime? _customEnd;
   Future<List<_PerfRow>>? _future;
 
   Future<List<_PerfRow>> _load() async {
     final app = AppScope.read(context);
+    final start = _customStart;
     final json = await app.fetchPerformanceReport(
       granularity: _granularity,
       days: _days,
+      start: _customWindow && start != null
+          ? DateTime(
+              start.year,
+              start.month,
+              start.day,
+            ).toUtc().toIso8601String()
+          : null,
     );
     return ((json['items'] as List?) ?? const [])
         .whereType<Map>()
         .map(_PerfRow.fromJson)
         .toList(growable: false);
+  }
+
+  void _setWindow(String value, DateTime? start, DateTime? end) {
+    setState(() {
+      if (value == TfPeriodWithCalendar.customValue) {
+        if (start == null || end == null) return;
+        _customWindow = true;
+        _customStart = start;
+        _customEnd = end;
+        _days = end.difference(start).inDays + 1;
+      } else {
+        _customWindow = false;
+        _customStart = null;
+        _customEnd = null;
+        _days = int.parse(value);
+      }
+    });
   }
 
   void _apply() => setState(() => _future = _load());
@@ -81,36 +111,26 @@ class _PerformanceReportScreenState extends State<PerformanceReportScreen> {
                     ),
                   ),
                   const SizedBox(height: PosSpacing.sp2),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final (k, l) in [
-                        ('daily', text.daily),
-                        ('weekly', text.weekly),
-                        ('monthly', text.monthly),
-                      ])
-                        TfChip(
-                          label: l,
-                          active: _granularity == k,
-                          small: true,
-                          onTap: () => setState(() => _granularity = k),
-                        ),
+                  TfPeriodSelector(
+                    options: [
+                      ('daily', text.daily),
+                      ('weekly', text.weekly),
+                      ('monthly', text.monthly),
                     ],
+                    value: _granularity,
+                    onChanged: (k) => setState(() => _granularity = k),
                   ),
                   const SizedBox(height: PosSpacing.sp3),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final d in [7, 30, 90])
-                        TfChip(
-                          label: '$d ${text.daysLabel}',
-                          active: _days == d,
-                          small: true,
-                          onTap: () => setState(() => _days = d),
-                        ),
+                  TfPeriodWithCalendar(
+                    options: [
+                      for (final d in [7, 30, 90]) ('$d', '$d ${text.daysLabel}'),
                     ],
+                    value: _customWindow
+                        ? TfPeriodWithCalendar.customValue
+                        : '$_days',
+                    start: _customStart,
+                    end: _customEnd,
+                    onChanged: _setWindow,
                   ),
                   const SizedBox(height: PosSpacing.sp3),
                   TfButton(label: text.apply, onPressed: _apply),

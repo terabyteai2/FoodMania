@@ -187,7 +187,6 @@ class _ReportSnapshot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -212,7 +211,7 @@ class _ReportSnapshot extends StatelessWidget {
               ),
               _ReportMetric(
                 label: 'Spend',
-                value: fmt.format(report.stockFlow.spendBdt),
+                value: tfFormatCurrency(context, report.stockFlow.spendBdt),
               ),
             ],
           ),
@@ -232,7 +231,7 @@ class _ReportSnapshot extends StatelessWidget {
                     (row) => _ReportMetric(
                       label: row.label.toUpperCase(),
                       value: '${row.pct}%',
-                      detail: fmt.format(row.valueBdt),
+                      detail: tfFormatCurrency(context, row.valueBdt),
                     ),
                   )
                   .toList(growable: false),
@@ -281,7 +280,7 @@ class _ReportSnapshot extends StatelessWidget {
                           ),
                           const SizedBox(width: 12),
                           TfText(
-                            fmt.format(row.salesBdt),
+                            tfFormatCurrency(context, row.salesBdt),
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -362,7 +361,6 @@ class _AlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final variance = report.unexplainedVarianceBdt;
     final isDown = variance < 0;
-    final fmt = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final color = isDown ? PosColors.danger : PosColors.success;
     return TfCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -383,8 +381,8 @@ class _AlertCard extends StatelessWidget {
           const SizedBox(height: 6),
           TfText(
             variance == 0
-                ? '৳0'
-                : '${isDown ? '−' : '+'}${fmt.format(variance.abs())}',
+                ? tfFormatCurrency(context, 0)
+                : '${isDown ? '−' : '+'}${tfFormatCurrency(context, variance.abs())}',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,

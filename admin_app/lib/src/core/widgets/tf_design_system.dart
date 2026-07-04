@@ -124,10 +124,130 @@ String tfToBnNumbers(String input) {
 }
 
 // ---------------------------------------------------------------------------
-// Named text styles — roles not covered by the TextTheme slots.
+// Named text styles — the DESIGN.md v4 §3 type ramp as tokens, measured from
+// context_pictures/petpooja_target. Feature code sets text style by naming a
+// role here (or a TextTheme slot); a raw `fontSize:` outside this file /
+// app_theme.dart is a defect (v4 §7).
 // ---------------------------------------------------------------------------
 class TfTextStyles {
   TfTextStyles._();
+
+  /// App-bar title — 18/700 (v4 §5.1, target9/3). Same size at tab roots
+  /// and on pushed screens; the slim single-row Petpooja bar.
+  static const TextStyle appBarTitle = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+  );
+
+  /// Compat alias for [appBarTitle] (v3 name).
+  static const TextStyle screenTitle = appBarTitle;
+
+  /// Compat alias for [appBarTitle] (v3 name).
+  static const TextStyle pushedTitle = appBarTitle;
+
+  /// Centered table number on FOH tiles — 28/700 tabular (target9/10).
+  static const TextStyle tileNumber = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    height: 1.1,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Money hero — payment-success ONLY. 30/800 tabular (target5).
+  static const TextStyle heroMoney = TextStyle(
+    fontSize: 30,
+    fontWeight: FontWeight.w800,
+    height: 1.05,
+    letterSpacing: -0.6,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Stat-card number — 20/700 tabular.
+  static const TextStyle statNumber = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    height: 1.1,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Section header (H2) — card titles, report/area headers. 14/700
+  /// (target9/10 "Party Hall", "AC").
+  static const TextStyle sectionHeader = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
+  );
+
+  /// In-list category strip label — 12/600 on surfaceSunk (target3).
+  static const TextStyle sectionStrip = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+
+  /// Row/tile title — item / table / staff name. 14/600.
+  static const TextStyle rowTitle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+
+  /// Row price / money — ৳-prefixed, tabular. 15/700. Height matches
+  /// [orderSerial] so serial + amount sit on one visual line on order cards.
+  static const TextStyle price = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Per-line money + qty gutter on order/receipt rows — 13/600 tabular
+  /// (matches the order-detail sheet rows; v4.2).
+  static const TextStyle rowMoney = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
+    height: 1.35,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Body — 13/400.
+  static const TextStyle body = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+  );
+
+  /// Muted metadata — 13/400.
+  static const TextStyle bodyMuted = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.45,
+    color: PosColors.muted,
+  );
+
+  /// Chip / badge / status / tile-meta label — 11/600 (target3/10:
+  /// "⏱ 32 min", tile amounts, "customizable*").
+  static const TextStyle label = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+
+  /// Tab label — 14/600 (active blue, inactive muted via color).
+  static const TextStyle tabLabel = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+
+  /// Eyebrow — 11/700, 0.05em, uppercase by convention.
+  static const TextStyle eyebrow = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
+    letterSpacing: 0.55,
+  );
 
   /// Order serial hero: #24 on order cards — 19/800 tabular.
   static const TextStyle orderSerial = TextStyle(
@@ -137,6 +257,16 @@ class TfTextStyles {
     height: 1.2,
     letterSpacing: -0.2,
     fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// DESIGN.md §3 alias for [orderSerial].
+  static const TextStyle serial = orderSerial;
+
+  /// Full-width CTA label — 15/700 (target4 "Confirm Order").
+  static const TextStyle ctaLabel = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
   );
 }
 
@@ -493,7 +623,10 @@ class TfAppBar extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfUnifiedTopNav — Common app chrome from the dashboard design canvas.
+// TfUnifiedTopNav — the slim Petpooja app bar (DESIGN.md v4 §5.1, target9/3):
+// one ~52px row of bare leading icon + 18/700 title + trailing icons. A small
+// contextual subtitle (target4 "Final Order") is supported but never carries
+// the outlet name — that lives in the drawer header.
 // ---------------------------------------------------------------------------
 class TfUnifiedTopNav extends StatelessWidget {
   const TfUnifiedTopNav({
@@ -504,9 +637,9 @@ class TfUnifiedTopNav extends StatelessWidget {
     this.below,
     this.padding = const EdgeInsets.fromLTRB(
       PosSpacing.sp4,
-      PosSpacing.sp3,
+      PosSpacing.sp2,
       PosSpacing.sp4,
-      PosSpacing.sp3 - 2,
+      PosSpacing.sp2,
     ),
     super.key,
   });
@@ -522,36 +655,30 @@ class TfUnifiedTopNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final titleBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         TfText(
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
+          style: TfTextStyles.appBarTitle.copyWith(
             fontFamily: tfFontFamily(context),
             color: PosColors.text,
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            height: 1.15,
             letterSpacing: 0,
           ),
         ),
-        if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-          const SizedBox(height: PosSpacing.sp1),
+        if (subtitle != null && subtitle!.trim().isNotEmpty)
           TfText(
             subtitle!,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: TfTextStyles.label.copyWith(
               fontFamily: tfFontFamily(context),
               color: PosColors.textSec,
-              fontSize: 15,
               fontWeight: FontWeight.w500,
-              height: 1.45,
               letterSpacing: 0,
             ),
           ),
-        ],
       ],
     );
 
@@ -561,7 +688,7 @@ class TfUnifiedTopNav extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (leading != null) ...[
                 leading!,
@@ -977,7 +1104,7 @@ class TfButton extends StatelessWidget {
 class TfCard extends StatelessWidget {
   const TfCard({
     required this.child,
-    this.padding = const EdgeInsets.all(PosSpacing.sp4),
+    this.padding = const EdgeInsets.all(PosDensity.cardPad),
     this.color = PosColors.surface,
     this.borderColor = PosColors.line,
     this.clip = false,
@@ -1208,7 +1335,8 @@ class TfItemRow extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfChip — Soft POS pill filter.
+// TfChip — POS filter chip. Squared segment geometry (matches
+// TfPeriodSelector), not a consumer pill.
 // ---------------------------------------------------------------------------
 class TfChip extends StatelessWidget {
   const TfChip({
@@ -1256,18 +1384,18 @@ class TfChip extends StatelessWidget {
 
     return Material(
       color: fillColor,
-      borderRadius: BorderRadius.circular(PosRadii.pill),
+      borderRadius: BorderRadius.circular(PosRadii.md),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
           constraints: BoxConstraints(minHeight: small ? 36 : 44),
           padding: EdgeInsets.symmetric(
-            horizontal: small ? 14 : 18,
+            horizontal: small ? 12 : 14,
             vertical: small ? 7 : 10,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.pill),
+            borderRadius: BorderRadius.circular(PosRadii.md),
             border: Border.all(color: borderColor, width: 1),
           ),
           child: Row(
@@ -1536,6 +1664,8 @@ class TfStatusBadge extends StatelessWidget {
       ),
       child: Text(
         upper ? label.toUpperCase() : label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontFamily: tfFontFamily(context),
           color: spec.$2,
@@ -1568,6 +1698,8 @@ class TfStatusBadge extends StatelessWidget {
 
 // ---------------------------------------------------------------------------
 // TfIconButton — Square actionable targets with smart notification layer.
+// [bare] renders the Petpooja app-bar treatment (v4 §5.1): no fill, no border,
+// a bare 24px glyph with the same 44px hit area.
 // ---------------------------------------------------------------------------
 class TfIconButton extends StatelessWidget {
   const TfIconButton({
@@ -1576,6 +1708,7 @@ class TfIconButton extends StatelessWidget {
     required this.onPressed,
     this.badge,
     this.dark = false,
+    this.bare = false,
     super.key,
   });
 
@@ -1584,6 +1717,7 @@ class TfIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final int? badge;
   final bool dark;
+  final bool bare;
 
   @override
   Widget build(BuildContext context) {
@@ -1597,7 +1731,11 @@ class TfIconButton extends StatelessWidget {
           children: [
             Positioned.fill(
               child: Material(
-                color: dark ? PosColors.primaryDark : PosColors.surface,
+                color: bare
+                    ? Colors.transparent
+                    : dark
+                    ? PosColors.primaryDark
+                    : PosColors.surface,
                 borderRadius: BorderRadius.circular(PosRadii.tile),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -1605,15 +1743,19 @@ class TfIconButton extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(PosRadii.tile),
-                      border: Border.all(
-                        color: dark ? PosColors.primaryDark : PosColors.line,
-                        width: 1,
-                      ),
+                      border: bare
+                          ? null
+                          : Border.all(
+                              color: dark
+                                  ? PosColors.primaryDark
+                                  : PosColors.line,
+                              width: 1,
+                            ),
                     ),
                     child: Icon(
                       icon,
-                      size: 20,
-                      color: dark ? Colors.white : PosColors.slate,
+                      size: bare ? 24 : 20,
+                      color: dark && !bare ? Colors.white : PosColors.slate,
                     ),
                   ),
                 ),
@@ -1655,6 +1797,8 @@ class TfIconButton extends StatelessWidget {
 
 // ---------------------------------------------------------------------------
 // TfBarButton — Source-of-truth 42px square top-bar action button.
+// [bare] renders the Petpooja app-bar treatment (v4 §5.1): no fill/border,
+// bare glyph, same hit area (badge/dot still overlay).
 // ---------------------------------------------------------------------------
 class TfBarButton extends StatelessWidget {
   const TfBarButton({
@@ -1664,6 +1808,7 @@ class TfBarButton extends StatelessWidget {
     this.badge,
     this.accent = false,
     this.dot = false,
+    this.bare = false,
     super.key,
   });
 
@@ -1673,6 +1818,7 @@ class TfBarButton extends StatelessWidget {
   final int? badge;
   final bool accent;
   final bool dot;
+  final bool bare;
 
   @override
   Widget build(BuildContext context) {
@@ -1687,7 +1833,11 @@ class TfBarButton extends StatelessWidget {
           children: [
             Positioned.fill(
               child: Material(
-                color: accent ? PosColors.primary : PosColors.surface,
+                color: bare
+                    ? Colors.transparent
+                    : accent
+                    ? PosColors.primary
+                    : PosColors.surface,
                 borderRadius: BorderRadius.circular(10),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -1695,16 +1845,18 @@ class TfBarButton extends StatelessWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: accent
-                            ? PosColors.primary
-                            : PosColors.lineStrong,
+                      border: bare
+                          ? null
+                          : Border.all(
+                              color: accent
+                                  ? PosColors.primary
+                                  : PosColors.lineStrong,
                       ),
                     ),
                     child: Center(
                       child: TfSourceIcon(
                         name: icon,
-                        size: 20,
+                        size: bare ? 22 : 20,
                         color: accent
                             ? PosColors.accentInk
                             : PosColors.primaryDark,
@@ -1764,7 +1916,7 @@ class TfBarButton extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfFab — Flat low-draw quick action trigger built for budget devices.
+// TfFab — circular Petpooja quick-action trigger (v4 §5.5, target3/9/10).
 // ---------------------------------------------------------------------------
 class TfFab extends StatelessWidget {
   const TfFab({
@@ -1787,7 +1939,7 @@ class TfFab extends StatelessWidget {
         height: 56,
         decoration: BoxDecoration(
           color: PosColors.primary,
-          borderRadius: BorderRadius.circular(PosRadii.xl),
+          shape: BoxShape.circle,
           border: Border.all(
             color: PosColors.primaryDark.withValues(alpha: 0.1),
             width: 1,
@@ -1796,7 +1948,7 @@ class TfFab extends StatelessWidget {
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(PosRadii.xl),
+          shape: const CircleBorder(),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
@@ -1825,19 +1977,27 @@ class TfStickyCTA extends StatelessWidget {
         color: PosColors.surface,
         boxShadow: PosShadows.bar,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          child,
-          if (helper != null) ...[
-            const SizedBox(height: 10),
-            TfText(
-              helper!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: PosColors.muted),
-            ),
+      // SafeArea so standalone Scaffolds can use this directly as
+      // bottomNavigationBar; inside AppScaffold's SafeArea it is a no-op.
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            child,
+            if (helper != null) ...[
+              const SizedBox(height: 10),
+              TfText(
+                helper!,
+                textAlign: TextAlign.center,
+                style: TfTextStyles.label.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: PosColors.muted,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1861,67 +2021,6 @@ class TfRail extends StatelessWidget {
       ),
     );
   }
-}
-
-// ---------------------------------------------------------------------------
-// TfDualActionBar — Fixed bottom bar with two action buttons.
-// ---------------------------------------------------------------------------
-class TfDualActionBar extends StatelessWidget {
-  const TfDualActionBar({required this.left, required this.right, super.key});
-
-  final TfDualActionBarItem left;
-  final TfDualActionBarItem right;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      decoration: const BoxDecoration(
-        color: PosColors.surface,
-        boxShadow: PosShadows.bar,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            Expanded(
-              child: TfButton(
-                label: left.label,
-                labelBn: left.labelBn,
-                icon: left.icon,
-                variant: TfButtonVariant.dark,
-                onPressed: left.onPressed,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TfButton(
-                label: right.label,
-                labelBn: right.labelBn,
-                icon: right.icon,
-                variant: TfButtonVariant.primary,
-                onPressed: right.onPressed,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class TfDualActionBarItem {
-  const TfDualActionBarItem({
-    required this.label,
-    required this.onPressed,
-    this.labelBn,
-    this.icon,
-  });
-
-  final String label;
-  final String? labelBn;
-  final VoidCallback onPressed;
-  final IconData? icon;
 }
 
 // ---------------------------------------------------------------------------
@@ -2093,6 +2192,8 @@ class TfSearchField extends StatelessWidget {
     this.onChanged,
     this.keyboardType,
     this.prefixIcon = Icons.search_rounded,
+    this.autofocus = false,
+    this.onClear,
     super.key,
   });
 
@@ -2101,6 +2202,11 @@ class TfSearchField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final TextInputType? keyboardType;
   final IconData prefixIcon;
+  final bool autofocus;
+
+  /// When set, shows a trailing ✕ that hands clearing/closing to the caller
+  /// (used by collapsible search rows).
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -2110,6 +2216,7 @@ class TfSearchField extends StatelessWidget {
         controller: controller,
         onChanged: onChanged,
         keyboardType: keyboardType,
+        autofocus: autofocus,
         textInputAction: TextInputAction.search,
         style: TextStyle(
           fontFamily: tfFontFamily(context),
@@ -2128,6 +2235,16 @@ class TfSearchField extends StatelessWidget {
           ),
           prefixIcon: Icon(prefixIcon, size: 20, color: PosColors.textSec),
           prefixIconConstraints: const BoxConstraints(minWidth: 44),
+          suffixIcon: onClear == null
+              ? null
+              : IconButton(
+                  onPressed: onClear,
+                  icon: const Icon(
+                    TfNavIcon.close,
+                    size: 18,
+                    color: PosColors.textSec,
+                  ),
+                ),
           filled: true,
           fillColor: PosColors.surface,
           contentPadding: const EdgeInsets.symmetric(
@@ -2351,11 +2468,11 @@ class TfEmptyState extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: PosColors.primarySoft,
+                color: PosColors.neutralSoft,
                 borderRadius: BorderRadius.circular(PosRadii.lg),
                 border: Border.all(color: PosColors.line),
               ),
-              child: Icon(icon, size: 30, color: PosColors.accentStrong),
+              child: Icon(icon, size: 30, color: PosColors.neutralInk),
             ),
             const SizedBox(height: PosSpacing.sp4),
             TfText(
@@ -2412,7 +2529,7 @@ class TfLoading extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: PosColors.primarySoft,
+                color: PosColors.neutralSoft,
                 borderRadius: BorderRadius.circular(PosRadii.lg),
                 border: Border.all(color: PosColors.line),
               ),
@@ -2678,139 +2795,21 @@ class TfDividerBand extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TfDashTopBar — Compact app bar for dashboards.
-// ---------------------------------------------------------------------------
-class TfDashTopBar extends StatelessWidget {
-  const TfDashTopBar({
-    required this.outlet,
-    this.mode,
-    this.time,
-    this.role,
-    this.onRoleChange,
-    this.drawer,
-    this.drawerLabel = 'Drawer',
-    super.key,
-  });
-
-  final String outlet;
-  final String? mode;
-  final String? time;
-  final String? role;
-  final ValueChanged<String>? onRoleChange;
-  final String? drawer;
-  final String drawerLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      outlet,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.text,
-                        letterSpacing: -0.18,
-                        height: 1.1,
-                      ),
-                    ),
-                    if (mode != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: PosColors.surfaceSunk,
-                          borderRadius: BorderRadius.circular(PosRadii.tag),
-                          border: Border.all(color: PosColors.line, width: 1),
-                        ),
-                        child: Text(
-                          mode!.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontFamily: tfEnglishFontFamily,
-                            fontWeight: FontWeight.w700,
-                            color: PosColors.textSec,
-                            letterSpacing: 0.7,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (time != null) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    time!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: PosColors.textSec,
-                      fontWeight: FontWeight.w500,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (role != null)
-            TfCompactRoleToggle(
-              key: const ValueKey('dashboard-view-dropdown'),
-              role: role!,
-              onChanged: onRoleChange!,
-            ),
-          if (drawer != null) ...[
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                TfMicroLabel(drawerLabel, color: PosColors.textTer),
-                const SizedBox(height: 2),
-                Text(
-                  drawer!,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.text,
-                    letterSpacing: -0.2,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // TfCompactRoleToggle — Small segmented toggle for the app bar.
 // ---------------------------------------------------------------------------
 class TfCompactRoleToggle extends StatelessWidget {
   const TfCompactRoleToggle({
     required this.role,
     required this.onChanged,
+    this.options = const [('Mgr', 'manager'), ('Owner', 'owner')],
     super.key,
   });
 
   final String role;
   final ValueChanged<String> onChanged;
+
+  /// Segments as `(label, value)` pairs.
+  final List<(String, String)> options;
 
   @override
   Widget build(BuildContext context) {
@@ -2823,7 +2822,7 @@ class TfCompactRoleToggle extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [_buildItem('Mgr', 'manager'), _buildItem('Owner', 'owner')],
+        children: [for (final opt in options) _buildItem(opt.$1, opt.$2)],
       ),
     );
   }
@@ -2858,20 +2857,32 @@ class TfCompactRoleToggle extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // TfPeriodSelector — Primary control on the Owner screen.
 // ---------------------------------------------------------------------------
+/// The single canonical period control: a segmented box of range options.
+/// Pass [options] as `(value, label)` pairs (use the localized
+/// `rangeToday`/`range7Days`/`range30Days` strings). [customValue], when set,
+/// marks the custom-range option. With [customIcon] the custom segment is
+/// auto-appended as a compact icon segment (do NOT include it in [options]);
+/// without [customIcon] a `customValue` present in [options] shows the legacy
+/// ▾ affordance.
 class TfPeriodSelector extends StatelessWidget {
   const TfPeriodSelector({
+    required this.options,
     required this.value,
     required this.onChanged,
+    this.customValue,
+    this.customIcon,
     super.key,
   });
 
+  final List<(String, String)> options;
   final String value;
   final ValueChanged<String> onChanged;
-
-  static const List<String> periods = ['Today', 'Week', 'Month', 'Custom'];
+  final String? customValue;
+  final IconData? customIcon;
 
   @override
   Widget build(BuildContext context) {
+    final hasIconSegment = customValue != null && customIcon != null;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -2881,47 +2892,78 @@ class TfPeriodSelector extends StatelessWidget {
         boxShadow: PosShadows.soft,
       ),
       child: Row(
-        children: periods.map((p) {
-          final on = p == value;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(p),
+        children: [
+          ...options.map((opt) {
+            final on = opt.$1 == value;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(opt.$1),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: on ? PosColors.primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(PosRadii.tag),
+                  ),
+                  alignment: Alignment.center,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TfText(
+                          opt.$2,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+                            color: on ? PosColors.accentInk : PosColors.textSec,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        if (!hasIconSegment && opt.$1 == customValue) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            '▾',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color:
+                                  (on ? PosColors.accentInk : PosColors.textSec)
+                                      .withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+          if (hasIconSegment)
+            GestureDetector(
+              onTap: () => onChanged(customValue!),
+              behavior: HitTestBehavior.opaque,
               child: Container(
+                width: 40,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: on ? PosColors.primary : Colors.transparent,
+                  color: value == customValue
+                      ? PosColors.primary
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(PosRadii.tag),
                 ),
                 alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      p,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: on ? FontWeight.w700 : FontWeight.w600,
-                        color: on ? PosColors.accentInk : PosColors.textSec,
-                        letterSpacing: -0.1,
-                      ),
-                    ),
-                    if (p == 'Custom') ...[
-                      const SizedBox(width: 4),
-                      Text(
-                        '▾',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: (on ? PosColors.accentInk : PosColors.textSec)
-                              .withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ],
+                child: Icon(
+                  customIcon,
+                  size: 16,
+                  color: value == customValue
+                      ? PosColors.accentInk
+                      : PosColors.textSec,
                 ),
               ),
             ),
-          );
-        }).toList(),
+        ],
       ),
     );
   }
@@ -4155,90 +4197,6 @@ class _GridRow extends StatelessWidget {
       children: List.generate(children.length, (i) {
         return Expanded(flex: (flexes[i] * 100).toInt(), child: children[i]);
       }),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// TfMenuPerfHeader — Sortable column chips.
-// ---------------------------------------------------------------------------
-class TfMenuPerfHeader extends StatelessWidget {
-  const TfMenuPerfHeader({
-    required this.sort,
-    required this.onChanged,
-    super.key,
-  });
-  final String sort;
-  final ValueChanged<String> onChanged;
-
-  static const List<Map<String, String>> sorts = [
-    {'id': 'rev', 'l': 'Revenue'},
-    {'id': 'qty', 'l': 'Qty'},
-    {'id': 'margin', 'l': 'Margin'},
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-      child: Row(
-        children: [
-          const TfMicroLabel('Sort', color: PosColors.textTer),
-          const SizedBox(width: 10),
-          ...sorts.map((s) {
-            final on = s['id'] == sort;
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: InkWell(
-                onTap: () => onChanged(s['id']!),
-                borderRadius: BorderRadius.circular(PosRadii.chip),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: on ? PosColors.accentSoft : PosColors.surface,
-                    borderRadius: BorderRadius.circular(PosRadii.chip),
-                    border: Border.all(
-                      color: on ? Colors.transparent : PosColors.line,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        s['l']!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: on ? FontWeight.w700 : FontWeight.w600,
-                          color: on
-                              ? PosColors.accentStrong
-                              : PosColors.textSec,
-                        ),
-                      ),
-                      if (on) ...[
-                        const SizedBox(width: 4),
-                        const Opacity(
-                          opacity: 0.7,
-                          child: Text(
-                            '▼',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: PosColors.accentStrong,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
     );
   }
 }

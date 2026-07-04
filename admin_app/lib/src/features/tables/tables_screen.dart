@@ -7,9 +7,9 @@ import '../../app_controller.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
 import '../../models/order_model.dart';
 import '../../models/order_service_type.dart';
@@ -17,11 +17,14 @@ import '../../models/pos_notification.dart';
 import '../desktop_pos/widgets/menu_line_customizer.dart';
 import '../orders/menu_order_widgets.dart';
 import '../orders/orders_screen.dart';
+import 'pos_table_cell.dart';
 
-/// QuickBytes Tables / FOH tab (spec §4.2). Dine-in · Parcel · Delivery
-/// segments; occupied tables use the slate wash (never lime); the bottom-bar
-/// primary creates a new order. In counter mode (More → service mode) the tab
-/// becomes a quick-sell entry point.
+/// QuickBytes Tables / FOH tab. Dine-in · Parcel · Delivery via underline
+/// tabs (TfTabs); table tiles carry the Petpooja state model (DESIGN.md v4
+/// §5.3, target9/10): white vacant, saturated-yellow occupied with live
+/// elapsed time + running amount + ⋮, mint dot when a KOT is in the kitchen.
+/// In counter mode (More → service mode) the tab becomes a quick-sell entry
+/// point.
 class TablesScreen extends StatefulWidget {
   const TablesScreen({
     this.onNavigateToOrders,
@@ -41,6 +44,23 @@ enum _TableSeg { dineIn, parcel, delivery }
 class _TablesScreenState extends State<TablesScreen> {
   _TableSeg _seg = _TableSeg.dineIn;
   bool _parcelFormOpen = false;
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // Occupied tiles show live elapsed minutes (v4 §5.3); one screen-level
+    // tick keeps every tile fresh without per-tile timers.
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,15 +70,14 @@ class _TablesScreenState extends State<TablesScreen> {
       AppAspect.language,
     ]);
     final text = app.strings;
-    final counterMode = app.counterModeEnabled;
+    final counterMode = app.isCounterOutlet;
     return AppScaffold(
       title: text.tables,
-      headerWidget: AppPageHeader(
+      headerWidget: TfGlobalTopBar(
         title: text.tables,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
       ),
-      showDatePill: false,
       pinHeader: true,
       fillBody: true,
       removeHorizontalPadding: counterMode,
@@ -114,8 +133,25 @@ class _FullService extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SegControl(value: seg, onChanged: onSeg, text: text),
-        const SizedBox(height: 14),
+        TfTabs(
+          activeIndex: _TableSeg.values.indexOf(seg),
+          onChanged: (i) => onSeg(_TableSeg.values[i]),
+          items: [
+            TfTabItem(
+              label: OrderServiceType.dineIn.localized(false),
+              labelBn: OrderServiceType.dineIn.localized(true),
+            ),
+            TfTabItem(
+              label: OrderServiceType.takeaway.localized(false),
+              labelBn: OrderServiceType.takeaway.localized(true),
+            ),
+            TfTabItem(
+              label: OrderServiceType.delivery.localized(false),
+              labelBn: OrderServiceType.delivery.localized(true),
+            ),
+          ],
+        ),
+        const SizedBox(height: PosDensity.sectionGap),
         Expanded(
           child: switch (seg) {
             _TableSeg.dineIn => _DineInGrid(
@@ -141,68 +177,6 @@ class _FullService extends StatelessWidget {
           },
         ),
       ],
-    );
-  }
-}
-
-class _SegControl extends StatelessWidget {
-  const _SegControl({
-    required this.value,
-    required this.onChanged,
-    required this.text,
-  });
-
-  final _TableSeg value;
-  final ValueChanged<_TableSeg> onChanged;
-  final AppStrings text;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget seg(_TableSeg s, String label) {
-      final on = s == value;
-      return Expanded(
-        child: GestureDetector(
-          onTap: () => onChanged(s),
-          child: Container(
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: on ? PosColors.surface : Colors.transparent,
-              borderRadius: BorderRadius.circular(PosRadii.tag),
-              border: on
-                  ? Border.all(color: PosColors.lineStrong)
-                  : Border.all(color: Colors.transparent),
-            ),
-            child: TfText(
-              label,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: on ? PosColors.text : PosColors.textSec,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.input),
-        border: Border.all(color: PosColors.line),
-      ),
-      child: Row(
-        children: [
-          seg(_TableSeg.dineIn, OrderServiceType.dineIn.localized(text.isBn)),
-          seg(_TableSeg.parcel, OrderServiceType.takeaway.localized(text.isBn)),
-          seg(
-            _TableSeg.delivery,
-            OrderServiceType.delivery.localized(text.isBn),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -243,29 +217,29 @@ class _DineInGrid extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // v4 §5.3: no legend row — tiles are self-explanatory (target9/10).
         TfText(
           text.tablesOccupiedFree(occupied, free),
-          style: const TextStyle(
-            fontSize: 13,
+          style: TfTextStyles.bodyMuted.copyWith(
             fontWeight: FontWeight.w600,
             color: PosColors.textSec,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: PosDensity.gridGap),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: PosSpacing.sp2),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.92,
+              mainAxisSpacing: PosDensity.gridGap,
+              crossAxisSpacing: PosDensity.gridGap,
+              childAspectRatio: PosDensity.tileTableAspect,
             ),
             itemCount: tableCount,
             itemBuilder: (_, i) {
               final label = 'T${i + 1}';
               final order = byTable[label];
-              return _TableCell(
+              return PosTableCell(
                 label: label,
                 order: order,
                 onTap: () {
@@ -290,90 +264,8 @@ class _DineInGrid extends StatelessWidget {
   }
 }
 
-class _TableCell extends StatelessWidget {
-  const _TableCell({
-    required this.label,
-    required this.order,
-    required this.onTap,
-  });
-
-  final String label;
-  final OrderModel? order;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.select(context, AppAspect.language).strings;
-    final occupied = order != null;
-    final mins = occupied
-        ? DateTime.now().difference(order!.createdAt.toLocal()).inMinutes
-        : 0;
-    return Material(
-      color: occupied ? PosColors.seatTint : PosColors.surface,
-      borderRadius: BorderRadius.circular(PosRadii.tile),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.tile),
-            border: Border.all(
-              color: occupied ? PosColors.seatLine : PosColors.line,
-              width: 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TfText(
-                label,
-                style: TextStyle(
-                  fontFamily: tfFontFamily(context),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: occupied ? PosColors.seatInk : PosColors.text,
-                  height: 1.1,
-                ),
-              ),
-              const Spacer(),
-              if (occupied) ...[
-                TfText(
-                  tfFormatCurrency(context, order!.total),
-                  style: TextStyle(
-                    fontFamily: tfFontFamily(context),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.seatInk,
-                    height: 1.1,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                TfText(
-                  text.agoMinutes(mins),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.seatInk,
-                  ),
-                ),
-              ] else
-                TfText(
-                  text.tableVacant,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.muted,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// Table tile + state lookup live in pos_table_cell.dart (PosTableCell /
+// tableStateStyle), shared with the order wizard's dine-in picker.
 
 class _OrderTypeList extends StatelessWidget {
   const _OrderTypeList({
@@ -392,7 +284,7 @@ class _OrderTypeList extends StatelessWidget {
       return Center(
         child: TfText(
           emptyLabel,
-          style: const TextStyle(fontSize: 14, color: PosColors.muted),
+          style: TfTextStyles.body.copyWith(color: PosColors.muted),
         ),
       );
     }
@@ -418,12 +310,8 @@ class _OrderTypeList extends StatelessWidget {
                     children: [
                       TfText(
                         o.displaySequence,
-                        style: TextStyle(
-                          fontFamily: tfFontFamily(context),
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
+                        style: TfTextStyles.orderSerial.copyWith(
                           color: PosColors.text,
-                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -431,24 +319,20 @@ class _OrderTypeList extends StatelessWidget {
                         subtitle.isEmpty ? text.agoMinutes(mins) : subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: PosColors.textSec,
+                        style: TfTextStyles.bodyMuted.copyWith(
                           fontWeight: FontWeight.w500,
+                          color: PosColors.textSec,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: PosSpacing.sp3),
                 TfText(
                   tfFormatCurrency(context, o.total),
-                  style: TextStyle(
-                    fontFamily: tfFontFamily(context),
-                    fontSize: 16,
+                  style: TfTextStyles.price.copyWith(
                     fontWeight: FontWeight.w800,
                     color: PosColors.text,
-                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -498,6 +382,12 @@ class _CounterModeState extends State<_CounterMode> {
     final cats = items.map((i) => i.category).toSet().toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     _categoriesMemo = ['All', ...cats];
+    // A stale category selection (menu edited/synced since) would filter
+    // EVERYTHING out and leave an inexplicably empty grid — fall back to All.
+    if (_selectedCategory != 'All' &&
+        !_categoriesMemo.contains(_selectedCategory)) {
+      _selectedCategory = 'All';
+    }
     _searchBlobs = {
       for (final i in items)
         i.id: [
@@ -719,9 +609,10 @@ class _CounterModeState extends State<_CounterMode> {
   @override
   Widget build(BuildContext context) {
     // Counter mode only reads the menu here (cart is local state); localized
-    // item names are resolved by MenuStep's own widgets.
+    // item names are resolved by MenuStep's own widgets. The full menu is
+    // passed (86'd items render dimmed) — also keeps the memo identity stable.
     final app = AppScope.select(context, AppAspect.menu);
-    final menuItems = app.menuItems.where((i) => i.isAvailable).toList();
+    final menuItems = app.menuItems;
     final cartQty = _cartQtyByItemId;
     final categoryCounts = <String, int>{'All': menuItems.length};
     for (final item in menuItems) {
@@ -752,6 +643,11 @@ class _CounterModeState extends State<_CounterMode> {
             onToggleFavorite: (item) => unawaited(_toggleFavorite(item)),
             onSetShortCode: (item) => unawaited(_setShortCode(item)),
             onSubmit: _cartLines.isNotEmpty ? _openReviewWizard : null,
+            onResetFilters: () => setState(() {
+              _selectedCategory = 'All';
+              _query = '';
+              _searchCtrl.clear();
+            }),
           ),
         ),
       ],

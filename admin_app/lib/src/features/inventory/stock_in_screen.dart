@@ -6,6 +6,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/inventory_item.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/receipt_scan.dart';
@@ -319,7 +320,8 @@ class _StockInScreenState extends State<StockInScreen> {
         bottom: false,
         child: Column(
           children: [
-            _StockInHeader(
+            // Shared slim pushed bar (v4 §5.1).
+            TfGlobalTopBar.leaf(
               title: scanned ? text.stockInConfirmTitle : text.stockInTitle,
               subtitle: subtitle,
               onBack: () => Navigator.pop(context),
@@ -381,93 +383,6 @@ class _StockInScreenState extends State<StockInScreen> {
 
 // ── Sub-widgets ──────────────────────────────────────────────────────────────
 
-class _StockInHeader extends StatelessWidget {
-  const _StockInHeader({
-    required this.title,
-    required this.subtitle,
-    required this.onBack,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    final backLabel = MaterialLocalizations.of(context).backButtonTooltip;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Transform.translate(
-              offset: const Offset(-8, 0),
-              child: SizedBox.square(
-                dimension: 40,
-                child: Tooltip(
-                  message: backLabel,
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: onBack,
-                      child: const Center(
-                        child: TfSourceIcon(
-                          name: TfSourceIconName.back,
-                          size: 22,
-                          strokeWidth: 2,
-                          color: PosColors.primaryDark,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 2),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TfText(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: PosColors.slate,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      height: 1,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  TfText(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: PosColors.muted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1.25,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ScanCallout extends StatelessWidget {
   const _ScanCallout({
     required this.text,
@@ -494,8 +409,8 @@ class _ScanCallout extends StatelessWidget {
 
     return TfCard(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-      color: isError ? PosColors.dangerSoft : PosColors.accentSoft,
-      borderColor: isError ? PosColors.danger : PosColors.primaryWash,
+      color: isError ? PosColors.dangerSoft : PosColors.neutralSoft,
+      borderColor: isError ? PosColors.danger : PosColors.neutralWash,
       child: Row(
         children: [
           if (busy)
@@ -517,9 +432,8 @@ class _ScanCallout extends StatelessWidget {
               provider == null || busy || isError
                   ? message
                   : '$message · $provider',
-              style: const TextStyle(
+              style: TfTextStyles.bodyMuted.copyWith(
                 color: PosColors.slate,
-                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 height: 1.25,
               ),
@@ -552,76 +466,63 @@ class _StockInBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: const BoxDecoration(
-        color: PosColors.surface,
-        border: Border(top: BorderSide(color: PosColors.line)),
-        boxShadow: PosShadows.bar,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Expanded(
-                  child: TfText(
-                    text.totalStockInValue,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: PosColors.muted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
+    // Chrome (surface + bar shadow + SafeArea) comes from TfStickyCTA;
+    // paired footer = navy secondary + primary, both Expanded (v4 §5.5).
+    return TfStickyCTA(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: TfText(
+                  text.totalStockInValue,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TfTextStyles.bodyMuted.copyWith(
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(width: 12),
-                TfText(
-                  tfFormatCurrency(context, total),
-                  style: const TextStyle(
-                    color: PosColors.slate,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    height: 1,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
+              ),
+              const SizedBox(width: 12),
+              TfText(
+                tfFormatCurrency(context, total),
+                style: TfTextStyles.price.copyWith(
+                  color: PosColors.slate,
+                  height: 1,
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                SizedBox(
-                  width: 130,
-                  child: TfButton(
-                    label: text.scanBill,
-                    icon: Icons.camera_alt_outlined,
-                    variant: TfButtonVariant.ghost,
-                    size: TfButtonSize.lg,
-                    busy: scanning,
-                    onPressed: scanning ? null : onScan,
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TfButton(
+                  label: text.scanBill,
+                  icon: Icons.camera_alt_outlined,
+                  variant: TfButtonVariant.dark,
+                  size: TfButtonSize.lg,
+                  busy: scanning,
+                  onPressed: scanning ? null : onScan,
                 ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: TfButton(
-                    label: text.addToInventory,
-                    icon: Icons.check_rounded,
-                    size: TfButtonSize.lg,
-                    busy: saving,
-                    onPressed: saving || !canSave ? null : onSave,
-                  ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TfButton(
+                  label: text.addToInventory,
+                  icon: Icons.check_rounded,
+                  size: TfButtonSize.lg,
+                  busy: saving,
+                  onPressed: saving || !canSave ? null : onSave,
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

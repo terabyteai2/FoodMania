@@ -4,93 +4,6 @@ import './tf_design_system.dart';
 
 enum TfTimeframe { today, week, month, custom }
 
-class TfTimeframeSelector extends StatelessWidget {
-  const TfTimeframeSelector({
-    required this.selected,
-    required this.onChanged,
-    super.key,
-  });
-
-  final TfTimeframe selected;
-  final ValueChanged<TfTimeframe> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final opts = <(TfTimeframe, String)>[
-      (TfTimeframe.today, tfPick(context, en: 'Today', bn: 'আজ')),
-      (TfTimeframe.week, tfPick(context, en: '7d', bn: '৭ দিন')),
-      (TfTimeframe.month, tfPick(context, en: '30d', bn: '৩০ দিন')),
-      (TfTimeframe.custom, tfPick(context, en: 'Custom', bn: 'কাস্টম')),
-    ];
-
-    final children = <Widget>[];
-    for (final o in opts) {
-      if (children.isNotEmpty) {
-        children.add(const SizedBox(width: 4));
-      }
-      children.add(
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onChanged(o.$1),
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected == o.$1
-                    ? PosColors.surface
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(PosRadii.sm),
-                boxShadow: selected == o.$1 ? PosShadows.e1 : null,
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (o.$1 == TfTimeframe.custom) ...[
-                      Icon(
-                        Icons.calendar_month_rounded,
-                        size: 14,
-                        color: selected == o.$1
-                            ? PosColors.text
-                            : PosColors.muted,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    TfText(
-                      o.$2,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: selected == o.$1
-                            ? PosColors.text
-                            : PosColors.muted,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-        border: Border.all(color: PosColors.line, width: 1),
-      ),
-      child: Row(children: children),
-    );
-  }
-}
-
 class TfCalendarRangePicker extends StatefulWidget {
   const TfCalendarRangePicker({
     required this.start,
@@ -382,4 +295,104 @@ class _TfCalendarRangePickerState extends State<TfCalendarRangePicker> {
   }
 
   int _gridRows(int daysInMonth, int lead) => ((lead + daysInMonth + 6) ~/ 7);
+}
+
+// ---------------------------------------------------------------------------
+// TfPeriodWithCalendar — the canonical period control with a custom range.
+// ---------------------------------------------------------------------------
+/// [TfPeriodSelector] plus the calendar-icon custom-range segment (DESIGN.md:
+/// every time-range filter carries the calendar custom picker; its label IS
+/// the calendar icon). Owns the inline [TfCalendarRangePicker] reveal and the
+/// pending start/end while the user picks; fires [onChanged] with
+/// ('custom', start, end) once both ends are chosen, or (preset, null, null)
+/// for preset taps.
+class TfPeriodWithCalendar extends StatefulWidget {
+  const TfPeriodWithCalendar({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+    this.start,
+    this.end,
+    super.key,
+  });
+
+  /// Marks the custom-range selection in [value].
+  static const String customValue = 'custom';
+
+  /// Preset segments only — the custom segment is appended automatically.
+  final List<(String, String)> options;
+  final String value;
+  final void Function(String value, DateTime? start, DateTime? end) onChanged;
+
+  /// Current custom range (shown when reopening the calendar).
+  final DateTime? start;
+  final DateTime? end;
+
+  @override
+  State<TfPeriodWithCalendar> createState() => _TfPeriodWithCalendarState();
+}
+
+class _TfPeriodWithCalendarState extends State<TfPeriodWithCalendar> {
+  bool _calendarOpen = false;
+  DateTime? _pendingStart;
+  DateTime? _pendingEnd;
+
+  void _onSegment(String value) {
+    if (value == TfPeriodWithCalendar.customValue) {
+      setState(() {
+        _calendarOpen = !_calendarOpen;
+        _pendingStart = widget.start;
+        _pendingEnd = widget.end;
+      });
+      return;
+    }
+    setState(() => _calendarOpen = false);
+    widget.onChanged(value, null, null);
+  }
+
+  void _onRangeChanged(DateTime? start, DateTime? end) {
+    setState(() {
+      _pendingStart = start;
+      _pendingEnd = end;
+    });
+    if (start != null && end != null) {
+      setState(() => _calendarOpen = false);
+      widget.onChanged(TfPeriodWithCalendar.customValue, start, end);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showCustomActive =
+        _calendarOpen || widget.value == TfPeriodWithCalendar.customValue;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TfPeriodSelector(
+          options: widget.options,
+          value: showCustomActive
+              ? TfPeriodWithCalendar.customValue
+              : widget.value,
+          onChanged: _onSegment,
+          customValue: TfPeriodWithCalendar.customValue,
+          customIcon: Icons.calendar_month_rounded,
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _calendarOpen
+              ? Padding(
+                  padding: const EdgeInsets.only(top: PosSpacing.sp2),
+                  child: TfCalendarRangePicker(
+                    start: _pendingStart,
+                    end: _pendingEnd,
+                    onRangeChanged: _onRangeChanged,
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
 }

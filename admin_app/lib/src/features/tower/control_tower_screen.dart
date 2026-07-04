@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/account_role.dart';
 import '../../models/dashboard_metrics.dart';
 import '../../models/dashboard_summary.dart';
@@ -107,12 +107,11 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
               onPressed: () => openNewOrderForm(context),
             )
           : null,
-      headerWidget: AppPageHeader(
+      headerWidget: TfGlobalTopBar(
         title: text.liveTab,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
       ),
-      showDatePill: false,
       pinHeader: true,
       fillBody: true,
       child: Column(
@@ -987,7 +986,7 @@ class _StaffRow extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: PosColors.accentSoft,
+              color: PosColors.neutralSoft,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
@@ -996,7 +995,7 @@ class _StaffRow extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
-                color: PosColors.accentStrong,
+                color: PosColors.neutralInk,
               ),
             ),
           ),

@@ -93,10 +93,17 @@ class PosColors {
   static const Color stateKot = Color(0xFFFCF3CF);
   static const Color stateKotInk = Color(0xFF9A7400);
 
-  // ── Occupied-table wash (FOH) — sky tint, ink label ─────────────────────
-  static const Color seatTint = stateRunning;
-  static const Color seatLine = Color(0xFFBFD6F2);
-  static const Color seatInk = stateRunningInk;
+  // ── Occupied-table fill (FOH) — saturated Petpooja yellow (DESIGN.md §2,
+  // target10). Tiles use the strong family, not a pastel wash. The mint
+  // "kitchen" pair marks KOT-sent on an occupied tile.
+  static const Color stateOccupied = Color(0xFFF7C948);
+  static const Color stateOccupiedInk = Color(0xFF5C4A00);
+  static const Color stateOccupiedLine = Color(0xFFDFAF2B);
+  static const Color stateKitchen = Color(0xFFA9E3BF);
+  static const Color stateKitchenInk = Color(0xFF1E7A47);
+  static const Color seatTint = stateOccupied;
+  static const Color seatLine = stateOccupiedLine;
+  static const Color seatInk = stateOccupiedInk;
 
   // ── Channel hues (order feed) ───────────────────────────────────────────
   // counter navy · website/messenger blue · table-QR amber · waiter green.
@@ -145,6 +152,13 @@ class PosColors {
   static const Color accentDeep = primaryDeep;
   static const Color accentMid = primaryMid;
   static const Color accentWash = primaryWash;
+
+  // ── Neutral wash (POS-utilitarian) ──────────────────────────────────────
+  // Decorative container washes are grey, never blue: blue is reserved for
+  // primary CTAs, active tabs/segments, and selection highlights.
+  static const Color neutralSoft = surfaceSunk; // #F1F3F6 washed container
+  static const Color neutralWash = surface3; // #E7EAEF border on wash
+  static const Color neutralInk = ink2; // #5A6475 ink on neutral wash
   static const Color slate = primaryDark;
   static const Color slateSoft = inkSoft;
   static const Color text = primaryDark;
@@ -170,13 +184,41 @@ class PosSpacing {
 }
 
 // ---------------------------------------------------------------------------
-// PosRadii — soft rounded POS geometry (DESIGN.md §7a)
+// PosDensity — Petpooja density targets (DESIGN.md v4 §4, measured from
+// context_pictures/petpooja_target). The single source for repeated-card
+// padding, grid gaps, section gaps, dense row heights, and grid tile extents.
+// Screens must not re-derive these from PosSpacing arithmetic or hardcode them.
+// ---------------------------------------------------------------------------
+class PosDensity {
+  /// Internal padding of repeated cards/tiles (target3/4; max — not 16–20).
+  static const double cardPad = 10;
+
+  /// Grid main/cross spacing (menu tiles, table tiles, stat grids; target9/10).
+  static const double gridGap = 8;
+
+  /// Vertical gap between sections/cards on a screen.
+  static const double sectionGap = 10;
+
+  /// Dense list-row minimum height (target7/8).
+  static const double rowMin = 48;
+
+  /// Menu/order-build grid tile mainAxisExtent (≥8 tiles per phone screen).
+  static const double tileMenu = 104;
+
+  /// FOH table tile childAspectRatio (square, packed with state data).
+  static const double tileTableAspect = 1.0;
+}
+
+// ---------------------------------------------------------------------------
+// PosRadii — Petpooja geometry (DESIGN.md v4 §4): cards/buttons/inputs sit at
+// ~10 (target1/3/4/11); 12–16 rounded-SaaS corners are gone. `xl` is reserved
+// for modal sheets (target11).
 // ---------------------------------------------------------------------------
 class PosRadii {
   static const double xs = 4;
   static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 14;
+  static const double md = 10;
+  static const double lg = 10;
   static const double xl = 16;
   static const double pill = 999;
   // Backward-compatible aliases
@@ -307,65 +349,65 @@ class AppTheme {
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       textTheme: TextTheme(
-        // Screen title (big) — tab roots: 26/700
+        // App-bar / screen title — 18/700 (DESIGN.md v4 §3, target9/3;
+        // same size at tab roots and pushed screens)
         displaySmall: baseText.copyWith(
-          fontSize: s(26),
+          fontSize: s(18),
           fontWeight: FontWeight.w700,
-          height: 1.15,
+          height: 1.2,
         ),
-        // Screen title (pushed): 22/700
         displayMedium: baseText.copyWith(
-          fontSize: s(22),
+          fontSize: s(18),
           fontWeight: FontWeight.w700,
-          height: 1.18,
+          height: 1.2,
         ),
-        // Money / token hero: 33/800 tabular
+        // Money hero — payment-success ONLY: 30/800 tabular (target5)
         headlineMedium: baseText.copyWith(
-          fontSize: s(33),
+          fontSize: s(30),
           fontWeight: FontWeight.w800,
           height: 1.05,
-          letterSpacing: s(-0.02 * 33),
+          letterSpacing: s(-0.02 * 30),
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
-        // Section (H2): 15/700
+        // Section (H2) / area header: 14/700 (target9/10)
         titleLarge: baseText.copyWith(
-          fontSize: s(15),
+          fontSize: s(14),
           fontWeight: FontWeight.w700,
           height: 1.30,
         ),
-        // Money / price: 17/700 tabular
+        // Money / price: 15/700 tabular
         titleMedium: baseText.copyWith(
-          fontSize: s(17),
+          fontSize: s(15),
           fontWeight: FontWeight.w700,
           height: 1.26,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
-        // Title (row/tile): 15/600
+        // Title (row/tile): 14/600 (target4)
         titleSmall: baseText.copyWith(
-          fontSize: s(15),
+          fontSize: s(14),
           fontWeight: FontWeight.w600,
           height: 1.30,
         ),
-        // Body: 14/400
-        bodyLarge: baseText.copyWith(fontSize: s(14), height: 1.50),
-        // Body S / desc: 13/400
+        // Body: 13/400
+        bodyLarge: baseText.copyWith(fontSize: s(13), height: 1.50),
+        // Body S / desc: 13/400 muted
         bodyMedium: baseText.copyWith(
           fontSize: s(13),
           color: mut,
           height: 1.45,
         ),
         bodySmall: baseText.copyWith(fontSize: s(12), color: mut, height: 1.30),
-        // Label / status: 12-13/500-600
+        // Label / status: 12/600
         labelLarge: baseText.copyWith(
-          fontSize: s(13),
+          fontSize: s(12),
           fontWeight: FontWeight.w600,
           letterSpacing: 0,
         ),
-        // Eyebrow: 12/700 · 0.05em UPPER
+        // Eyebrow: 11/700 · 0.05em UPPER
         labelSmall: baseText.copyWith(
-          fontSize: s(12),
+          fontSize: s(11),
           fontWeight: FontWeight.w700,
-          letterSpacing: s(0.05 * 12),
+          letterSpacing: s(0.05 * 11),
         ),
       ),
       appBarTheme: AppBarTheme(

@@ -169,7 +169,6 @@ class _OrderingSettingsScreenState extends State<OrderingSettingsScreen> {
     return AppScaffold(
       title: text.orderingSettings,
       subtitle: text.orderingSettingsSubtitle,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,

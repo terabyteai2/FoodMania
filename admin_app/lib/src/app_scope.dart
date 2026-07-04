@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import 'app_controller.dart';
-import 'core/enums/business_tier.dart';
 
 /// Reactive "slices" of [PosAppController] that a widget can subscribe to.
 ///
@@ -22,7 +21,6 @@ enum AppAspect {
   account,
   settings,
   language,
-  tier,
   appUpdate,
   chatbot,
 }
@@ -105,9 +103,8 @@ class AppModel extends InheritedModel<AppAspect> {
         AppAspect.printer: c.printerState,
         AppAspect.dashboard: c.dashboardSummary,
         AppAspect.account: (c.isLoggedIn, c.accountRole, c.accountId),
-        AppAspect.settings: (c.serverConfig, c.counterModeEnabled),
+        AppAspect.settings: c.serverConfig,
         AppAspect.language: c.language,
-        AppAspect.tier: c.businessTier,
         AppAspect.appUpdate: c.pendingAppUpdate,
         AppAspect.chatbot: c.facebookChatbotConfig,
       };
@@ -128,20 +125,4 @@ class AppModel extends InheritedModel<AppAspect> {
     }
     return false;
   }
-}
-
-/// Provides the active [BusinessTier] to the subtree.
-/// Rebuilt whenever the tier changes via [AppScope].
-class TierScope extends StatelessWidget {
-  const TierScope({required this.child, super.key});
-
-  final Widget child;
-
-  static BusinessTier of(BuildContext context) {
-    final app = context.dependOnInheritedWidgetOfExactType<AppScope>();
-    return app?.notifier?.businessTier ?? BusinessTier.standard;
-  }
-
-  @override
-  Widget build(BuildContext context) => child;
 }

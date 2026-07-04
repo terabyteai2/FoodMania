@@ -58,7 +58,6 @@ class StockTrendsScreen extends StatelessWidget {
       title: text.stockOverTime,
       subtitle: text.wholeInventoryHealth,
       showBackButton: true,
-      showDatePill: false,
       child: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [

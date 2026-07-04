@@ -426,8 +426,8 @@ class _DiagnosticBanner extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: TfCard(
         padding: const EdgeInsets.all(12),
-        color: PosColors.primarySoft,
-        borderColor: PosColors.primaryWash,
+        color: PosColors.neutralSoft,
+        borderColor: PosColors.neutralWash,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

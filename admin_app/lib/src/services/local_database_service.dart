@@ -2470,6 +2470,7 @@ class LocalDatabaseService {
     String? shiftId,
     double? amount,
     String? paymentMethod,
+    Map<String, Object?>? metadata,
   }) async {
     final db = await _db;
     final eventId = _uuid.v4();
@@ -2481,7 +2482,7 @@ class LocalDatabaseService {
       'shiftId': shiftId,
       'amount': amount,
       'paymentMethod': paymentMethod,
-      'metadata': const <String, Object?>{},
+      'metadata': metadata ?? const <String, Object?>{},
     };
     await db.transaction((txn) async {
       await txn.insert('pos_audit_events', {

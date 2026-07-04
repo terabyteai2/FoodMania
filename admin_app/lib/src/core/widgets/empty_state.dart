@@ -32,11 +32,11 @@ class EmptyState extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: PosColors.primarySoft,
+              color: PosColors.neutralSoft,
               borderRadius: BorderRadius.circular(PosRadii.lg),
               border: Border.all(color: PosColors.line),
             ),
-            child: Icon(icon, color: PosColors.accentStrong, size: 30),
+            child: Icon(icon, color: PosColors.neutralInk, size: 30),
           ),
           const SizedBox(height: PosSpacing.sp4),
           TfText(

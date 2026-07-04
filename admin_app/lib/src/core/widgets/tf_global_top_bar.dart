@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
 import '../../models/pos_notification.dart';
-import '../enums/business_tier.dart';
-import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
 import 'notification_center.dart';
+import 'shell_nav_scope.dart';
 import 'tf_design_system.dart';
 
 /// Unified app chrome shared across every primary tab.
 ///
-/// Renders the page [title] + [subtitle] on the left (subtitle defaults to the
-/// restaurant name) and, on the right, any [extraActions], the notification
-/// bell, and the account avatar dropdown (mode switch, language, sign out).
+/// Renders the slim Petpooja bar (DESIGN.md v4 §5.1): page [title] on the
+/// left and, on the right, any [extraActions], the notification bell, and the
+/// account avatar dropdown (settings, sign out). A [subtitle] is only
+/// rendered when explicitly passed — the outlet name lives in the drawer
+/// header, never in the bar.
+///
+/// [extraActions] is reserved for per-screen VIEW controls (e.g. Stock's
+/// simple/advanced toggle) — navigation and feature actions belong in the
+/// drawer, not the bar.
 class TfGlobalTopBar extends StatelessWidget {
   const TfGlobalTopBar({
     required this.title,
@@ -22,21 +27,42 @@ class TfGlobalTopBar extends StatelessWidget {
     this.onNavigateToOrders,
     this.onNavigateToTarget,
     this.extraActions = const [],
-    this.padding = const EdgeInsets.fromLTRB(
-      PosSpacing.sp4,
-      PosSpacing.sp3,
-      PosSpacing.sp4,
-      PosSpacing.sp3 - 2,
-    ),
+    this.padding = _defaultPadding,
     this.showTrailing = true,
     super.key,
-  });
+  }) : _isLeaf = false,
+       _onBack = null;
+
+  /// Leaf / pushed-screen variant: a back arrow in the leading slot and no
+  /// notification bell or avatar dropdown (those belong on tab roots only).
+  /// [onBack] defaults to popping the current route.
+  const TfGlobalTopBar.leaf({
+    required this.title,
+    this.titleBn,
+    this.subtitle,
+    this.subtitleBn,
+    this.extraActions = const [],
+    this.padding = _defaultPadding,
+    VoidCallback? onBack,
+    super.key,
+  }) : onNavigateToOrders = null,
+       onNavigateToTarget = null,
+       showTrailing = false,
+       _isLeaf = true,
+       _onBack = onBack;
+
+  static const EdgeInsetsGeometry _defaultPadding = EdgeInsets.fromLTRB(
+    PosSpacing.sp4,
+    PosSpacing.sp2,
+    PosSpacing.sp4,
+    PosSpacing.sp2,
+  );
 
   final String title;
   final String? titleBn;
 
-  /// Left-side subtitle. When null, falls back to the restaurant name so the
-  /// outlet identity is always visible.
+  /// Small contextual subtitle (e.g. "3 of 13 counted"). Rendered only when
+  /// explicitly passed — never the outlet name (v4 §5.1).
   final String? subtitle;
   final String? subtitleBn;
 
@@ -53,21 +79,46 @@ class TfGlobalTopBar extends StatelessWidget {
   /// surface those controls inline and don't need them duplicated up top.
   final bool showTrailing;
 
+  /// True for the [TfGlobalTopBar.leaf] variant — renders a back arrow instead
+  /// of the hamburger and suppresses the trailing cluster.
+  final bool _isLeaf;
+  final VoidCallback? _onBack;
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final text = app.strings;
     final isBn = tfIsBn(context);
     final t = isBn && (titleBn?.isNotEmpty ?? false) ? titleBn! : title;
 
     String? s;
     if (subtitle != null) {
       s = isBn && (subtitleBn?.isNotEmpty ?? false) ? subtitleBn! : subtitle;
+    }
+
+    final shellNav = ShellNavScope.maybeOf(context);
+
+    final Widget? leading;
+    if (_isLeaf) {
+      leading = TfIconButton(
+        icon: TfNavIcon.back,
+        tooltip: tfPick(context, en: 'Back', bn: 'পিছনে'),
+        onPressed: _onBack ?? () => Navigator.of(context).maybePop(),
+        bare: true,
+      );
+    } else if (shellNav != null) {
+      leading = TfIconButton(
+        icon: Icons.menu_rounded,
+        tooltip: text.menu,
+        onPressed: shellNav.openDrawer,
+        bare: true,
+      );
     } else {
-      final name = app.restaurantName.trim();
-      if (name.isNotEmpty) s = name;
+      leading = null;
     }
 
     return TfUnifiedTopNav(
+      leading: leading,
       title: t,
       subtitle: s,
       padding: padding,
@@ -78,17 +129,19 @@ class TfGlobalTopBar extends StatelessWidget {
             onNavigateToOrders: onNavigateToOrders ?? () {},
             onNavigateToTarget: onNavigateToTarget,
           ),
-          const _AvatarDropdown(),
+          _AvatarDropdown(onNavigateToTarget: onNavigateToTarget),
         ],
       ],
     );
   }
 }
 
-enum _TopAction { modeSimple, modeAdvanced, langEn, langBn, signOut }
+enum _TopAction { settings, signOut }
 
 class _AvatarDropdown extends StatelessWidget {
-  const _AvatarDropdown();
+  const _AvatarDropdown({this.onNavigateToTarget});
+
+  final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
 
   static String _initials(String name) {
     final trimmed = name.trim();
@@ -103,9 +156,8 @@ class _AvatarDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final isAdvanced = app.businessTier.isAdvanced;
-    final language = app.language;
     final initials = _initials(app.accountDisplayName);
+    final canOpenSettings = onNavigateToTarget != null;
 
     return PopupMenuButton<_TopAction>(
       tooltip: '',
@@ -120,47 +172,37 @@ class _AvatarDropdown extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 224, maxWidth: 280),
       onSelected: (action) {
         switch (action) {
-          case _TopAction.modeSimple:
-            app.setBusinessTier(BusinessTier.simple);
-          case _TopAction.modeAdvanced:
-            app.setBusinessTier(BusinessTier.advanced);
-          case _TopAction.langEn:
-            app.updateLanguage(AppLanguage.en);
-          case _TopAction.langBn:
-            app.updateLanguage(AppLanguage.bn);
+          case _TopAction.settings:
+            onNavigateToTarget?.call(PosNotificationTarget.settings);
           case _TopAction.signOut:
             app.logOut();
         }
       },
       itemBuilder: (context) => [
-        _eyebrowItem(context, tfPick(context, en: 'Mode', bn: 'মোড')),
-        _choiceItem(
-          context,
-          value: _TopAction.modeSimple,
-          label: tfPick(context, en: 'Simple', bn: 'সিম্পল'),
-          active: !isAdvanced,
-        ),
-        _choiceItem(
-          context,
-          value: _TopAction.modeAdvanced,
-          label: tfPick(context, en: 'Advanced', bn: 'অ্যাডভান্সড'),
-          active: isAdvanced,
-        ),
-        const PopupMenuDivider(),
-        _eyebrowItem(context, tfPick(context, en: 'Language', bn: 'ভাষা')),
-        _choiceItem(
-          context,
-          value: _TopAction.langEn,
-          label: 'English',
-          active: language == AppLanguage.en,
-        ),
-        _choiceItem(
-          context,
-          value: _TopAction.langBn,
-          label: 'বাংলা',
-          active: language == AppLanguage.bn,
-        ),
-        const PopupMenuDivider(),
+        if (canOpenSettings)
+          PopupMenuItem<_TopAction>(
+            value: _TopAction.settings,
+            height: 42,
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.settings_outlined,
+                  size: 18,
+                  color: PosColors.ink2,
+                ),
+                const SizedBox(width: 10),
+                TfText(
+                  tfPick(context, en: 'Settings', bn: 'সেটিংস'),
+                  style: const TextStyle(
+                    color: PosColors.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (canOpenSettings) const PopupMenuDivider(),
         PopupMenuItem<_TopAction>(
           value: _TopAction.signOut,
           height: 42,
@@ -189,68 +231,18 @@ class _AvatarDropdown extends StatelessWidget {
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: PosColors.primarySoft,
+          color: PosColors.neutralSoft,
           shape: BoxShape.circle,
-          border: Border.all(color: PosColors.primaryWash),
+          border: Border.all(color: PosColors.neutralWash),
         ),
         child: TfText(
           initials,
           style: const TextStyle(
-            color: PosColors.accentStrong,
+            color: PosColors.neutralInk,
             fontSize: 13.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0,
           ),
-        ),
-      ),
-    );
-  }
-
-  PopupMenuItem<_TopAction> _eyebrowItem(BuildContext context, String label) {
-    return PopupMenuItem<_TopAction>(
-      enabled: false,
-      height: 30,
-      child: TfMicroLabel(label.toUpperCase()),
-    );
-  }
-
-  PopupMenuItem<_TopAction> _choiceItem(
-    BuildContext context, {
-    required _TopAction value,
-    required String label,
-    required bool active,
-  }) {
-    return PopupMenuItem<_TopAction>(
-      value: value,
-      height: 42,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: active
-            ? BoxDecoration(
-                color: PosColors.primarySoft,
-                borderRadius: BorderRadius.circular(PosRadii.sm),
-                border: Border.all(color: PosColors.primaryWash),
-              )
-            : null,
-        child: Row(
-          children: [
-            Expanded(
-              child: TfText(
-                label,
-                style: TextStyle(
-                  color: active ? PosColors.accentStrong : PosColors.text,
-                  fontSize: 14,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ),
-            if (active)
-              const Icon(
-                Icons.check_rounded,
-                size: 17,
-                color: PosColors.accentStrong,
-              ),
-          ],
         ),
       ),
     );

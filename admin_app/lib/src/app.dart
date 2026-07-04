@@ -15,9 +15,11 @@ import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
 import 'models/account_role.dart';
 import 'features/analytics/analytics_screen.dart';
-import 'features/analytics/sales_summary_screen.dart';
 import 'features/desktop_pos/desktop_pos_shell.dart';
+import 'features/inventory/end_of_day_count_screen.dart';
 import 'features/inventory/inventory_screen.dart';
+import 'features/inventory/stock_in_screen.dart';
+import 'features/inventory/stock_scan_flow.dart';
 import 'features/menu/menu_management_screen.dart';
 import 'features/messaging/messages_screen.dart';
 import 'features/more/more_screen.dart';
@@ -209,11 +211,13 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     return MainShell(initialIndex: _initialShellIndex, onMounted: mounted);
   }
 
-  /// Visual index of the Orders tab in the current role's tab order — the
-  /// default landing tab for every role.
+  /// Default landing tab: Analytics for owner, Orders for manager/waiter.
   int _defaultShellIndex() {
-    final order = _tabOrderForRole(_controller.accountRole);
-    final i = order.indexOf(_AppTab.orders);
+    final tabs = _tabOrderForRole(_controller.accountRole);
+    final target = _controller.accountRole.isOwner
+        ? _AppTab.analytics
+        : _AppTab.orders;
+    final i = tabs.indexOf(target);
     return i < 0 ? 0 : i;
   }
 }
@@ -232,20 +236,23 @@ enum _AppTab {
   reports,
 }
 
-// Owner: Analytics · Orders · Reports · Tables · Stock · More (Menu lives in More)
+// Owner: Analytics · Orders · Stock · Menu · Reports · More.
+// Menu is a first-class destination (matches the DESIGN.md desktop-rail order
+// … Stock · Menu · Reports …), not a pushed screen under More. Tables is
+// waiter-only — owners/managers work from Orders.
 const _ownerTabOrder = <_AppTab>[
   _AppTab.analytics,
   _AppTab.orders,
-  _AppTab.reports,
-  _AppTab.tables,
   _AppTab.stock,
+  _AppTab.menu,
+  _AppTab.reports,
   _AppTab.more,
 ];
-// Manager: Live (Control Tower) · Tables · Orders · Sales Summary · More
+// Manager: Live (Control Tower) · Orders · Menu · Sales Summary · More
 const _managerTabOrder = <_AppTab>[
   _AppTab.live,
-  _AppTab.tables,
   _AppTab.orders,
+  _AppTab.menu,
   _AppTab.salesSummary,
   _AppTab.more,
 ];
@@ -419,7 +426,8 @@ class _MainShellState extends State<MainShell> {
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
       ),
-      (_) => SalesSummaryScreen(
+      (_) => AnalyticsScreen(
+        reduced: true,
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
       ),
@@ -451,8 +459,7 @@ class _MainShellState extends State<MainShell> {
               selected: _selected,
               onSelectTab: _selectTab,
               onNavigateTarget: _navigateNotificationTarget,
-              onMenuDelivery: () => showMenuDeliveryChargeEditor(context),
-              onMenuDiscounts: () => showMenuDiscountsSheet(context),
+              onAction: _handleDrawerAction,
             ),
             body: ShellNavScope(
               openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
@@ -462,7 +469,18 @@ class _MainShellState extends State<MainShell> {
         }
 
         final extended = constraints.maxWidth >= 1050;
+        // Wide surface keeps the flat rail for one-tap tab switching; the
+        // grouped child entries (Stock in/Count/Scan, Delivery/Discounts,
+        // Reports) stay reachable through the same drawer via the hamburger.
         return Scaffold(
+          key: _scaffoldKey,
+          drawer: _AppNavDrawer(
+            tabOrder: tabOrder,
+            selected: _selected,
+            onSelectTab: _selectTab,
+            onNavigateTarget: _navigateNotificationTarget,
+            onAction: _handleDrawerAction,
+          ),
           body: Row(
             children: [
               DecoratedBox(
@@ -504,7 +522,12 @@ class _MainShellState extends State<MainShell> {
                       .toList(growable: false),
                 ),
               ),
-              Expanded(child: body),
+              Expanded(
+                child: ShellNavScope(
+                  openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  child: body,
+                ),
+              ),
             ],
           ),
         );
@@ -534,15 +557,10 @@ class _MainShellState extends State<MainShell> {
         _selectTab(_AppTab.stock);
         return;
       case PosNotificationTarget.menu:
-        // Menu moved out of the bottom nav into the More hub — deep-link pushes
-        // the management screen rather than switching a tab (manager+ only).
+        // Menu is a first-class nav destination — deep-link selects the tab
+        // rather than pushing a screen (manager+ only).
         if (AppScope.read(context).accountRole.isManager) {
-          _pushScreen(
-            MenuManagementScreen(
-              onNavigateToOrders: () => _selectTab(_AppTab.orders),
-              onNavigateToTarget: _navigateNotificationTarget,
-            ),
-          );
+          _selectTab(_AppTab.menu);
         }
         return;
       case PosNotificationTarget.receiptPrinter:
@@ -565,6 +583,29 @@ class _MainShellState extends State<MainShell> {
       case PosNotificationTarget.none:
         return;
     }
+  }
+
+  /// Drawer group-child actions: quick screens/sheets that don't map to a tab.
+  void _handleDrawerAction(_DrawerAction action) {
+    switch (action) {
+      case _DrawerAction.stockIn:
+        unawaited(_pushThenRefreshInventory(const StockInScreen()));
+      case _DrawerAction.stockCount:
+        unawaited(_pushThenRefreshInventory(const EndOfDayCountScreen()));
+      case _DrawerAction.stockScan:
+        unawaited(runStockScanFlow(context));
+      case _DrawerAction.menuDeliveryCharge:
+        unawaited(showMenuDeliveryChargeEditor(context));
+      case _DrawerAction.menuDiscounts:
+        unawaited(showMenuDiscountsSheet(context));
+    }
+  }
+
+  Future<void> _pushThenRefreshInventory(Widget screen) async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => screen));
+    if (mounted) await AppScope.read(context).refreshInventorySummary();
   }
 
   Future<void> _deepLinkToChat(String conversationId) async {
@@ -743,7 +784,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: PosColors.primarySoft,
+              color: PosColors.neutralSoft,
               borderRadius: BorderRadius.circular(PosRadii.sm),
               border: Border.all(color: PosColors.line),
             ),
@@ -893,7 +934,7 @@ class _UpdateBadge extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: PosColors.primarySoft,
+        color: PosColors.neutralSoft,
         borderRadius: BorderRadius.circular(PosRadii.xs),
         border: Border.all(color: PosColors.line),
       ),
@@ -971,31 +1012,36 @@ class _RailLogo extends StatelessWidget {
   }
 }
 
+/// Quick actions reachable from drawer group children — screens/sheets that
+/// don't map to a nav tab. Handled by [_MainShellState._handleDrawerAction].
+enum _DrawerAction {
+  stockIn,
+  stockCount,
+  stockScan,
+  menuDeliveryCharge,
+  menuDiscounts,
+}
+
 /// Petpooja-style left navigation drawer for the phone surface. Header =
-/// brand + outlet + role chip; body = the role's primary destinations, then
-/// Menu/Messages (permission-gated) and a Settings entry into the More hub;
-/// footer = EN/বাংলা toggle. Selecting an item closes the drawer first.
+/// brand + outlet + role chip (+ owner Backoffice/Manager view toggle);
+/// body = the role's primary destinations with expandable groups
+/// (Analytics ▸ Reports, Stock ▸ Stock in/Count/Scan, Menu ▸ Delivery
+/// charge/Discounts), then Messages (permission-gated) and a Settings entry
+/// into the More hub. Selecting an item closes the drawer first.
 class _AppNavDrawer extends StatelessWidget {
   const _AppNavDrawer({
     required this.tabOrder,
     required this.selected,
     required this.onSelectTab,
     required this.onNavigateTarget,
-    required this.onMenuDelivery,
-    required this.onMenuDiscounts,
+    required this.onAction,
   });
 
   final List<_AppTab> tabOrder;
   final _AppTab selected;
   final ValueChanged<_AppTab> onSelectTab;
   final ValueChanged<PosNotificationTarget> onNavigateTarget;
-
-  /// Opens the menu delivery-charge editor (moved out of the Menu page's action
-  /// row into this drawer's collapsible Menu group).
-  final VoidCallback onMenuDelivery;
-
-  /// Opens the bulk-discount sheet for all menu items.
-  final VoidCallback onMenuDiscounts;
+  final ValueChanged<_DrawerAction> onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1008,8 +1054,9 @@ class _AppNavDrawer extends StatelessWidget {
     ]);
     final text = app.strings;
     final isBn = text.isBn;
+    // Reports renders nested under Analytics, not as a flat row.
     final primary = tabOrder
-        .where((t) => t != _AppTab.more)
+        .where((t) => t != _AppTab.more && t != _AppTab.reports)
         .toList(growable: false);
 
     void close() => Navigator.of(context).pop();
@@ -1021,6 +1068,96 @@ class _AppNavDrawer extends StatelessWidget {
     void goTarget(PosNotificationTarget target) {
       close();
       onNavigateTarget(target);
+    }
+
+    void goAction(_DrawerAction action) {
+      close();
+      onAction(action);
+    }
+
+    Widget rowFor(_AppTab tab) {
+      switch (tab) {
+        case _AppTab.analytics when tabOrder.contains(_AppTab.reports):
+          return _DrawerNavGroup(
+            destination: _destinationFor(tab, text),
+            selected: tab == selected,
+            isBn: isBn,
+            onHeaderTap: () => goTab(tab),
+            initiallyExpanded:
+                tab == selected || selected == _AppTab.reports,
+            children: [
+              _DrawerNavRow.icon(
+                icon: Icons.assessment_outlined,
+                label: text.reports,
+                selected: selected == _AppTab.reports,
+                indented: true,
+                onTap: () => goTab(_AppTab.reports),
+              ),
+            ],
+          );
+        case _AppTab.stock:
+          return _DrawerNavGroup(
+            destination: _destinationFor(tab, text),
+            selected: tab == selected,
+            isBn: isBn,
+            onHeaderTap: () => goTab(tab),
+            initiallyExpanded: tab == selected,
+            children: [
+              _DrawerNavRow.icon(
+                icon: Icons.add_box_outlined,
+                label: text.stockIn,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.stockIn),
+              ),
+              _DrawerNavRow.icon(
+                icon: Icons.fact_check_outlined,
+                label: text.countAction,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.stockCount),
+              ),
+              _DrawerNavRow.icon(
+                icon: Icons.document_scanner_outlined,
+                label: text.scanStock,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.stockScan),
+              ),
+            ],
+          );
+        case _AppTab.menu when app.accountRole.isManager:
+          return _DrawerNavGroup(
+            destination: _destinationFor(tab, text),
+            selected: tab == selected,
+            isBn: isBn,
+            onHeaderTap: () => goTab(tab),
+            initiallyExpanded: tab == selected,
+            children: [
+              _DrawerNavRow.icon(
+                icon: Icons.delivery_dining_outlined,
+                label: text.deliveryCharge,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.menuDeliveryCharge),
+              ),
+              _DrawerNavRow.icon(
+                icon: Icons.percent_rounded,
+                label: text.menuActionDiscounts,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.menuDiscounts),
+              ),
+            ],
+          );
+        default:
+          return _DrawerNavRow.destination(
+            destination: _destinationFor(tab, text),
+            selected: tab == selected,
+            isBn: isBn,
+            onTap: () => goTab(tab),
+          );
+      }
     }
 
     return Drawer(
@@ -1036,61 +1173,53 @@ class _AppNavDrawer extends StatelessWidget {
               outletName: app.outletName.trim(),
               isBn: isBn,
             ),
+            // Owner-only Backoffice/Manager view switch (kept visible while an
+            // owner previews the manager surface so they can switch back).
+            if (app.demoOwnerAccess)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  PosSpacing.sp4,
+                  0,
+                  PosSpacing.sp4,
+                  PosSpacing.sp3,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TfMicroLabel(
+                        tfPick(context, en: 'VIEW', bn: 'ভিউ'),
+                      ),
+                    ),
+                    TfCompactRoleToggle(
+                      role: app.accountRole.isOwner ? 'owner' : 'manager',
+                      options: [
+                        (text.backofficeLabel, 'owner'),
+                        (text.managerRole, 'manager'),
+                      ],
+                      onChanged: (value) => app.setAccountRoleDemo(
+                        value == 'owner'
+                            ? AccountRole.owner
+                            : AccountRole.manager,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Divider(height: 1, thickness: 1, color: PosColors.line),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp2),
                 children: [
-                  for (final tab in primary)
-                    _DrawerNavRow.destination(
-                      destination: _destinationFor(tab, text),
-                      selected: tab == selected,
-                      isBn: isBn,
-                      onTap: () => goTab(tab),
-                    ),
-                  if (app.isManager || app.canMessages) ...[
+                  for (final tab in primary) rowFor(tab),
+                  // Messages stays permission-gated here.
+                  if (app.canMessages) ...[
                     const _DrawerDivider(),
-                    if (app.isManager)
-                      _DrawerNavGroup(
-                        destination: _destinationFor(_AppTab.menu, text),
-                        isBn: isBn,
-                        children: [
-                          _DrawerNavRow.icon(
-                            icon: Icons.restaurant_menu_outlined,
-                            label: text.menuGroupOpen,
-                            selected: false,
-                            onTap: () => goTarget(PosNotificationTarget.menu),
-                            indented: true,
-                          ),
-                          _DrawerNavRow.icon(
-                            icon: Icons.delivery_dining_outlined,
-                            label: text.menuActionDelivery,
-                            selected: false,
-                            onTap: () {
-                              close();
-                              onMenuDelivery();
-                            },
-                            indented: true,
-                          ),
-                          _DrawerNavRow.icon(
-                            icon: Icons.percent_rounded,
-                            label: text.menuActionDiscounts,
-                            selected: false,
-                            onTap: () {
-                              close();
-                              onMenuDiscounts();
-                            },
-                            indented: true,
-                          ),
-                        ],
-                      ),
-                    if (app.canMessages)
-                      _DrawerNavRow.icon(
-                        icon: Icons.forum_outlined,
-                        label: text.messages,
-                        selected: false,
-                        onTap: () => goTarget(PosNotificationTarget.messages),
-                      ),
+                    _DrawerNavRow.icon(
+                      icon: Icons.forum_outlined,
+                      label: text.messages,
+                      selected: false,
+                      onTap: () => goTarget(PosNotificationTarget.messages),
+                    ),
                   ],
                   const _DrawerDivider(),
                   _DrawerNavRow.destination(
@@ -1102,11 +1231,94 @@ class _AppNavDrawer extends StatelessWidget {
                 ],
               ),
             ),
-            Divider(height: 1, thickness: 1, color: PosColors.line),
-            _DrawerLanguageFooter(isBn: isBn),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Expandable drawer group: a normal destination row with a trailing chevron.
+/// Tapping the row selects the group's tab (and closes the drawer); tapping
+/// the chevron only toggles the children — the drawer stays open.
+class _DrawerNavGroup extends StatefulWidget {
+  const _DrawerNavGroup({
+    required this.destination,
+    required this.selected,
+    required this.isBn,
+    required this.onHeaderTap,
+    required this.children,
+    this.initiallyExpanded = false,
+  });
+
+  final _Destination destination;
+  final bool selected;
+  final bool isBn;
+  final VoidCallback onHeaderTap;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  @override
+  State<_DrawerNavGroup> createState() => _DrawerNavGroupState();
+}
+
+class _DrawerNavGroupState extends State<_DrawerNavGroup> {
+  late bool _open = widget.initiallyExpanded;
+
+  @override
+  void didUpdateWidget(covariant _DrawerNavGroup oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initiallyExpanded && !oldWidget.initiallyExpanded) {
+      _open = true;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Stack(
+          children: [
+            _DrawerNavRow.destination(
+              destination: widget.destination,
+              selected: widget.selected,
+              isBn: widget.isBn,
+              onTap: widget.onHeaderTap,
+            ),
+            Positioned(
+              right: PosSpacing.sp2,
+              top: 0,
+              bottom: 0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _open = !_open),
+                child: SizedBox(
+                  width: 44,
+                  child: Icon(
+                    _open
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 22,
+                    color: PosColors.muted,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _open
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: widget.children,
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
     );
   }
 }
@@ -1160,14 +1372,14 @@ class _RoleChip extends StatelessWidget {
         vertical: PosSpacing.sp1,
       ),
       decoration: BoxDecoration(
-        color: PosColors.primarySoft,
+        color: PosColors.neutralSoft,
         borderRadius: BorderRadius.circular(PosRadii.pill),
-        border: Border.all(color: PosColors.primaryWash),
+        border: Border.all(color: PosColors.neutralWash),
       ),
       child: Text(
         label,
         style: const TextStyle(
-          color: PosColors.accentStrong,
+          color: PosColors.neutralInk,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -1235,7 +1447,7 @@ class _DrawerNavRow extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  /// When true the row is inset (used for children of [_DrawerNavGroup]).
+  /// When true the row is inset (used for indented sub-rows in the drawer).
   final bool indented;
 
   @override
@@ -1324,193 +1536,6 @@ class _DrawerNavRow extends StatelessWidget {
   }
 }
 
-/// Collapsible drawer section (e.g. "Menu") — a header row styled like
-/// [_DrawerNavRow] with a rotating chevron that expands/collapses a set of
-/// indented child rows (Open Menu management · Delivery · Discounts).
-class _DrawerNavGroup extends StatefulWidget {
-  const _DrawerNavGroup({
-    required this.destination,
-    required this.isBn,
-    required this.children,
-  });
-
-  final _Destination destination;
-  final bool isBn;
-  final List<Widget> children;
-
-  @override
-  State<_DrawerNavGroup> createState() => _DrawerNavGroupState();
-}
-
-class _DrawerNavGroupState extends State<_DrawerNavGroup> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = widget.isBn
-        ? widget.destination.bnLabel
-        : widget.destination.label;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: PosSpacing.sp2,
-            vertical: PosSpacing.sp1,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(PosRadii.md),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: PosSpacing.sp3,
-                  vertical: PosSpacing.sp3,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      widget.destination.icon,
-                      size: 22,
-                      color: PosColors.muted,
-                    ),
-                    const SizedBox(width: PosSpacing.sp3),
-                    Expanded(
-                      child: TfText(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: tfFontFamily(context),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: PosColors.primaryDark,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
-                    AnimatedRotation(
-                      turns: _expanded ? 0.5 : 0.0,
-                      duration: const Duration(milliseconds: 180),
-                      child: const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 22,
-                        color: PosColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        AnimatedCrossFade(
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: widget.children,
-          ),
-          crossFadeState: _expanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          duration: const Duration(milliseconds: 180),
-        ),
-      ],
-    );
-  }
-}
-
-class _DrawerLanguageFooter extends StatelessWidget {
-  const _DrawerLanguageFooter({required this.isBn});
-
-  final bool isBn;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.select(context, AppAspect.language);
-    final text = app.strings;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        PosSpacing.sp3,
-        PosSpacing.sp3,
-        PosSpacing.sp3,
-        PosSpacing.sp3,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: PosColors.surfaceSunk,
-          borderRadius: BorderRadius.circular(PosRadii.pill),
-          border: Border.all(color: PosColors.line),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(PosSpacing.sp1),
-          child: Row(
-            children: [
-              Expanded(
-                child: _LangSegment(
-                  label: text.english,
-                  active: !isBn,
-                  onTap: () => app.updateLanguage(AppLanguage.en),
-                ),
-              ),
-              Expanded(
-                child: _LangSegment(
-                  label: text.bangla,
-                  active: isBn,
-                  onTap: () => app.updateLanguage(AppLanguage.bn),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LangSegment extends StatelessWidget {
-  const _LangSegment({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: active ? PosColors.primary : Colors.transparent,
-      borderRadius: BorderRadius.circular(PosRadii.pill),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp2),
-          child: Center(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: tfFontFamily(context),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: active ? PosColors.accentInk : PosColors.muted,
-                letterSpacing: 0,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _RailFooter extends StatelessWidget {
   const _RailFooter({required this.extended});
 
@@ -1523,13 +1548,13 @@ class _RailFooter extends StatelessWidget {
       return Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: PosColors.primarySoft,
+          color: PosColors.neutralSoft,
           borderRadius: BorderRadius.circular(PosRadii.sm),
           border: Border.all(color: PosColors.line),
         ),
         child: Icon(
           Icons.verified_user_outlined,
-          color: PosColors.primary,
+          color: PosColors.neutralInk,
           size: 20,
         ),
       );
@@ -1537,14 +1562,7 @@ class _RailFooter extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            PosColors.primarySoft,
-            PosColors.primarySoft.withValues(alpha: 0.55),
-          ],
-        ),
+        color: PosColors.neutralSoft,
         borderRadius: BorderRadius.circular(PosRadii.md),
         border: Border.all(color: PosColors.line),
       ),

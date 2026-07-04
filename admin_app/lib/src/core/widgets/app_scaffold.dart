@@ -10,13 +10,13 @@ class AppScaffold extends StatelessWidget {
     this.subtitle,
     this.actions = const [],
     this.floatingActionButton,
-    this.showDatePill = true,
     this.showBackButton = false,
     this.pinHeader = false,
     this.fillBody = false,
     this.centerHeader = false,
     this.removeHorizontalPadding = false,
     this.headerWidget,
+    this.footer,
     super.key,
   });
 
@@ -25,7 +25,6 @@ class AppScaffold extends StatelessWidget {
   final Widget child;
   final List<Widget> actions;
   final Widget? floatingActionButton;
-  final bool showDatePill;
   final bool showBackButton;
   final bool pinHeader;
 
@@ -39,8 +38,13 @@ class AppScaffold extends StatelessWidget {
   final bool removeHorizontalPadding;
 
   /// When set, replaces the default title/actions header entirely. The widget
-  /// is responsible for its own padding. Use [AppPageHeader] for tab roots.
+  /// is responsible for its own padding. Use [TfGlobalTopBar] for tab roots.
   final Widget? headerWidget;
+
+  /// Full-bleed sticky footer (v4 §5.5) rendered below the body, outside the
+  /// horizontal-padding wrapper — pass a [TfStickyCTA]. Only supported with
+  /// [pinHeader].
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +97,7 @@ class AppScaffold extends StatelessWidget {
                                 ],
                               ),
                       ),
+                      ?footer,
                     ],
                   ),
                 ],
@@ -200,7 +205,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final titleFontSize = showBackButton ? 22.0 : 26.0;
+        // v4 §5.1: one slim-bar title size everywhere (target9/3).
         final titleColumn = Column(
           crossAxisAlignment: centerHeader
               ? CrossAxisAlignment.center
@@ -212,32 +217,25 @@ class _Header extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: centerHeader ? TextAlign.center : TextAlign.start,
-              style: TextStyle(
+              style: TfTextStyles.appBarTitle.copyWith(
                 fontFamily: tfFontFamily(context),
-                fontSize: titleFontSize,
-                fontWeight: FontWeight.w700,
                 color: PosColors.primaryDark,
-                height: showBackButton ? 1.18 : 1.15,
                 letterSpacing: 0,
               ),
             ),
-            if (subtitle != null) ...[
-              const SizedBox(height: PosSpacing.sp1),
+            if (subtitle != null)
               TfText(
                 subtitle!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: centerHeader ? TextAlign.center : TextAlign.start,
-                style: TextStyle(
+                style: TfTextStyles.label.copyWith(
                   fontFamily: tfFontFamily(context),
-                  fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: PosColors.muted,
-                  height: 1.25,
                   letterSpacing: 0,
                 ),
               ),
-            ],
           ],
         );
         final titleArea = showBackButton

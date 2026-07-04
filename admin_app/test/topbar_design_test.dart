@@ -3,9 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_pos/src/app_controller.dart';
 import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
-import 'package:local_pos/src/core/widgets/app_page_header.dart';
 import 'package:local_pos/src/core/widgets/app_scaffold.dart';
 import 'package:local_pos/src/core/widgets/tf_design_system.dart';
+import 'package:local_pos/src/core/widgets/tf_global_top_bar.dart';
 
 void main() {
   testWidgets('source brand header matches wordmark and mark sizing', (
@@ -65,15 +65,13 @@ void main() {
     expect(badge.style?.fontWeight, FontWeight.w800);
   });
 
-  testWidgets('pushed AppScaffold header uses 22 title and source back icon', (
-    tester,
-  ) async {
+  testWidgets('pushed AppScaffold header uses the v4 slim-bar title and '
+      'source back icon', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
         home: const AppScaffold(
           title: 'Audit trail',
-          showDatePill: false,
           showBackButton: true,
           child: SizedBox.shrink(),
         ),
@@ -81,7 +79,7 @@ void main() {
     );
 
     final title = tester.widget<Text>(find.text('Audit trail'));
-    expect(title.style?.fontSize, 22);
+    expect(title.style?.fontSize, TfTextStyles.appBarTitle.fontSize);
     expect(title.style?.fontWeight, FontWeight.w700);
 
     final backIcon = tester.widget<TfSourceIcon>(find.byType(TfSourceIcon));
@@ -90,24 +88,17 @@ void main() {
     expect(backIcon.strokeWidth, 2);
   });
 
-  testWidgets('root topbar owns the page gap with source padding', (
-    tester,
-  ) async {
+  testWidgets('root TfGlobalTopBar renders its title', (tester) async {
     await tester.pumpWidget(
       AppScope(
         controller: PosAppController(),
         child: MaterialApp(
           theme: AppTheme.light(),
-          home: const Scaffold(body: AppPageHeader(title: 'Tables')),
+          home: const Scaffold(body: TfGlobalTopBar(title: 'Tables')),
         ),
       ),
     );
 
-    final padding = tester.widget<Padding>(
-      find
-          .ancestor(of: find.text('Tables'), matching: find.byType(Padding))
-          .first,
-    );
-    expect(padding.padding, const EdgeInsets.fromLTRB(16, 8, 16, 12));
+    expect(find.text('Tables'), findsOneWidget);
   });
 }

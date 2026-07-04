@@ -4,15 +4,14 @@ import '../../app_controller.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/app_page_header.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/account_role.dart';
 import '../../models/pos_notification.dart';
 import '../audit/audit_screen.dart';
 import '../messaging/messages_screen.dart';
 import '../staff/staff_screen.dart';
-import '../menu/menu_management_screen.dart';
 import '../settings/settings_screen.dart';
 
 /// QuickBytes "More" hub — shared secondary navigation across all roles
@@ -36,12 +35,11 @@ class MoreScreen extends StatelessWidget {
     final text = app.strings;
     return AppScaffold(
       title: text.settingsTab,
-      headerWidget: AppPageHeader(
+      headerWidget: TfGlobalTopBar(
         title: text.settingsTab,
         onNavigateToOrders: onNavigateToOrders,
         onNavigateToTarget: onNavigateToTarget,
       ),
-      showDatePill: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -59,15 +57,8 @@ class MoreScreen extends StatelessWidget {
           _ManageGroup(
             app: app,
             text: text,
-            onNavigateToOrders: onNavigateToOrders,
             push: (w) => _push(context, w),
           ),
-          if (app.canMessages) ...[
-            const SizedBox(height: 20),
-            _ServiceModeCard(app: app, text: text),
-          ],
-          const SizedBox(height: 20),
-          _LanguageCard(app: app, text: text),
           // The rest of Settings (My restaurant details, Device, Admin,
           // Account for managers; a reduced set for waiters) is embedded
           // directly here — no separate page/route. SettingsScreen already
@@ -112,7 +103,7 @@ class _ProfileCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: PosColors.primarySoft,
+                  color: PosColors.neutralSoft,
                   borderRadius: BorderRadius.circular(PosRadii.md),
                   border: Border.all(color: PosColors.line),
                 ),
@@ -122,7 +113,7 @@ class _ProfileCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: PosColors.accentStrong,
+                    color: PosColors.neutralInk,
                   ),
                 ),
               ),
@@ -148,10 +139,6 @@ class _ProfileCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          TfMicroLabel(text.switchRoleDemo),
-          const SizedBox(height: 8),
-          _RoleSwitcher(app: app, isBn: text.isBn),
         ],
       ),
     );
@@ -177,7 +164,7 @@ class _RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: PosColors.primarySoft,
+        color: PosColors.neutralSoft,
         borderRadius: BorderRadius.circular(PosRadii.tag),
         border: Border.all(color: PosColors.line),
       ),
@@ -186,59 +173,8 @@ class _RoleBadge extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: PosColors.accentStrong,
+          color: PosColors.neutralInk,
           letterSpacing: 0.02 * 11,
-        ),
-      ),
-    );
-  }
-}
-
-/// Three-segment demo role switcher (Owner / Manager / Waiter).
-class _RoleSwitcher extends StatelessWidget {
-  const _RoleSwitcher({required this.app, required this.isBn});
-
-  final PosAppController app;
-  final bool isBn;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.input),
-        border: Border.all(color: PosColors.line),
-      ),
-      child: Row(
-        children: [
-          for (final role in AccountRole.values)
-            Expanded(child: _seg(role, app.accountRole == role)),
-        ],
-      ),
-    );
-  }
-
-  Widget _seg(AccountRole role, bool on) {
-    return GestureDetector(
-      onTap: () => app.setAccountRoleDemo(role),
-      child: Container(
-        height: 38,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: on ? PosColors.surface : Colors.transparent,
-          borderRadius: BorderRadius.circular(PosRadii.tag),
-          border: on
-              ? Border.all(color: PosColors.lineStrong)
-              : Border.all(color: Colors.transparent),
-        ),
-        child: TfText(
-          isBn ? role.labelBn : role.label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: on ? PosColors.text : PosColors.textSec,
-          ),
         ),
       ),
     );
@@ -249,13 +185,11 @@ class _ManageGroup extends StatelessWidget {
   const _ManageGroup({
     required this.app,
     required this.text,
-    required this.onNavigateToOrders,
     required this.push,
   });
 
   final PosAppController app;
   final AppStrings text;
-  final VoidCallback onNavigateToOrders;
   final void Function(Widget) push;
 
   @override
@@ -267,13 +201,8 @@ class _ManageGroup extends StatelessWidget {
     }
 
     if (app.canManageStock) {
-      // Tables now lives in the bottom nav for every role, so it's not repeated
-      // here. Menu moved out of the bottom nav into this hub (spec nav change).
-      add(
-        Icons.restaurant_menu_outlined,
-        text.menu,
-        MenuManagementScreen(onNavigateToOrders: onNavigateToOrders),
-      );
+      // Menu is a first-class nav destination (drawer/rail), so it's not
+      // repeated here. This hub keeps the remaining management screens.
       add(Icons.groups_outlined, text.staff, const StaffScreen());
       add(Icons.fact_check_outlined, text.auditTrail, const AuditScreen());
     }
@@ -341,114 +270,3 @@ class _RowDivider extends StatelessWidget {
   }
 }
 
-class _ServiceModeCard extends StatelessWidget {
-  const _ServiceModeCard({required this.app, required this.text});
-
-  final PosAppController app;
-  final AppStrings text;
-
-  @override
-  Widget build(BuildContext context) {
-    final counter = app.counterModeEnabled;
-    return TfCard(
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(
-                  text.serviceMode,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.slate,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                TfText(
-                  counter ? text.counterService : text.fullService,
-                  style: const TextStyle(fontSize: 13, color: PosColors.muted),
-                ),
-              ],
-            ),
-          ),
-          TfToggle(
-            value: counter,
-            onChanged: app.setCounterModeEnabled,
-            semanticLabel: text.serviceMode,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LanguageCard extends StatelessWidget {
-  const _LanguageCard({required this.app, required this.text});
-
-  final PosAppController app;
-  final AppStrings text;
-
-  @override
-  Widget build(BuildContext context) {
-    return TfCard(
-      child: Row(
-        children: [
-          const Icon(Icons.translate_rounded, size: 20, color: PosColors.slate),
-          const SizedBox(width: 14),
-          Expanded(
-            child: TfText(
-              text.languageLabel,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: PosColors.slate,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: PosColors.surfaceSunk,
-              borderRadius: BorderRadius.circular(PosRadii.input),
-              border: Border.all(color: PosColors.line),
-            ),
-            child: Row(
-              children: [
-                for (final lang in AppLanguage.values)
-                  _langSeg(lang, app.language == lang, () {
-                    app.updateLanguage(lang);
-                  }),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _langSeg(AppLanguage lang, bool on, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: on ? PosColors.surface : Colors.transparent,
-          borderRadius: BorderRadius.circular(PosRadii.tag),
-          border: on
-              ? Border.all(color: PosColors.lineStrong)
-              : Border.all(color: Colors.transparent),
-        ),
-        child: TfText(
-          lang == AppLanguage.bn ? 'বাংলা' : 'EN',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: on ? PosColors.text : PosColors.textSec,
-          ),
-        ),
-      ),
-    );
-  }
-}

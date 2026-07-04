@@ -43,7 +43,6 @@ class _StockVarianceScreenState extends State<StockVarianceScreen> {
     return AppScaffold(
       title: text.dailyVariance,
       subtitle: text.expectedVsCounted,
-      showDatePill: false,
       showBackButton: true,
       pinHeader: true,
       fillBody: true,
@@ -55,9 +54,7 @@ class _StockVarianceScreenState extends State<StockVarianceScreen> {
               Expanded(
                 child: _StatCard(
                   label: text.varianceLoss,
-                  value: lossVal == 0
-                      ? '৳0'
-                      : '−${tfFormatCurrency(context, lossVal.abs())}',
+                  value: '(${tfFormatCurrency(context, lossVal.abs())})',
                   valueColor: lossVal < 0 ? PosColors.danger : PosColors.text,
                 ),
               ),

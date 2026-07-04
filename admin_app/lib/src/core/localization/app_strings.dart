@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../models/order_source.dart';
 
@@ -68,8 +69,6 @@ class AppStrings {
   String get liveTab => isBn ? 'লাইভ' : 'Live';
   String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
   // ── QS analytics (owner) ──────────────────────────────────────────────
-  String ownerViewSubtitle(String outlet) =>
-      isBn ? 'মালিক ভিউ · $outlet' : 'Owner view · $outlet';
   String get salesBreakdownTab => isBn ? 'সেলস ব্রেকডাউন' : 'Sales Breakdown';
   String get itemWiseTab => isBn ? 'আইটেম ওয়াইজ' : 'Item-wise Sales';
   String get rangeToday => isBn ? 'আজ' : 'Today';
@@ -161,6 +160,8 @@ class AppStrings {
   String get serviceMode => isBn ? 'সার্ভিস মোড' : 'Service mode';
   String get fullService => isBn ? 'ফুল' : 'Full';
   String get counterService => isBn ? 'কাউন্টার' : 'Counter';
+  String get backofficeLabel => isBn ? 'ব্যাকঅফিস' : 'Backoffice';
+  String get managerRole => isBn ? 'ম্যানেজার' : 'Manager';
   String get switchRoleDemo =>
       isBn ? 'রোল পরিবর্তন (ডেমো)' : 'Switch role (demo)';
   String get comingSoon => isBn ? 'শীঘ্রই আসছে' : 'Coming soon';
@@ -544,6 +545,9 @@ class AppStrings {
   String get onTheFloorNow => isBn ? 'এখন ফ্লোরে' : 'On the floor now';
   String get completedPaid => isBn ? 'সম্পন্ন · পেইড' : 'Completed · paid';
   String get printKotAction => isBn ? 'KOT প্রিন্ট' : 'Print KOT';
+  // Short order-card action labels (the card drops the "Print" verb).
+  String get kotAction => 'KOT';
+  String get billAction => isBn ? 'বিল' : 'Bill';
   String kotPrinted(String seq) =>
       isBn ? '${_digits(seq)}-এর KOT প্রিন্ট হয়েছে' : 'KOT printed for $seq';
   String get kotNotPrinted => isBn ? 'KOT প্রিন্ট হয়নি' : 'KOT not printed';
@@ -551,14 +555,71 @@ class AppStrings {
       isBn ? 'কোনো চলমান অর্ডার নেই।' : 'No ongoing orders.';
   String get noCompletedOrders =>
       isBn ? 'এখনো কোনো সম্পন্ন অর্ডার নেই।' : 'No completed orders yet.';
-  // Compact relative age for order cards: "5m ago" / "2h ago".
-  String orderAgeAgo(int minutes) {
-    if (minutes < 1) return isBn ? 'এইমাত্র' : 'just now';
-    if (minutes < 60) {
-      return isBn ? '${_n(minutes)} মিনিট আগে' : '${minutes}m ago';
+  // Relative age for order cards: "just now" / "5m ago" / "2h ago" / "yesterday" / "3d ago" / "2w ago" / "3mo ago" / "1y ago".
+  String orderAgeAgo(DateTime createdAt) {
+    final now = DateTime.now();
+    final diff = now.difference(createdAt);
+    if (diff.inMinutes < 1) return isBn ? 'এইমাত্র' : 'just now';
+    if (diff.inMinutes < 60) {
+      return isBn
+          ? '${_n(diff.inMinutes)} মিনিট আগে'
+          : '${diff.inMinutes}m ago';
     }
-    final hours = (minutes / 60).floor();
-    return isBn ? '${_n(hours)} ঘণ্টা আগে' : '${hours}h ago';
+    if (diff.inHours < 24) {
+      return isBn ? '${_n(diff.inHours)} ঘণ্টা আগে' : '${diff.inHours}h ago';
+    }
+    final createdDate = DateTime(
+      createdAt.year,
+      createdAt.month,
+      createdAt.day,
+    );
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    if (createdDate == yesterday) {
+      return isBn ? 'গতকাল' : 'yesterday';
+    }
+    if (diff.inDays < 30) {
+      if (diff.inDays < 7) {
+        return isBn ? '${_n(diff.inDays)} দিন আগে' : '${diff.inDays}d ago';
+      }
+      final weeks = (diff.inDays / 7).floor();
+      return isBn ? '${_n(weeks)} সপ্তাহ আগে' : '${weeks}w ago';
+    }
+    if (diff.inDays < 365) {
+      final months = (diff.inDays / 30).floor();
+      return isBn ? '${_n(months)} মাস আগে' : '${months}mo ago';
+    }
+    final years = (diff.inDays / 365).floor();
+    return isBn ? '${_n(years)} বছর আগে' : '${years}y ago';
+  }
+
+  /// Date header label for order list grouping. Returns "Today", "Yesterday",
+  /// or a formatted date like "26 June, 2026" (বাংলা: "২৬ জুন, ২০২৬").
+  String formatDateHeader(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final d = DateTime(date.year, date.month, date.day);
+    if (d == today) return isBn ? 'আজকে' : 'Today';
+    if (d == yesterday) return isBn ? 'গতকাল' : 'Yesterday';
+    if (isBn) {
+      const months = <String>[
+        '',
+        'জানুয়ারি',
+        'ফেব্রুয়ারি',
+        'মার্চ',
+        'এপ্রিল',
+        'মে',
+        'জুন',
+        'জুলাই',
+        'আগস্ট',
+        'সেপ্টেম্বর',
+        'অক্টোবর',
+        'নভেম্বর',
+        'ডিসেম্বর',
+      ];
+      return '${_bnDigits(date.day.toString())} ${months[date.month]}, ${_bnDigits(date.year.toString())}';
+    }
+    return DateFormat('d MMMM, yyyy').format(date);
   }
 
   String get ordersTitle => isBn ? 'অর্ডার' : 'Orders';
@@ -593,6 +654,20 @@ class AppStrings {
     final hours = (minutes / 60).floor();
     return isBn ? '${_n(hours)} ঘণ্টা' : '$hours hr';
   }
+
+  /// Time-of-day for completed order cards — "6:35 PM" (বাংলা digits, Latin
+  /// AM/PM, matching printed receipts).
+  String formatTimeOfDay(DateTime dt) =>
+      _digits(DateFormat('h:mm a').format(dt.toLocal()));
+
+  /// Completed-card byline. Caller passes the localized role label
+  /// (AccountRole.label / labelBn).
+  String orderTakenBy(String roleLabel) =>
+      isBn ? '$roleLabel নিয়েছেন' : 'by $roleLabel';
+
+  String showMoreItems(int count) =>
+      isBn ? '+${_n(count)} আরও' : '+$count more';
+  String get showLess => isBn ? 'কম দেখান' : 'Show less';
 
   String get applyFilters => isBn ? 'প্রয়োগ করুন' : 'Apply';
   String get resetFilters => isBn ? 'রিসেট' : 'Reset';
@@ -824,6 +899,7 @@ class AppStrings {
   String get coversLabel => isBn ? 'অতিথি সংখ্যা' : 'Covers';
   String get howManyPeople => isBn ? 'কতজন অতিথি?' : 'How many people?';
   String get continueAction => isBn ? 'চালিয়ে যান' : 'Continue';
+  String get confirmAction => isBn ? 'নিশ্চিত করুন' : 'Confirm';
   String get reviewAction => isBn ? 'রিভিউ' : 'Review';
   String get reviewOrder => isBn ? 'অর্ডার পর্যালোচনা' : 'Review order';
   String get sendToKitchen => isBn ? 'অর্ডার তৈরি করুন' : 'Create order';
@@ -1403,6 +1479,12 @@ class AppStrings {
   String get colQty => isBn ? 'পরিমাণ' : 'QTY';
   String get colCover => isBn ? 'কভার' : 'COVER';
   String get countAction => isBn ? 'গণনা' : 'Count';
+  String get stockCountTitle => isBn ? 'স্টক গণনা' : 'Stock count';
+  String countedOf(int done, int total) =>
+      isBn ? '$total টির মধ্যে $done গণনা হয়েছে' : '$done of $total counted';
+  String finishCount(int done) => done > 0
+      ? (isBn ? 'গণনা শেষ করুন · $done' : 'Finish count · $done')
+      : (isBn ? 'গণনা শেষ করুন' : 'Finish count');
   String get stockItemDetailHint => isBn
       ? 'ব্যবহার ও সমন্বয়ের ইতিহাস দেখতে যেকোনো আইটেমে ট্যাপ করুন।'
       : 'Tap any item above for usage & adjustment history.';

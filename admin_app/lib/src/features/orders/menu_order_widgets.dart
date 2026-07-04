@@ -19,14 +19,6 @@ import '../desktop_pos/widgets/menu_line_customizer.dart';
 
 // ── Menu add-items step (search, categories, content, cart footer) ──
 
-// Card chrome tuned to the Petpooja "Items" source of truth — rounder than the
-// global PosRadii.card (7) with a soft drop shadow (PosShadows.card is empty).
-const double _kCardRadius = 14;
-const List<BoxShadow> _kCardShadow = [
-  BoxShadow(color: Color(0x0A14180E), blurRadius: 2, offset: Offset(0, 1)),
-  BoxShadow(color: Color(0x0D14180E), blurRadius: 8, offset: Offset(0, 2)),
-];
-
 class MenuStep extends StatefulWidget {
   const MenuStep({
     required this.visibleItems,
@@ -49,6 +41,7 @@ class MenuStep extends StatefulWidget {
     required this.onSetShortCode,
     this.categoryCounts,
     this.onSubmit,
+    this.onResetFilters,
     this.title,
     this.onBack,
     this.leadingIsClose = false,
@@ -79,6 +72,10 @@ class MenuStep extends StatefulWidget {
   final ValueChanged<MenuItem> onSetShortCode;
   final VoidCallback? onSubmit;
 
+  /// Clears the category + search filters — the empty state's "Show all"
+  /// escape hatch so a stale filter can never dead-end the picker.
+  final VoidCallback? onResetFilters;
+
   /// Optional Petpooja-style top bar (back/close + title). When null the host
   /// already supplies its own header (e.g. Tables counter mode under AppScaffold).
   final String? title;
@@ -90,42 +87,23 @@ class MenuStep extends StatefulWidget {
 }
 
 class _MenuStepState extends State<MenuStep> {
-  bool _searchExpanded = false;
-
-  void _toggleSearch() {
-    setState(() {
-      _searchExpanded = !_searchExpanded;
-      if (!_searchExpanded && !widget.codeMode) {
-        widget.searchCtrl.clear();
-        widget.onSearchChanged('');
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Code mode forces the (numeric) entry bar open; otherwise the search field
-    // is revealed only when the top-right search icon is tapped.
-    final searchVisible = _searchExpanded || widget.codeMode;
     return Column(
       children: [
         _TopControls(
           title: widget.title,
           onLeading: widget.onBack,
           leadingIsClose: widget.leadingIsClose,
-          codeActive: widget.codeMode,
-          onToggleCode: widget.onToggleCodeMode,
-          searchActive: searchVisible,
-          onToggleSearch: _toggleSearch,
         ),
-        if (searchVisible)
-          _MenuSearchBar(
-            searchCtrl: widget.searchCtrl,
-            query: widget.query,
-            codeMode: widget.codeMode,
-            onSearchChanged: widget.onSearchChanged,
-            onCodeSubmit: widget.onCodeSubmit,
-          ),
+        _MenuSearchBar(
+          searchCtrl: widget.searchCtrl,
+          query: widget.query,
+          codeMode: widget.codeMode,
+          onSearchChanged: widget.onSearchChanged,
+          onCodeSubmit: widget.onCodeSubmit,
+          onToggleCode: widget.onToggleCodeMode,
+        ),
         if (!widget.codeMode)
           CategoryChips(
             categories: widget.categories,
@@ -135,7 +113,11 @@ class _MenuStepState extends State<MenuStep> {
           ),
         Expanded(
           child: widget.codeMode
-              ? _ShortCodeList(items: widget.visibleItems, onTap: widget.onTap)
+              ? _ShortCodeList(
+                  items: widget.visibleItems,
+                  cart: widget.cart,
+                  onTap: widget.onTap,
+                )
               : _MenuContent(
                   items: widget.visibleItems,
                   cart: widget.cart,
@@ -143,6 +125,7 @@ class _MenuStepState extends State<MenuStep> {
                   onDecrement: widget.onDecrement,
                   onToggleFavorite: widget.onToggleFavorite,
                   onSetShortCode: widget.onSetShortCode,
+                  onResetFilters: widget.onResetFilters,
                 ),
         ),
         CartFooter(onSubmit: widget.onSubmit),
@@ -151,26 +134,18 @@ class _MenuStepState extends State<MenuStep> {
   }
 }
 
-// ── Top control bar (optional back/close + title · ⚡ short-code · 🔍 search) ──
+// ── Top control bar (optional back/close + title) ──
 
 class _TopControls extends StatelessWidget {
   const _TopControls({
     required this.title,
     required this.onLeading,
     required this.leadingIsClose,
-    required this.codeActive,
-    required this.onToggleCode,
-    required this.searchActive,
-    required this.onToggleSearch,
   });
 
   final String? title;
   final VoidCallback? onLeading;
   final bool leadingIsClose;
-  final bool codeActive;
-  final VoidCallback onToggleCode;
-  final bool searchActive;
-  final VoidCallback onToggleSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -196,27 +171,13 @@ class _TopControls extends StatelessWidget {
                 title!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+                style: TfTextStyles.pushedTitle.copyWith(
                   color: PosColors.slate,
-                  height: 1.15,
                 ),
               ),
             )
           else
             const Spacer(),
-          _SquareToggle(
-            icon: Icons.bolt_rounded,
-            active: codeActive,
-            onTap: onToggleCode,
-          ),
-          const SizedBox(width: 8),
-          _SquareToggle(
-            icon: Icons.search_rounded,
-            active: searchActive,
-            onTap: onToggleSearch,
-          ),
         ],
       ),
     );
@@ -265,6 +226,7 @@ class _MenuSearchBar extends StatelessWidget {
     required this.codeMode,
     required this.onSearchChanged,
     required this.onCodeSubmit,
+    required this.onToggleCode,
   });
 
   final TextEditingController searchCtrl;
@@ -272,35 +234,48 @@ class _MenuSearchBar extends StatelessWidget {
   final bool codeMode;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onCodeSubmit;
+  final VoidCallback onToggleCode;
 
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: TextField(
-        controller: searchCtrl,
-        onChanged: onSearchChanged,
-        autofocus: true,
-        keyboardType: codeMode ? TextInputType.number : TextInputType.text,
-        textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
-        onSubmitted: codeMode ? onCodeSubmit : null,
-        decoration: InputDecoration(
-          hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
-          prefixIcon: Icon(
-            codeMode ? Icons.tag_rounded : Icons.search_rounded,
-            color: PosColors.muted,
-          ),
-          suffixIcon: query.isEmpty
-              ? null
-              : IconButton(
-                  onPressed: () {
-                    searchCtrl.clear();
-                    onSearchChanged('');
-                  },
-                  icon: Icon(Icons.close_rounded, color: PosColors.muted),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: searchCtrl,
+              onChanged: onSearchChanged,
+              autofocus: true,
+              keyboardType: codeMode ? TextInputType.number : TextInputType.text,
+              textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
+              onSubmitted: codeMode ? onCodeSubmit : null,
+              decoration: InputDecoration(
+                hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
+                prefixIcon: Icon(
+                  codeMode ? Icons.tag_rounded : Icons.search_rounded,
+                  color: PosColors.muted,
                 ),
-        ),
+                suffixIcon: query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          searchCtrl.clear();
+                          onSearchChanged('');
+                        },
+                        icon: Icon(Icons.close_rounded, color: PosColors.muted),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _SquareToggle(
+            icon: Icons.bolt_rounded,
+            active: codeMode,
+            onTap: onToggleCode,
+          ),
+        ],
       ),
     );
   }
@@ -324,32 +299,187 @@ class CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allLabel = AppScope.of(context).strings.categoryAll;
     return SizedBox(
       height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-        itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (_, i) {
-          final cat = categories[i];
-          final sel = cat == selected;
-          final label = cat == 'All' ? allLabel : cat;
-          return TfChip(
-            label: label,
-            active: sel,
-            small: true,
-            count: counts?[cat],
-            onTap: () => onSelected(cat),
-          );
-        },
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(
+                PosSpacing.sp4,
+                PosSpacing.sp1,
+                PosSpacing.sp2,
+                0,
+              ),
+              itemCount: categories.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                final cat = categories[i];
+                final sel = cat == selected;
+                return TfChip(
+                  label: cat,
+                  active: sel,
+                  small: true,
+                  count: counts?[cat],
+                  onTap: () => onSelected(cat),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              0,
+              PosSpacing.sp1,
+              PosSpacing.sp4,
+              0,
+            ),
+            child: _CategoryJumpButton(
+              onTap: () => _showCategoryJumpSheet(
+                context,
+                categories: categories,
+                selected: selected,
+                counts: counts,
+                onSelected: onSelected,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Menu content (Petpooja "Items" card grid, 2-col) ──
+// Trailing trigger for the Petpooja category index (DESIGN.md §5
+// category-jump sheet).
+class _CategoryJumpButton extends StatelessWidget {
+  const _CategoryJumpButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: PosColors.surfaceSunk,
+          border: Border.all(color: PosColors.line),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.restaurant_menu_rounded,
+          size: 18,
+          color: PosColors.ink2,
+        ),
+      ),
+    );
+  }
+}
+
+// Bottom-sheet category index: name left, item count right; tap jumps the
+// menu to that category.
+Future<void> _showCategoryJumpSheet(
+  BuildContext context, {
+  required List<String> categories,
+  required String selected,
+  required Map<String, int>? counts,
+  required ValueChanged<String> onSelected,
+}) {
+  final text = AppScope.of(context).strings;
+  return showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                PosSpacing.sp4,
+                PosSpacing.sp1,
+                PosSpacing.sp4,
+                PosDensity.sectionGap,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.restaurant_menu_rounded,
+                    size: 20,
+                    color: PosColors.accentStrong,
+                  ),
+                  const SizedBox(width: PosSpacing.sp2),
+                  TfText(
+                    text.isBn ? 'মেনু' : 'Menu',
+                    style: TfTextStyles.sectionHeader,
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: categories.length,
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, color: PosColors.line),
+                itemBuilder: (_, i) {
+                  final cat = categories[i];
+                  final sel = cat == selected;
+                  final label = cat == 'All' ? text.categoryAll : cat;
+                  final count = counts?[cat];
+                  return InkWell(
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onSelected(cat);
+                    },
+                    child: Container(
+                      color: sel ? PosColors.primarySoft : null,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: PosSpacing.sp4,
+                        vertical: PosSpacing.sp3,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TfText(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowTitle.copyWith(
+                                color: sel
+                                    ? PosColors.accentStrong
+                                    : PosColors.primaryDark,
+                              ),
+                            ),
+                          ),
+                          if (count != null)
+                            TfText(
+                              tfFormatNumber(context, count),
+                              style: TfTextStyles.rowTitle.copyWith(
+                                color: PosColors.muted,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+// ── Menu content (Petpooja "Items": 2-col card grid grouped under sticky
+//    category section headers — DESIGN.md §5 / Part 0) ──
 
 class _MenuContent extends StatelessWidget {
   const _MenuContent({
@@ -359,6 +489,7 @@ class _MenuContent extends StatelessWidget {
     required this.onDecrement,
     required this.onToggleFavorite,
     required this.onSetShortCode,
+    this.onResetFilters,
   });
 
   final List<MenuItem> items;
@@ -367,17 +498,34 @@ class _MenuContent extends StatelessWidget {
   final ValueChanged<String> onDecrement;
   final ValueChanged<MenuItem> onToggleFavorite;
   final ValueChanged<MenuItem> onSetShortCode;
+  final VoidCallback? onResetFilters;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
+      final text = AppScope.of(context).strings;
       return CustomScrollView(
         slivers: [
           SliverFillRemaining(
             child: Center(
-              child: TfText(
-                AppScope.of(context).strings.noItemsInCategory,
-                style: const TextStyle(color: PosColors.muted),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TfText(
+                    text.noItemsInCategory,
+                    style: TfTextStyles.body.copyWith(color: PosColors.muted),
+                  ),
+                  if (onResetFilters != null) ...[
+                    const SizedBox(height: PosSpacing.sp3),
+                    TfButton(
+                      label: text.isBn ? 'সব দেখান' : 'Show all',
+                      variant: TfButtonVariant.ghost,
+                      size: TfButtonSize.sm,
+                      fullWidth: false,
+                      onPressed: onResetFilters,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -388,25 +536,30 @@ class _MenuContent extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.fromLTRB(
+            PosSpacing.sp4,
+            PosDensity.gridGap,
+            PosSpacing.sp4,
+            PosDensity.sectionGap,
+          ),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              mainAxisExtent: 112,
+              mainAxisSpacing: PosDensity.gridGap,
+              crossAxisSpacing: PosDensity.gridGap,
+              mainAxisExtent: PosDensity.tileMenu,
             ),
-            delegate: SliverChildBuilderDelegate(
-              (_, i) => _GridTile(
-                item: items[i],
-                qty: cart[items[i].id] ?? 0,
-                onTap: () => onTap(items[i]),
-                onDecrement: () => onDecrement(items[i].id),
-                onToggleFavorite: () => onToggleFavorite(items[i]),
-                onSetShortCode: () => onSetShortCode(items[i]),
-              ),
-              childCount: items.length,
-            ),
+            delegate: SliverChildBuilderDelegate((_, i) {
+              final item = items[i];
+              return _GridTile(
+                item: item,
+                qty: cart[item.id] ?? 0,
+                onTap: () => onTap(item),
+                onDecrement: () => onDecrement(item.id),
+                onToggleFavorite: () => onToggleFavorite(item),
+                onSetShortCode: () => onSetShortCode(item),
+              );
+            }, childCount: items.length),
           ),
         ),
       ],
@@ -445,10 +598,9 @@ class _QtyStepperInline extends StatelessWidget {
             child: TfText(
               tfFormatNumber(context, qty),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
+              style: TfTextStyles.rowTitle.copyWith(
                 fontWeight: FontWeight.w700,
-                fontFeatures: [FontFeature.tabularFigures()],
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -483,8 +635,9 @@ class _StepperBtn extends StatelessWidget {
   }
 }
 
-// ── Grid card tile (Petpooja "Items": centered name · price/qty top-right ·
-//    inline stepper when in cart · long-press for favourite + short code) ──
+// ── Grid card tile (Petpooja "Items": price top-left · centered name ·
+//    "customizable*" strip when modifiers exist · inline stepper + count badge
+//    when in cart · long-press for favourite + short code) ──
 
 class _GridTile extends StatelessWidget {
   const _GridTile({
@@ -506,8 +659,11 @@ class _GridTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    debugPrint('[QB-WIZARD] _GridTile: building ${item.id} ${item.name} cat=${item.category}');
     final inCart = qty > 0;
     final off = !item.isAvailable;
+    final customizable =
+        item.extras.options.isNotEmpty || item.extras.addOns.isNotEmpty;
 
     return GestureDetector(
       onTap: off ? null : onTap,
@@ -521,34 +677,37 @@ class _GridTile extends StatelessWidget {
         opacity: off ? 0.5 : 1.0,
         child: Container(
           clipBehavior: Clip.antiAlias,
-          padding: EdgeInsets.fromLTRB(10, 10, 10, inCart ? 8 : 10),
+          padding: const EdgeInsets.all(PosSpacing.sp2),
           decoration: BoxDecoration(
             color: inCart ? PosColors.primarySoft : PosColors.surface,
             border: Border.all(
               color: inCart ? PosColors.primary : PosColors.line,
             ),
-            borderRadius: BorderRadius.circular(_kCardRadius),
-            boxShadow: _kCardShadow,
+            borderRadius: BorderRadius.circular(PosRadii.card),
+            boxShadow: PosShadows.soft,
           ),
           child: Stack(
             children: [
-              // Centered name, with the inline stepper pinned to the bottom
-              // once the item is in the cart.
+              // Centered name, with the inline stepper (or the customizable
+              // hint) pinned to the bottom.
               Positioned.fill(
                 child: Column(
                   children: [
                     Expanded(
                       child: Center(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(4, 14, 4, 2),
+                          padding: const EdgeInsets.fromLTRB(
+                            PosSpacing.sp1,
+                            PosSpacing.sp4,
+                            PosSpacing.sp1,
+                            2,
+                          ),
                           child: TfText(
                             item.localizedName(app.language),
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            style: TfTextStyles.rowTitle.copyWith(
                               color: PosColors.primaryDark,
                               height: 1.2,
                             ),
@@ -561,22 +720,45 @@ class _GridTile extends StatelessWidget {
                         qty: qty,
                         onDecrement: onDecrement,
                         onIncrement: onTap,
-                      ),
+                      )
+                    else if (customizable && !off)
+                      const _CustomizableHint(),
                   ],
                 ),
               ),
-              // Top-right: price when idle, running count when in cart.
-              Positioned(
-                top: 0,
-                right: 0,
-                child: inCart
-                    ? _CountBadge(qty: qty)
-                    : _PriceTag(price: item.price),
-              ),
+              // Top-right: price. Top-left: running count once the item is in
+              // the cart.
+              Positioned(top: 0, right: 0, child: _PriceTag(price: item.price)),
+              if (inCart)
+                Positioned(top: 0, left: 0, child: _CountBadge(qty: qty)),
               if (off) const Positioned(bottom: 0, left: 0, child: _OffBadge()),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// "customizable*" strip at the tile foot — signals options/add-ons exist.
+class _CustomizableHint extends StatelessWidget {
+  const _CustomizableHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = AppScope.of(context).strings.isBn;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp1),
+      decoration: BoxDecoration(
+        color: PosColors.surfaceSunk,
+        borderRadius: BorderRadius.circular(PosRadii.sm),
+      ),
+      alignment: Alignment.center,
+      child: TfText(
+        isBn ? 'কাস্টমাইজযোগ্য*' : 'customizable*',
+        maxLines: 1,
+        style: TfTextStyles.label.copyWith(color: PosColors.muted),
       ),
     );
   }
@@ -605,19 +787,6 @@ class _TileStepper extends StatelessWidget {
       child: Row(
         children: [
           _TileStepBtn(icon: Icons.remove_rounded, onTap: onDecrement),
-          Expanded(
-            child: Center(
-              child: TfText(
-                tfFormatNumber(context, qty),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: PosColors.onSecondary,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ),
           _TileStepBtn(icon: Icons.add_rounded, onTap: onIncrement),
         ],
       ),
@@ -662,18 +831,17 @@ class _CountBadge extends StatelessWidget {
       ),
       child: TfText(
         tfFormatNumber(context, qty),
-        style: const TextStyle(
-          fontSize: 12.5,
+        style: TfTextStyles.label.copyWith(
           fontWeight: FontWeight.w800,
           color: PosColors.onSecondary,
-          fontFeatures: [FontFeature.tabularFigures()],
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
   }
 }
 
-// Price label (top-right of an idle card).
+// Price label (top-left of the card, Petpooja tile layout).
 class _PriceTag extends StatelessWidget {
   const _PriceTag({required this.price});
   final double price;
@@ -681,12 +849,11 @@ class _PriceTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TfText(
-      tfFormatCurrency(context, price),
-      style: const TextStyle(
-        fontSize: 12.5,
+      tfFormatNumber(context, price),
+      style: TfTextStyles.label.copyWith(
         fontWeight: FontWeight.w700,
         color: PosColors.ink2,
-        fontFeatures: [FontFeature.tabularFigures()],
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }
@@ -703,13 +870,9 @@ class _OffBadge extends StatelessWidget {
         color: PosColors.danger,
         borderRadius: BorderRadius.circular(PosRadii.sm),
       ),
-      child: const Text(
+      child: Text(
         "86'd",
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-        ),
+        style: TfTextStyles.eyebrow.copyWith(color: Colors.white),
       ),
     );
   }
@@ -764,12 +927,18 @@ Future<void> _showItemActions(
   );
 }
 
-// ── Short-code list (⚡ mode): short code + name, no price, no thumbnail ──
+// ── Short-code list (⚡ mode): plain POS rows — bare code column + name; rows
+//    already in the cart carry the standard blue selection wash + count ──
 
 class _ShortCodeList extends StatelessWidget {
-  const _ShortCodeList({required this.items, required this.onTap});
+  const _ShortCodeList({
+    required this.items,
+    required this.cart,
+    required this.onTap,
+  });
 
   final List<MenuItem> items;
+  final Map<String, int> cart;
   final ValueChanged<MenuItem> onTap;
 
   @override
@@ -791,12 +960,24 @@ class _ShortCodeList extends StatelessWidget {
       itemBuilder: (_, i) {
         final item = items[i];
         final off = !item.isAvailable;
+        final qty = cart[item.id] ?? 0;
+        final inCart = qty > 0;
         return InkWell(
           onTap: off ? null : () => onTap(item),
           child: Opacity(
             opacity: off ? 0.5 : 1.0,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              decoration: BoxDecoration(
+                color: inCart ? PosColors.primarySoft : Colors.transparent,
+                borderRadius: BorderRadius.circular(PosRadii.sm),
+                border: Border(
+                  left: BorderSide(
+                    color: inCart ? PosColors.primary : Colors.transparent,
+                    width: 3,
+                  ),
+                ),
+              ),
               child: Row(
                 children: [
                   _CodeBadge(shortCode: item.shortCode),
@@ -806,13 +987,14 @@ class _ShortCodeList extends StatelessWidget {
                       item.localizedName(app.language),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: PosColors.primaryDark,
+                      style: TfTextStyles.rowTitle.copyWith(
+                        color: inCart
+                            ? PosColors.accentStrong
+                            : PosColors.primaryDark,
                       ),
                     ),
                   ),
+                  if (inCart) _CountBadge(qty: qty),
                 ],
               ),
             ),
@@ -823,7 +1005,7 @@ class _ShortCodeList extends StatelessWidget {
   }
 }
 
-// ── Short-code badge (shown on cards in ⚡ code mode) ──
+// ── Short-code column (⚡ code mode): bare tabular digits, no chip, no '#' ──
 
 class _CodeBadge extends StatelessWidget {
   const _CodeBadge({required this.shortCode});
@@ -832,19 +1014,14 @@ class _CodeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: PosColors.primarySoft,
-        borderRadius: BorderRadius.circular(PosRadii.sm),
-      ),
+    return SizedBox(
+      width: 36,
       child: TfText(
-        shortCode == null ? '#—' : '#$shortCode',
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          color: PosColors.accentStrong,
-          fontFeatures: [FontFeature.tabularFigures()],
+        shortCode == null ? '—' : '$shortCode',
+        style: TfTextStyles.rowTitle.copyWith(
+          fontWeight: FontWeight.w700,
+          color: PosColors.ink2,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
@@ -1022,12 +1199,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
       category: widget.item.category,
     );
 
-    const eyebrowStyle = TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.6,
-      color: PosColors.muted,
-    );
+    final eyebrowStyle = TfTextStyles.eyebrow.copyWith(color: PosColors.muted);
 
     return Container(
       constraints: BoxConstraints(
@@ -1077,9 +1249,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                         widget.item.localizedName(app.language),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                        style: TfTextStyles.pushedTitle.copyWith(
                           letterSpacing: -0.18,
                         ),
                       ),
@@ -1089,10 +1259,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                           widget.item.description,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: PosColors.muted,
-                          ),
+                          style: TfTextStyles.bodyMuted,
                         ),
                       ],
                     ],
@@ -1147,9 +1314,9 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                           alignment: Alignment.center,
                           child: Text(
                             isBn ? 'আবশ্যিক' : 'Required',
-                            style: const TextStyle(
-                              fontSize: 10.5,
+                            style: TfTextStyles.eyebrow.copyWith(
                               fontWeight: FontWeight.w600,
+                              letterSpacing: 0,
                               color: PosColors.ink2,
                             ),
                           ),
@@ -1182,10 +1349,9 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                         const SizedBox(width: 8),
                         Text(
                           isBn ? 'ঐচ্ছিক' : 'Optional',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: PosColors.mutedSoft,
+                          style: TfTextStyles.label.copyWith(
                             fontWeight: FontWeight.w500,
+                            color: PosColors.mutedSoft,
                           ),
                         ),
                       ],
@@ -1227,9 +1393,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                               isBn
                                   ? 'রান্নাঘরের নোট যোগ করুন'
                                   : 'Add a kitchen note',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                              style: TfTextStyles.rowTitle.copyWith(
                                 color: PosColors.accentStrong,
                               ),
                             ),
@@ -1297,20 +1461,17 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                               Expanded(
                                 child: Text(
                                   isBn ? 'অর্ডারে যোগ করুন' : 'Add to order',
-                                  style: const TextStyle(
-                                    fontSize: 16,
+                                  style: TfTextStyles.price.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: PosColors.accentInk,
+                                    fontFeatures: const [],
                                   ),
                                 ),
                               ),
                               Text(
                                 tfFormatCurrency(context, _lineTotal),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
+                                style: TfTextStyles.price.copyWith(
                                   color: PosColors.accentInk,
-                                  fontFeatures: [FontFeature.tabularFigures()],
                                 ),
                               ),
                             ],
@@ -1391,10 +1552,10 @@ class _OptionBtn extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 15,
+                style: TfTextStyles.price.copyWith(
                   fontWeight: FontWeight.w500,
                   color: PosColors.primaryDark,
+                  fontFeatures: const [],
                 ),
               ),
             ),
@@ -1402,11 +1563,9 @@ class _OptionBtn extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '+${tfFormatCurrency(context, priceDelta)}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                style: TfTextStyles.rowTitle.copyWith(
                   color: PosColors.accentStrong,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],
