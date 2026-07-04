@@ -148,7 +148,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: TfSegToggle(
+                child: TfTabs(
                   activeIndex: _tab,
                   onChanged: (i) => setState(() => _tab = i),
                   items: [
@@ -236,16 +236,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           _RevenueChartCard(trend: d.trend, text: text),
           const SizedBox(height: PosSpacing.sp3),
         ],
-        _StatGrid(tiles: _statTiles(context, text, d)),
-        Padding(
-          padding: const EdgeInsets.only(top: PosSpacing.sp2),
-          child: TfText(
-            text.otherIncomeNote,
-            style: const TextStyle(fontSize: 11, color: PosColors.muted),
+        // Headline KPI strip — the ledger sections below carry the detail;
+        // the old per-tile grid duplicated these figures (no-dup rule).
+        TfStatStrip(cells: _statCells(context, text, d)),
+        if (d.otherIncome != 0)
+          Padding(
+            padding: const EdgeInsets.only(top: PosSpacing.sp2),
+            child: TfText(
+              text.otherIncomeNote,
+              style: TfTextStyles.label.copyWith(
+                fontWeight: FontWeight.w400,
+                color: PosColors.muted,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: PosSpacing.sp4),
-        _salesSummarySection(context, text, d),
         const SizedBox(height: PosSpacing.sp3),
         _collectionSection(context, text, d),
         const SizedBox(height: PosSpacing.sp3),
@@ -254,6 +258,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           const SizedBox(height: PosSpacing.sp3),
         ],
         _serviceWiseSection(context, text, d),
+        const SizedBox(height: PosSpacing.sp3),
+        TfStatStrip(
+          title:
+              '${text.costOfGoodsSold} (${tfFormatCurrency(context, d.profit.preparationCost + d.profit.wastage + d.profit.paymentFee)})',
+          cells: [
+            TfStatCell(
+              label: text.preparationCost,
+              value: tfFormatCurrency(context, d.profit.preparationCost),
+            ),
+            TfStatCell(
+              label: text.wastage,
+              value: tfFormatCurrency(context, d.profit.wastage),
+            ),
+            TfStatCell(
+              label: text.paymentFee,
+              value: tfFormatCurrency(context, d.profit.paymentFee),
+            ),
+          ],
+        ),
         const SizedBox(height: PosSpacing.sp3),
         ReportSection(
           title: text.profitEstimation,
@@ -299,36 +322,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ],
         ),
         const SizedBox(height: PosSpacing.sp3),
-        _MiniStatRow(
-          title:
-              '${text.costOfGoodsSold} (${tfFormatCurrency(context, d.profit.preparationCost + d.profit.wastage + d.profit.paymentFee)})',
-          cells: [
-            (
-              text.preparationCost,
-              tfFormatCurrency(context, d.profit.preparationCost),
-            ),
-            (text.wastage, tfFormatCurrency(context, d.profit.wastage)),
-            (text.paymentFee, tfFormatCurrency(context, d.profit.paymentFee)),
-          ],
-        ),
-        const SizedBox(height: PosSpacing.sp3),
-        _MiniStatRow(
-          title: text.profitEstimation,
-          cells: [
-            (text.netSales, tfFormatCurrency(context, d.profit.netSales)),
-            (
-              text.costOfGoodsSold,
-              tfFormatCurrency(
-                context,
-                d.profit.preparationCost +
-                    d.profit.wastage +
-                    d.profit.paymentFee,
-              ),
-            ),
-            (text.grossProfit, tfFormatCurrency(context, d.profit.grossProfit)),
-          ],
-        ),
-        const SizedBox(height: PosSpacing.sp3),
         _PopularDishes(dishes: d.popular, text: text),
         const SizedBox(height: PosSpacing.sp4),
         _ExportRow(
@@ -355,76 +348,57 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     }
   }
 
-  List<_TileSpec> _statTiles(
+  /// Headline KPI cells. Core figures (orders, gross, net, collection) always
+  /// show; auxiliary money figures hide when zero so dataless metrics never
+  /// spend screen space (zero policy, one-language pass).
+  List<TfStatCell> _statCells(
     BuildContext context,
     AppStrings text,
     AnalyticsSummaryData d,
   ) {
     return [
-      _TileSpec(
-        PosColors.tintPurple,
-        Icons.receipt_long_rounded,
-        PosColors.iconPurple,
-        tfFormatNumber(context, d.ordersCompleted),
-        text.ordersCompleted,
+      TfStatCell(
+        label: text.ordersCompleted,
+        value: tfFormatNumber(context, d.ordersCompleted),
       ),
-      _TileSpec(
-        PosColors.tintBlue,
-        Icons.trending_up_rounded,
-        PosColors.iconBlue,
-        tfFormatCurrency(context, d.grossSales),
-        text.grossSales,
+      TfStatCell(
+        label: text.grossSales,
+        value: tfFormatCurrency(context, d.grossSales),
       ),
-      _TileSpec(
-        PosColors.tintPurple,
-        Icons.local_offer_outlined,
-        PosColors.iconPurple,
-        parenCurrency(context, d.discountAndCommission),
-        text.discountAndCommission,
-      ),
-      _TileSpec(
-        PosColors.tintBlue,
-        Icons.bar_chart_rounded,
-        PosColors.iconBlue,
-        tfFormatCurrency(context, d.netSales),
-        text.netSales,
-      ),
-      _TileSpec(
-        PosColors.tintGreen,
-        Icons.add_card_outlined,
-        PosColors.iconGreen,
-        tfFormatCurrency(context, d.otherIncome),
-        text.otherIncome,
-      ),
-      _TileSpec(
-        PosColors.tintAmber,
-        Icons.receipt_outlined,
-        PosColors.iconAmber,
-        tfFormatCurrency(context, d.taxAndDuty),
-        text.taxAndDuty,
-      ),
-      if (d.dueReceivable != null)
-        _TileSpec(
-          PosColors.tintRed,
-          Icons.schedule_outlined,
-          PosColors.iconRed,
-          parenCurrency(context, d.dueReceivable!),
-          text.dueReceivable,
+      if (d.discountAndCommission != 0)
+        TfStatCell(
+          label: text.discountAndCommission,
+          value: parenCurrency(context, d.discountAndCommission),
+          valueColor: PosColors.muted,
         ),
-      if (d.duePaid != null)
-        _TileSpec(
-          PosColors.tintGreen,
-          Icons.check_circle_outline,
-          PosColors.iconGreen,
-          tfFormatCurrency(context, d.duePaid!),
-          text.duePaid,
+      TfStatCell(
+        label: text.netSales,
+        value: tfFormatCurrency(context, d.netSales),
+      ),
+      if (d.otherIncome != 0)
+        TfStatCell(
+          label: text.otherIncome,
+          value: tfFormatCurrency(context, d.otherIncome),
         ),
-      _TileSpec(
-        PosColors.tintGreen,
-        Icons.account_balance_wallet_rounded,
-        PosColors.iconGreen,
-        tfFormatCurrency(context, d.totalCollection),
-        text.totalCollection,
+      if (d.taxAndDuty != 0)
+        TfStatCell(
+          label: text.taxAndDuty,
+          value: tfFormatCurrency(context, d.taxAndDuty),
+        ),
+      if ((d.dueReceivable ?? 0) != 0)
+        TfStatCell(
+          label: text.dueReceivable,
+          value: parenCurrency(context, d.dueReceivable!),
+          valueColor: PosColors.muted,
+        ),
+      if ((d.duePaid ?? 0) != 0)
+        TfStatCell(
+          label: text.duePaid,
+          value: tfFormatCurrency(context, d.duePaid!),
+        ),
+      TfStatCell(
+        label: text.totalCollection,
+        value: tfFormatCurrency(context, d.totalCollection),
       ),
     ];
   }
@@ -483,13 +457,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (message == null || message.trim().isEmpty) return const [];
     return [
       TfCard(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(PosSpacing.sp3),
         child: Text(
           message,
-          style: const TextStyle(
+          style: TfTextStyles.label.copyWith(
             fontFamily: 'JetBrains Mono',
-            fontSize: 11,
-            height: 1.3,
+            fontWeight: FontWeight.w400,
             color: PosColors.muted,
           ),
         ),
@@ -764,12 +737,7 @@ class _Eyebrow extends StatelessWidget {
     ).formatShortDate(DateTime.now());
     return TfText(
       '${text.todaysSales} · $date',
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        color: PosColors.muted,
-      ),
+      style: TfTextStyles.eyebrow.copyWith(color: PosColors.muted),
     );
   }
 }
@@ -884,25 +852,26 @@ class _PopularDishes extends StatelessWidget {
         ? dishes
         : dishes.take(limit!).toList(growable: false);
     return TfCard(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+      padding: const EdgeInsets.fromLTRB(
+        PosDensity.cardPad,
+        PosDensity.cardPad,
+        PosDensity.cardPad,
+        PosSpacing.sp1,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TfText(
             text.popularDishes,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: PosColors.text,
-            ),
+            style: TfTextStyles.cardTitle.copyWith(color: PosColors.text),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: PosSpacing.sp1),
           if (shown.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp3),
               child: TfText(
                 text.noData,
-                style: const TextStyle(color: PosColors.muted, fontSize: 13),
+                style: TfTextStyles.bodyMuted,
               ),
             )
           else
@@ -911,7 +880,9 @@ class _PopularDishes extends StatelessWidget {
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: PosColors.line)),
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  vertical: PosDensity.cardPad,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -919,8 +890,7 @@ class _PopularDishes extends StatelessWidget {
                         dish.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
+                        style: TfTextStyles.body.copyWith(
                           fontWeight: FontWeight.w500,
                           color: PosColors.text,
                         ),
@@ -928,11 +898,8 @@ class _PopularDishes extends StatelessWidget {
                     ),
                     TfText(
                       tfFormatCurrency(context, dish.salesBdt),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                      style: TfTextStyles.rowMoney.copyWith(
                         color: PosColors.text,
-                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
@@ -969,33 +936,31 @@ class _ItemCategoryCard extends StatelessWidget {
                 top: Radius.circular(PosRadii.lg),
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding: const EdgeInsets.symmetric(
+              horizontal: PosDensity.cardPad,
+              vertical: PosDensity.cardPad,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: TfText(
                     '${category.category} (${category.units})',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                    style: TfTextStyles.sectionHeader.copyWith(
                       color: PosColors.text,
                     ),
                   ),
                 ),
                 TfText(
                   tfFormatCurrency(context, category.totalPrice),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.text,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
+                  style: TfTextStyles.price.copyWith(color: PosColors.text),
                 ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            padding: const EdgeInsets.symmetric(
+              horizontal: PosDensity.cardPad,
+            ),
             child: Column(
               children: [
                 for (final item in category.items)
@@ -1005,7 +970,9 @@ class _ItemCategoryCard extends StatelessWidget {
                       decoration: const BoxDecoration(
                         border: Border(top: BorderSide(color: PosColors.line)),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: PosDensity.cardPad,
+                      ),
                       child: Row(
                         children: [
                           Expanded(
@@ -1013,8 +980,7 @@ class _ItemCategoryCard extends StatelessWidget {
                               '${item.name} (${item.units})',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13.5,
+                              style: TfTextStyles.body.copyWith(
                                 fontWeight: FontWeight.w500,
                                 color: PosColors.text,
                               ),
@@ -1026,11 +992,9 @@ class _ItemCategoryCard extends StatelessWidget {
                             child: TfText(
                               tfFormatCurrency(context, item.avgUnitPrice),
                               textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: 13,
+                              style: TfTextStyles.rowMoney.copyWith(
                                 fontWeight: FontWeight.w500,
                                 color: PosColors.muted,
-                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
                             ),
                           ),
@@ -1039,11 +1003,9 @@ class _ItemCategoryCard extends StatelessWidget {
                             child: TfText(
                               tfFormatCurrency(context, item.totalPrice),
                               textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: 13.5,
+                              style: TfTextStyles.rowMoney.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: PosColors.text,
-                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
                             ),
                           ),
@@ -1067,56 +1029,8 @@ class _ItemCategoryCard extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// QS analytics building blocks (charts, stat grid, mini-rows, drill-down).
+// QS analytics building blocks (charts, drill-down).
 // ---------------------------------------------------------------------------
-
-class _TileSpec {
-  const _TileSpec(this.tint, this.icon, this.iconColor, this.value, this.label);
-  final Color tint;
-  final IconData icon;
-  final Color iconColor;
-  final String value;
-  final String label;
-}
-
-/// 3-per-row stat-tile grid; trailing slots stay empty (null tiles dropped
-/// upstream so dataless figures never zero-fill).
-class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.tiles});
-  final List<_TileSpec> tiles;
-
-  @override
-  Widget build(BuildContext context) {
-    const cols = 3;
-    final rows = <Widget>[];
-    for (int i = 0; i < tiles.length; i += cols) {
-      final slice = tiles.skip(i).take(cols).toList();
-      rows.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (int j = 0; j < cols; j++) ...[
-              if (j > 0) const SizedBox(width: 10),
-              Expanded(
-                child: j < slice.length
-                    ? _StatTile(
-                        tint: slice[j].tint,
-                        icon: slice[j].icon,
-                        iconColor: slice[j].iconColor,
-                        value: slice[j].value,
-                        label: slice[j].label,
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ],
-        ),
-      );
-      if (i + cols < tiles.length) rows.add(const SizedBox(height: 10));
-    }
-    return Column(children: rows);
-  }
-}
 
 class _RevenueChartCard extends StatefulWidget {
   const _RevenueChartCard({required this.trend, required this.text});
@@ -1138,7 +1052,12 @@ class _RevenueChartCardState extends State<_RevenueChartCard> {
     ];
     final labels = [for (final p in widget.trend) _shortDate(p.date)];
     return TfCard(
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
+      padding: const EdgeInsets.fromLTRB(
+        PosSpacing.sp2,
+        PosSpacing.sp3,
+        PosSpacing.sp2,
+        PosDensity.cardPad,
+      ),
       child: Column(
         children: [
           TfAreaChart(values: values, xLabels: labels, money: _metric == 0),
@@ -1162,7 +1081,12 @@ class _ServiceWiseChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TfCard(
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
+      padding: const EdgeInsets.fromLTRB(
+        PosSpacing.sp2,
+        PosSpacing.sp3,
+        PosSpacing.sp2,
+        PosDensity.cardPad,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1170,11 +1094,7 @@ class _ServiceWiseChartCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: TfText(
               text.serviceWiseSales,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: PosColors.text,
-              ),
+              style: TfTextStyles.cardTitle.copyWith(color: PosColors.text),
             ),
           ),
           const SizedBox(height: 10),
@@ -1182,82 +1102,6 @@ class _ServiceWiseChartCard extends StatelessWidget {
             bars: [
               for (final r in rows) TfBarDatum(label: r.label, value: r.value),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 2–3 numbers side by side with hairline dividers and a caption under each
-/// (spec §5 mini-stat row: COGS = Prep Cost | Wastage | Payment Fee).
-class _MiniStatRow extends StatelessWidget {
-  const _MiniStatRow({required this.title, required this.cells});
-  final String title;
-  final List<(String, String)> cells;
-
-  @override
-  Widget build(BuildContext context) {
-    return TfCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TfText(
-            title,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
-              color: PosColors.muted,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 48,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int i = 0; i < cells.length; i++) ...[
-                  if (i > 0)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Container(width: 1, color: PosColors.line),
-                    ),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        TfText(
-                          cells[i].$2,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: PosColors.text,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        TfText(
-                          cells[i].$1,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: PosColors.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
           ),
         ],
       ),
@@ -1329,7 +1173,12 @@ class _ItemDrillDownScreenState extends State<ItemDrillDownScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
                 TfCard(
-                  padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
+                  padding: const EdgeInsets.fromLTRB(
+                    PosSpacing.sp2,
+                    PosSpacing.sp3,
+                    PosSpacing.sp2,
+                    PosDensity.cardPad,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -1337,9 +1186,7 @@ class _ItemDrillDownScreenState extends State<ItemDrillDownScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         child: TfText(
                           text.performance,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                          style: TfTextStyles.cardTitle.copyWith(
                             color: PosColors.text,
                           ),
                         ),
@@ -1353,12 +1200,10 @@ class _ItemDrillDownScreenState extends State<ItemDrillDownScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: PosSpacing.sp3),
                 TfText(
                   text.salesOfLastDays(d.daily.length),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                  style: TfTextStyles.cardTitle.copyWith(
                     color: PosColors.text,
                   ),
                 ),
@@ -1373,27 +1218,24 @@ class _ItemDrillDownScreenState extends State<ItemDrillDownScreen> {
                               ? PosColors.surfaceSunk
                               : PosColors.surface,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 13,
+                            horizontal: PosDensity.cardPad,
+                            vertical: PosDensity.cardPad,
                           ),
                           child: Row(
                             children: [
                               Expanded(
                                 child: TfText(
                                   _dayLabel(reversed[i].date),
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
+                                  style: TfTextStyles.body.copyWith(
                                     color: PosColors.ink2,
                                   ),
                                 ),
                               ),
                               TfText(
                                 tfFormatCurrency(context, reversed[i].salesBdt),
-                                style: const TextStyle(
-                                  fontSize: 13.5,
+                                style: TfTextStyles.rowMoney.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: PosColors.text,
-                                  fontFeatures: [FontFeature.tabularFigures()],
                                 ),
                               ),
                             ],

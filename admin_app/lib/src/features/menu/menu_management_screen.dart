@@ -681,9 +681,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               children: [
                 TfText(
                   text.isBn ? 'মেনু স্ক্যান' : 'Scan menu',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                  style: TfTextStyles.cardTitle.copyWith(
                     color: PosColors.slate,
                   ),
                 ),
@@ -1405,10 +1403,8 @@ class _MenuSettingsSheet extends StatelessWidget {
             children: [
               TfText(
                 text.isBn ? 'মেনু সেটিংস' : 'Menu settings',
-                style: TextStyle(
+                style: TfTextStyles.appBarTitle.copyWith(
                   fontFamily: tfFontFamily(context),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
                   color: PosColors.slate,
                 ),
               ),
@@ -1417,10 +1413,9 @@ class _MenuSettingsSheet extends StatelessWidget {
                 text.isBn
                     ? 'ডেলিভারি চার্জ এবং মেনু ডিসকাউন্ট পরিচালনা করুন।'
                     : 'Manage delivery pricing and menu discounts.',
-                style: TextStyle(
+                style: TfTextStyles.sectionStrip.copyWith(
+                  fontWeight: FontWeight.w400,
                   color: PosColors.muted,
-                  fontSize: 12,
-                  height: 1.35,
                 ),
               ),
               const SizedBox(height: 16),
@@ -1447,18 +1442,16 @@ class _MenuSettingsSheet extends StatelessWidget {
                             children: [
                               TfText(
                                 text.menuDeliveryCharge,
-                                style: const TextStyle(
+                                style: TfTextStyles.sectionHeader.copyWith(
                                   color: PosColors.slate,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 3),
                               TfText(
                                 text.menuDeliveryChargeSubtitle,
-                                style: const TextStyle(
+                                style: TfTextStyles.sectionStrip.copyWith(
+                                  fontWeight: FontWeight.w400,
                                   color: PosColors.muted,
-                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -1467,10 +1460,8 @@ class _MenuSettingsSheet extends StatelessWidget {
                         const SizedBox(width: 10),
                         TfMoney(
                           deliveryCharge,
-                          style: const TextStyle(
+                          style: TfTextStyles.price.copyWith(
                             color: PosColors.slate,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -1592,19 +1583,16 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
               children: [
                 TfText(
                   text.menuDeliveryCharge,
-                  style: const TextStyle(
+                  style: TfTextStyles.appBarTitle.copyWith(
                     color: PosColors.slate,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 6),
                 TfText(
                   text.menuDeliveryChargeSubtitle,
-                  style: const TextStyle(
+                  style: TfTextStyles.sectionStrip.copyWith(
+                    fontWeight: FontWeight.w400,
                     color: PosColors.muted,
-                    fontSize: 12,
-                    height: 1.35,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -1674,11 +1662,7 @@ class _BulkMenuToolbar extends StatelessWidget {
               text.isBn
                   ? '${tfToBnNumbers('$count')} আইটেম নির্বাচিত'
                   : '$count items selected',
-              style: const TextStyle(
-                color: PosColors.slate,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TfTextStyles.rowTitle.copyWith(color: PosColors.slate),
             ),
           ),
           TfButton(
@@ -1744,10 +1728,8 @@ class _BulkDiscountSheetState extends State<_BulkDiscountSheet> {
             children: [
               TfText(
                 text.isBn ? 'একসাথে ডিসকাউন্ট' : 'Bulk discount',
-                style: TextStyle(
+                style: TfTextStyles.appBarTitle.copyWith(
                   fontFamily: tfFontFamily(context),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
                   color: PosColors.slate,
                 ),
               ),
@@ -1893,12 +1875,6 @@ class _MenuListHeader extends StatelessWidget {
               onChanged: (_) => onToggleAll(),
             ),
           ),
-          SizedBox(
-            width: _kMenuColStatus,
-            child: Center(
-              child: Text(text.menuColStatus.toUpperCase(), style: style),
-            ),
-          ),
           const SizedBox(width: 4),
           Expanded(child: Text(text.menuColName.toUpperCase(), style: style)),
           const SizedBox(width: 8),
@@ -1914,8 +1890,9 @@ class _MenuListHeader extends StatelessWidget {
   }
 }
 
-/// One menu item rendered as a Petpooja Management row: checkbox · status dot ·
-/// name · ON/OFF "Mark as" toggle. Tapping the row opens the editor; the
+/// One menu item rendered as a Petpooja Management row: checkbox · name ·
+/// ON/OFF "Mark as" toggle (the toggle alone encodes availability — the old
+/// status dot double-encoded it). Tapping the row opens the editor; the
 /// checkbox toggles multi-select.
 class _MenuManageRow extends StatelessWidget {
   const _MenuManageRow({
@@ -1964,19 +1941,6 @@ class _MenuManageRow extends StatelessWidget {
                   onChanged: (_) => onToggleSelect(),
                 ),
               ),
-              SizedBox(
-                width: _kMenuColStatus,
-                child: Center(
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: available ? PosColors.success : PosColors.muted,
-                    ),
-                  ),
-                ),
-              ),
               const SizedBox(width: 4),
               Expanded(
                 child: TfText(
@@ -2008,7 +1972,6 @@ class _MenuManageRow extends StatelessWidget {
 }
 
 const double _kMenuColCheckbox = 36;
-const double _kMenuColStatus = 44;
 const double _kMenuColMarkAs = 58;
 
 /// Compact square checkbox used in the menu management table.
@@ -2045,11 +2008,9 @@ class _MarkAsToggle extends StatelessWidget {
     final on = value;
     final label = Text(
       on ? text.menuMarkOn : text.menuMarkOff,
-      style: TextStyle(
-        fontSize: 10,
+      style: TfTextStyles.label.copyWith(
         fontWeight: FontWeight.w700,
         color: on ? Colors.white : PosColors.muted,
-        letterSpacing: 0.3,
       ),
     );
     const knob = DecoratedBox(
@@ -2686,10 +2647,7 @@ class _EditorPhotoBlock extends StatelessWidget {
                     addLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TfTextStyles.rowMoney,
                   ),
                 ],
               ),
@@ -2858,9 +2816,7 @@ class _EditorToggleRow extends StatelessWidget {
                 children: [
                   TfText(
                     label,
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
+                    style: TfTextStyles.rowTitle.copyWith(
                       color: PosColors.text,
                     ),
                   ),
@@ -2869,8 +2825,7 @@ class _EditorToggleRow extends StatelessWidget {
                     hint,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
+                    style: TfTextStyles.sectionStrip.copyWith(
                       fontWeight: FontWeight.w500,
                       color: PosColors.muted,
                     ),
@@ -2931,17 +2886,16 @@ class _AdvancedMenuOptions extends StatelessWidget {
           ),
           title: TfText(
             text.menuVariationsAddOns,
-            style: const TextStyle(
-              color: PosColors.text,
-              fontSize: 14.5,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TfTextStyles.rowTitle.copyWith(color: PosColors.text),
           ),
           subtitle: TfText(
             text.menuOptionsSubtitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: PosColors.muted, fontSize: 12.5),
+            style: TfTextStyles.sectionStrip.copyWith(
+              fontWeight: FontWeight.w400,
+              color: PosColors.muted,
+            ),
           ),
           children: [
             TextFormField(

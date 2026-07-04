@@ -179,6 +179,15 @@ class TfTextStyles {
     height: 1.3,
   );
 
+  /// Backoffice card title — 15/700. The ONE "read layer" step above
+  /// [sectionHeader]: titles on report/ledger cards (ReportSection, Popular
+  /// Dishes, Live cards). Numbers on read surfaces cap at [statNumber].
+  static const TextStyle cardTitle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
+  );
+
   /// In-list category strip label — 12/600 on surfaceSunk (target3).
   static const TextStyle sectionStrip = TextStyle(
     fontSize: 12,
@@ -247,6 +256,15 @@ class TfTextStyles {
     fontWeight: FontWeight.w700,
     height: 1.3,
     letterSpacing: 0.55,
+  );
+
+  /// Order-created success serial hero ONLY — the big #n a customer/waiter
+  /// reads from across the counter. Not for any other surface.
+  static const TextStyle heroSerial = TextStyle(
+    fontSize: 54,
+    fontWeight: FontWeight.w700,
+    height: 0.95,
+    fontFeatures: [FontFeature.tabularFigures()],
   );
 
   /// Order serial hero: #24 on order cards — 19/800 tabular.
@@ -1154,6 +1172,138 @@ class TfListCard extends StatelessWidget {
       ),
       child: child,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TfStatStrip — text-first KPI strip (one-language pass 2026-07-04). One card,
+// rows of up to [columns] equal-width cells split by hairlines. This is the
+// ONLY stat/KPI chrome in the app: no icons, no decorative washes; value =
+// statNumber over a muted label. Cells may be tappable (e.g. Stock "Below
+// par" sort); active cells get a primarySoft wash.
+// ---------------------------------------------------------------------------
+class TfStatCell {
+  const TfStatCell({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.onTap,
+    this.active = false,
+  });
+
+  final String label;
+  final String value;
+
+  /// Ink for the value; defaults to [PosColors.text]. Pass [PosColors.muted]
+  /// for parenthesised deductions or [PosColors.success] for positive money.
+  final Color? valueColor;
+  final VoidCallback? onTap;
+  final bool active;
+}
+
+class TfStatStrip extends StatelessWidget {
+  const TfStatStrip({
+    required this.cells,
+    this.title,
+    this.columns = 3,
+    super.key,
+  });
+
+  final List<TfStatCell> cells;
+
+  /// Optional [TfTextStyles.cardTitle] header row above the cells.
+  final String? title;
+  final int columns;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    for (int i = 0; i < cells.length; i += columns) {
+      final slice = cells.skip(i).take(columns).toList(growable: false);
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (int j = 0; j < slice.length; j++) ...[
+                if (j > 0) Container(width: 1, color: PosColors.line),
+                Expanded(child: _StatCellView(cell: slice[j])),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    return TfCard(
+      padding: EdgeInsets.zero,
+      clip: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null)
+            Container(
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: PosColors.line)),
+              ),
+              padding: const EdgeInsets.fromLTRB(
+                PosDensity.cardPad,
+                PosDensity.cardPad,
+                PosDensity.cardPad,
+                PosSpacing.sp2,
+              ),
+              child: TfText(
+                title!,
+                style: TfTextStyles.cardTitle.copyWith(color: PosColors.text),
+              ),
+            ),
+          for (int r = 0; r < rows.length; r++) ...[
+            if (r > 0) Container(height: 1, color: PosColors.line),
+            rows[r],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCellView extends StatelessWidget {
+  const _StatCellView({required this.cell});
+  final TfStatCell cell;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Container(
+      color: cell.active ? PosColors.primarySoft : null,
+      padding: const EdgeInsets.symmetric(
+        horizontal: PosSpacing.sp2,
+        vertical: PosDensity.cardPad,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: TfText(
+              cell.value,
+              maxLines: 1,
+              style: TfTextStyles.statNumber.copyWith(
+                color: cell.valueColor ?? PosColors.text,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          TfText(
+            cell.label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TfTextStyles.label.copyWith(color: PosColors.muted),
+          ),
+        ],
+      ),
+    );
+    if (cell.onTap == null) return body;
+    return InkWell(onTap: cell.onTap, child: body);
   }
 }
 
@@ -2369,70 +2519,9 @@ class TfTabs extends StatelessWidget {
   }
 }
 
-/// Two-tab toggle (analytics) — rounded segmented control on surface-2; active
-/// segment = white card + blue text (spec §5). Used for Sales Breakdown /
-/// Item-wise Sales, not for primary navigation.
-class TfSegToggle extends StatelessWidget {
-  const TfSegToggle({
-    required this.items,
-    required this.activeIndex,
-    required this.onChanged,
-    super.key,
-  });
-
-  final List<TfTabItem> items;
-  final int activeIndex;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final isBn = tfIsBn(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-        border: Border.all(color: PosColors.line, width: 1),
-      ),
-      child: Row(
-        children: List.generate(items.length, (i) {
-          final it = items[i];
-          final selected = i == activeIndex;
-          final text = isBn && (it.labelBn?.isNotEmpty ?? false)
-              ? it.labelBn!
-              : it.label;
-          return Expanded(
-            child: Material(
-              color: selected ? PosColors.surface : Colors.transparent,
-              borderRadius: BorderRadius.circular(PosRadii.sm),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => onChanged(i),
-                child: Container(
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: selected
-                      ? const BoxDecoration(boxShadow: PosShadows.e1)
-                      : null,
-                  child: TfText(
-                    text,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: selected
-                          ? PosColors.accentStrong
-                          : PosColors.muted,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
+// NOTE(one-language pass 2026-07-04): TfSegToggle (grey-wash segmented control
+// with white active pill) was removed — view switching uses underline TfTabs;
+// filters/periods use TfPeriodSelector/TfPeriodWithCalendar. Two species only.
 
 // ---------------------------------------------------------------------------
 // Primitives: TfEmptyState — Universal empty context messaging module.

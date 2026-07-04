@@ -61,19 +61,17 @@ class _ReportSectionState extends State<ReportSection> {
             onTap: () => setState(() => _open = !_open),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                PosSpacing.sp4 - 2,
-                PosSpacing.sp4 - 2,
-                PosSpacing.sp3,
-                PosSpacing.sp4 - 2,
+                PosDensity.cardPad,
+                PosDensity.cardPad,
+                PosDensity.cardPad,
+                PosDensity.cardPad,
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: TfText(
                       widget.title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                      style: TfTextStyles.cardTitle.copyWith(
                         color: PosColors.text,
                       ),
                     ),
@@ -91,9 +89,9 @@ class _ReportSectionState extends State<ReportSection> {
           if (_open)
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                PosSpacing.sp4 - 2,
+                PosDensity.cardPad,
                 0,
-                PosSpacing.sp4 - 2,
+                PosDensity.cardPad,
                 PosSpacing.sp2 - 2,
               ),
               child: Column(
@@ -116,31 +114,32 @@ class _ReportSectionState extends State<ReportSection> {
         border: Border(top: BorderSide(color: PosColors.line)),
       ),
       padding: EdgeInsets.fromLTRB(
-        row.indent ? PosSpacing.sp4 - 2 : 0,
-        PosSpacing.sp3 - 1,
+        row.indent ? PosDensity.cardPad : 0,
+        PosDensity.cardPad,
         0,
-        PosSpacing.sp3 - 1,
+        PosDensity.cardPad,
       ),
       child: Row(
         children: [
           Expanded(
             child: TfText(
               row.label,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: row.bold ? FontWeight.w700 : FontWeight.w500,
-                color: row.bold ? PosColors.text : PosColors.ink2,
-              ),
+              style: row.bold
+                  ? TfTextStyles.rowTitle.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: PosColors.text,
+                    )
+                  : TfTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: PosColors.ink2,
+                    ),
             ),
           ),
           TfText(
             row.value,
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: row.bold ? FontWeight.w800 : FontWeight.w600,
-              color: valueColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            style: row.bold
+                ? TfTextStyles.price.copyWith(color: valueColor)
+                : TfTextStyles.rowMoney.copyWith(color: valueColor),
           ),
         ],
       ),

@@ -57,7 +57,11 @@ void main() {
       await tester.pumpWidget(_scoped(controller));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sales Summary'), findsOneWidget);
+      // Owner view: headline KPI strip (no duplicate "Sales Summary" ledger —
+      // one-language pass 2026-07-04), then the ledger sections.
+      expect(find.text('Orders Completed'), findsOneWidget);
+      expect(find.text('Total Collection'), findsOneWidget);
+      expect(find.text('Sales Summary'), findsNothing);
       await tester.scrollUntilVisible(
         find.text('Collection Summary'),
         240,

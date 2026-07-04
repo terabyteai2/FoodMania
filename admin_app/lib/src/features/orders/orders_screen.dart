@@ -925,29 +925,23 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
                 margin: EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
                   color: PosColors.line,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(PosRadii.pill),
                 ),
               ),
             ),
             TfText(
               t.filterOrders,
-              style: TextStyle(
+              style: TfTextStyles.appBarTitle.copyWith(
                 fontFamily: tfFontFamily(context),
-                fontWeight: FontWeight.w700,
-                fontSize: 22,
                 color: PosColors.text,
-                height: 1.18,
               ),
             ),
             const SizedBox(height: 20),
             TfText(
               t.filterByDate,
-              style: TextStyle(
+              style: TfTextStyles.eyebrow.copyWith(
                 fontFamily: tfFontFamily(context),
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
                 color: PosColors.textTer,
-                letterSpacing: 0.4,
               ),
             ),
             const SizedBox(height: 10),
@@ -967,12 +961,9 @@ class _OrdersFilterSheetState extends State<_OrdersFilterSheet> {
             const SizedBox(height: 24),
             TfText(
               t.filterBySource,
-              style: TextStyle(
+              style: TfTextStyles.eyebrow.copyWith(
                 fontFamily: tfFontFamily(context),
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
                 color: PosColors.textTer,
-                letterSpacing: 0.4,
               ),
             ),
             const SizedBox(height: 10),
@@ -1360,33 +1351,24 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                 TfText(
                   titleText,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TfTextStyles.appBarTitle.copyWith(
                     color: PosColors.slate,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
                   ),
                 ),
                 const SizedBox(height: 8),
                 TfText(
                   messageText,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: PosColors.muted,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    height: 1.45,
-                  ),
+                  style: TfTextStyles.bodyMuted,
                 ),
                 if (!canCreate) ...[
                   const SizedBox(height: 12),
                   TfText(
                     text.addMenuItemsBeforeOrders,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: PosColors.danger,
-                      fontSize: 13,
+                    style: TfTextStyles.body.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: PosColors.danger,
                     ),
                   ),
                 ],
@@ -2133,30 +2115,25 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                     children: [
                       TfText(
                         order.displaySequence,
-                        style: TextStyle(
+                        style: TfTextStyles.tileNumber.copyWith(
                           fontFamily: tfFontFamily(context),
-                          fontSize: 28,
                           fontWeight: FontWeight.w800,
-                          color: PosColors.text,
                           height: 1.0,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: PosColors.text,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TfText(
                           typeLabel,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                          style: TfTextStyles.rowTitle.copyWith(
                             color: PosColors.ink2,
                           ),
                         ),
                       ),
                       TfText(
                         text.orderAgeAgo(createdAt),
-                        style: const TextStyle(
-                          fontSize: 12,
+                        style: TfTextStyles.label.copyWith(
                           color: PosColors.muted,
                         ),
                       ),
@@ -2165,10 +2142,7 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                   const SizedBox(height: 6),
                   TfText(
                     text.channelLabel(channel.key),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: PosColors.muted,
-                    ),
+                    style: TfTextStyles.bodyMuted,
                   ),
                   // ── Delivery info ────────────────────────────────────────
                   if (isDelivery &&
@@ -2210,11 +2184,8 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
                           child: TfText(
                             isBn ? 'আইটেমসমূহ' : 'Items',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                            style: TfTextStyles.eyebrow.copyWith(
                               color: PosColors.muted,
-                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
@@ -2228,22 +2199,16 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                                   width: 30,
                                   child: TfText(
                                     '${tfFormatNumber(context, item.qty)}×',
-                                    style: TextStyle(
+                                    style: TfTextStyles.rowMoney.copyWith(
                                       fontFamily: tfFontFamily(context),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
                                       color: PosColors.slate,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
                                     ),
                                   ),
                                 ),
                                 Expanded(
                                   child: TfText(
                                     item.localizedName(app.language),
-                                    style: const TextStyle(
-                                      fontSize: 14,
+                                    style: TfTextStyles.body.copyWith(
                                       color: PosColors.slate,
                                     ),
                                     maxLines: 2,
@@ -2253,14 +2218,9 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                                 const SizedBox(width: 8),
                                 TfText(
                                   tfFormatCurrency(context, item.lineTotal),
-                                  style: TextStyle(
+                                  style: TfTextStyles.rowMoney.copyWith(
                                     fontFamily: tfFontFamily(context),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
                                     color: PosColors.slate,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures(),
-                                    ],
                                   ),
                                 ),
                               ],
@@ -2285,10 +2245,8 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                           Expanded(
                             child: TfText(
                               order.note!.trim(),
-                              style: const TextStyle(
-                                fontSize: 13,
+                              style: TfTextStyles.body.copyWith(
                                 color: PosColors.ink2,
-                                height: 1.4,
                               ),
                             ),
                           ),
@@ -2400,7 +2358,7 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: TfText(
               value,
-              style: const TextStyle(fontSize: 13, color: PosColors.slate),
+              style: TfTextStyles.body.copyWith(color: PosColors.slate),
             ),
           ),
         ],
@@ -2609,10 +2567,8 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                   Expanded(
                     child: TfText(
                       text.isBn ? 'আইটেম' : 'Items',
-                      style: TextStyle(
+                      style: TfTextStyles.sectionHeader.copyWith(
                         fontFamily: tfFontFamily(context),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
                         color: PosColors.slate,
                       ),
                     ),
@@ -2645,8 +2601,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                           children: [
                             TfText(
                               _metaFor(context, entry.key).name,
-                              style: const TextStyle(
-                                fontSize: 14,
+                              style: TfTextStyles.rowTitle.copyWith(
                                 fontWeight: FontWeight.w500,
                                 color: PosColors.slate,
                               ),
@@ -2657,13 +2612,10 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                 _metaFor(context, entry.key).price,
                                 decimalDigits: 2,
                               ),
-                              style: TextStyle(
+                              style: TfTextStyles.rowMoney.copyWith(
                                 fontFamily: tfFontFamily(context),
-                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
                                 color: PosColors.muted,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
                               ),
                             ),
                           ],
@@ -2677,11 +2629,8 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                         width: 28,
                         child: TfText(
                           '${entry.value}',
-                          style: TextStyle(
+                          style: TfTextStyles.price.copyWith(
                             fontFamily: tfFontFamily(context),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                       ),
@@ -2700,10 +2649,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                     children: [
                       TfText(
                         text.isBn ? 'মোট' : 'Total',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TfTextStyles.rowTitle,
                       ),
                       TfText(
                         tfFormatCurrency(
@@ -2711,11 +2657,8 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                           _runningTotal,
                           decimalDigits: 2,
                         ),
-                        style: TextStyle(
+                        style: TfTextStyles.price.copyWith(
                           fontFamily: tfFontFamily(context),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
@@ -2877,9 +2820,7 @@ class _MenuItemPickerSheetState extends State<_MenuItemPickerSheet> {
                     Expanded(
                       child: TfText(
                         text.isBn ? 'আইটেম যোগ করুন' : 'Add item',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                        style: TfTextStyles.appBarTitle.copyWith(
                           color: PosColors.slate,
                         ),
                       ),
@@ -2918,14 +2859,11 @@ class _MenuItemPickerSheetState extends State<_MenuItemPickerSheet> {
                           ? null
                           : TfText(
                               item.category,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: PosColors.muted,
-                              ),
+                              style: TfTextStyles.bodyMuted,
                             ),
                       trailing: TfText(
                         tfFormatCurrency(context, item.price, decimalDigits: 2),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        style: TfTextStyles.rowMoney,
                       ),
                       onTap: () => Navigator.of(context).pop(item),
                     );
@@ -2983,12 +2921,10 @@ class _OrderCreatedSheet extends StatelessWidget {
                     tooltip: 'Back to orders',
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: TfText(
                       'Receipt',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
+                      style: TfTextStyles.appBarTitle.copyWith(
                         color: PosColors.slate,
                       ),
                     ),
@@ -3001,7 +2937,7 @@ class _OrderCreatedSheet extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: PosColors.successSoft,
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: BorderRadius.circular(PosRadii.pill),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -3014,10 +2950,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                           const SizedBox(width: 4),
                           TfText(
                             text.ticketSentToPrinter,
-                            style: const TextStyle(
+                            style: TfTextStyles.label.copyWith(
                               color: PosColors.success,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 10.5,
                             ),
                           ),
                         ],
@@ -3055,32 +2989,24 @@ class _OrderCreatedSheet extends StatelessWidget {
                         const SizedBox(height: 10),
                         TfText(
                           'Order created',
-                          style: TextStyle(
+                          style: TfTextStyles.bodyMuted.copyWith(
                             fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                            color: PosColors.muted,
                           ),
                         ),
                         const SizedBox(height: 12),
                         // Big order # focus.
                         TfText(
                           order.displaySequence,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 56,
+                          style: TfTextStyles.heroSerial.copyWith(
                             color: PosColors.slate,
-                            height: 1,
-                            letterSpacing: -1.5,
                           ),
                         ),
                         const SizedBox(height: 4),
                         if ((order.tableNo ?? '').isNotEmpty)
                           TfText(
                             'Table ${order.tableNo}',
-                            style: const TextStyle(
+                            style: TfTextStyles.bodyMuted.copyWith(
                               fontWeight: FontWeight.w500,
-                              fontSize: 13,
-                              color: PosColors.muted,
                             ),
                           ),
                         const SizedBox(height: 16),
@@ -3111,10 +3037,9 @@ class _OrderCreatedSheet extends StatelessWidget {
                           menuUrl != null
                               ? 'Scan to view the menu'
                               : order.orderNo,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: PosColors.muted,
+                          style: TfTextStyles.label.copyWith(
                             fontWeight: FontWeight.w500,
+                            color: PosColors.muted,
                           ),
                         ),
                       ],
@@ -3134,11 +3059,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                       children: [
                         TfText(
                           'ITEMS',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w500,
+                          style: TfTextStyles.eyebrow.copyWith(
                             color: PosColors.muted,
-                            letterSpacing: 0.8,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -3151,9 +3073,8 @@ class _OrderCreatedSheet extends StatelessWidget {
                                   width: 28,
                                   child: TfText(
                                     '${tfFormatNumber(context, item.qty)}×',
-                                    style: const TextStyle(
+                                    style: TfTextStyles.rowMoney.copyWith(
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 12.5,
                                       color: PosColors.muted,
                                     ),
                                   ),
@@ -3163,18 +3084,16 @@ class _OrderCreatedSheet extends StatelessWidget {
                                     item.localizedName(
                                       AppScope.of(context).language,
                                     ),
-                                    style: const TextStyle(
+                                    style: TfTextStyles.body.copyWith(
                                       fontWeight: FontWeight.w500,
-                                      fontSize: 13,
                                       color: PosColors.slate,
                                     ),
                                   ),
                                 ),
                                 TfText(
                                   tfFormatCurrency(context, item.lineTotal),
-                                  style: const TextStyle(
+                                  style: TfTextStyles.rowMoney.copyWith(
                                     fontWeight: FontWeight.w500,
-                                    fontSize: 13,
                                     color: PosColors.slate,
                                   ),
                                 ),
@@ -3186,19 +3105,14 @@ class _OrderCreatedSheet extends StatelessWidget {
                           children: [
                             TfText(
                               'TOTAL',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                              style: TfTextStyles.eyebrow.copyWith(
                                 color: PosColors.slate,
-                                letterSpacing: 0.7,
                               ),
                             ),
                             const Spacer(),
                             TfText(
                               tfFormatCurrency(context, order.total),
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w500,
+                              style: TfTextStyles.statNumber.copyWith(
                                 color: PosColors.slate,
                               ),
                             ),
@@ -4108,8 +4022,7 @@ class _SourceAndTableStep extends StatelessWidget {
                       Expanded(
                         child: TfText(
                           text.pickATable,
-                          style: const TextStyle(
-                            fontSize: 14,
+                          style: TfTextStyles.rowTitle.copyWith(
                             fontWeight: FontWeight.w500,
                             color: PosColors.slate,
                           ),
@@ -4118,10 +4031,7 @@ class _SourceAndTableStep extends StatelessWidget {
                       TfText(
                         '${tfFormatNumber(context, tableCount)} ${text.isBn ? "টেবিল" : "tables"}'
                         ' · ${tfFormatNumber(context, tableCount - occupiedCount)} ${text.isBn ? "খালি" : "free"}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: PosColors.muted,
-                        ),
+                        style: TfTextStyles.bodyMuted,
                       ),
                     ],
                   ),
@@ -4204,9 +4114,7 @@ class _SourceTile extends StatelessWidget {
               TfText(
                 label,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                style: TfTextStyles.sectionHeader.copyWith(
                   color: PosColors.slate,
                 ),
                 maxLines: 1,
@@ -4302,9 +4210,7 @@ class _ReviewStep extends StatelessWidget {
                     Expanded(
                       child: TfText(
                         sourceLabel,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                        style: TfTextStyles.cardTitle.copyWith(
                           color: PosColors.slate,
                         ),
                       ),
@@ -4313,10 +4219,7 @@ class _ReviewStep extends StatelessWidget {
                       text.isBn
                           ? '${tfFormatNumber(context, totalQty)} আইটেম'
                           : '${tfFormatNumber(context, totalQty)} items',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: PosColors.muted,
-                      ),
+                      style: TfTextStyles.bodyMuted,
                     ),
                   ],
                 ),
@@ -4335,22 +4238,16 @@ class _ReviewStep extends StatelessWidget {
                               width: 36,
                               child: TfText(
                                 '${tfFormatNumber(context, line.qty)}×',
-                                style: TextStyle(
+                                style: TfTextStyles.rowMoney.copyWith(
                                   fontFamily: tfFontFamily(context),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
                                   color: PosColors.slate,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
                                 ),
                               ),
                             ),
                             Expanded(
                               child: TfText(
                                 line.localizedDisplayName(app.language),
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TfTextStyles.body.copyWith(
                                   color: PosColors.slate,
                                 ),
                                 maxLines: 1,
@@ -4359,14 +4256,9 @@ class _ReviewStep extends StatelessWidget {
                             ),
                             TfText(
                               tfFormatCurrency(context, line.lineTotal),
-                              style: TextStyle(
+                              style: TfTextStyles.rowMoney.copyWith(
                                 fontFamily: tfFontFamily(context),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
                                 color: PosColors.slate,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
                               ),
                             ),
                           ],
@@ -4387,15 +4279,14 @@ class _ReviewStep extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: PosDensity.sectionGap),
               Padding(
                 padding: const EdgeInsets.only(left: 2, bottom: 6),
                 child: Row(
                   children: [
                     TfText(
                       text.kitchenNote,
-                      style: const TextStyle(
-                        fontSize: 13,
+                      style: TfTextStyles.body.copyWith(
                         fontWeight: FontWeight.w500,
                         color: PosColors.slate,
                       ),
@@ -4403,8 +4294,8 @@ class _ReviewStep extends StatelessWidget {
                     const SizedBox(width: 6),
                     TfText(
                       text.kitchenNoteOptional,
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: TfTextStyles.label.copyWith(
+                        fontWeight: FontWeight.w400,
                         color: PosColors.muted,
                       ),
                     ),
@@ -4421,9 +4312,9 @@ class _ReviewStep extends StatelessWidget {
                   textCapitalization: TextCapitalization.sentences,
                   minLines: 1,
                   maxLines: 3,
-                  style: TextStyle(
+                  style: TfTextStyles.rowTitle.copyWith(
                     fontFamily: tfFontFamily(context),
-                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
                     color: PosColors.slate,
                   ),
                   decoration: InputDecoration(
@@ -4433,21 +4324,19 @@ class _ReviewStep extends StatelessWidget {
                     isCollapsed: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     hintText: text.kitchenNoteHint,
-                    hintStyle: TextStyle(
+                    hintStyle: TfTextStyles.body.copyWith(
                       fontFamily: tfFontFamily(context),
                       color: PosColors.muted,
-                      fontSize: 13,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: PosDensity.sectionGap),
               Padding(
                 padding: const EdgeInsets.only(left: 2, bottom: 6),
                 child: TfText(
                   text.isBn ? 'ডিসকাউন্ট (ফ্ল্যাট ৳)' : 'Discount (flat ৳)',
-                  style: const TextStyle(
-                    fontSize: 13,
+                  style: TfTextStyles.body.copyWith(
                     fontWeight: FontWeight.w500,
                     color: PosColors.slate,
                   ),
@@ -4472,9 +4361,9 @@ class _ReviewStep extends StatelessWidget {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        style: TextStyle(
+                        style: TfTextStyles.rowTitle.copyWith(
                           fontFamily: tfFontFamily(context),
-                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
                           color: PosColors.slate,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -4487,10 +4376,10 @@ class _ReviewStep extends StatelessWidget {
                             vertical: 12,
                           ),
                           hintText: '0',
-                          hintStyle: TextStyle(
+                          hintStyle: TfTextStyles.rowTitle.copyWith(
                             fontFamily: tfFontFamily(context),
+                            fontWeight: FontWeight.w400,
                             color: PosColors.muted,
-                            fontSize: 14,
                           ),
                         ),
                         onChanged: (_) => onDiscountChanged(),
@@ -4519,10 +4408,10 @@ class _ReviewStep extends StatelessWidget {
                   if (hasDiscount) ...[
                     TfText(
                       '${text.isBn ? 'সাবটোটাল' : 'Subtotal'}: ${tfFormatCurrency(context, subtotal)}',
-                      style: TextStyle(
+                      style: TfTextStyles.label.copyWith(
                         fontFamily: tfFontFamily(context),
+                        fontWeight: FontWeight.w400,
                         color: PosColors.muted,
-                        fontSize: 11,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                       maxLines: 1,
@@ -4530,10 +4419,10 @@ class _ReviewStep extends StatelessWidget {
                     ),
                     TfText(
                       '${text.isBn ? 'ডিসকাউন্ট' : 'Discount'}: -${tfFormatCurrency(context, discount)}',
-                      style: TextStyle(
+                      style: TfTextStyles.label.copyWith(
                         fontFamily: tfFontFamily(context),
+                        fontWeight: FontWeight.w400,
                         color: PosColors.danger,
-                        fontSize: 11,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                       maxLines: 1,
@@ -4542,12 +4431,9 @@ class _ReviewStep extends StatelessWidget {
                   ],
                   TfText(
                     '${text.totalLabel}: ${tfFormatCurrency(context, total)}',
-                    style: TextStyle(
+                    style: TfTextStyles.rowMoney.copyWith(
                       fontFamily: tfFontFamily(context),
                       color: PosColors.slate,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -4588,21 +4474,12 @@ class _AmountLine extends StatelessWidget {
       children: [
         TfText(
           label,
-          style: TextStyle(
-            fontSize: 13,
-            color: PosColors.muted,
-            fontWeight: FontWeight.w400,
-          ),
+          style: TfTextStyles.body.copyWith(color: PosColors.muted),
         ),
         const Spacer(),
         TfText(
           value,
-          style: TextStyle(
-            fontSize: 13,
-            color: PosColors.slate,
-            fontWeight: FontWeight.w600,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
+          style: TfTextStyles.rowMoney.copyWith(color: PosColors.slate),
         ),
       ],
     );
@@ -4659,35 +4536,26 @@ class _OrderCreatedStep extends StatelessWidget {
                   const SizedBox(height: 10),
                   TfText(
                     text.orderCreatedTitle,
-                    style: const TextStyle(
+                    style: TfTextStyles.appBarTitle.copyWith(
                       color: PosColors.slate,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0,
                     ),
                   ),
                   const SizedBox(height: 6),
                   TfText(
                     orderNo,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: TfTextStyles.heroSerial.copyWith(
                       fontFamily: tfFontFamily(context),
                       color: PosColors.primaryDark,
-                      fontSize: 54,
-                      fontWeight: FontWeight.w700,
-                      height: 0.95,
-                      letterSpacing: 0,
-                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(height: 8),
                   TfText(
                     '$source · ${tfFormatCurrency(context, order?.total ?? total)}',
-                    style: TextStyle(
+                    style: TfTextStyles.rowMoney.copyWith(
                       fontFamily: tfFontFamily(context),
+                      fontWeight: FontWeight.w400,
                       color: PosColors.muted,
-                      fontSize: 13,
-                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -4797,12 +4665,9 @@ class _CreatedOrderBillCard extends StatelessWidget {
                       width: 34,
                       child: TfText(
                         '${tfFormatNumber(context, item.qty)}×',
-                        style: TextStyle(
+                        style: TfTextStyles.rowMoney.copyWith(
                           fontFamily: tfFontFamily(context),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
                           color: PosColors.slate,
-                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ),
@@ -4811,21 +4676,17 @@ class _CreatedOrderBillCard extends StatelessWidget {
                         item.localizedName(app.language),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: TfTextStyles.body.copyWith(
                           color: PosColors.slate,
-                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     TfText(
                       tfFormatCurrency(context, item.lineTotal),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: PosColors.slate,
+                      style: TfTextStyles.rowMoney.copyWith(
                         fontWeight: FontWeight.w500,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: PosColors.slate,
                       ),
                     ),
                   ],

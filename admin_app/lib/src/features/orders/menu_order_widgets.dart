@@ -1220,7 +1220,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
             margin: const EdgeInsets.only(top: 9, bottom: 2),
             decoration: BoxDecoration(
               color: PosColors.lineStrong,
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(PosRadii.pill),
             ),
           ),
           // Header: thumb + name/desc + close X

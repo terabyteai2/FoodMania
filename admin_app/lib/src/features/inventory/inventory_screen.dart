@@ -444,102 +444,23 @@ class _SummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _SummaryCard(
-              label: text.stockValue,
-              child: TfText(
-                tfFormatCurrency(context, stockValue),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TfTextStyles.statNumber.copyWith(
-                  color: PosColors.text,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _SummaryCard(
-              label: text.belowPar,
-              active: lowActive,
-              onTap: onTapLow,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  TfText(
-                    tfFormatNumber(context, lowCount),
-                    style: TfTextStyles.statNumber.copyWith(
-                      color: lowCount > 0 ? PosColors.warning : PosColors.text,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: TfText(
-                      text.isBn ? 'টি আইটেম' : 'items',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TfTextStyles.bodyMuted.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.label,
-    required this.child,
-    this.active = false,
-    this.onTap,
-  });
-
-  final String label;
-  final Widget child;
-  final bool active;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final card = Container(
-      padding: const EdgeInsets.all(PosDensity.cardPad),
-      decoration: BoxDecoration(
-        color: active ? PosColors.accentSoft : PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(
-          color: active ? PosColors.primaryWash : PosColors.line,
+    // Shared KPI strip (one-language pass): same component as Analytics /
+    // Sales Summary / Live. "Below par" stays tappable (sorts worst-first).
+    return TfStatStrip(
+      columns: 2,
+      cells: [
+        TfStatCell(
+          label: text.stockValue,
+          value: tfFormatCurrency(context, stockValue),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TfText(
-            label,
-            style: TfTextStyles.label.copyWith(color: PosColors.muted),
-          ),
-          const SizedBox(height: 3),
-          child,
-        ],
-      ),
-    );
-    if (onTap == null) return card;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(PosRadii.card),
-      child: card,
+        TfStatCell(
+          label: '${text.belowPar} · ${text.isBn ? 'আইটেম' : 'items'}',
+          value: tfFormatNumber(context, lowCount),
+          valueColor: lowCount > 0 ? PosColors.warning : PosColors.text,
+          active: lowActive,
+          onTap: onTapLow,
+        ),
+      ],
     );
   }
 }
@@ -669,10 +590,7 @@ class _HCell extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
+              style: TfTextStyles.eyebrow.copyWith(
                 color: active ? PosColors.accentStrong : PosColors.muted,
               ),
             ),
@@ -763,26 +681,27 @@ class _StockRow extends StatelessWidget {
                 children: [
                   TfText(
                     name,
-                    maxLines: 1,
+                    // Advanced packs 4 columns: give the name a second line
+                    // and drop the ৳value caption instead of truncating to
+                    // "Chinigur…" (one-language pass).
+                    maxLines: advanced ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
+                    style: TfTextStyles.rowTitle.copyWith(
                       color: PosColors.text,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  TfText(
-                    tfFormatCurrency(context, _itemValue(item)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: PosColors.muted,
+                  if (!advanced) ...[
+                    const SizedBox(height: 2),
+                    TfText(
+                      tfFormatCurrency(context, _itemValue(item)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TfTextStyles.sectionStrip.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: PosColors.muted,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -796,28 +715,24 @@ class _StockRow extends StatelessWidget {
                     if (item.todayIn > 0)
                       TfText(
                         '+${tfFormatNumber(context, item.todayIn)}',
-                        style: const TextStyle(
-                          fontSize: 11,
+                        style: TfTextStyles.label.copyWith(
                           fontWeight: FontWeight.w700,
                           color: PosColors.success,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     if (item.todayOut > 0)
                       TfText(
                         '-${tfFormatNumber(context, item.todayOut)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                        style: TfTextStyles.label.copyWith(
                           color: PosColors.muted,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     if (item.todayIn == 0 && item.todayOut == 0)
-                      const TfText(
+                      TfText(
                         '—',
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: TfTextStyles.body.copyWith(
                           color: PosColors.mutedSoft,
                         ),
                       ),
@@ -831,11 +746,10 @@ class _StockRow extends StatelessWidget {
                   builder: (context) {
                     final net = item.todayIn - item.todayOut;
                     if (net == 0) {
-                      return const TfText(
+                      return TfText(
                         '—',
                         textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: TfTextStyles.body.copyWith(
                           color: PosColors.mutedSoft,
                         ),
                       );
@@ -843,11 +757,9 @@ class _StockRow extends StatelessWidget {
                     return TfText(
                       '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
                       textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 13,
+                      style: TfTextStyles.rowMoney.copyWith(
                         fontWeight: FontWeight.w700,
                         color: net > 0 ? PosColors.success : PosColors.danger,
-                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     );
                   },
@@ -868,12 +780,8 @@ class _StockRow extends StatelessWidget {
                     children: [
                       TfText(
                         _formatQty(context, item.onHand),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
+                        style: TfTextStyles.statNumber.copyWith(
                           color: qtyColor,
-                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       const SizedBox(width: 3),
@@ -881,9 +789,7 @@ class _StockRow extends StatelessWidget {
                         unit,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
+                        style: TfTextStyles.sectionStrip.copyWith(
                           color: PosColors.muted,
                         ),
                       ),
@@ -922,12 +828,7 @@ class _AdvancedDrilldowns extends StatelessWidget {
       children: [
         TfText(
           text.advancedSection.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: PosColors.muted,
-          ),
+          style: TfTextStyles.eyebrow.copyWith(color: PosColors.muted),
         ),
         const SizedBox(height: 9),
         IntrinsicHeight(
@@ -974,7 +875,10 @@ class _AdvancedDrilldowns extends StatelessWidget {
             Expanded(
               child: TfText(
                 text.stockItemDetailHint,
-                style: const TextStyle(fontSize: 12, color: PosColors.muted),
+                style: TfTextStyles.sectionStrip.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: PosColors.muted,
+                ),
               ),
             ),
           ],
@@ -1017,7 +921,7 @@ class _DrillCard extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(
                 color: PosColors.surfaceSunk,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(PosRadii.md),
               ),
               alignment: Alignment.center,
               child: Icon(icon, size: 18, color: PosColors.text),
@@ -1027,9 +931,7 @@ class _DrillCard extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+              style: TfTextStyles.sectionHeader.copyWith(
                 color: PosColors.text,
               ),
             ),
@@ -1038,7 +940,10 @@ class _DrillCard extends StatelessWidget {
               hint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: PosColors.muted),
+              style: TfTextStyles.sectionStrip.copyWith(
+                fontWeight: FontWeight.w400,
+                color: PosColors.muted,
+              ),
             ),
           ],
         ),
@@ -1077,9 +982,7 @@ class _AddItemButton extends StatelessWidget {
             const SizedBox(width: 8),
             TfText(
               text.addInventoryItem,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+              style: TfTextStyles.rowTitle.copyWith(
                 color: PosColors.accentStrong,
               ),
             ),
@@ -1090,8 +993,9 @@ class _AddItemButton extends StatelessWidget {
   }
 }
 
-/// Bottom actions: **Stock in** is the primary hero, **Count** the ghost
-/// beside it. Scan lives in the drawer's Stock group (stock_scan_flow.dart).
+/// Bottom actions: **Stock in** is the primary hero, **Count** the navy
+/// secondary beside it (app-wide sticky-footer pairing = dark + primary).
+/// Scan lives in the drawer's Stock group (stock_scan_flow.dart).
 class _StockBottomBar extends StatelessWidget {
   const _StockBottomBar({
     required this.text,
@@ -1113,7 +1017,7 @@ class _StockBottomBar extends StatelessWidget {
           child: TfButton(
             label: text.countAction,
             icon: Icons.fact_check_outlined,
-            variant: TfButtonVariant.ghost,
+            variant: TfButtonVariant.dark,
             size: TfButtonSize.lg,
             onPressed: onCount,
           ),
