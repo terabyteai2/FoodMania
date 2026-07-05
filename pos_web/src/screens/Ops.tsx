@@ -4,36 +4,49 @@
 import { useState } from 'react';
 import { PrinterSettings } from '../components/PrinterSettings';
 import { DayEnd } from './DayEnd';
+import { Dashboard } from './Dashboard';
+import { Analytics } from './Analytics';
+import { Reports } from './Reports';
+import { MenuManage } from './MenuManage';
+import { Inventory } from './Inventory';
 import { usePos } from '../state/pos';
 import { useSession } from '../state/session';
 import { useSync } from '../state/sync';
 import { formatTk } from '../core/money';
 import './ops.css';
 
-type OpsPane = 'home' | 'printers' | 'dayend';
+type OpsPane = 'home' | 'printers' | 'dayend' | 'dashboard' | 'analytics' | 'reports' | 'menu' | 'inventory';
 
 export function Ops() {
   const [pane, setPane] = useState<OpsPane>('home');
   const pos = usePos();
   const session = useSession((s) => s.session)!;
   const sync = useSync();
+  const isManager = session.role === 'owner' || session.role === 'manager';
+  const isOwner = session.role === 'owner'; // inventory is owner-only on the backend
+
+  const back = <button className="btn btn-outline btn-sm ops-back" onClick={() => setPane('home')}>← Operations</button>;
 
   if (pane === 'printers') {
+    return <div className="ops-root">{back}<PrinterSettings /></div>;
+  }
+  if (pane === 'dayend') {
+    return <div className="ops-root ops-root-flush">{back}<DayEnd /></div>;
+  }
+  // Back-office panes (owner/manager only). The child screen owns its own scroll.
+  if (isManager && (pane === 'dashboard' || pane === 'analytics' || pane === 'reports' || pane === 'menu')) {
     return (
-      <div className="ops-root">
-        <button className="btn btn-outline btn-sm ops-back" onClick={() => setPane('home')}>← Operations</button>
-        <PrinterSettings />
+      <div className="ops-root ops-root-flush">
+        {back}
+        {pane === 'dashboard' && <Dashboard />}
+        {pane === 'analytics' && <Analytics />}
+        {pane === 'reports' && <Reports />}
+        {pane === 'menu' && <MenuManage />}
       </div>
     );
   }
-
-  if (pane === 'dayend') {
-    return (
-      <div className="ops-root ops-root-flush">
-        <button className="btn btn-outline btn-sm ops-back" onClick={() => setPane('home')}>← Operations</button>
-        <DayEnd />
-      </div>
-    );
+  if (isOwner && pane === 'inventory') {
+    return <div className="ops-root ops-root-flush">{back}<Inventory /></div>;
   }
 
   return (
@@ -43,6 +56,32 @@ export function Ops() {
         <span className="ops-outlet">{session.outletName} · Master Billing Station</span>
       </div>
       <div className="ops-grid">
+        {isManager && (
+          <>
+            <button className="ops-tile card" onClick={() => setPane('dashboard')}>
+              <span className="ops-tile-icon">📊</span>
+              <span>Dashboard</span>
+            </button>
+            <button className="ops-tile card" onClick={() => setPane('analytics')}>
+              <span className="ops-tile-icon">📈</span>
+              <span>Analytics &amp; Tax</span>
+            </button>
+            <button className="ops-tile card" onClick={() => setPane('reports')}>
+              <span className="ops-tile-icon">🧮</span>
+              <span>Reports</span>
+            </button>
+            <button className="ops-tile card" onClick={() => setPane('menu')}>
+              <span className="ops-tile-icon">🍽️</span>
+              <span>Menu</span>
+            </button>
+            {isOwner && (
+              <button className="ops-tile card" onClick={() => setPane('inventory')}>
+                <span className="ops-tile-icon">📦</span>
+                <span>Inventory</span>
+              </button>
+            )}
+          </>
+        )}
         <button className="ops-tile card" onClick={() => setPane('printers')}>
           <span className="ops-tile-icon">🖨️</span>
           <span>Printers</span>

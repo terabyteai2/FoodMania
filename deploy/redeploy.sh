@@ -206,7 +206,8 @@ for i in {1..45}; do
   fi
   sleep 2
 done
-check_url_contains "https://quickbytes.buzz/" "<title>QuickBytes" "Landing page"
+check_url_contains "https://quickbytes.buzz/" "<title>QuickBytes POS</title>" "POS dashboard"
+check_url_contains "https://quickbytes.buzz/landing/" "<title>QuickBytes" "Landing page"
 check_url_contains "https://quickbytes.buzz/admin/" "<title>Rastarant Platform Admin</title>" "Platform admin"
 check_url_contains "https://demo.quickbytes.buzz/" "<title>Menu</title>" "Customer menu"
 placeholder_headers="$(mktemp)"

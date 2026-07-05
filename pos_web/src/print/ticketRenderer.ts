@@ -296,6 +296,44 @@ export function renderDayEnd(width: number, ctx: TicketContext, s: DayEndSummary
   return trim(p);
 }
 
+// ----------------------------------------------------------- Tax summary -----
+export interface TaxSummaryData {
+  periodLabel: string;
+  taxableBdt: number; // taxable base (net sales)
+  vatRatePercent: number;
+  taxCollectedBdt: number; // taxAndDuty
+  ordersCompleted: number;
+  grossSalesBdt: number;
+  totalCollectionBdt: number;
+}
+
+export function renderTaxSummary(width: number, ctx: TicketContext, s: TaxSummaryData): HTMLCanvasElement {
+  const p = createPainter(width);
+  const u = width / 384;
+
+  textCenter(p, ctx.restaurantName, 24 * u, 800, 3);
+  if (ctx.outletName && ctx.outletName !== ctx.restaurantName) {
+    textCenter(p, ctx.outletName, 18 * u, 500, 4);
+  }
+  textCenter(p, 'TAX SUMMARY', 22 * u, 800, 4);
+  textCenter(p, s.periodLabel, 18 * u, 400, 6);
+  hline(p);
+
+  textRow(p, 'Orders completed', String(s.ordersCompleted), 19 * u);
+  textRow(p, 'Gross sales', formatTk(s.grossSalesBdt), 19 * u);
+  textRow(p, 'Total collection', formatTk(s.totalCollectionBdt), 19 * u);
+  hline(p);
+
+  textRow(p, 'Taxable amount', formatTk(s.taxableBdt), 20 * u, 700, 700, 6);
+  textRow(p, 'VAT rate', `${s.vatRatePercent}%`, 19 * u);
+  p.y += 4;
+  textRow(p, 'TAX COLLECTED', formatTk(s.taxCollectedBdt), 24 * u, 800, 800, 8);
+
+  hline(p, false);
+  textCenter(p, 'Powered by QuickBytes', 16 * u, 400, 2);
+  return trim(p);
+}
+
 // ---------------------------------------------------------- Test ticket ------
 export function renderTestTicket(width: number, label: string): HTMLCanvasElement {
   const p = createPainter(width);

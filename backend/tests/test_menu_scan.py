@@ -1,16 +1,18 @@
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
-from auth import get_current_device_payload
+from auth import create_device_token, get_current_device_payload
 from database import AsyncSessionLocal, create_tables, get_db
 from main import app
-from models import AdminAccount
+from models import AdminAccount, Outlet
+from phone_utils import phone_to_synthetic_email
 from routers import menu
 from schemas import MenuScanCandidate
 from services import menu_scan
@@ -413,7 +415,6 @@ async def test_menu_scan_route_accepts_manager_access_variants(
     await create_tables()
     suffix = uuid.uuid4()
     server_id = f"scan-role-{suffix}"
-    email = f"scan-role-{suffix}@example.com"
 
     async def fake_ocr(pages):
         assert pages == [(b"image", "image/png")]
@@ -452,33 +453,27 @@ async def test_menu_scan_route_accepts_manager_access_variants(
             },
         )
         outlet_id = boot.json()["data"]["outletId"]
-        await client.post(
-            "/admin/create",
-            json={
-                "outletId": outlet_id,
-                "email": email,
-                "username": email,
-                "password": "password",
-                "role": "manager",
-            },
-        )
         async with AsyncSessionLocal() as db:
-            account = (
-                await db.execute(
-                    select(AdminAccount).where(AdminAccount.email == email)
-                )
-            ).scalar_one()
-            account.role = stored_role
+            outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+            phone = f"+88017{suffix.hex[:8]}"
+            account = AdminAccount(
+                id=str(uuid.uuid4()),
+                outlet_id=outlet.id,
+                email=phone_to_synthetic_email(phone),
+                username=phone_to_synthetic_email(phone),
+                password_hash=None,
+                role=stored_role,
+                display_name="Test Manager",
+                auth_provider="phone",
+                phone=phone,
+                phone_verified_at=datetime.now(timezone.utc),
+                invite_status="accepted",
+                is_active=True,
+            )
+            db.add(account)
             await db.commit()
-        login = await client.post(
-            "/admin/login",
-            json={
-                "serverId": server_id,
-                "usernameOrEmail": email,
-                "password": "password",
-            },
-        )
-        token = login.json()["data"]["deviceToken"]
+            await db.refresh(account)
+            token = create_device_token(outlet.id, account.id)
         response = await client.post(
             f"/outlets/{outlet_id}/menu/scan",
             headers={"Authorization": f"Bearer {token}"},

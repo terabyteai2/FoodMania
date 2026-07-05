@@ -1,0 +1,35 @@
+/* Shared styling for the hand-rolled SVG/CSS charts. */
+
+.chart-area { width: 100%; }
+.chart-area svg { display: block; }
+.chart-empty { color: var(--muted); font-size: var(--fs-13); padding: 18px 0; text-align: center; }
+
+.chart-xlabels {
+  display: flex; justify-content: space-between; margin-top: 6px;
+  font-size: var(--fs-11); color: var(--muted);
+}
+.chart-xlabels span { flex: 1; text-align: center; }
+.chart-xlabels span:first-child { text-align: left; }
+.chart-xlabels span:last-child { text-align: right; }
+
+/* horizontal bar chart (service-wise / value bars) */
+.barchart { display: flex; flex-direction: column; gap: 10px; }
+.barchart-row { display: grid; grid-template-columns: 120px 1fr 84px; align-items: center; gap: 10px; }
+.barchart-label { font-size: var(--fs-13); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barchart-track { height: 12px; background: var(--surface-sunk); border-radius: 999px; overflow: hidden; }
+.barchart-fill { height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.25s ease; }
+.barchart-value { font-size: var(--fs-13); font-weight: 700; text-align: right; }
+
+/* donut + legend */
+.donut { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.donut-svg { flex: 0 0 auto; }
+.donut-legend { display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-13); }
+.donut-legend-row { display: flex; align-items: center; gap: 8px; }
+.donut-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.donut-legend-label { color: var(--ink-2); }
+.donut-legend-val { font-weight: 700; margin-left: auto; padding-left: 12px; }
+.donut-center-value { font-weight: 800; font-size: var(--fs-16); }
+.donut-center-label { font-size: var(--fs-11); fill: var(--muted); }
+
+/* sparkline (inline, fixed size) */
+.sparkline { display: inline-block; vertical-align: middle; }

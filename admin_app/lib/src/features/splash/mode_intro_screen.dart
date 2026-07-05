@@ -131,27 +131,6 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
     }
   }
 
-  Future<void> _demoLogin() async {
-    final app = AppScope.of(context);
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final ok = await app.loginAsDemoManager();
-      if (!ok) {
-        throw Exception(app.lastError ?? 'Demo login failed.');
-      }
-      if (!mounted) return;
-      widget.onFinished('authenticated');
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = _humanizeError(error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _verifyOtp() async {
     final app = AppScope.of(context);
     final code = _otpCode.trim();
@@ -319,14 +298,6 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ),
-                      ],
-                      if (app.demoManagerLoginEnabled && !_otpSent) ...[
-                        const SizedBox(height: 12),
-                        TfButton(
-                          label: 'Try demo restaurant',
-                          onPressed: _busy ? null : _demoLogin,
-                          variant: TfButtonVariant.paper,
                         ),
                       ],
                       SizedBox(height: compact ? 20 : 40),

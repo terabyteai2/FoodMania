@@ -117,6 +117,7 @@ class _MenuStepState extends State<MenuStep> {
                   items: widget.visibleItems,
                   cart: widget.cart,
                   onTap: widget.onTap,
+                  onDecrement: widget.onDecrement,
                 )
               : _MenuContent(
                   items: widget.visibleItems,
@@ -247,7 +248,7 @@ class _MenuSearchBar extends StatelessWidget {
             child: TextField(
               controller: searchCtrl,
               onChanged: onSearchChanged,
-              autofocus: true,
+              autofocus: false,
               keyboardType: codeMode ? TextInputType.number : TextInputType.text,
               textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
               onSubmitted: codeMode ? onCodeSubmit : null,
@@ -327,155 +328,11 @@ class CategoryChips extends StatelessWidget {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              0,
-              PosSpacing.sp1,
-              PosSpacing.sp4,
-              0,
-            ),
-            child: _CategoryJumpButton(
-              onTap: () => _showCategoryJumpSheet(
-                context,
-                categories: categories,
-                selected: selected,
-                counts: counts,
-                onSelected: onSelected,
-              ),
-            ),
-          ),
+
         ],
       ),
     );
   }
-}
-
-// Trailing trigger for the Petpooja category index (DESIGN.md §5
-// category-jump sheet).
-class _CategoryJumpButton extends StatelessWidget {
-  const _CategoryJumpButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: PosColors.surfaceSunk,
-          border: Border.all(color: PosColors.line),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.restaurant_menu_rounded,
-          size: 18,
-          color: PosColors.ink2,
-        ),
-      ),
-    );
-  }
-}
-
-// Bottom-sheet category index: name left, item count right; tap jumps the
-// menu to that category.
-Future<void> _showCategoryJumpSheet(
-  BuildContext context, {
-  required List<String> categories,
-  required String selected,
-  required Map<String, int>? counts,
-  required ValueChanged<String> onSelected,
-}) {
-  final text = AppScope.of(context).strings;
-  return showModalBottomSheet<void>(
-    context: context,
-    builder: (sheetContext) {
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                PosSpacing.sp4,
-                PosSpacing.sp1,
-                PosSpacing.sp4,
-                PosDensity.sectionGap,
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.restaurant_menu_rounded,
-                    size: 20,
-                    color: PosColors.accentStrong,
-                  ),
-                  const SizedBox(width: PosSpacing.sp2),
-                  TfText(
-                    text.isBn ? 'মেনু' : 'Menu',
-                    style: TfTextStyles.sectionHeader,
-                  ),
-                ],
-              ),
-            ),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: categories.length,
-                separatorBuilder: (_, _) =>
-                    const Divider(height: 1, color: PosColors.line),
-                itemBuilder: (_, i) {
-                  final cat = categories[i];
-                  final sel = cat == selected;
-                  final label = cat == 'All' ? text.categoryAll : cat;
-                  final count = counts?[cat];
-                  return InkWell(
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      onSelected(cat);
-                    },
-                    child: Container(
-                      color: sel ? PosColors.primarySoft : null,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: PosSpacing.sp4,
-                        vertical: PosSpacing.sp3,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TfText(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TfTextStyles.rowTitle.copyWith(
-                                color: sel
-                                    ? PosColors.accentStrong
-                                    : PosColors.primaryDark,
-                              ),
-                            ),
-                          ),
-                          if (count != null)
-                            TfText(
-                              tfFormatNumber(context, count),
-                              style: TfTextStyles.rowTitle.copyWith(
-                                color: PosColors.muted,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
 }
 
 // ── Menu content (Petpooja "Items": 2-col card grid grouped under sticky
@@ -662,9 +519,6 @@ class _GridTile extends StatelessWidget {
     debugPrint('[QB-WIZARD] _GridTile: building ${item.id} ${item.name} cat=${item.category}');
     final inCart = qty > 0;
     final off = !item.isAvailable;
-    final customizable =
-        item.extras.options.isNotEmpty || item.extras.addOns.isNotEmpty;
-
     return GestureDetector(
       onTap: off ? null : onTap,
       onLongPress: () => _showItemActions(
@@ -679,10 +533,8 @@ class _GridTile extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           padding: const EdgeInsets.all(PosSpacing.sp2),
           decoration: BoxDecoration(
-            color: inCart ? PosColors.primarySoft : PosColors.surface,
-            border: Border.all(
-              color: inCart ? PosColors.primary : PosColors.line,
-            ),
+            color: PosColors.surface,
+            border: Border.all(color: PosColors.line),
             borderRadius: BorderRadius.circular(PosRadii.card),
             boxShadow: PosShadows.soft,
           ),
@@ -721,44 +573,19 @@ class _GridTile extends StatelessWidget {
                         onDecrement: onDecrement,
                         onIncrement: onTap,
                       )
-                    else if (customizable && !off)
-                      const _CustomizableHint(),
+
                   ],
                 ),
               ),
-              // Top-right: price. Top-left: running count once the item is in
-              // the cart.
-              Positioned(top: 0, right: 0, child: _PriceTag(price: item.price)),
-              if (inCart)
-                Positioned(top: 0, left: 0, child: _CountBadge(qty: qty)),
+              // Top-right: count badge when in cart, price otherwise.
+              Positioned(
+                top: 0, right: 0,
+                child: inCart ? _CountBadge(qty: qty) : _PriceTag(price: item.price),
+              ),
               if (off) const Positioned(bottom: 0, left: 0, child: _OffBadge()),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// "customizable*" strip at the tile foot — signals options/add-ons exist.
-class _CustomizableHint extends StatelessWidget {
-  const _CustomizableHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final isBn = AppScope.of(context).strings.isBn;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp1),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.sm),
-      ),
-      alignment: Alignment.center,
-      child: TfText(
-        isBn ? 'কাস্টমাইজযোগ্য*' : 'customizable*',
-        maxLines: 1,
-        style: TfTextStyles.label.copyWith(color: PosColors.muted),
       ),
     );
   }
@@ -786,8 +613,12 @@ class _TileStepper extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _TileStepBtn(icon: Icons.remove_rounded, onTap: onDecrement),
-          _TileStepBtn(icon: Icons.add_rounded, onTap: onIncrement),
+          Expanded(
+            child: Center(child: _TileStepBtn(icon: Icons.remove_rounded, onTap: onDecrement)),
+          ),
+          Expanded(
+            child: Center(child: _TileStepBtn(icon: Icons.add_rounded, onTap: onIncrement)),
+          ),
         ],
       ),
     );
@@ -805,7 +636,6 @@ class _TileStepBtn extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(
-        width: 40,
         height: 34,
         child: Icon(icon, size: 18, color: PosColors.onSecondary),
       ),
@@ -935,11 +765,13 @@ class _ShortCodeList extends StatelessWidget {
     required this.items,
     required this.cart,
     required this.onTap,
+    required this.onDecrement,
   });
 
   final List<MenuItem> items;
   final Map<String, int> cart;
   final ValueChanged<MenuItem> onTap;
+  final ValueChanged<String> onDecrement;
 
   @override
   Widget build(BuildContext context) {
@@ -969,14 +801,8 @@ class _ShortCodeList extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               decoration: BoxDecoration(
-                color: inCart ? PosColors.primarySoft : Colors.transparent,
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(PosRadii.sm),
-                border: Border(
-                  left: BorderSide(
-                    color: inCart ? PosColors.primary : Colors.transparent,
-                    width: 3,
-                  ),
-                ),
               ),
               child: Row(
                 children: [
@@ -988,13 +814,31 @@ class _ShortCodeList extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TfTextStyles.rowTitle.copyWith(
-                        color: inCart
-                            ? PosColors.accentStrong
-                            : PosColors.primaryDark,
+                        color: PosColors.primaryDark,
                       ),
                     ),
                   ),
-                  if (inCart) _CountBadge(qty: qty),
+                  if (inCart) ...[
+                    _CountBadge(qty: qty),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => onDecrement(item.id),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: PosColors.surface,
+                          border: Border.all(color: PosColors.lineStrong),
+                          borderRadius: BorderRadius.circular(PosRadii.chip),
+                        ),
+                        child: Icon(
+                          Icons.remove_rounded,
+                          size: 16,
+                          color: PosColors.primaryDark,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1409,7 +1253,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                     const SizedBox(height: 9),
                     TextField(
                       controller: _noteCtrl,
-                      autofocus: true,
+              autofocus: false,
                       maxLines: null,
                       minLines: 2,
                       onChanged: (_) => setState(() {}),

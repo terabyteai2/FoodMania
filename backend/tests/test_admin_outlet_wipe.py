@@ -1,9 +1,12 @@
 import uuid
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
+from auth import create_device_token
 from database import AsyncSessionLocal, create_tables
 from main import app
 from models import (
@@ -16,6 +19,7 @@ from models import (
     Restaurant,
     StockAdjustment,
 )
+from phone_utils import phone_to_synthetic_email
 from routers import admin
 
 
@@ -35,8 +39,6 @@ async def test_manager_can_wipe_current_outlet_database_and_media(monkeypatch):
 
     suffix = uuid.uuid4()
     server_id = f"wipe-{suffix}"
-    email = f"wipe-{suffix}@example.com"
-    password = "wipe-password"
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -47,25 +49,28 @@ async def test_manager_can_wipe_current_outlet_database_and_media(monkeypatch):
         boot = bootstrap.json()["data"]
         outlet_id = boot["outletId"]
         restaurant_id = boot["restaurantId"]
-        create_account = await client.post(
-            "/admin/create",
-            json={
-                "outletId": outlet_id,
-                "email": email,
-                "username": email,
-                "password": password,
-                "role": "manager",
-            },
-        )
-        login = await client.post(
-            "/admin/login",
-            json={
-                "usernameOrEmail": email,
-                "password": password,
-                "serverId": server_id,
-            },
-        )
-        token = login.json()["data"]["deviceToken"]
+        async with AsyncSessionLocal() as db:
+            outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+            phone = f"+88017{suffix.hex[:8]}"
+            email = phone_to_synthetic_email(phone)
+            account = AdminAccount(
+                id=str(uuid4()),
+                outlet_id=outlet.id,
+                email=email,
+                username=email,
+                password_hash=None,
+                role="owner",
+                display_name="Test Manager",
+                auth_provider="phone",
+                phone=phone,
+                phone_verified_at=datetime.now(timezone.utc),
+                invite_status="accepted",
+                is_active=True,
+            )
+            db.add(account)
+            await db.commit()
+            await db.refresh(account)
+            token = create_device_token(outlet.id, account.id)
 
         menu_image_url = "http://test/uploads/menu_images/wipe-menu.jpg"
         gallery_url = (
@@ -130,8 +135,6 @@ async def test_manager_can_wipe_current_outlet_database_and_media(monkeypatch):
         )
 
     assert bootstrap.status_code == 200
-    assert create_account.status_code == 200
-    assert login.status_code == 200
     assert rejected.status_code == 400
     assert wiped.status_code == 200
     payload = wiped.json()["data"]

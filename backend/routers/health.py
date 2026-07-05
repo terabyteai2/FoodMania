@@ -17,15 +17,6 @@ from services.blocking_notice import get_blocking_notice, respond_to_blocking_no
 router = APIRouter()
 
 
-def _demo_manager_login_enabled() -> bool:
-    explicit = settings.DEMO_MANAGER_LOGIN_ENABLED.strip().lower()
-    if explicit in ("1", "true", "yes", "on"):
-        return True
-    if explicit in ("0", "false", "no", "off"):
-        return False
-    return settings.APP_ENV.strip().lower() == "development"
-
-
 def _configured(value: str) -> bool:
     return bool(value.strip())
 
@@ -108,7 +99,6 @@ async def health():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "database": {"ok": db_ok, "error": db_error},
         "gitCommit": commit or None,
-        "demoManagerLoginEnabled": _demo_manager_login_enabled(),
         "smsProvider": "onecodesoft" if onecodesoft_configured else None,
         "onecodesoftConfigured": onecodesoft_configured,
         "phoneOtpMode": phone_otp.phone_otp_mode(),
@@ -119,7 +109,6 @@ async def health():
             "publishableKey": "",
             "channelPrefix": "pos:outlet:",
         },
-        "staffDevBypassEnabled": bool(settings.STAFF_DEV_BYPASS_SECRET.strip()),
         "monitoring": {"sentryEnabled": bool(settings.SENTRY_DSN.strip())},
         "diagnostics": diagnostics,
     }

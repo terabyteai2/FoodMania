@@ -1,10 +1,16 @@
 import uuid
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
-from database import create_tables
+from auth import create_device_token
+from database import AsyncSessionLocal, create_tables
 from main import app
+from models import AdminAccount, Outlet
+from phone_utils import phone_to_synthetic_email
 
 
 async def _manager(client: AsyncClient) -> tuple[str, str, dict]:
@@ -15,43 +21,56 @@ async def _manager(client: AsyncClient) -> tuple[str, str, dict]:
         json={"serverId": server_id, "restaurantName": "Desktop POS", "tableCount": 3},
     )
     outlet_id = boot.json()["data"]["outletId"]
-    email = f"desktop-{suffix}@example.com"
-    await client.post(
-        "/admin/create",
-        json={
-            "outletId": outlet_id,
-            "email": email,
-            "username": email,
-            "password": "password",
-            "role": "manager",
-        },
-    )
-    login = await client.post(
-        "/admin/login",
-        json={"serverId": server_id, "usernameOrEmail": email, "password": "password"},
-    )
-    token = login.json()["data"]["deviceToken"]
+
+    async with AsyncSessionLocal() as db:
+        outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+        phone = f"+88017{suffix.hex[:8]}"
+        account = AdminAccount(
+            id=str(uuid4()),
+            outlet_id=outlet.id,
+            email=phone_to_synthetic_email(phone),
+            username=phone_to_synthetic_email(phone),
+            password_hash=None,
+            role="owner",
+            display_name="Test Manager",
+            auth_provider="phone",
+            phone=phone,
+            phone_verified_at=datetime.now(timezone.utc),
+            invite_status="accepted",
+            is_active=True,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+        token = create_device_token(outlet.id, account.id)
+
     return outlet_id, server_id, {"Authorization": f"Bearer {token}"}
 
 
 async def _staff(client: AsyncClient, outlet_id: str, server_id: str) -> dict:
     suffix = uuid.uuid4()
-    email = f"staff-{suffix}@example.com"
-    await client.post(
-        "/admin/create",
-        json={
-            "outletId": outlet_id,
-            "email": email,
-            "username": email,
-            "password": "password",
-            "role": "staff",
-        },
-    )
-    login = await client.post(
-        "/admin/login",
-        json={"serverId": server_id, "usernameOrEmail": email, "password": "password"},
-    )
-    return {"Authorization": f"Bearer {login.json()['data']['deviceToken']}"}
+    async with AsyncSessionLocal() as db:
+        outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+        phone = f"+88018{suffix.hex[:8]}"
+        account = AdminAccount(
+            id=str(uuid4()),
+            outlet_id=outlet.id,
+            email=phone_to_synthetic_email(phone),
+            username=phone_to_synthetic_email(phone),
+            password_hash=None,
+            role="staff",
+            display_name="Test Staff",
+            auth_provider="phone",
+            phone=phone,
+            phone_verified_at=datetime.now(timezone.utc),
+            invite_status="accepted",
+            is_active=True,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+        token = create_device_token(outlet.id, account.id)
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -368,27 +387,29 @@ async def test_zero_table_outlet_keeps_main_floor_without_fake_table():
         assert boot.status_code == 200
         outlet_id = boot.json()["data"]["outletId"]
         assert boot.json()["data"]["tableCount"] == 0
-        email = f"zero-table-{suffix}@example.com"
-        await client.post(
-            "/admin/create",
-            json={
-                "outletId": outlet_id,
-                "email": email,
-                "username": email,
-                "password": "password",
-                "role": "manager",
-            },
-        )
-        login = await client.post(
-            "/admin/login",
-            json={
-                "serverId": server_id,
-                "usernameOrEmail": email,
-                "password": "password",
-            },
-        )
+        async with AsyncSessionLocal() as db:
+            outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+            phone = f"+88017{suffix.hex[:8]}"
+            account = AdminAccount(
+                id=str(uuid4()),
+                outlet_id=outlet.id,
+                email=phone_to_synthetic_email(phone),
+                username=phone_to_synthetic_email(phone),
+                password_hash=None,
+                role="owner",
+                display_name="Test Manager",
+                auth_provider="phone",
+                phone=phone,
+                phone_verified_at=datetime.now(timezone.utc),
+                invite_status="accepted",
+                is_active=True,
+            )
+            db.add(account)
+            await db.commit()
+            await db.refresh(account)
+            token = create_device_token(outlet.id, account.id)
         headers = {
-            "Authorization": f"Bearer {login.json()['data']['deviceToken']}"
+            "Authorization": f"Bearer {token}"
         }
         settings = await client.get(
             f"/outlets/{outlet_id}/pos/settings",

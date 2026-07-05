@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -6,9 +7,11 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from auth import create_device_token
 from database import AsyncSessionLocal, create_tables
 from main import app
-from models import ChatbotConversation, ChatbotIntegration
+from models import AdminAccount, ChatbotConversation, ChatbotIntegration, Outlet
+from phone_utils import phone_to_synthetic_email
 from services import facebook_chatbot
 
 
@@ -20,28 +23,27 @@ async def _manager_headers(client: AsyncClient, label: str) -> tuple[str, dict]:
     )
     assert bootstrap.status_code == 200
     outlet_id = bootstrap.json()["data"]["outletId"]
-    email = f"{label}-{uuid.uuid4()}@example.com"
-    created = await client.post(
-        "/admin/create",
-        json={
-            "outletId": outlet_id,
-            "email": email,
-            "username": email,
-            "password": "secret123",
-            "role": "manager",
-        },
-    )
-    assert created.status_code == 200
-    login = await client.post(
-        "/admin/login",
-        json={
-            "usernameOrEmail": email,
-            "password": "secret123",
-            "serverId": server_id,
-        },
-    )
-    assert login.status_code == 200
-    token = login.json()["data"]["deviceToken"]
+    async with AsyncSessionLocal() as db:
+        outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+        phone = f"+88017{uuid.uuid4().hex[:8]}"
+        account = AdminAccount(
+            id=str(uuid.uuid4()),
+            outlet_id=outlet.id,
+            email=phone_to_synthetic_email(phone),
+            username=phone_to_synthetic_email(phone),
+            password_hash=None,
+            role="owner",
+            display_name="Test Manager",
+            auth_provider="phone",
+            phone=phone,
+            phone_verified_at=datetime.now(timezone.utc),
+            invite_status="accepted",
+            is_active=True,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+        token = create_device_token(outlet.id, account.id)
     return outlet_id, {"Authorization": f"Bearer {token}"}
 
 

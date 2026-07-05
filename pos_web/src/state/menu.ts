@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
-import type { MenuItemWire } from '../api/types';
+import type { MenuItemPayload, MenuItemWire } from '../api/types';
 import { parseExtras, effectiveUnitPrice, type MenuExtras } from '../core/tags';
 import { cacheGet, cacheSet } from '../offline/db';
 
@@ -21,6 +21,10 @@ interface MenuState {
   error: string | null;
   load: (outletId: string) => Promise<void>;
   toggleFavorite: (itemId: string) => void;
+  // Phase B menu management — POST upsert / DELETE, then reload (online-only for v1).
+  saveItem: (outletId: string, payload: MenuItemPayload) => Promise<void>;
+  saveMany: (outletId: string, payloads: MenuItemPayload[]) => Promise<void>;
+  deleteItem: (outletId: string, itemId: string) => Promise<void>;
 }
 
 function loadFavorites(): Set<string> {
@@ -73,6 +77,21 @@ export const useMenu = create<MenuState>((set, get) => ({
     else next.add(itemId);
     localStorage.setItem(FAV_KEY, JSON.stringify([...next]));
     set({ favorites: next });
+  },
+
+  saveItem: async (outletId, payload) => {
+    await api.pushMenuItem(outletId, payload);
+    await get().load(outletId);
+  },
+
+  saveMany: async (outletId, payloads) => {
+    for (const p of payloads) await api.pushMenuItem(outletId, p);
+    await get().load(outletId);
+  },
+
+  deleteItem: async (outletId, itemId) => {
+    await api.deleteMenuItem(outletId, itemId);
+    await get().load(outletId);
   },
 }));
 

@@ -1,0 +1,83 @@
+name: quickbytes_desktop
+description: "QuickBytes Desktop POS (Windows) — Petpooja-fidelity register."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Reuse the ENTIRE domain + data + controller layer from the mobile app.
+  # No duplication: models, CloudApiService, LocalDatabaseService, SyncService,
+  # PrinterService, PosAppController, AppScope, AppStrings and design tokens are
+  # imported via package:local_pos/src/...  (admin_app already targets Windows).
+  local_pos:
+    path: ../admin_app
+
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  uuid: ^4.5.3
+  # Desktop SQLite backend (main.dart wires databaseFactory = databaseFactoryFfi).
+  sqflite_common_ffi: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/brand/
+    - assets/sounds/
+    - assets/menu_placeholders/
+
+  # Fonts must be declared in the RUNNING app's pubspec; reused widgets/theme
+  # reference these families by name (Plus Jakarta Sans EN, Hind Siliguri /
+  # Noto Sans Bengali for বাংলা). Files copied from admin_app/assets/fonts.
+  fonts:
+    - family: Plus Jakarta Sans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+          weight: 400
+        - asset: assets/fonts/Inter.ttf
+          weight: 600
+        - asset: assets/fonts/Inter.ttf
+          weight: 700
+    - family: Hind Siliguri
+      fonts:
+        - asset: assets/fonts/HindSiliguri-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/HindSiliguri-Medium.ttf
+          weight: 500
+    - family: Noto Sans Bengali
+      fonts:
+        - asset: assets/fonts/NotoSansBengali-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansBengali-Bold.ttf
+          weight: 700
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono.ttf
+          weight: 400
+        - asset: assets/fonts/JetBrainsMono.ttf
+          weight: 500

@@ -36,33 +36,6 @@ class BootstrapResponse(BaseModel):
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 
-class AdminLoginRequest(BaseModel):
-    usernameOrEmail: str
-    password: str
-    serverId: str
-
-
-class AdminCreateRequest(BaseModel):
-    outletId: str
-    email: str
-    username: str
-    password: str | None = None
-    role: str = "manager"
-    googleSub: str | None = None
-    displayName: str | None = None
-
-
-class GoogleAdminAuthRequest(BaseModel):
-    idToken: str
-    role: str = "staff"
-    serverId: str | None = None
-    restaurantName: str | None = None
-    outletName: str | None = None
-    restaurantId: str | None = None
-    outletId: str | None = None
-    tableCount: int | None = Field(default=None, ge=0, le=200)
-
-
 class PhoneSendOtpRequest(BaseModel):
     phone: str
     """Android SMS Retriever 11-char hash from SmsAutoFill().getAppSignature — enables auto-read OTP."""
@@ -91,8 +64,7 @@ class StaffInviteRespondRequest(BaseModel):
 
 
 class StaffInviteRequest(BaseModel):
-    phone: str | None = None
-    email: str | None = None
+    phone: str
     displayName: str | None = None
     role: str | None = None  # waiter (default) | manager (owner-only)
 
@@ -151,14 +123,6 @@ class FacebookChatbotOAuthCompleteRequest(BaseModel):
 
 class FacebookChatbotNativeOAuthRequest(BaseModel):
     userAccessToken: str
-
-
-class StaffDevBypassLoginRequest(BaseModel):
-    """Local/dev staff login without Google; server must set STAFF_DEV_BYPASS_SECRET."""
-
-    email: str
-    serverId: str
-    bypassSecret: str
 
 
 # ── Devices ───────────────────────────────────────────────────────────────────

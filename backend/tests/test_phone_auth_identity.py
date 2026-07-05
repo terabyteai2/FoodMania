@@ -1,12 +1,16 @@
 import uuid
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
-from auth import create_signup_token
-from database import create_tables
+from auth import create_device_token, create_signup_token
+from database import AsyncSessionLocal, create_tables
 from main import app
-from phone_utils import normalize_bd_phone
+from models import AdminAccount, Outlet
+from phone_utils import normalize_bd_phone, phone_to_synthetic_email
 
 
 def _contains_synthetic_phone_email(value) -> bool:
@@ -32,27 +36,28 @@ async def _manager(client: AsyncClient) -> dict:
         json={"serverId": server_id, "restaurantName": "Phone Auth"},
     )
     outlet_id = boot.json()["data"]["outletId"]
-    email = f"phone-auth-{suffix}@example.com"
-    await client.post(
-        "/admin/create",
-        json={
-            "outletId": outlet_id,
-            "email": email,
-            "username": email,
-            "password": "password",
-            "role": "manager",
-            "displayName": "Manager",
-        },
-    )
-    login = await client.post(
-        "/admin/login",
-        json={
-            "serverId": server_id,
-            "usernameOrEmail": email,
-            "password": "password",
-        },
-    )
-    return {"Authorization": f"Bearer {login.json()['data']['deviceToken']}"}
+    async with AsyncSessionLocal() as db:
+        outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+        phone = f"+88017{suffix.hex[:8]}"
+        account = AdminAccount(
+            id=str(uuid4()),
+            outlet_id=outlet.id,
+            email=phone_to_synthetic_email(phone),
+            username=phone_to_synthetic_email(phone),
+            password_hash=None,
+            role="owner",
+            display_name="Test Manager",
+            auth_provider="phone",
+            phone=phone,
+            phone_verified_at=datetime.now(timezone.utc),
+            invite_status="accepted",
+            is_active=True,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+        token = create_device_token(outlet.id, account.id)
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio(loop_scope="session")

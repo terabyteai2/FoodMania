@@ -19,7 +19,6 @@ from services.facebook_chatbot import start_batch_worker, stop_batch_worker
 from subscription_service import maybe_expire_subscription
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
-POS_DIST = Path(__file__).parent / "pos_dist"
 
 
 def _start_ngrok() -> str | None:
@@ -189,12 +188,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 if (FRONTEND_DIST / "assets").exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
 
-# POS web app (pos_web/ → backend/pos_dist/, Vite base '/pos/')
-if (POS_DIST / "assets").exists():
-    app.mount("/pos/assets", StaticFiles(directory=str(POS_DIST / "assets")), name="pos_assets")
-if (POS_DIST / "fonts").exists():
-    app.mount("/pos/fonts", StaticFiles(directory=str(POS_DIST / "fonts")), name="pos_fonts")
-
 
 @app.get("/menu/{full_path:path}", include_in_schema=False)
 async def serve_menu_spa(full_path: str):
@@ -218,19 +211,6 @@ async def serve_table_order_spa(full_path: str):
             headers={"Cache-Control": "no-store, max-age=0"},
         )
     return JSONResponse(status_code=503, content={"error": "Customer menu not built yet. Run: bash build_frontend.sh"})
-
-
-@app.get("/pos", include_in_schema=False)
-@app.get("/pos/{full_path:path}", include_in_schema=False)
-async def serve_pos_spa(full_path: str = ""):
-    """Serve the desktop POS React SPA for all /pos/* routes."""
-    index = POS_DIST / "index.html"
-    if index.exists():
-        return FileResponse(
-            str(index),
-            headers={"Cache-Control": "no-store, max-age=0"},
-        )
-    return JSONResponse(status_code=503, content={"error": "POS app not built yet. Run: bash build_pos.sh"})
 
 
 @app.get("/", include_in_schema=False)

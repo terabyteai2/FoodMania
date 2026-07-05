@@ -3,9 +3,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token
-import requests as http_requests
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +11,6 @@ from auth import (
     create_signup_token,
     decode_signup_token,
     get_current_device_payload,
-    hash_password,
-    verify_password,
 )
 from phone_utils import (
     INVITE_ACCEPTED,
@@ -48,10 +43,7 @@ from models import (
     UddoktaPaySession,
 )
 from schemas import (
-    AdminCreateRequest,
-    AdminLoginRequest,
     DisplayNameUpdateRequest,
-    GoogleAdminAuthRequest,
     OnboardingPlanRequest,
     OutletProfileUpdateRequest,
     OutletWipeRequest,
@@ -59,7 +51,6 @@ from schemas import (
     PhoneSendOtpRequest,
     PhoneVerifyOtpRequest,
     PublicSlugUpdateRequest,
-    StaffDevBypassLoginRequest,
     StaffInviteRequest,
     StaffInviteRespondRequest,
     StaffUpdateRequest,
@@ -100,37 +91,6 @@ RESERVED_PUBLIC_SLUGS = {
     "uploads",
     "www",
 }
-GOOGLE_VERIFY_TIMEOUT_SECONDS = 5.0
-_google_verify_transport = google_requests.Request(session=http_requests.Session())
-
-
-class _GoogleVerifyRequestWithTimeout:
-    """Inject a short timeout so Google verify does not hang client requests."""
-
-    def __call__(self, *args, **kwargs):
-        # google-auth passes its own default timeout (120s); force ours.
-        kwargs["timeout"] = GOOGLE_VERIFY_TIMEOUT_SECONDS
-        return _google_verify_transport(*args, **kwargs)
-
-
-_google_verify_request = _GoogleVerifyRequestWithTimeout()
-
-DEMO_PHONE = "+8801700000000"
-
-
-def _demo_manager_login_enabled() -> bool:
-    explicit = settings.DEMO_MANAGER_LOGIN_ENABLED.strip().lower()
-    if explicit in ("1", "true", "yes", "on"):
-        return True
-    if explicit in ("0", "false", "no", "off"):
-        return False
-    return settings.APP_ENV.strip().lower() == "development"
-
-
-def _clean_email(value: str) -> str:
-    return value.strip().lower()
-
-
 def _normalize_role(value: str | None) -> str:
     role = (value or WAITER).strip().lower()
     if role == STAFF:
@@ -149,7 +109,7 @@ def _account_dict(account: AdminAccount) -> dict:
         "role": account.role or MANAGER,
         "displayName": account.display_name,
         "invitedByName": account.invited_by_name,
-        "authProvider": account.auth_provider or "password",
+        "authProvider": account.auth_provider or "phone",
         "isActive": account.is_active,
         "inviteStatus": account.invite_status,
     }
@@ -316,171 +276,6 @@ async def _current_account(
     if require_manager and account.role not in MANAGEMENT_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required.")
     return account
-
-
-def _verify_google_id_token(raw_token: str) -> dict:
-    client_ids = [item.strip() for item in settings.GOOGLE_CLIENT_IDS.split(",") if item.strip()]
-    if not client_ids:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="GOOGLE_CLIENT_IDS is not configured.",
-        )
-    last_error: Exception | None = None
-    for client_id in client_ids:
-        try:
-            claims = id_token.verify_oauth2_token(raw_token, _google_verify_request, client_id)
-            email = claims.get("email", "")
-            if not email or claims.get("email_verified") is False:
-                raise ValueError("Google email is not verified.")
-            return claims
-        except http_requests.exceptions.Timeout:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    "google_verify_timeout:Timed out while contacting Google auth "
-                    "verification service. Please try again."
-                ),
-            )
-        except http_requests.exceptions.RequestException as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    "google_verify_unreachable:Google auth verification service is "
-                    f"currently unreachable. {error}"
-                ),
-            )
-        except Exception as error:  # pragma: no cover - depends on Google certs
-            last_error = error
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=f"Invalid Google sign-in token. {last_error}",
-    )
-
-
-@router.post("/admin/login")
-async def admin_login(
-    request: Request,
-    body: AdminLoginRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    outlet = (await db.execute(select(Outlet).where(Outlet.server_id == body.serverId))).scalar_one_or_none()
-    if outlet is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server ID not registered.")
-
-    identity = body.usernameOrEmail.strip()
-    email_identity = _clean_email(identity)
-    account = (
-        await db.execute(
-            select(AdminAccount).where(
-                (AdminAccount.outlet_id == outlet.id)
-                & (
-                    (AdminAccount.email == email_identity)
-                    | (AdminAccount.username == identity)
-                    | (AdminAccount.username == email_identity)
-                )
-            )
-        )
-    ).scalar_one_or_none()
-
-    if (
-        account is None
-        or not account.is_active
-        or not account.password_hash
-        or not verify_password(body.password, account.password_hash)
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
-
-    return ok(
-        await _auth_payload(
-            db=db,
-            outlet=outlet,
-            account=account,
-            server_id=body.serverId,
-            request=request,
-        )
-    )
-
-
-@router.post("/admin/demo/manager-login")
-async def demo_manager_login(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """One-tap demo manager session without Twilio. Enabled in development by default."""
-    if not _demo_manager_login_enabled():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
-    server_id = settings.DEMO_MANAGER_SERVER_ID.strip() or "DEMO-MANAGER"
-    outlet = (
-        await db.execute(select(Outlet).where(Outlet.server_id == server_id))
-    ).scalar_one_or_none()
-
-    if outlet is None:
-        restaurant = Restaurant(name="Demo Restaurant")
-        db.add(restaurant)
-        await db.flush()
-        outlet = Outlet(
-            id=str(uuid4()),
-            restaurant_id=restaurant.id,
-            name="Demo Outlet",
-            server_id=server_id,
-        )
-        db.add(outlet)
-        await db.flush()
-
-    phone = DEMO_PHONE
-    email = phone_to_synthetic_email(phone)
-    account = (
-        await db.execute(
-            select(AdminAccount).where(
-                AdminAccount.outlet_id == outlet.id,
-                AdminAccount.role.in_(MANAGEMENT_ROLES),
-            )
-        )
-    ).scalar_one_or_none()
-
-    now = datetime.now(timezone.utc)
-    if account is None:
-        account = AdminAccount(
-            id=str(uuid4()),
-            outlet_id=outlet.id,
-            email=email,
-            username="demo-manager",
-            password_hash=None,
-            role=OWNER,
-            display_name="Demo Manager",
-            auth_provider="phone",
-            phone=phone,
-            phone_verified_at=now,
-            invite_status=INVITE_ACCEPTED,
-            is_active=True,
-        )
-        db.add(account)
-    else:
-        account.phone = phone
-        account.phone_verified_at = now
-        account.invite_status = INVITE_ACCEPTED
-        account.is_active = True
-        if not account.display_name:
-            account.display_name = "Demo Manager"
-
-    await grant_outlet_access(db, outlet.id, plan="annual", extend_days=365)
-    await db.commit()
-    await db.refresh(outlet)
-    await db.refresh(account)
-
-    return ok(
-        {
-            "status": "authenticated",
-            **await _auth_payload(
-                db=db,
-                outlet=outlet,
-                account=account,
-                server_id=outlet.server_id,
-                request=request,
-            ),
-        }
-    )
 
 
 @router.post("/admin/phone/send-otp")
@@ -717,292 +512,6 @@ async def staff_invite_respond(
         request=request,
     )
     return ok({"status": "authenticated", **payload})
-
-
-@router.post("/admin/staff/dev-bypass-login")
-async def staff_dev_bypass_login(
-    request: Request,
-    body: StaffDevBypassLoginRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Dev-only staff login without Google. Disabled unless STAFF_DEV_BYPASS_SECRET is set."""
-    configured = settings.STAFF_DEV_BYPASS_SECRET.strip()
-    if not configured:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if body.bypassSecret.strip() != configured:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid bypass credential.",
-        )
-    sid = body.serverId.strip()
-    if not sid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="serverId is required.",
-        )
-    outlet = (
-        await db.execute(select(Outlet).where(Outlet.server_id == sid))
-    ).scalar_one_or_none()
-    if outlet is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server ID not registered.")
-    email = _clean_email(body.email)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="email is required.",
-        )
-    account = (
-        await db.execute(
-            select(AdminAccount).where(
-                (AdminAccount.outlet_id == outlet.id)
-                & (AdminAccount.role.in_(FLOOR_ROLES))
-                & (AdminAccount.email == email)
-            )
-        )
-    ).scalar_one_or_none()
-    if account is None or not account.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Staff email not found for this outlet.",
-        )
-    return ok(
-        await _auth_payload(
-            db=db,
-            outlet=outlet,
-            account=account,
-            server_id=outlet.server_id,
-            request=request,
-        )
-    )
-
-
-@router.post("/admin/google/start-or-login")
-async def google_start_or_login(
-    request: Request,
-    body: GoogleAdminAuthRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    claims = _verify_google_id_token(body.idToken)
-    email = _clean_email(claims["email"])
-    google_sub = claims["sub"]
-    display_name = claims.get("name") or email.split("@")[0]
-    requested_role = _normalize_role(body.role)
-    requested_server_id = (body.serverId or "").strip()
-
-    account = (
-        await db.execute(
-            select(AdminAccount).where(
-                (AdminAccount.google_sub == google_sub) | (AdminAccount.email == email)
-            )
-        )
-    ).scalar_one_or_none()
-
-    if account is not None:
-        resolved_outlet: Outlet | None = None
-        if requested_role not in MANAGEMENT_ROLES:
-            if requested_server_id:
-                resolved_outlet = (
-                    await db.execute(select(Outlet).where(Outlet.server_id == requested_server_id))
-                ).scalar_one_or_none()
-                if resolved_outlet is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="Server ID not registered. Ask your manager for the correct server link.",
-                    )
-            elif account.role not in MANAGEMENT_ROLES:
-                # Existing staff accounts can sign in without retyping serverId.
-                # Keep them bound to their current outlet for shared manager/staff
-                # sync when the app did not supply serverId.
-                resolved_outlet = (
-                    await db.execute(select(Outlet).where(Outlet.id == account.outlet_id))
-                ).scalar_one_or_none()
-                if resolved_outlet is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=(
-                            "Staff account outlet is missing. Ask your manager for the "
-                            "correct server link and sign in again."
-                        ),
-                    )
-            # Keep staff and manager apps on the same outlet. If this Google
-            # staff account was previously attached elsewhere, rebind it to
-            # the manager's serverId outlet to restore shared order sync.
-            if (
-                resolved_outlet is not None
-                and account.role not in MANAGEMENT_ROLES
-                and account.outlet_id != resolved_outlet.id
-            ):
-                account.outlet_id = resolved_outlet.id
-                account.role = WAITER
-        if not account.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff account is disabled.")
-        if not account.google_sub:
-            account.google_sub = google_sub
-        account.display_name = account.display_name or display_name
-        account.auth_provider = "google"
-        await db.commit()
-        await db.refresh(account)
-        outlet = resolved_outlet or (
-            await db.execute(select(Outlet).where(Outlet.id == account.outlet_id))
-        ).scalar_one()
-        return ok(
-            await _auth_payload(
-                db=db,
-                outlet=outlet,
-                account=account,
-                server_id=outlet.server_id,
-                request=request,
-            )
-        )
-
-    if requested_role not in MANAGEMENT_ROLES:
-        # Staff one-tap onboarding requires manager's serverId so both apps
-        # attach to the same outlet and share the same order stream.
-        if not requested_server_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "serverId is required for staff sign-up. "
-                    "Use the same server ID/link configured by your manager."
-                ),
-            )
-        target_outlet = (
-            await db.execute(select(Outlet).where(Outlet.server_id == requested_server_id))
-        ).scalar_one_or_none()
-        if target_outlet is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Server ID not registered. Ask your manager for the correct server link.",
-            )
-        account = AdminAccount(
-            outlet_id=target_outlet.id,
-            email=email,
-            username=email,
-            password_hash=None,
-            role=WAITER,
-            google_sub=google_sub,
-            display_name=display_name,
-            auth_provider="google",
-            is_active=True,
-        )
-        db.add(account)
-        await db.commit()
-        await db.refresh(account)
-        return ok(
-            await _auth_payload(
-                db=db,
-                outlet=target_outlet,
-                account=account,
-                server_id=target_outlet.server_id,
-                request=request,
-            )
-        )
-
-    restaurant_name = (body.restaurantName or "").strip()
-    outlet_name = (body.outletName or restaurant_name).strip() or restaurant_name
-    if not restaurant_name:
-        # No restaurant name → this is a login attempt for a Google email
-        # that has never signed up. Surface a 404 the app can recognize and
-        # route the user into the create-restaurant flow instead of failing
-        # with a confusing 400.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="account_not_found:No restaurant account is linked to this Google email. Please sign up to create your restaurant.",
-        )
-
-    restaurant = Restaurant(name=restaurant_name)
-    db.add(restaurant)
-    await db.flush()
-    server_id = (body.serverId or str(uuid4())).strip()
-    server_taken = (
-        await db.execute(select(Outlet).where(Outlet.server_id == server_id))
-    ).scalar_one_or_none()
-    if server_taken is not None:
-        server_id = str(uuid4())
-
-    # Same defensive pattern as /tenants/bootstrap: if the client-supplied
-    # outletId already exists (from a wiped install / different tenant),
-    # generate a fresh one so we don't violate outlets_pkey.
-    requested_outlet_id = (body.outletId or "").strip()
-    if requested_outlet_id:
-        conflict = (
-            await db.execute(select(Outlet).where(Outlet.id == requested_outlet_id))
-        ).scalar_one_or_none()
-        if conflict is not None:
-            requested_outlet_id = ""
-    outlet_id_to_use = requested_outlet_id or str(uuid4())
-
-    outlet = Outlet(
-        id=outlet_id_to_use,
-        restaurant_id=restaurant.id,
-        name=outlet_name,
-        server_id=server_id,
-        table_count=body.tableCount if body.tableCount is not None else 10,
-    )
-    db.add(outlet)
-    await db.flush()
-    account = AdminAccount(
-        outlet_id=outlet.id,
-        email=email,
-        username=email,
-        password_hash=None,
-        role=OWNER,
-        google_sub=google_sub,
-        display_name=display_name,
-        auth_provider="google",
-        is_active=True,
-    )
-    db.add(account)
-    await db.flush()
-    await get_or_create_subscription(db, outlet.id)
-    await db.commit()
-    await db.refresh(outlet)
-    await db.refresh(account)
-    return ok(
-        await _auth_payload(
-            db=db,
-            outlet=outlet,
-            account=account,
-            server_id=server_id,
-            request=request,
-        )
-    )
-
-
-@router.post("/admin/create")
-async def create_admin(body: AdminCreateRequest, db: AsyncSession = Depends(get_db)):
-    outlet = (await db.execute(select(Outlet).where(Outlet.id == body.outletId))).scalar_one_or_none()
-    if outlet is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outlet not found.")
-
-    email = _clean_email(body.email)
-    username = body.username.strip() or email
-    role = _normalize_role(body.role)
-    existing = (
-        await db.execute(
-            select(AdminAccount).where(
-                (AdminAccount.email == email) | (AdminAccount.username == username)
-            )
-        )
-    ).scalar_one_or_none()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or username already in use.")
-
-    account = AdminAccount(
-        outlet_id=body.outletId,
-        email=email,
-        username=username,
-        password_hash=hash_password(body.password) if body.password else None,
-        role=role,
-        google_sub=body.googleSub,
-        display_name=body.displayName,
-        auth_provider="google" if body.googleSub else "password",
-        is_active=True,
-    )
-    db.add(account)
-    await db.commit()
-    await db.refresh(account)
-    return ok({"created": True, "account": _account_dict(account)})
 
 
 @router.get("/admin/me")
@@ -1279,86 +788,46 @@ async def add_staff(
                 detail="An active manager already exists.",
             )
 
-    phone: str | None = None
-    email: str | None = None
-    if body.phone and body.phone.strip():
-        phone = _parse_phone_param(body.phone)
-        synthetic_email = phone_to_synthetic_email(phone)
-        existing = (
-            await db.execute(select(AdminAccount).where(AdminAccount.phone == phone))
-        ).scalar_one_or_none()
-        if existing:
-            if existing.outlet_id != manager.outlet_id:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Phone is already used by another outlet.",
-                )
-            existing.role = requested_role
-            existing.display_name = body.displayName or existing.display_name
-            existing.invited_by_name = manager.display_name
-            existing.invite_status = INVITE_PENDING
-            existing.is_active = False
-            existing.auth_provider = "phone"
-            existing.email = synthetic_email
-            existing.username = synthetic_email
-            await db.commit()
-            await db.refresh(existing)
-            return ok({"account": _account_dict(existing)})
-
-        account = AdminAccount(
-            outlet_id=manager.outlet_id,
-            email=synthetic_email,
-            username=synthetic_email,
-            password_hash=None,
-            role=requested_role,
-            phone=phone,
-            display_name=body.displayName,
-            invited_by_name=manager.display_name,
-            auth_provider="phone",
-            is_active=False,
-            invite_status=INVITE_PENDING,
-        )
-        db.add(account)
+    phone = _parse_phone_param(body.phone)
+    synthetic_email = phone_to_synthetic_email(phone)
+    existing = (
+        await db.execute(select(AdminAccount).where(AdminAccount.phone == phone))
+    ).scalar_one_or_none()
+    if existing:
+        if existing.outlet_id != manager.outlet_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Phone is already used by another outlet.",
+            )
+        existing.role = requested_role
+        existing.display_name = body.displayName or existing.display_name
+        existing.invited_by_name = manager.display_name
+        existing.invite_status = INVITE_PENDING
+        existing.is_active = False
+        existing.auth_provider = "phone"
+        existing.email = synthetic_email
+        existing.username = synthetic_email
         await db.commit()
-        await db.refresh(account)
-        return ok({"account": _account_dict(account)})
+        await db.refresh(existing)
+        return ok({"account": _account_dict(existing)})
 
-    if body.email and body.email.strip():
-        email = _clean_email(body.email)
-        existing = (await db.execute(select(AdminAccount).where(AdminAccount.email == email))).scalar_one_or_none()
-        if existing:
-            if existing.outlet_id != manager.outlet_id:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Email is already used by another outlet.",
-                )
-            existing.role = requested_role
-            existing.display_name = body.displayName or existing.display_name
-            existing.invited_by_name = manager.display_name
-            existing.is_active = True
-            existing.invite_status = INVITE_ACCEPTED
-            await db.commit()
-            await db.refresh(existing)
-            return ok({"account": _account_dict(existing)})
-
-        account = AdminAccount(
-            outlet_id=manager.outlet_id,
-            email=email,
-            username=email,
-            password_hash=None,
-            role=requested_role,
-            display_name=body.displayName,
-            invited_by_name=manager.display_name,
-            auth_provider="google",
-            is_active=True,
-            invite_status=INVITE_ACCEPTED,
-        )
-        db.add(account)
-        await db.commit()
-        await db.refresh(account)
-        return ok({"account": _account_dict(account)})
-
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone or email is required.")
+    account = AdminAccount(
+        outlet_id=manager.outlet_id,
+        email=synthetic_email,
+        username=synthetic_email,
+        password_hash=None,
+        role=requested_role,
+        phone=phone,
+        display_name=body.displayName,
+        invited_by_name=manager.display_name,
+        auth_provider="phone",
+        is_active=False,
+        invite_status=INVITE_PENDING,
+    )
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return ok({"account": _account_dict(account)})
 
 
 @router.patch("/admin/staff/{account_id}")

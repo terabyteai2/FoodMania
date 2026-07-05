@@ -37,22 +37,6 @@ void main() {
     expect(result.role, AccountRole.waiter);
   });
 
-  test(
-    'controller display label uses role placeholder for no-name phone users',
-    () {
-      final controller = PosAppController()
-        ..accountRole = AccountRole.waiter
-        ..accountEmail = '01921512040@phone.rastarant.local'
-        ..accountUsername = '01921512040@phone.rastarant.local'
-        ..accountDisplayName = '01921512040@phone.rastarant.local';
-
-      expect(controller.accountDisplayLabel, 'Staff member');
-      expect(controller.accountDisplayLabel, isNot(contains('@phone')));
-
-      controller.dispose();
-    },
-  );
-
   test('staff member name does not fall back to phone or synthetic email', () {
     final staff = StaffMember(
       id: 'staff-1',

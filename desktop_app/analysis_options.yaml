@@ -1,0 +1,8 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # desktop_app intentionally reuses admin_app's internals via
+    # package:local_pos/src/... (see pubspec + plan). That is a deliberate,
+    # single-source-of-truth reuse of the shared domain/data/controller layer.
+    implementation_imports: false

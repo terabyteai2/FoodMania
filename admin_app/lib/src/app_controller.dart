@@ -7,13 +7,11 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'core/constants/cloud_defaults.dart';
-import 'core/constants/google_auth_defaults.dart';
 import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
 import 'core/utils/bounded_string_set.dart';
@@ -237,10 +235,6 @@ class PosAppController extends ChangeNotifier {
   bool _handlingDatabaseChange = false;
   bool _databaseChangePending = false;
   AudioPlayer? _notificationPlayer;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['openid', 'email', 'profile'],
-    serverClientId: GoogleAuthDefaults.webClientId,
-  );
 
   bool initialized = false;
   bool busy = false;
@@ -274,7 +268,6 @@ class PosAppController extends ChangeNotifier {
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
   String? lastError;
-  bool demoManagerLoginEnabled = false;
   String phoneOtpMode = 'unconfigured';
   bool showDevOtpHint = false;
   String devOtpCodeHint = '000000';
@@ -284,7 +277,6 @@ class PosAppController extends ChangeNotifier {
   String accountEmail = '';
   String accountUsername = '';
   String accountDisplayName = '';
-  String _accountPassword = '';
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
 
@@ -604,7 +596,6 @@ class PosAppController extends ChangeNotifier {
       }
       _ownerViewPreview =
           preferences.getBool(_ownerViewPreviewKey) ?? false;
-      _accountPassword = preferences.getString(_accountPasswordKey) ?? '';
       notificationSoundEnabled =
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
       notificationSoundPath =
@@ -1760,62 +1751,6 @@ class PosAppController extends ChangeNotifier {
     });
   }
 
-  Future<bool> createAccountAndProvisionTenant({
-    required String restaurantName,
-    required String outletName,
-    required String email,
-    required String username,
-    required String password,
-  }) async {
-    return _runBusy(() async {
-      await _prepareNewRestaurantIdentity();
-      await _provisionTenantInternal(
-        restaurantName: restaurantName,
-        outletName: outletName,
-      );
-      accountEmail = email.trim();
-      accountUsername = username.trim();
-      accountRole = AccountRole.owner;
-      accountDisplayName = username.trim();
-      _accountPassword = password;
-      if (cloudConfig.canSync) {
-        await cloudApiService.createAdminAccount(
-          outletId: serverConfig.outletId,
-          email: accountEmail,
-          username: accountUsername,
-          password: password,
-          role: AccountRole.owner,
-          displayName: accountDisplayName,
-        );
-        await _loginCloudAccount(
-          usernameOrEmail: accountEmail,
-          password: password,
-        );
-        pendingHeroMediaSetup = true;
-        return;
-      }
-      isLoggedIn = true;
-      await _persistAccountAuth();
-      pendingHeroMediaSetup = true;
-    });
-  }
-
-  Future<bool> createManagerWithPassword({
-    required String restaurantName,
-    required String outletName,
-    required String email,
-    required String password,
-  }) {
-    final username = email.trim().toLowerCase();
-    return createAccountAndProvisionTenant(
-      restaurantName: restaurantName,
-      outletName: outletName,
-      email: username,
-      username: username,
-      password: password,
-    );
-  }
-
   String _normalizeBdPhoneInput(String raw) {
     var digits = raw.replaceAll(RegExp(r'\D'), '');
     if (digits.startsWith('880')) {
@@ -1848,7 +1783,6 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> refreshCloudCapabilities() async {
     if (!cloudConfig.canConnect) {
-      demoManagerLoginEnabled = false;
       phoneOtpMode = 'unconfigured';
       showDevOtpHint = false;
       notifyListeners();
@@ -1860,25 +1794,14 @@ class PosAppController extends ChangeNotifier {
       final data = health['data'] is Map
           ? Map<String, Object?>.from(health['data'] as Map)
           : health;
-      demoManagerLoginEnabled = data['demoManagerLoginEnabled'] == true;
       phoneOtpMode = data['phoneOtpMode']?.toString() ?? 'unconfigured';
       showDevOtpHint =
           phoneOtpMode == 'dev_bypass' || phoneOtpMode == 'dev_fallback';
     } catch (_) {
-      demoManagerLoginEnabled = false;
       phoneOtpMode = 'unconfigured';
       showDevOtpHint = false;
     }
     notifyListeners();
-  }
-
-  Future<bool> loginAsDemoManager() async {
-    return _runBusy(() async {
-      await _ensurePhoneAuthCloudConfigured();
-      final result = await cloudApiService.demoManagerLogin();
-      await _finishPhoneAuthenticatedLogin(result);
-      await clearOnboardingPaymentRequired();
-    });
   }
 
   Future<bool> sendPhoneOtp(String phoneInput, {String? appSignature}) async {
@@ -1969,7 +1892,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> _finishPhoneAuthenticatedLogin(AdminLoginResult result) async {
     final wasFreshTenant = serverConfig.outletId != result.outletId;
-    _applyAdminLoginResult(result, password: '');
+    _applyAdminLoginResult(result);
     await _applyServerAppAccess(result.hasAppAccess);
     hasSeenIntro = true;
     final preferences = await SharedPreferences.getInstance();
@@ -2050,229 +1973,6 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> googleLoginOrSignup({
-    required AccountRole role,
-    String? restaurantName,
-    String? outletName,
-
-    /// When set (e.g. staff flow), used as Cloud API base before hitting /admin/google.
-    String? cloudApiUrlOverride,
-  }) async {
-    return _runBusy(() async {
-      GoogleSignInAccount? googleUser;
-      GoogleAuthPreflightResult? googlePreflight;
-      debugPrint(
-        '[QB-AUTH] googleLoginOrSignup start role=$role url=$cloudApiUrlOverride',
-      );
-      googlePreflight = await connectivityService.runGoogleAuthPreflight();
-      debugPrint('[QB-AUTH] google preflight: ${googlePreflight.debugSummary}');
-      if (!googlePreflight.ok) {
-        throw Exception(
-          'Google sign-in preflight failed (${googlePreflight.reasonCode}). ${googlePreflight.userMessage}',
-        );
-      }
-      // Always sign the previous Google session out first so the account
-      // chooser is shown. Without this, a returning user is silently logged
-      // in to the cached account and can never pick a different one for a
-      // second restaurant.
-      try {
-        await _googleSignIn.signOut();
-        debugPrint('[QB-AUTH] previous Google session signed out');
-      } catch (e) {
-        debugPrint('[QB-AUTH] signOut threw (ok on first run): $e');
-      }
-      try {
-        debugPrint('[QB-AUTH] invoking GoogleSignIn.signIn()');
-        googleUser = await _googleSignIn.signIn();
-        debugPrint(
-          '[QB-AUTH] signIn() returned: ${googleUser?.email ?? 'null'}',
-        );
-      } on PlatformException catch (error) {
-        debugPrint(
-          '[QB-AUTH] PlatformException code=${error.code} message=${error.message} details=${error.details}',
-        );
-        // GMS codes: 7=NETWORK_ERROR, 10=DEVELOPER_ERROR (SHA-1/client config),
-        // 12500=SIGN_IN_FAILED, 12501=SIGN_IN_CANCELLED, 12502=SIGN_IN_CURRENTLY_IN_PROGRESS.
-        final code = error.code;
-        final msg = error.message ?? '';
-        String friendly;
-        if (code == 'network_error' || msg.contains('ApiException: 7')) {
-          debugPrint(
-            '[QB-AUTH] ApiException:7 diagnostics -> ${googlePreflight.debugSummary}',
-          );
-          friendly =
-              "Couldn't reach Google to complete sign-in. "
-              '${googlePreflight.userMessage}';
-        } else if (msg.contains('ApiException: 10')) {
-          friendly =
-              'Google rejected this build. Register an Android OAuth client in Google Cloud with package com.terabyteai.foodmania.posadmin and this build\'s SHA-1, then rebuild.';
-        } else if (msg.contains('ApiException: 12501') ||
-            code == 'sign_in_canceled') {
-          friendly = 'Sign-in cancelled.';
-        } else {
-          friendly =
-              'Google sign-in failed. Details: $code${msg.isEmpty ? '' : ' — $msg'}';
-        }
-        throw Exception(friendly);
-      } catch (error) {
-        debugPrint('[QB-AUTH] signIn() unknown error: $error');
-        rethrow;
-      }
-      if (googleUser == null) {
-        debugPrint(
-          '[QB-AUTH] googleUser is null (user cancelled OR no Android OAuth client registered)',
-        );
-        throw Exception('Google sign-in was cancelled.');
-      }
-      debugPrint('[QB-AUTH] requesting authentication tokens…');
-      final auth = await googleUser.authentication;
-      final idToken = auth.idToken;
-      debugPrint(
-        '[QB-AUTH] idToken length=${idToken?.length ?? 0} accessTokenPresent=${auth.accessToken != null}',
-      );
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception(
-          'Google did not return an ID token. Check POS_GOOGLE_WEB_CLIENT_ID and make sure it is a Web OAuth client ID.',
-        );
-      }
-      debugPrint(
-        '[QB-AUTH] posting idToken to backend at ${cloudApiUrlOverride ?? cloudConfig.baseUrl}',
-      );
-      // Manager signup with a restaurant name is a create-tenant flow — do not
-      // reuse this device's serverId or the backend will bind to an old outlet.
-      if (role.isManager && (restaurantName?.trim().isNotEmpty ?? false)) {
-        await _prepareNewRestaurantIdentity();
-      }
-      final resolvedBase = _resolvedCloudBaseUrl(cloudApiUrlOverride);
-      final loginCloudConfig = cloudConfig.copyWith(
-        baseUrl: resolvedBase,
-        enabled: true,
-      );
-      if (!loginCloudConfig.hasValidBaseUrl) {
-        throw Exception(
-          'Enter a valid server URL (https://… or http://…). Ask your manager for the same link they use in Settings → Cloud sync.',
-        );
-      }
-      cloudConfig = loginCloudConfig;
-      await _persistSettings();
-      cloudApiService.configure(
-        cloudConfig: loginCloudConfig,
-        serverConfig: serverConfig,
-      );
-      AdminLoginResult result;
-      var mustCollectRestaurantNameAfterAuth = false;
-      // Pass through whatever the caller supplied. If manager login returns
-      // account_not_found, retry once in the same Google session with temporary
-      // names so we don't force the user to pick the same Google account twice.
-      try {
-        result = await cloudApiService.googleStartOrLogin(
-          idToken: idToken,
-          role: role,
-          serverId: serverConfig.serverId,
-          tableCount: serverConfig.tableCount,
-          restaurantName: restaurantName,
-          outletName: outletName,
-          restaurantId: serverConfig.restaurantId,
-          outletId: serverConfig.outletId,
-        );
-      } catch (error) {
-        final fallbackToSignup =
-            role.isManager &&
-            (restaurantName?.trim().isEmpty ?? true) &&
-            _isAccountNotFoundError(error);
-        if (!fallbackToSignup) rethrow;
-        debugPrint(
-          '[QB-AUTH] account_not_found -> auto-signup retry with same Google token',
-        );
-        result = await cloudApiService.googleStartOrLogin(
-          idToken: idToken,
-          role: role,
-          serverId: serverConfig.serverId,
-          tableCount: serverConfig.tableCount,
-          restaurantName: 'My Restaurant',
-          outletName: 'My Restaurant',
-          restaurantId: serverConfig.restaurantId,
-          outletId: serverConfig.outletId,
-        );
-        mustCollectRestaurantNameAfterAuth = true;
-      }
-      final wasFreshTenant =
-          role.isManager && serverConfig.outletId != result.outletId;
-      _applyAdminLoginResult(result, password: '');
-      await _applyServerAppAccess(result.hasAppAccess);
-      hasSeenIntro = true;
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setBool(_seenIntroKey, true);
-      await _persistSettings();
-      await _persistAccountAuth();
-      await _switchTenantIfNeeded();
-      syncService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      unawaited(syncService.syncNow());
-      unawaited(syncSubscriptionAccessFromCloud());
-      // Only ask for hero media when this Google sign-in created a brand-new
-      // tenant — returning managers should land straight on the dashboard.
-      if (wasFreshTenant) {
-        pendingHeroMediaSetup = true;
-        await markOnboardingPaymentRequired();
-      } else {
-        await clearOnboardingPaymentRequired();
-      }
-      if (mustCollectRestaurantNameAfterAuth) {
-        await requireRestaurantNamingAfterGoogleSignup();
-      }
-    });
-  }
-
-  /// Staff sign-in without Google — only works when backend sets STAFF_DEV_BYPASS_SECRET.
-  /// Enabled in Flutter via debug builds or --dart-define=POS_STAFF_DEV_BYPASS=true.
-  Future<bool> staffDevBypassLogin({
-    required String email,
-    required String serverId,
-    required String bypassSecret,
-    String? cloudApiUrlOverride,
-  }) async {
-    return _runBusy(() async {
-      final resolvedBase = _resolvedCloudBaseUrl(cloudApiUrlOverride);
-      final loginCloudConfig = cloudConfig.copyWith(
-        baseUrl: resolvedBase,
-        enabled: true,
-      );
-      if (!loginCloudConfig.hasValidBaseUrl) {
-        throw Exception(
-          'Enter a valid server URL (https://… or http://…). Ask your manager for the same link they use in Settings → Cloud sync.',
-        );
-      }
-      cloudConfig = loginCloudConfig;
-      await _persistSettings();
-      cloudApiService.configure(
-        cloudConfig: loginCloudConfig,
-        serverConfig: serverConfig,
-      );
-      final result = await cloudApiService.staffDevBypassLogin(
-        email: email,
-        serverId: serverId,
-        bypassSecret: bypassSecret,
-      );
-      _applyAdminLoginResult(result, password: '');
-      await _applyServerAppAccess(result.hasAppAccess);
-      hasSeenIntro = true;
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setBool(_seenIntroKey, true);
-      await _persistSettings();
-      await _persistAccountAuth();
-      await _switchTenantIfNeeded();
-      syncService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      unawaited(syncService.syncNow());
-      unawaited(syncSubscriptionAccessFromCloud());
-    });
-  }
-
   /// Called by the hero-media step when the manager finishes uploads (or
   /// taps "I'll do this later"). Clears the flag so the parent shell can
   /// finally mount MainShell.
@@ -2280,62 +1980,6 @@ class PosAppController extends ChangeNotifier {
     if (!pendingHeroMediaSetup) return;
     pendingHeroMediaSetup = false;
     notifyListeners();
-  }
-
-  Future<bool> loginWithAccount({
-    required String usernameOrEmail,
-    required String password,
-  }) async {
-    return _runBusy(() async {
-      final id = usernameOrEmail.trim().toLowerCase();
-      final cloudErrors = <Object>[];
-      if (cloudConfig.hasValidBaseUrl) {
-        try {
-          await _loginCloudAccount(usernameOrEmail: id, password: password);
-          return;
-        } catch (error) {
-          cloudErrors.add(error);
-        }
-      }
-
-      if (accountUsername.trim().isEmpty || _accountPassword.isEmpty) {
-        if (cloudErrors.isNotEmpty) {
-          throw Exception(cloudErrors.first.toString());
-        }
-        throw Exception(
-          'No account found on this device. Please create account first.',
-        );
-      }
-      await _loginLocalAccount(usernameOrEmail: id, password: password);
-    });
-  }
-
-  Future<void> _loginCloudAccount({
-    required String usernameOrEmail,
-    required String password,
-  }) async {
-    final loginCloudConfig = cloudConfig.copyWith(
-      baseUrl: CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl),
-      enabled: true,
-    );
-    cloudApiService.configure(
-      cloudConfig: loginCloudConfig,
-      serverConfig: serverConfig,
-    );
-    final result = await cloudApiService.loginAdminAccount(
-      usernameOrEmail: usernameOrEmail,
-      password: password,
-      serverId: serverConfig.serverId,
-    );
-    cloudConfig = loginCloudConfig;
-    _applyAdminLoginResult(result, password: password);
-    await _applyServerAppAccess(result.hasAppAccess);
-    await _persistSettings();
-    await _persistAccountAuth();
-    await _switchTenantIfNeeded();
-    syncService.configure(cloudConfig: cloudConfig, serverConfig: serverConfig);
-    unawaited(syncService.syncNow());
-    unawaited(syncSubscriptionAccessFromCloud());
   }
 
   /// Open the local SQLite file that belongs to the current tenant. Two
@@ -2403,14 +2047,6 @@ class PosAppController extends ChangeNotifier {
     final uri = Uri.tryParse(raw);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) return fallback;
     return raw;
-  }
-
-  String _resolvedCloudBaseUrl(String? override) {
-    final hint = override?.trim();
-    if (hint != null && hint.isNotEmpty) {
-      return CloudDefaults.resolveBaseUrl(hint);
-    }
-    return CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl);
   }
 
   void _handleRemoteSyncEvent(Map<String, Object?> event) {
@@ -2815,10 +2451,7 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
-  void _applyAdminLoginResult(
-    AdminLoginResult result, {
-    required String password,
-  }) {
+  void _applyAdminLoginResult(AdminLoginResult result) {
     final resolvedBase = _mergePublicApiBaseUrl(
       result.publicApiBaseUrl,
       CloudDefaults.resolveBaseUrl(cloudConfig.baseUrl),
@@ -2848,29 +2481,7 @@ class PosAppController extends ChangeNotifier {
     accountUsername = result.username;
     accountDisplayName = result.displayName ?? result.username;
     accountRole = result.role;
-    _accountPassword = password;
     isLoggedIn = true;
-  }
-
-  Future<void> _loginLocalAccount({
-    required String usernameOrEmail,
-    required String password,
-  }) async {
-    final usernameMatch =
-        accountUsername.trim().toLowerCase() == usernameOrEmail;
-    final emailMatch = accountEmail.trim().toLowerCase() == usernameOrEmail;
-    if ((!usernameMatch && !emailMatch) || _accountPassword != password) {
-      throw Exception('Invalid username/email or password.');
-    }
-    if (!isTenantReady) {
-      throw Exception(
-        'Restaurant setup is incomplete on this device. Please create account again.',
-      );
-    }
-    isLoggedIn = true;
-    // A local-only (no-cloud) account is always the tenant creator → owner.
-    accountRole = AccountRole.owner;
-    await _persistAccountAuth();
   }
 
   Future<void> logOut() async {
@@ -2914,11 +2525,6 @@ class PosAppController extends ChangeNotifier {
     _ownerViewPreview = false;
     await preferences.remove(_ownerViewPreviewKey);
     selectedSubscriptionPlan = '';
-    // Drop the cached Google session so the next sign-in shows the account
-    // chooser instead of silently re-using the previous account.
-    try {
-      await _googleSignIn.signOut();
-    } catch (_) {}
     // Tear down the realtime WebSocket so the next login forces a fresh
     // connection with the new device token — otherwise the stale socket
     // would keep using the old JWT and order events could stop flowing.
@@ -4665,7 +4271,6 @@ class PosAppController extends ChangeNotifier {
     await preferences.setString(_accountUsernameKey, accountUsername);
     await preferences.setString(_accountDisplayNameKey, accountDisplayName);
     await preferences.setString(_accountRoleKey, accountRole.value);
-    await preferences.setString(_accountPasswordKey, _accountPassword);
     await preferences.setBool(_accountLoggedInKey, isLoggedIn);
   }
 
@@ -4790,14 +4395,6 @@ class PosAppController extends ChangeNotifier {
     return trimmed;
   }
 
-  bool _isAccountNotFoundError(Object error) {
-    final message = error.toString().toLowerCase();
-    return message.contains('account_not_found:') ||
-        message.contains(
-          'no restaurant account is linked to this google email',
-        );
-  }
-
   static final String _seenIntroKey = 'local_pos_seen_intro';
   static final String _restaurantNameKey = 'local_pos_restaurant_name';
   static final String _outletNameKey = 'local_pos_outlet_name';
@@ -4826,7 +4423,6 @@ class PosAppController extends ChangeNotifier {
   static final String _accountDisplayNameKey = 'local_pos_account_display_name';
   static final String _accountRoleKey = 'local_pos_account_role';
   static final String _ownerViewPreviewKey = 'local_pos_owner_view_preview';
-  static final String _accountPasswordKey = 'local_pos_account_password';
   static final String _accountLoggedInKey = 'local_pos_account_logged_in';
   static final String _notificationSoundEnabledKey =
       'local_pos_notification_sound_enabled';

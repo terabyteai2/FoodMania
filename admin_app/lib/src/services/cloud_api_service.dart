@@ -757,27 +757,6 @@ class CloudApiService {
     return TenantBootstrapResult.fromJson(response);
   }
 
-  Future<AdminLoginResult> loginAdminAccount({
-    required String usernameOrEmail,
-    required String password,
-    required String serverId,
-  }) async {
-    final uri = _uri('/admin/login');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson(
-      'POST',
-      uri,
-      body: {
-        'usernameOrEmail': usernameOrEmail.trim(),
-        'password': password,
-        'serverId': serverId,
-      },
-    );
-    return AdminLoginResult.fromJson(response);
-  }
-
   Future<PhoneOtpSendResult> sendPhoneOtp({
     required String phone,
     String? appSignature,
@@ -867,70 +846,6 @@ class CloudApiService {
       },
     );
     return PhoneVerifyResult.fromJson(response);
-  }
-
-  Future<AdminLoginResult> googleStartOrLogin({
-    required String idToken,
-    required AccountRole role,
-    required String serverId,
-    int? tableCount,
-    String? restaurantName,
-    String? outletName,
-    String? restaurantId,
-    String? outletId,
-  }) async {
-    final uri = _uri('/admin/google/start-or-login');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson(
-      'POST',
-      uri,
-      body: {
-        'idToken': idToken,
-        'role': role.value,
-        'serverId': serverId,
-        if (tableCount != null) 'tableCount': tableCount.clamp(0, 200),
-        if (restaurantName?.trim().isNotEmpty == true)
-          'restaurantName': restaurantName!.trim(),
-        if (outletName?.trim().isNotEmpty == true)
-          'outletName': outletName!.trim(),
-        if (restaurantId?.trim().isNotEmpty == true)
-          'restaurantId': restaurantId!.trim(),
-        if (outletId?.trim().isNotEmpty == true) 'outletId': outletId!.trim(),
-      },
-    );
-    return AdminLoginResult.fromJson(response);
-  }
-
-  Future<AdminLoginResult> demoManagerLogin() async {
-    final uri = _uri('/admin/demo/manager-login');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson('POST', uri, body: {});
-    return AdminLoginResult.fromJson(response);
-  }
-
-  Future<AdminLoginResult> staffDevBypassLogin({
-    required String email,
-    required String serverId,
-    required String bypassSecret,
-  }) async {
-    final uri = _uri('/admin/staff/dev-bypass-login');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson(
-      'POST',
-      uri,
-      body: {
-        'email': email.trim(),
-        'serverId': serverId.trim(),
-        'bypassSecret': bypassSecret,
-      },
-    );
-    return AdminLoginResult.fromJson(response);
   }
 
   /// Register monthly/annual plan choice so platform admin can activate the outlet.
@@ -1085,33 +1000,6 @@ class CloudApiService {
       },
     );
     return FacebookChatbotConfig.fromJson(response);
-  }
-
-  Future<Map<String, Object?>> createAdminAccount({
-    required String outletId,
-    required String email,
-    required String username,
-    String? password,
-    AccountRole role = AccountRole.manager,
-    String? displayName,
-  }) async {
-    final uri = _uri('/admin/create');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    return _sendJson(
-      'POST',
-      uri,
-      body: {
-        'outletId': outletId,
-        'email': email,
-        'username': username,
-        if (password?.isNotEmpty == true) 'password': password,
-        'role': role.value,
-        if (displayName?.trim().isNotEmpty == true)
-          'displayName': displayName!.trim(),
-      },
-    );
   }
 
   Future<List<Map<String, Object?>>> listStaffAccounts() async {

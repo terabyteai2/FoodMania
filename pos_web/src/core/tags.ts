@@ -59,6 +59,22 @@ export function parseExtras(tags: string[] | null | undefined): MenuExtras {
   return extras;
 }
 
+/** Encode extras back into the tag string list (inverse of parseExtras). */
+export function buildTags(extras: MenuExtras): string[] {
+  const tags: string[] = [];
+  if (extras.iconKey) tags.push(`icon:${extras.iconKey}`);
+  if (extras.discountPercent && extras.discountPercent > 0) {
+    tags.push(`discount:percent:${extras.discountPercent}`);
+  } else if (extras.discountFlat && extras.discountFlat > 0) {
+    tags.push(`discount:flat:${extras.discountFlat}`);
+  }
+  for (const inc of extras.includes) if (inc.trim()) tags.push(`inc:${inc.trim()}`);
+  for (const o of extras.options) if (o.name.trim()) tags.push(`option:${o.name.trim()}:${o.priceDelta}`);
+  for (const s of extras.sizes) if (s.name.trim() && s.price > 0) tags.push(`size:${s.name.trim()}:${s.price}`);
+  for (const a of extras.addOns) if (a.name.trim()) tags.push(`addon:${a.price}:${a.name.trim()}`);
+  return tags;
+}
+
 /** Unit price after item-level discount tags (shown struck-through in the grid). */
 export function effectiveUnitPrice(basePrice: number, extras: MenuExtras): number {
   let price = basePrice;

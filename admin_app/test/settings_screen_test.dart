@@ -100,8 +100,7 @@ void main() {
       'with restaurant identity fields up top and no Restaurant/Restaurant '
       'Details detour', (tester) async {
     final controller = PosAppController()
-      ..language = AppLanguage.en
-      ..demoManagerLoginEnabled = true;
+      ..language = AppLanguage.en;
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 

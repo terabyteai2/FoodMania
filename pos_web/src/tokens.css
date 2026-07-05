@@ -6,13 +6,13 @@
    ============================================================ */
 
 /* ---------- fonts (self-hosted) ---------- */
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-Regular.ttf'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-Medium.ttf'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-SemiBold.ttf'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-Bold.ttf'); font-weight: 700; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/pos/fonts/PlusJakartaSans-ExtraBold.ttf'); font-weight: 800; font-display: swap; }
-@font-face { font-family: 'Hind Siliguri'; src: url('/pos/fonts/HindSiliguri-Regular.ttf'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Hind Siliguri'; src: url('/pos/fonts/HindSiliguri-Medium.ttf'); font-weight: 500 700; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-Regular.ttf'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-Medium.ttf'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-SemiBold.ttf'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-Bold.ttf'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-ExtraBold.ttf'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Hind Siliguri'; src: url('/fonts/HindSiliguri-Regular.ttf'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Hind Siliguri'; src: url('/fonts/HindSiliguri-Medium.ttf'); font-weight: 500 700; font-display: swap; }
 
 :root {
   /* ---------- brand (the one substitution) ---------- */

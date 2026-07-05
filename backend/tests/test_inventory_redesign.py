@@ -1,10 +1,16 @@
 import uuid
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
-from database import create_tables
+from auth import create_device_token
+from database import AsyncSessionLocal, create_tables
 from main import app
+from models import AdminAccount, Outlet
+from phone_utils import phone_to_synthetic_email
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -20,26 +26,28 @@ async def test_supplier_and_batch_adjustments_capture_actor_and_rollback_togethe
             )
         ).json()["data"]
         outlet_id = boot["outletId"]
-        await client.post(
-            "/admin/create",
-            json={
-                "outletId": outlet_id,
-                "email": f"inventory-{suffix}@example.com",
-                "username": f"inventory-{suffix}@example.com",
-                "password": "password",
-                "role": "manager",
-            },
-        )
-        login = await client.post(
-            "/admin/login",
-            json={
-                "serverId": f"inventory-redesign-{suffix}",
-                "usernameOrEmail": f"inventory-{suffix}@example.com",
-                "password": "password",
-            },
-        )
-        token = login.json()["data"]["deviceToken"]
-        account_id = login.json()["data"]["account"]["id"]
+        async with AsyncSessionLocal() as db:
+            outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
+            phone = f"+88017{suffix.hex[:8]}"
+            account = AdminAccount(
+                id=str(uuid4()),
+                outlet_id=outlet.id,
+                email=phone_to_synthetic_email(phone),
+                username=phone_to_synthetic_email(phone),
+                password_hash=None,
+                role="owner",
+                display_name="Test Manager",
+                auth_provider="phone",
+                phone=phone,
+                phone_verified_at=datetime.now(timezone.utc),
+                invite_status="accepted",
+                is_active=True,
+            )
+            db.add(account)
+            await db.commit()
+            await db.refresh(account)
+            token = create_device_token(outlet.id, account.id)
+            account_id = account.id
         headers = {"Authorization": f"Bearer {token}"}
 
         supplier = await client.post(

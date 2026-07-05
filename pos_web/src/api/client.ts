@@ -1,11 +1,24 @@
 // Thin fetch wrapper over the FastAPI backend.
-// Prod: same origin (app is served at /pos/*). Dev: set VITE_API_BASE.
+// Prod: same origin (app is served at the site root). Dev: set VITE_API_BASE.
 
 import type {
-  ApiEnvelope, AuthPayload, MenuItemWire, OrderWire, PhoneOtpSendResult,
-  PhoneVerifyResult, PosReportWire, PosSettingsWire, PosSettlementLineWire,
-  PosShiftWire,
+  AnalyticsRange, AnalyticsSummaryWire, ApiEnvelope, AuthPayload,
+  DailyStockCountPayload, DailyStockCountResult, DashboardSummaryWire,
+  InventoryDailyReportWire, InventoryItemPayload,
+  InventoryItemWire, InventoryPullWire, InventorySummaryWire, InventorySupplierPayload,
+  InventorySupplierWire, MenuItemPayload, MenuItemWire, OrderBucketsWire, OrderWire,
+  PerformanceReportWire, PhoneCompleteManagerSignupRequest, PhoneOtpSendResult,
+  PhoneVerifyResult, PosReportWire, PosSettingsWire,
+  PosSettlementLineWire, PosShiftWire, StaffInviteRespondRequest,
+  StockAdjustmentPayload, StockAdjustmentResult,
 } from './types';
+
+function qs(params: Record<string, string | number | undefined | null>): string {
+  const pairs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+  return pairs.length ? `?${pairs.join('&')}` : '';
+}
 
 export const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
 
@@ -67,12 +80,6 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
 // ---------- auth ----------
 export const api = {
-  login: (serverId: string, usernameOrEmail: string, password: string) =>
-    request<AuthPayload>('/admin/login', {
-      method: 'POST', auth: false,
-      body: { serverId, usernameOrEmail, password },
-    }),
-
   demoManagerLogin: () =>
     request<AuthPayload>('/admin/demo/manager-login', { method: 'POST', auth: false }),
 
@@ -86,6 +93,16 @@ export const api = {
       method: 'POST', auth: false, body: { phone, code },
     }),
 
+  completeManagerSignup: (body: PhoneCompleteManagerSignupRequest) =>
+    request<AuthPayload>('/admin/phone/complete-manager-signup', {
+      method: 'POST', auth: false, body,
+    }),
+
+  respondStaffInvite: (body: StaffInviteRespondRequest) =>
+    request<AuthPayload>('/admin/staff/invite/respond', {
+      method: 'POST', auth: false, body,
+    }),
+
   adminAccess: () => request<{ hasAppAccess: boolean; subscriptionStatus?: string }>('/admin/access'),
 
   // ---------- data pulls ----------
@@ -96,6 +113,27 @@ export const api = {
   fetchCurrentShift: (outletId: string) => request<PosShiftWire | null>(`/outlets/${outletId}/pos/shifts/current`),
   fetchPosReport: (outletId: string, days = 1) =>
     request<PosReportWire>(`/outlets/${outletId}/pos/reports?days=${days}`),
+
+  // ---------- Phase B: back-office reads ----------
+  fetchDashboardSummary: (outletId: string, asOf?: string) =>
+    request<DashboardSummaryWire>(`/outlets/${outletId}/dashboard/summary${qs({ as_of: asOf })}`),
+  fetchAnalyticsSummary: (
+    outletId: string,
+    params: { range: AnalyticsRange; start?: string; end?: string; service?: string; paymentMethod?: string },
+  ) =>
+    request<AnalyticsSummaryWire>(`/outlets/${outletId}/analytics/summary${qs({
+      range: params.range, start: params.start, end: params.end,
+      service: params.service, payment_method: params.paymentMethod,
+    })}`),
+  fetchOrderBuckets: (outletId: string, range: AnalyticsRange, start?: string, end?: string) =>
+    request<OrderBucketsWire>(`/outlets/${outletId}/reports/order-buckets${qs({ range, start, end })}`),
+  fetchPerformanceReport: (
+    outletId: string,
+    params: { granularity?: string; category?: string; start?: string; days?: number },
+  ) =>
+    request<PerformanceReportWire>(`/outlets/${outletId}/reports/performance${qs({
+      granularity: params.granularity, category: params.category, start: params.start, days: params.days,
+    })}`),
 
   // ---------- mutations ----------
   createOrder: (outletId: string, order: Record<string, unknown>) =>
@@ -129,6 +167,38 @@ export const api = {
     request<{ eventId: string; action: string }>(
       `/outlets/${outletId}/pos/orders/${orderId}/audit`, { method: 'POST', body },
     ),
+
+  // ---------- Phase B: menu management writes ----------
+  // POST /menu is an upsert keyed on `id` — used for both create and edit (send the full,
+  // merged MenuItemPayload; backend replaces every field, shortCode only when non-null).
+  pushMenuItem: (outletId: string, item: MenuItemPayload) =>
+    request<MenuItemWire>(`/outlets/${outletId}/menu`, { method: 'POST', body: item }),
+  deleteMenuItem: (outletId: string, itemId: string) =>
+    request<{ deleted: boolean }>(`/outlets/${outletId}/menu/${itemId}`, { method: 'DELETE' }),
+
+  // ---------- Phase B3: inventory (owner-only on the backend) ----------
+  fetchInventorySummary: (outletId: string, params: { asOf?: string; start?: string; end?: string } = {}) =>
+    request<InventorySummaryWire>(`/outlets/${outletId}/inventory/summary${qs({
+      as_of: params.asOf, start: params.start, end: params.end,
+    })}`),
+  pullInventory: (outletId: string, since?: string) =>
+    request<InventoryPullWire>(`/outlets/${outletId}/inventory${qs({ since })}`),
+  fetchInventoryDailyReport: (outletId: string, date?: string) =>
+    request<InventoryDailyReportWire>(`/outlets/${outletId}/inventory/daily-report${qs({ date })}`),
+  fetchInventorySuppliers: (outletId: string, includeArchived = false) =>
+    request<InventorySupplierWire[]>(`/outlets/${outletId}/inventory/suppliers${qs({
+      include_archived: includeArchived ? 'true' : undefined,
+    })}`),
+  pushInventoryItem: (outletId: string, item: InventoryItemPayload) =>
+    request<InventoryItemWire>(`/outlets/${outletId}/inventory/items`, { method: 'POST', body: item }),
+  deleteInventoryItem: (outletId: string, itemId: string) =>
+    request<{ id: string; deletedAt: string }>(`/outlets/${outletId}/inventory/items/${itemId}`, { method: 'DELETE' }),
+  postInventoryAdjustment: (outletId: string, body: StockAdjustmentPayload) =>
+    request<StockAdjustmentResult>(`/outlets/${outletId}/inventory/adjustments`, { method: 'POST', body }),
+  postDailyStockCount: (outletId: string, body: DailyStockCountPayload) =>
+    request<DailyStockCountResult>(`/outlets/${outletId}/inventory/daily-counts`, { method: 'POST', body }),
+  saveInventorySupplier: (outletId: string, body: InventorySupplierPayload) =>
+    request<InventorySupplierWire>(`/outlets/${outletId}/inventory/suppliers`, { method: 'POST', body }),
 };
 
 export function wsUrl(outletId: string, token: string): string {

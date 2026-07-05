@@ -1,0 +1,96 @@
+/* Shared chrome for the back-office panes (Dashboard / Analytics / Reports / Tax / Menu).
+   Builds on the DayEnd idiom (.card grids + key/value rows). */
+
+.bo-root {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 16px 18px 40px; display: flex; flex-direction: column; gap: 16px;
+}
+.bo-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bo-head h2 { font-size: var(--fs-20); font-weight: 800; }
+.bo-sub { font-size: var(--fs-13); color: var(--muted); }
+.bo-head-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bo-err { color: var(--danger); font-size: var(--fs-13); font-weight: 600; }
+.bo-loading { color: var(--muted); font-size: var(--fs-13); padding: 24px 0; text-align: center; }
+.bo-muted { font-size: var(--fs-13); color: var(--muted); }
+
+/* label text when the whole control is a <label className="field"> with a <span> caption */
+.field > span { font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); }
+
+/* period picker */
+.period { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.period-btn {
+  height: 32px; padding: 0 12px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px; font-size: var(--fs-13); font-weight: 700; color: var(--ink-2); cursor: pointer;
+}
+.period-btn:hover { border-color: var(--primary); color: var(--primary); }
+.period-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.period-custom { display: inline-flex; align-items: center; gap: 6px; }
+.period-custom .input { height: 32px; width: 148px; }
+.period-dash { color: var(--muted); }
+
+/* KPI card grid (reuses the DayEnd card look) */
+.bo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.bo-card { padding: 16px; display: flex; flex-direction: column; gap: 5px; }
+.bo-card.accent { background: linear-gradient(180deg, var(--primary-soft) 0%, #fff 60%); box-shadow: inset 0 0 0 1px var(--primary); }
+.bo-card-title { font-size: var(--fs-12); font-weight: 700; color: var(--ink-2); }
+.bo-card-value { font-size: 24px; font-weight: 800; color: var(--ink); }
+.bo-card.accent .bo-card-value { color: var(--primary); }
+.bo-card-sub { font-size: var(--fs-12); color: var(--muted); }
+.bo-card-sub.up { color: var(--success); }
+.bo-card-sub.down { color: var(--danger); }
+
+/* panels + key/value rows */
+.bo-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+.bo-panel { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.bo-panel h3 { font-size: var(--fs-14); font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.3px; }
+.bo-panel-wide { grid-column: 1 / -1; }
+.bo-line { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-14); }
+.bo-line.strong { font-weight: 800; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.bo-line.pos { color: var(--success); }
+.bo-line.neg { color: var(--danger); }
+.bo-line-sub { color: var(--muted); font-size: var(--fs-12); }
+
+/* tabs */
+.bo-tabs { display: flex; gap: 6px; }
+.bo-tab {
+  height: 34px; padding: 0 14px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: var(--r-md); font-size: var(--fs-13); font-weight: 700; color: var(--ink-2); cursor: pointer;
+}
+.bo-tab.active { background: var(--secondary); border-color: var(--secondary); color: #fff; }
+
+/* simple ranked rows (top items / performance) */
+.bo-rank { display: flex; flex-direction: column; }
+.bo-rank-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-14); }
+.bo-rank-row:last-child { border-bottom: none; }
+.bo-rank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bo-rank-qty { color: var(--muted); font-size: var(--fs-13); min-width: 56px; text-align: right; }
+.bo-rank-val { font-weight: 700; min-width: 84px; text-align: right; }
+
+/* chart header toggle (revenue ↔ orders) */
+.bo-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bo-toggle { display: flex; gap: 4px; }
+.bo-toggle button {
+  height: 28px; padding: 0 10px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px; font-size: var(--fs-12); font-weight: 700; color: var(--ink-2); cursor: pointer;
+}
+.bo-toggle button.active { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+
+/* item-wise category cards */
+.bo-cat-head { display: flex; justify-content: space-between; align-items: baseline; }
+.bo-cat-head h3 { text-transform: none; font-size: var(--fs-15); color: var(--ink); }
+.bo-cat-meta { font-size: var(--fs-12); color: var(--muted); }
+
+/* toast */
+.bo-toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--secondary); color: #fff; padding: 10px 16px; border-radius: 999px;
+  font-size: var(--fs-13); font-weight: 600; box-shadow: var(--shadow-pop); z-index: 60;
+}
+
+/* right-now / needs-attention */
+.bo-attn { display: flex; flex-direction: column; gap: 8px; }
+.bo-attn-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-sunk); }
+.bo-attn-row.late { background: var(--warning-line); }
+.bo-attn-row.low { background: var(--danger-soft); }
+.bo-attn-title { font-weight: 700; font-size: var(--fs-13); }
+.bo-attn-body { font-size: var(--fs-12); color: var(--ink-2); }

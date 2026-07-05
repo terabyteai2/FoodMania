@@ -5,8 +5,18 @@ import { t } from './i18n/strings';
 
 export function App() {
   const { session, lang, logout } = useSession();
+  const path = window.location.pathname;
 
-  if (!session) return <Login />;
+  if (!session) {
+    if (path === '/login') return <Login />;
+    window.location.href = '/landing/';
+    return null;
+  }
+
+  if (path === '/login') {
+    window.location.href = '/';
+    return null;
+  }
 
   if (session.hasAppAccess === false) {
     return (

@@ -90,9 +90,7 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = app.accountDisplayName.trim().isNotEmpty
         ? app.accountDisplayName.trim()
-        : (app.accountUsername.trim().isNotEmpty
-              ? app.accountUsername.trim()
-              : app.outletName);
+        : app.outletName;
     return TfCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
