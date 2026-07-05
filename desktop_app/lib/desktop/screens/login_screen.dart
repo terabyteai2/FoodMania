@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/core/constants/cloud_defaults.dart';
 
 import '../theme/desk_theme.dart';
 
-/// Desktop sign-in. The mobile app authenticates with phone-OTP / Google, which
-/// aren't viable on Windows, so the register logs in with the outlet's
-/// **Server ID + account credentials** against `POST /admin/login`
-/// (backend looks the outlet up by `server_id`, then the account within it).
+/// Desktop sign-in using phone OTP, matching the mobile app's auth flow.
+/// Users enter their Server ID + phone number, receive a 6-digit code via SMS,
+/// and verify to log in. Unregistered phones and pending staff invites are
+/// redirected to the mobile app.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -18,10 +19,12 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   late final TextEditingController _urlCtl;
   late final TextEditingController _serverCtl;
-  final _userCtl = TextEditingController();
-  final _passCtl = TextEditingController();
+  final _phoneCtl = TextEditingController();
+  final _otpCtl = TextEditingController();
+
   bool _busy = false;
-  bool _obscure = true;
+  bool _otpSent = false;
+  String _otpCode = '';
   String? _error;
 
   @override
@@ -39,44 +42,95 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _urlCtl.dispose();
     _serverCtl.dispose();
-    _userCtl.dispose();
-    _passCtl.dispose();
+    _phoneCtl.dispose();
+    _otpCtl.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final app = AppScope.read(context);
+  Future<void> _sendOtp() async {
+    final app = AppScope.of(context);
     final base = CloudDefaults.resolveBaseUrl(_urlCtl.text.trim());
     final serverId = _serverCtl.text.trim();
-    final id = _userCtl.text.trim();
-    final pw = _passCtl.text;
-    if (serverId.isEmpty || id.isEmpty || pw.isEmpty) {
-      setState(() => _error = 'Enter Server ID, username/email and password.');
+    final phone = _phoneCtl.text.trim();
+    if (serverId.isEmpty || phone.isEmpty) {
+      setState(() => _error = 'Enter Server ID and phone number.');
+      return;
+    }
+    app.cloudConfig = app.cloudConfig.copyWith(baseUrl: base, enabled: true);
+    app.serverConfig = app.serverConfig.copyWith(serverId: serverId);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final ok = await app.sendPhoneOtp(phone);
+      if (!ok) {
+        throw Exception(app.lastError ?? 'Could not send code.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _otpSent = true;
+        _otpCode = '';
+        _otpCtl.clear();
+      });
+      if (app.showDevOtpHint) {
+        final code = app.devOtpCodeHint;
+        _otpCtl.text = code;
+        _onOtpChanged(code);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = _clean(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _onOtpChanged(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 6) return;
+    setState(() => _otpCode = digits);
+  }
+
+  Future<void> _verifyOtp() async {
+    final app = AppScope.of(context);
+    final code = _otpCode.trim();
+    if (code.length < 6) {
+      setState(() => _error = 'Enter the 6-digit code.');
       return;
     }
     setState(() {
       _busy = true;
       _error = null;
     });
-    app.cloudConfig = app.cloudConfig.copyWith(baseUrl: base, enabled: true);
-    app.serverConfig = app.serverConfig.copyWith(serverId: serverId);
     try {
-      await app.loginWithAccount(usernameOrEmail: id, password: pw);
-      // On success isLoggedIn flips and the parent rebuilds into DeskShell,
-      // unmounting this screen — so only handle the no-throw failure case.
-      if (mounted && !app.isLoggedIn) {
-        setState(() {
-          _busy = false;
-          _error = 'Login failed. Check the Server ID and your credentials.';
-        });
+      final next = await app.verifyPhoneOtp(
+        phoneInput: _phoneCtl.text,
+        code: code,
+      );
+      if (!mounted) return;
+      if (next == null) {
+        setState(() => _error = app.lastError ?? 'Verification failed.');
+        return;
       }
+      if (next == 'needs_restaurant_setup') {
+        setState(
+          () => _error = 'This phone is not registered. Please sign up using the mobile app first.',
+        );
+        return;
+      }
+      if (next == 'pending_staff_invite') {
+        setState(
+          () => _error = 'You have a pending staff invitation. Please respond using the mobile app.',
+        );
+        return;
+      }
+      // 'authenticated' — isLoggedIn flips, parent rebuilds into DeskShell
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = _clean(error);
-        });
-      }
+      if (!mounted) return;
+      setState(() => _error = _clean(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -140,22 +194,49 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 22),
                 _field('Server ID', _serverCtl, hint: 'Outlet server id'),
                 const SizedBox(height: 14),
-                _field('Username or email', _userCtl),
-                const SizedBox(height: 14),
-                _field(
-                  'Password',
-                  _passCtl,
-                  obscure: _obscure,
-                  onSubmitted: (_) => _submit(),
-                  trailing: IconButton(
-                    icon: Icon(
-                      _obscure ? Icons.visibility_off : Icons.visibility,
-                      size: 18,
-                      color: PosColors.muted,
-                    ),
-                    onPressed: () => setState(() => _obscure = !_obscure),
+                if (!_otpSent) ...[
+                  _field('Phone number', _phoneCtl,
+                    hint: '01XXXXXXXXX',
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s-]')),
+                      LengthLimitingTextInputFormatter(14),
+                    ],
                   ),
-                ),
+                ] else ...[
+                  _field('Verification code', _otpCtl,
+                    hint: '6-digit code',
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: _onOtpChanged,
+                    onSubmitted: (_) => _verifyOtp(),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 36),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() {
+                                _otpSent = false;
+                                _otpCode = '';
+                                _otpCtl.clear();
+                                _error = null;
+                              }),
+                      child: Text(
+                        'Change phone number',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: PosColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 _field('Server URL', _urlCtl),
                 if (_error != null) ...[
@@ -183,7 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(PosRadii.md),
                       ),
                     ),
-                    onPressed: _busy ? null : _submit,
+                    onPressed: _busy ? null : (_otpSent ? _verifyOtp : _sendOtp),
                     child: _busy
                         ? const SizedBox(
                             width: 20,
@@ -191,9 +272,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2.4, color: Colors.white),
                           )
-                        : const Text('Sign in',
-                            style: TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w700)),
+                        : Text(
+                            _otpSent ? 'Verify' : 'Send code',
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
                   ),
                 ),
               ],
@@ -211,6 +294,8 @@ class _LoginScreenState extends State<LoginScreen> {
     String? hint,
     Widget? trailing,
     ValueChanged<String>? onSubmitted,
+    ValueChanged<String>? onChanged,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,6 +313,8 @@ class _LoginScreenState extends State<LoginScreen> {
           controller: controller,
           obscureText: obscure,
           onSubmitted: onSubmitted,
+          onChanged: onChanged,
+          inputFormatters: inputFormatters,
           decoration: InputDecoration(
             isDense: true,
             hintText: hint,

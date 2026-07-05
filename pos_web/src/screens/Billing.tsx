@@ -43,7 +43,7 @@ export function Billing() {
   const pos = usePos();
   const printers = usePrinters();
 
-  const [category, setCategory] = useState<string>('__fav');
+  const [category, setCategory] = useState<string>('__all');
   const [search, setSearch] = useState('');
   const [shortCode, setShortCode] = useState('');
   const [modal, setModal] = useState<ModalKind>(null);
@@ -144,7 +144,7 @@ export function Billing() {
     })();
 
   const doSettle = (lines?: PosSettlementLineWire[]) => {
-    if (!pos.shift) {
+    if (!pos.shift || pos.shift.status !== 'open') {
       setModal({ kind: 'shiftOpen', then: () => doSettle(lines) });
       return;
     }

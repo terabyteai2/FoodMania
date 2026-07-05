@@ -274,8 +274,6 @@ class PosAppController extends ChangeNotifier {
   bool isLoggedIn = false;
   AccountRole accountRole = AccountRole.manager;
   String accountId = '';
-  String accountEmail = '';
-  String accountUsername = '';
   String accountDisplayName = '';
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
@@ -581,8 +579,6 @@ class PosAppController extends ChangeNotifier {
       await _loadCachedAdminBlockingNotice(preferences);
       await refreshAdminBlockingNotice();
       _startAdminBlockingNoticePolling();
-      accountEmail = preferences.getString(_accountEmailKey) ?? '';
-      accountUsername = preferences.getString(_accountUsernameKey) ?? '';
       accountId = preferences.getString(_accountIdKey) ?? '';
       accountDisplayName = preferences.getString(_accountDisplayNameKey) ?? '';
       accountRole = AccountRole.parse(preferences.getString(_accountRoleKey));
@@ -955,10 +951,10 @@ class PosAppController extends ChangeNotifier {
         ? fullName!.trim()
         : (accountDisplayName.isNotEmpty
               ? accountDisplayName
-              : accountUsername);
+              : 'Owner');
     final resolvedEmail = (email?.trim().isNotEmpty == true)
         ? email!.trim()
-        : (accountEmail.isNotEmpty ? accountEmail : 'manager@example.com');
+        : 'manager@example.com';
     if (PaymentDefaults.useUddoktaPay) {
       return cloudApiService.createUddoktaPayment(
         serverId: serverConfig.serverId,
@@ -2477,9 +2473,7 @@ class PosAppController extends ChangeNotifier {
       deviceToken: result.deviceToken,
     );
     accountId = result.accountId;
-    accountEmail = result.email;
-    accountUsername = result.username;
-    accountDisplayName = result.displayName ?? result.username;
+    accountDisplayName = result.displayName ?? '';
     accountRole = result.role;
     isLoggedIn = true;
   }
@@ -4267,8 +4261,6 @@ class PosAppController extends ChangeNotifier {
   Future<void> _persistAccountAuth() async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_accountIdKey, accountId);
-    await preferences.setString(_accountEmailKey, accountEmail);
-    await preferences.setString(_accountUsernameKey, accountUsername);
     await preferences.setString(_accountDisplayNameKey, accountDisplayName);
     await preferences.setString(_accountRoleKey, accountRole.value);
     await preferences.setBool(_accountLoggedInKey, isLoggedIn);
@@ -4417,9 +4409,7 @@ class PosAppController extends ChangeNotifier {
       'local_pos_bkash_payment_verified';
   static final String _bkashPaymentIdKey = 'local_pos_bkash_payment_id';
   static final String _bkashTransactionIdKey = 'local_pos_bkash_transaction_id';
-  static final String _accountEmailKey = 'local_pos_account_email';
   static final String _accountIdKey = 'local_pos_account_id';
-  static final String _accountUsernameKey = 'local_pos_account_username';
   static final String _accountDisplayNameKey = 'local_pos_account_display_name';
   static final String _accountRoleKey = 'local_pos_account_role';
   static final String _ownerViewPreviewKey = 'local_pos_owner_view_preview';

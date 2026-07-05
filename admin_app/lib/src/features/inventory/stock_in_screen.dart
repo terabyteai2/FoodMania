@@ -832,12 +832,12 @@ class _SourceFieldFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: PosColors.line),
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        border: Border.all(color: PosColors.lineStrong),
       ),
       alignment: Alignment.center,
       child: child,

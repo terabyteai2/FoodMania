@@ -1693,7 +1693,33 @@ async def analytics_summary(
     other_income = service_charge_total + delivery_total
     tax_and_duty = tax_total
 
-    day_keys = _day_keys(cur_start, cur_end)
+    # Trend: always show at least 7 days so single-day ranges like
+    # "today" don't produce a single-point useless line chart.
+    trend_start = min(cur_start, cur_end - timedelta(days=6))
+    if trend_start < cur_start:
+        extra_orders = (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= trend_start)
+                .where(Order.created_at < cur_start)
+                .where(
+                    func.lower(func.trim(Order.status)).notin_(
+                        tuple(REJECTED_STATUSES)
+                    )
+                )
+            )
+        ).scalars().all()
+        for o in extra_orders:
+            if not _order_matches_report_filters(
+                o, service, payment_method, shift_id, user
+            ):
+                continue
+            d = _bdt_date_key(o.created_at)
+            trend_rev[d] += float(o.total_amount or 0)
+            trend_ord[d] += 1
+
+    day_keys = _day_keys(trend_start, cur_end)
     trend = [
         {
             "date": d,
@@ -1846,6 +1872,31 @@ async def analytics_item_detail(
     _ensure_outlet(current_outlet, outlet_id)
     now = datetime.now(timezone.utc)
     cur_start, cur_end, _ps, _pe = _analytics_period(range_, start, end, now)
+    # Trend: always show at least 7 days so single-day ranges produce
+    # a meaningful chart.
+    trend_start = min(cur_start, cur_end - timedelta(days=6))
+
+    daily: dict[str, float] = defaultdict(float)
+    if trend_start < cur_start:
+        extra_orders = (
+            await db.execute(
+                select(Order)
+                .where(Order.outlet_id == outlet_id)
+                .where(Order.created_at >= trend_start)
+                .where(Order.created_at < cur_start)
+                .where(
+                    func.lower(func.trim(Order.status)).notin_(
+                        tuple(REJECTED_STATUSES)
+                    )
+                )
+            )
+        ).scalars().all()
+        for order in extra_orders:
+            day = _bdt_date_key(order.created_at)
+            for line in _line_items(order.items):
+                if str(line.get("menuItemId") or "") != menu_item_id:
+                    continue
+                daily[day] += _item_revenue(line)
 
     orders = (
         (
@@ -1874,7 +1925,6 @@ async def analytics_item_detail(
     ).first()
     name = (menu_row.name_en or menu_row.name) if menu_row else menu_item_id
 
-    daily: dict[str, float] = defaultdict(float)
     total = 0.0
     units = 0
     for order in orders:
@@ -1889,7 +1939,7 @@ async def analytics_item_detail(
 
     series = [
         {"date": d, "salesBdt": round(daily.get(d, 0.0), 2)}
-        for d in _day_keys(cur_start, cur_end)
+        for d in _day_keys(trend_start, cur_end)
     ]
     return ok(
         {

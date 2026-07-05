@@ -201,8 +201,6 @@ class TenantBootstrapResult {
 
 class AdminLoginResult {
   AdminLoginResult({
-    required this.email,
-    required this.username,
     required this.accountId,
     required this.role,
     this.displayName,
@@ -222,8 +220,6 @@ class AdminLoginResult {
     this.logoBitmapUrl,
   });
 
-  final String email;
-  final String username;
   final String accountId;
   final AccountRole role;
   final String? displayName;
@@ -247,8 +243,6 @@ class AdminLoginResult {
         ? Map<String, Object?>.from(data['account'] as Map)
         : <String, Object?>{};
     return AdminLoginResult(
-      email: account['email']?.toString().trim() ?? '',
-      username: account['username']?.toString().trim() ?? '',
       accountId: account['id']?.toString().trim() ?? '',
       role: AccountRole.parse(
         account['role']?.toString().trim() ?? data['role']?.toString().trim(),

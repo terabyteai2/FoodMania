@@ -219,9 +219,10 @@ export const useCart = create<CartState>((set, get) => ({
     set({ busy: true });
     try {
       const totals = s.totals();
-      const { settings } = usePos.getState();
+      const { settings, shift } = usePos.getState();
       const nowIso = new Date().toISOString();
       const common = {
+        shiftId: shift?.id ?? null,
         subtotal: totals.subtotal,
         vatRatePercent: settings?.vatRatePercent ?? 0,
         vatAmount: totals.vatAmount,
@@ -252,6 +253,7 @@ export const useCart = create<CartState>((set, get) => ({
           vatRatePercent: common.vatRatePercent,
           vatAmount: common.vatAmount,
           deliveryCharge: common.deliveryCharge,
+          shiftId: common.shiftId,
           updatedAt: nowIso,
         };
         try {
@@ -332,7 +334,7 @@ export const useCart = create<CartState>((set, get) => ({
     const session = useSession.getState().session;
     const { shift, settings } = usePos.getState();
     if (!session) throw new Error('Not signed in');
-    if (!shift) throw new Error('Open a shift before settling');
+    if (!shift || shift.status !== 'open') throw new Error('Open a shift before settling');
     const order = s.order ?? (await get().saveOrder());
     const totals = get().totals();
     const body = {
