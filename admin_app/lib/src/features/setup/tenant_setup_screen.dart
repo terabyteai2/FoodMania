@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../menu/menu_scan_screen.dart';
 
 class TenantSetupScreen extends StatefulWidget {
   const TenantSetupScreen({required this.onProvisioned, super.key});
@@ -15,7 +16,7 @@ class TenantSetupScreen extends StatefulWidget {
 }
 
 class _TenantSetupScreenState extends State<TenantSetupScreen> {
-  static const int _totalSteps = 3;
+  static const int _totalSteps = 4;
   static const int _maxTableCount = 200;
 
   final _ownerCtrl = TextEditingController();
@@ -92,6 +93,19 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _scanNow() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MenuScanScreen()),
+    );
+    if (!mounted) return;
+    if (result != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: TfText('Menu scanned! Items added to your menu.')),
+      );
+    }
+    _finish();
   }
 
   @override
@@ -221,16 +235,19 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
                       ],
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) {
-                        if (_tablesReady) _finish();
+                        if (_tablesReady) _goTo(3);
                       },
                     ),
                     cta: TfButton(
-                      label: 'Finish',
-                      labelBn: 'শেষ করুন',
+                      label: 'Continue',
+                      labelBn: 'চালিয়ে যান',
                       trailingIcon: TfNavIcon.arrow,
-                      busy: _busy,
-                      onPressed: _tablesReady && !_busy ? _finish : null,
+                      onPressed: _tablesReady ? () => _goTo(3) : null,
                     ),
+                  ),
+                  _ScanPromptStep(
+                    onScanNow: _scanNow,
+                    onSkip: _finish,
                   ),
                 ],
               ),
@@ -238,6 +255,78 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ScanPromptStep extends StatelessWidget {
+  const _ScanPromptStep({
+    required this.onScanNow,
+    required this.onSkip,
+  });
+
+  final VoidCallback onScanNow;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBn = tfIsBn(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 54, 20, 24),
+      children: [
+        TfText(
+          isBn ? 'আপনার মেনু কার্ড স্ক্যান করুন?' : 'Scan your menu card?',
+          style: TextStyle(
+            fontFamily: tfFontFamily(context),
+            fontSize: 30,
+            fontWeight: FontWeight.w700,
+            color: PosColors.slate,
+            height: 1.08,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TfText(
+          isBn
+              ? 'AI আপনার ফিজিক্যাল মেনু পড়ে আইটেমগুলি স্বয়ংক্রিয়ভাবে যোগ করুক।'
+              : 'Let AI read your physical menu and add items automatically.',
+          style: const TextStyle(
+            fontSize: 15,
+            color: PosColors.muted,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 40),
+        Center(
+          child: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: PosColors.primarySoft,
+              borderRadius: BorderRadius.circular(PosRadii.xl),
+            ),
+            child: const Icon(
+              Icons.document_scanner_outlined,
+              size: 48,
+              color: PosColors.primary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 40),
+        TfButton(
+          label: 'Scan Now',
+          labelBn: 'এখন স্ক্যান করুন',
+          trailingIcon: TfNavIcon.arrow,
+          onPressed: onScanNow,
+        ),
+        const SizedBox(height: 12),
+        TfButton(
+          label: "I'll do this later",
+          labelBn: 'পরে করব',
+          variant: TfButtonVariant.ghost,
+          fullWidth: true,
+          onPressed: onSkip,
+        ),
+      ],
     );
   }
 }

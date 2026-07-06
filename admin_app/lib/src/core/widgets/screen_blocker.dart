@@ -24,6 +24,8 @@ class ScreenBlocker extends StatelessWidget {
     this.leading,
     this.body,
     this.error,
+    this.floatingActionButton,
+    this.floatingActionButtonLocation,
     super.key,
   });
 
@@ -31,6 +33,8 @@ class ScreenBlocker extends StatelessWidget {
   final Widget? body;
   final String? error;
   final List<ScreenBlockerAction> actions;
+  final Widget? floatingActionButton;
+  final FloatingActionButtonLocation? floatingActionButtonLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +42,8 @@ class ScreenBlocker extends StatelessWidget {
       canPop: false,
       child: Scaffold(
         backgroundColor: PosColors.background,
+        floatingActionButton: floatingActionButton,
+        floatingActionButtonLocation: floatingActionButtonLocation,
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(

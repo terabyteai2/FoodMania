@@ -236,9 +236,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           _RevenueChartCard(trend: d.trend, text: text),
           const SizedBox(height: PosSpacing.sp3),
         ],
-        // Headline KPI strip — the ledger sections below carry the detail;
-        // the old per-tile grid duplicated these figures (no-dup rule).
-        TfStatStrip(cells: _statCells(context, text, d)),
+        _analyticsKpiGrid(context, text, d),
         if (d.otherIncome != 0)
           Padding(
             padding: const EdgeInsets.only(top: PosSpacing.sp2),
@@ -351,58 +349,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   /// Headline KPI cells. Core figures (orders, gross, net, collection) always
   /// show; auxiliary money figures hide when zero so dataless metrics never
   /// spend screen space (zero policy, one-language pass).
-  List<TfStatCell> _statCells(
-    BuildContext context,
-    AppStrings text,
-    AnalyticsSummaryData d,
-  ) {
-    return [
-      TfStatCell(
-        label: text.ordersCompleted,
-        value: tfFormatNumber(context, d.ordersCompleted),
-      ),
-      TfStatCell(
-        label: text.grossSales,
-        value: tfFormatCurrency(context, d.grossSales),
-      ),
-      if (d.discountAndCommission != 0)
-        TfStatCell(
-          label: text.discountAndCommission,
-          value: parenCurrency(context, d.discountAndCommission),
-          valueColor: PosColors.muted,
-        ),
-      TfStatCell(
-        label: text.netSales,
-        value: tfFormatCurrency(context, d.netSales),
-      ),
-      if (d.otherIncome != 0)
-        TfStatCell(
-          label: text.otherIncome,
-          value: tfFormatCurrency(context, d.otherIncome),
-        ),
-      if (d.taxAndDuty != 0)
-        TfStatCell(
-          label: text.taxAndDuty,
-          value: tfFormatCurrency(context, d.taxAndDuty),
-        ),
-      if ((d.dueReceivable ?? 0) != 0)
-        TfStatCell(
-          label: text.dueReceivable,
-          value: parenCurrency(context, d.dueReceivable!),
-          valueColor: PosColors.muted,
-        ),
-      if ((d.duePaid ?? 0) != 0)
-        TfStatCell(
-          label: text.duePaid,
-          value: tfFormatCurrency(context, d.duePaid!),
-        ),
-      TfStatCell(
-        label: text.totalCollection,
-        value: tfFormatCurrency(context, d.totalCollection),
-      ),
-    ];
-  }
-
   void _openItem(BuildContext context, AnalyticsSummaryItem item) {
     if (item.menuItemId.isEmpty) return;
     Navigator.of(context).push(
@@ -570,7 +516,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     ];
   }
 
-  /// 2×2 headline stat grid for the reduced manager cut.
+  /// 4-card 2×2 headline stat grid for the reduced manager cut.
   Widget _reducedStatGrid(
     BuildContext context,
     AppStrings text,
@@ -623,6 +569,83 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             Expanded(child: tiles[2]),
             const SizedBox(width: PosSpacing.sp3),
             Expanded(child: tiles[3]),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 6-card 2×3 headline KPI grid for the analytics Sales Breakdown tab.
+  Widget _analyticsKpiGrid(
+    BuildContext context,
+    AppStrings text,
+    AnalyticsSummaryData d,
+  ) {
+    final tiles = [
+      _StatTile(
+        tint: PosColors.tintBlue,
+        iconColor: PosColors.iconBlue,
+        icon: Icons.receipt_long_rounded,
+        value: tfFormatNumber(context, d.ordersCompleted),
+        label: text.ordersCompleted,
+      ),
+      _StatTile(
+        tint: PosColors.tintGreen,
+        iconColor: PosColors.iconGreen,
+        icon: Icons.trending_up_rounded,
+        value: tfFormatCurrency(context, d.netSales),
+        label: text.netSales,
+      ),
+      _StatTile(
+        tint: PosColors.tintPurple,
+        iconColor: PosColors.iconPurple,
+        icon: Icons.account_balance_wallet_rounded,
+        value: tfFormatCurrency(context, d.totalCollection),
+        label: text.totalCollection,
+      ),
+      _StatTile(
+        tint: PosColors.tintAmber,
+        iconColor: PosColors.iconAmber,
+        icon: Icons.delivery_dining_rounded,
+        value: tfFormatCurrency(context, d.profit.deliveryCharge),
+        label: text.deliveryCharge,
+      ),
+      _StatTile(
+        tint: PosColors.tintRed,
+        iconColor: PosColors.iconRed,
+        icon: Icons.discount_rounded,
+        value: tfFormatCurrency(context, d.discountAndCommission),
+        label: text.discountAndCommission,
+      ),
+      _StatTile(
+        tint: const Color(0xFFE0F2F1),
+        iconColor: const Color(0xFF00796B),
+        icon: Icons.receipt_rounded,
+        value: tfFormatCurrency(context, d.taxAndDuty),
+        label: text.taxAndDuty,
+      ),
+    ];
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: tiles[0]),
+            const SizedBox(width: PosSpacing.sp3),
+            Expanded(child: tiles[1]),
+            const SizedBox(width: PosSpacing.sp3),
+            Expanded(child: tiles[2]),
+          ],
+        ),
+        const SizedBox(height: PosSpacing.sp3),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: tiles[3]),
+            const SizedBox(width: PosSpacing.sp3),
+            Expanded(child: tiles[4]),
+            const SizedBox(width: PosSpacing.sp3),
+            Expanded(child: tiles[5]),
           ],
         ),
       ],

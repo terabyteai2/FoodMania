@@ -2126,12 +2126,16 @@ class CloudApiService {
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    debugPrint('[API] GET $uri');
     final json = await _sendJson('GET', uri);
     final data = json['data'];
     if (data is! Map) {
+      debugPrint('[API] analytics response malformed: $json');
       throw CloudApiException('Analytics response was malformed.');
     }
-    return Map<String, Object?>.from(data);
+    final result = Map<String, Object?>.from(data);
+    debugPrint('[API] analytics OK revenue=${result["revenue"]} orders=${result["orderCount"]} products=${(result["products"] as List?)?.length}');
+    return result;
   }
 
   /// Owner sales table (spec §4.8 "Detailed sales table") — returns the raw
@@ -2157,12 +2161,17 @@ class CloudApiService {
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    debugPrint('[API] GET $uri');
     final json = await _sendJson('GET', uri);
     final data = json['data'];
     if (data is! Map) {
+      debugPrint('[API] salesTable response malformed: $json');
       throw CloudApiException('Sales table response was malformed.');
     }
-    return Map<String, Object?>.from(data);
+    final result = Map<String, Object?>.from(data);
+    final rows = result['rows'] as List?;
+    debugPrint('[API] salesTable OK rows=${rows?.length}');
+    return result;
   }
 
   /// All-time item popularity — returns {menuItemId: totalQty} for the outlet.

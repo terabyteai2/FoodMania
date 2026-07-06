@@ -978,7 +978,7 @@ class _TfWordmark extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // TfButton — Soft POS action button.
 // ---------------------------------------------------------------------------
-enum TfButtonVariant { primary, dark, ghost, paper, accent }
+enum TfButtonVariant { primary, dark, ghost, paper, accent, success }
 
 enum TfButtonSize { lg, md, sm }
 
@@ -1020,6 +1020,8 @@ class TfButton extends StatelessWidget {
       // Accent-wash: soft emphasis action — primary-tint fill + blue text
       // (spec §5 soft active), never a solid block.
       TfButtonVariant.accent => (PosColors.accentSoft, PosColors.accentStrong),
+      // Solid green completion action — fills green, white text, no border.
+      TfButtonVariant.success => (PosColors.success, PosColors.accentInk),
     };
     final borderColor = switch (variant) {
       TfButtonVariant.primary => Colors.transparent,
@@ -1027,6 +1029,7 @@ class TfButton extends StatelessWidget {
       TfButtonVariant.ghost => PosColors.lineStrong,
       TfButtonVariant.paper => PosColors.lineStrong,
       TfButtonVariant.accent => PosColors.primaryWash,
+      TfButtonVariant.success => Colors.transparent,
     };
 
     final effHeight =

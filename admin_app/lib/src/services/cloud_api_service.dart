@@ -1997,12 +1997,16 @@ class CloudApiService {
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    debugPrint('[API] GET $uri');
     final json = await _sendJson('GET', uri);
     final data = json['data'];
     if (data is! Map) {
+      debugPrint('[API] analytics response malformed: $json');
       throw CloudApiException('Analytics response was malformed.');
     }
-    return Map<String, Object?>.from(data);
+    final result = Map<String, Object?>.from(data);
+    debugPrint('[API] analytics OK revenue=${result["revenue"]} orders=${result["orderCount"]} products=${(result["products"] as List?)?.length} trendPoints=${(result["revenueTrend"] as List?)?.length}');
+    return result;
   }
 
   /// Owner QS analytics (spec Part B) — plain BD metrics: Sales Summary,
@@ -2033,12 +2037,25 @@ class CloudApiService {
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    debugPrint('[API] GET $uri');
     final json = await _sendJson('GET', uri);
     final data = json['data'];
     if (data is! Map) {
+      debugPrint('[API] analyticsSummary response malformed: $json');
       throw CloudApiException('Analytics summary response was malformed.');
     }
-    return Map<String, Object?>.from(data);
+    final result = Map<String, Object?>.from(data);
+    final trend = result['trend'] as List?;
+    final trendDates = trend?.map((t) => t['date']).join(', ');
+    final trendVals = trend?.map((t) => t['revenue']).join(', ');
+    debugPrint(
+      '[API] analyticsSummary OK orders=${result["ordersCompleted"]} '
+      'grossSales=${result["grossSales"]} netSales=${result["netSales"]} '
+      'totalCollection=${result["totalCollection"]} '
+      'trendPoints=${trend?.length} '
+      'trendDates=[$trendDates] trendRevenue=[$trendVals]',
+    );
+    return result;
   }
 
   /// Daily sales series for one menu item — drives the Item drill-down screen.
@@ -2056,12 +2073,24 @@ class CloudApiService {
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
+    debugPrint('[API] GET $uri');
     final json = await _sendJson('GET', uri);
     final data = json['data'];
     if (data is! Map) {
+      debugPrint('[API] itemAnalytics response malformed: $json');
       throw CloudApiException('Item analytics response was malformed.');
     }
-    return Map<String, Object?>.from(data);
+    final result = Map<String, Object?>.from(data);
+    final dailySales = result['dailySales'] as List?;
+    final dates = dailySales?.map((d) => d['date']).join(', ');
+    final vals = dailySales?.map((d) => d['salesBdt']).join(', ');
+    debugPrint(
+      '[API] itemAnalytics OK item=$menuItemId name=${result["name"]} '
+      'totalBdt=${result["totalBdt"]} units=${result["units"]} '
+      'dailyPoints=${dailySales?.length} '
+      'dates=[$dates] sales=[$vals]',
+    );
+    return result;
   }
 
   /// QS Performance Report — item-wise performance over a trailing window.

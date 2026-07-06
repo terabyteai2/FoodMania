@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../app_controller.dart';
 import '../../app_scope.dart';
@@ -12,13 +11,11 @@ import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
-import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 import '../desktop_pos/widgets/pc_theme.dart';
 import '../desktop_pos/widgets/pc_widgets.dart';
+import 'menu_scan_screen.dart';
 import 'square_image_cropper.dart';
-
-enum _MenuScanSource { camera, gallery }
 
 class MenuManagementScreen extends StatefulWidget {
   const MenuManagementScreen({
@@ -123,6 +120,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             _BulkMenuToolbar(
               count: _selectedItemIds.length,
               onDiscount: () => _applyBulkDiscount(context),
+              onDelete: () => _bulkDeleteItems(context),
               onClear: () => setState(_selectedItemIds.clear),
             ),
             const SizedBox(height: 16),
@@ -387,6 +385,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             _DesktopBulkToolbar(
               count: _selectedItemIds.length,
               onDiscount: () => _applyBulkDiscount(context),
+              onDelete: () => _bulkDeleteItems(context),
               onClear: () => setState(_selectedItemIds.clear),
               isBn: text.isBn,
             ),
@@ -522,40 +521,16 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _scanMenu(BuildContext context) async {
-    final app = AppScope.read(context);
-    final text = app.strings;
+    if (_scanBusy) return;
+    final text = AppScope.of(context).strings;
+    setState(() => _scanBusy = true);
     try {
-      final pages = await _pickMenuScanPages(context);
-      if (pages.isEmpty) return;
-      if (!context.mounted) return;
-      if (kDebugMode) {
-        final pageSummary = pages
-            .map(
-              (page) =>
-                  '${page.fileName}(${page.mimeType}, ${page.bytes.length} bytes)',
-            )
-            .join('; ');
-        debugPrint(
-          '[MENU_SCAN] pages selected count=${pages.length}: $pageSummary',
-        );
-      }
-      setState(() => _scanBusy = true);
-      if (kDebugMode) {
-        debugPrint('[MENU_SCAN] scan start');
-      }
-      final uploads = pages
-          .map(
-            (page) => MenuScanPageUpload(
-              bytes: page.bytes,
-              fileName: page.fileName,
-              mimeType: page.mimeType,
-            ),
-          )
-          .toList(growable: false);
-      pages.clear();
-      final result = await app.scanAndImportMenu(uploads);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      final result = await Navigator.push<MenuScanImportResult>(
+        context,
+        MaterialPageRoute(builder: (_) => const MenuScanScreen()),
+      );
+      if (result == null || !mounted) return;
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(
           content: TfText(
             text.menuScanImported(
@@ -564,14 +539,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             ),
           ),
         ),
-      );
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('[MENU_SCAN] scan failed error=$error');
-      }
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: TfText('${text.menuScanFailed}: $error')),
       );
     } finally {
       if (mounted) setState(() => _scanBusy = false);
@@ -584,6 +551,34 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         .where((item) => _selectedItemIds.contains(item.id))
         .toList(growable: false);
     await _applyDiscountToItems(context, selected, clearSelection: true);
+  }
+
+  void _bulkDeleteItems(BuildContext context) {
+    final app = AppScope.read(context);
+    final text = app.strings;
+    final selected = app.menuItems
+        .where((item) => _selectedItemIds.contains(item.id))
+        .toList(growable: false);
+    if (selected.isEmpty) return;
+    TfConfirmSheet.show(
+      context,
+      title: text.menuDeleteTitle,
+      description: text.isBn
+          ? '${tfToBnNumbers('${selected.length}')} টি আইটেম মুছে ফেলা হবে'
+          : '${selected.length} items will be deleted',
+      confirmLabel: text.deleteAction,
+      isDanger: true,
+      onConfirm: () async {
+        for (final item in selected) {
+          await app.deleteMenuItem(item.id);
+        }
+        if (!context.mounted) return;
+        setState(_selectedItemIds.clear);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: TfText(text.menuDeletedBulk(selected.length))),
+        );
+      },
+    );
   }
 
   // Discounts action row entry: apply to the current selection, or to every
@@ -661,116 +656,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     if (mounted && clearSelection) setState(_selectedItemIds.clear);
   }
 
-  Future<List<PickedMenuScanPage>> _pickMenuScanPages(
-    BuildContext context,
-  ) async {
-    final text = AppScope.of(context).strings;
-    final source = await showModalBottomSheet<_MenuScanSource>(
-      context: context,
-      backgroundColor: PosColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.lg)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TfText(
-                  text.isBn ? 'মেনু স্ক্যান' : 'Scan menu',
-                  style: TfTextStyles.cardTitle.copyWith(
-                    color: PosColors.slate,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TfButton(
-                  label: text.isBn ? 'ক্যামেরা' : 'Camera',
-                  icon: Icons.photo_camera_rounded,
-                  variant: TfButtonVariant.primary,
-                  onPressed: () =>
-                      Navigator.pop(sheetContext, _MenuScanSource.camera),
-                ),
-                const SizedBox(height: 8),
-                TfButton(
-                  label: text.isBn ? 'গ্যালারি' : 'Gallery',
-                  icon: Icons.photo_library_outlined,
-                  variant: TfButtonVariant.dark,
-                  onPressed: () =>
-                      Navigator.pop(sheetContext, _MenuScanSource.gallery),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (source == null || !context.mounted) return const [];
-    if (source == _MenuScanSource.gallery) {
-      return _scanImageService.pickMenuScanPages();
-    }
-    return _captureMenuScanPages(context);
-  }
 
-  Future<List<PickedMenuScanPage>> _captureMenuScanPages(
-    BuildContext context,
-  ) async {
-    final pages = <PickedMenuScanPage>[];
-    while (pages.length < MenuImageService.maxScanPages) {
-      final page = await _scanImageService.captureMenuScanPage(
-        pageNumber: pages.length + 1,
-      );
-      if (page == null) break;
-      pages.add(page);
-      if (kDebugMode) {
-        debugPrint(
-          '[MENU_SCAN] captured ${page.fileName} '
-          '${page.bytes.length} bytes ${page.mimeType}',
-        );
-      }
-      if (!context.mounted) break;
-      final addAnother = await showDialog<bool>(
-        context: context,
-        builder: (context) {
-          final text = AppScope.of(context).strings;
-          return AlertDialog(
-            title: TfText(text.menuScanAddAnotherTitle),
-            content: TfText(text.menuScanAddAnotherMessage(pages.length)),
-            actions: [
-              TfButton(
-                label: text.menuScanUsePhotos,
-                variant: TfButtonVariant.paper,
-                fullWidth: false,
-                onPressed: () => Navigator.pop(context, false),
-              ),
-              TfButton(
-                label: text.menuScanAddPage,
-                icon: Icons.add_a_photo_rounded,
-                fullWidth: false,
-                onPressed: () => Navigator.pop(context, true),
-              ),
-            ],
-          );
-        },
-      );
-      if (addAnother != true) break;
-    }
-    if (pages.length >= MenuImageService.maxScanPages && context.mounted) {
-      final text = AppScope.of(context).strings;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: TfText(
-            text.isBn
-                ? 'একবারে ${MenuImageService.maxScanPages}টি মেনু ছবি স্ক্যান করা যাবে।'
-                : 'You can scan up to ${MenuImageService.maxScanPages} menu photos at a time.',
-          ),
-        ),
-      );
-    }
-    return pages;
-  }
 
   Future<void> _openMenuForm(BuildContext context, {MenuItem? item}) async {
     final app = AppScope.read(context);
@@ -979,12 +865,14 @@ class _DesktopBulkToolbar extends StatelessWidget {
   const _DesktopBulkToolbar({
     required this.count,
     required this.onDiscount,
+    required this.onDelete,
     required this.onClear,
     required this.isBn,
   });
 
   final int count;
   final VoidCallback onDiscount;
+  final VoidCallback onDelete;
   final VoidCallback onClear;
   final bool isBn;
 
@@ -1010,6 +898,14 @@ class _DesktopBulkToolbar extends StatelessWidget {
             size: PcSize.sm,
             variant: PcVariant.surface,
             onTap: onDiscount,
+          ),
+          const SizedBox(width: 8),
+          PcBtn(
+            label: isBn ? 'মুছুন' : 'Delete',
+            icon: 'close',
+            size: PcSize.sm,
+            variant: PcVariant.danger,
+            onTap: onDelete,
           ),
           const SizedBox(width: 8),
           PcBtn(
@@ -1643,11 +1539,13 @@ class _BulkMenuToolbar extends StatelessWidget {
   const _BulkMenuToolbar({
     required this.count,
     required this.onDiscount,
+    required this.onDelete,
     required this.onClear,
   });
 
   final int count;
   final VoidCallback onDiscount;
+  final VoidCallback onDelete;
   final VoidCallback onClear;
 
   @override
@@ -1671,6 +1569,15 @@ class _BulkMenuToolbar extends StatelessWidget {
             fullWidth: false,
             size: TfButtonSize.sm,
             onPressed: onDiscount,
+          ),
+          const SizedBox(width: 8),
+          TfButton(
+            label: text.deleteAction,
+            icon: Icons.delete_outline,
+            fullWidth: false,
+            size: TfButtonSize.sm,
+            variant: TfButtonVariant.paper,
+            onPressed: onDelete,
           ),
           const SizedBox(width: 8),
           TfIconButton(
@@ -2066,15 +1973,13 @@ class _MenuItemFormState extends State<_MenuItemForm> {
   late final TextEditingController _shortCodeController;
   late final TextEditingController _imageController;
   late final TextEditingController _prepController;
-  late final TextEditingController _discountController;
-  late final TextEditingController _includesController;
-  late final TextEditingController _optionsController;
-  late final TextEditingController _addOnsController;
   final MenuImageService _imageService = MenuImageService();
   late bool _isAvailable;
   late MenuItemExtras _initialExtras;
-  late _DiscountMode _discountMode;
   bool _imageBusy = false;
+  final List<_OptionRow> _options = [];
+  final List<_IncludeRow> _includes = [];
+  final List<_AddOnRow> _addOns = [];
 
   @override
   void initState() {
@@ -2097,39 +2002,14 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     );
     _isAvailable = item?.isAvailable ?? true;
     _initialExtras = item == null ? const MenuItemExtras() : item.extras;
-    _discountMode =
-        _initialExtras.discountPercent != null &&
-            _initialExtras.discountPercent! > 0
-        ? _DiscountMode.percent
-        : (_initialExtras.discountFlat != null &&
-                  _initialExtras.discountFlat! > 0
-              ? _DiscountMode.flat
-              : _DiscountMode.none);
-    final initialDiscount =
-        _initialExtras.discountPercent ?? _initialExtras.discountFlat;
-    _discountController = TextEditingController(
-      text: initialDiscount == null || initialDiscount == 0
-          ? ''
-          : _formatNumber(initialDiscount),
+    _options.addAll(
+      _initialExtras.options.map((o) => _OptionRow(name: o.name, priceDelta: o.priceDelta)),
     );
-    _includesController = TextEditingController(
-      text: _initialExtras.includes.join('\n'),
+    _includes.addAll(
+      _initialExtras.includes.map((i) => _IncludeRow(i)),
     );
-    _optionsController = TextEditingController(
-      text: _initialExtras.options
-          .map(
-            (o) =>
-                '${o.name} : ${o.priceDelta == o.priceDelta.roundToDouble() ? o.priceDelta.toInt() : o.priceDelta}',
-          )
-          .join('\n'),
-    );
-    _addOnsController = TextEditingController(
-      text: _initialExtras.addOns
-          .map(
-            (a) =>
-                '${a.name} : ${a.price == a.price.roundToDouble() ? a.price.toInt() : a.price}',
-          )
-          .join('\n'),
+    _addOns.addAll(
+      _initialExtras.addOns.map((a) => _AddOnRow(name: a.name, price: a.price)),
     );
   }
 
@@ -2142,16 +2022,10 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     _shortCodeController.dispose();
     _imageController.dispose();
     _prepController.dispose();
-    _discountController.dispose();
-    _includesController.dispose();
-    _optionsController.dispose();
-    _addOnsController.dispose();
+    for (final o in _options) { o.dispose(); }
+    for (final i in _includes) { i.dispose(); }
+    for (final a in _addOns) { a.dispose(); }
     super.dispose();
-  }
-
-  static String _formatNumber(double v) {
-    if (v == v.roundToDouble()) return v.toInt().toString();
-    return v.toStringAsFixed(2);
   }
 
   @override
@@ -2161,7 +2035,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     final theme = Theme.of(context);
     final placeholderIconKey = _placeholderIconKey();
     final inputTheme = theme.inputDecorationTheme.copyWith(
-      fillColor: PosColors.background,
+      fillColor: PosColors.surface,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(PosRadii.md),
         borderSide: BorderSide(color: PosColors.lineStrong),
@@ -2171,12 +2045,12 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       data: theme.copyWith(
         inputDecorationTheme: inputTheme,
         chipTheme: theme.chipTheme.copyWith(
-          backgroundColor: PosColors.background,
+          backgroundColor: PosColors.surface,
           selectedColor: PosColors.primarySoft,
         ),
       ),
       child: Material(
-        color: PosColors.background,
+        color: PosColors.surface,
         child: Padding(
           padding: EdgeInsets.only(bottom: bottomInset),
           child: SizedBox(
@@ -2187,7 +2061,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                 children: [
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+                      padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp3, PosSpacing.sp4, PosSpacing.sp5),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -2198,11 +2072,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                                   widget.initialItem == null
                                       ? text.menuNewItemTitle
                                       : text.menuEditItemTitle,
-                                  style: Theme.of(context).textTheme.titleLarge
-                                      ?.copyWith(
-                                        fontFamily: tfFontFamily(context),
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                  style: TfTextStyles.screenTitle,
                                 ),
                               ),
                               if (widget.initialItem != null)
@@ -2237,7 +2107,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                               setState(() {});
                             },
                           ),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: PosSpacing.sp5),
                           _EditorField(
                             label: text.menuItemName,
                             child: TextFormField(
@@ -2311,41 +2181,30 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                             child: _buildCategoryField(text),
                           ),
                           const SizedBox(height: 16),
-                          _EditorToggleCard(
-                            text: text,
-                            available: _isAvailable,
-                            discountOn: _discountMode != _DiscountMode.none,
-                            discountMode: _discountMode,
-                            discountController: _discountController,
-                            onAvailableChanged: (value) =>
-                                setState(() => _isAvailable = value),
-                            onDiscountEnabledChanged: (value) => setState(() {
-                              if (value) {
-                                _discountMode = _DiscountMode.percent;
-                                if (_discountController.text.trim().isEmpty) {
-                                  _discountController.text = '10';
-                                }
-                              } else {
-                                _discountMode = _DiscountMode.none;
-                                _discountController.clear();
-                              }
-                            }),
-                            onDiscountModeChanged: (mode) =>
-                                setState(() => _discountMode = mode),
-                          ),
-                          const SizedBox(height: 14),
                           _AdvancedMenuOptions(
                             text: text,
                             descriptionController: _descriptionController,
                             prepController: _prepController,
-                            includesController: _includesController,
-                            optionsController: _optionsController,
-                            addOnsController: _addOnsController,
+                            options: _options,
+                            includes: _includes,
+                            addOns: _addOns,
+                            onAddOption: () =>
+                                setState(() => _options.add(_OptionRow())),
+                            onRemoveOption: (i) =>
+                                setState(() => _options.removeAt(i).dispose()),
+                            onAddInclude: () =>
+                                setState(() => _includes.add(_IncludeRow(''))),
+                            onRemoveInclude: (i) =>
+                                setState(() => _includes.removeAt(i).dispose()),
+                            onAddAddOn: () =>
+                                setState(() => _addOns.add(_AddOnRow())),
+                            onRemoveAddOn: (i) =>
+                                setState(() => _addOns.removeAt(i).dispose()),
                             initiallyExpanded:
                                 _descriptionController.text.trim().isNotEmpty ||
                                 _prepController.text.trim().isNotEmpty ||
-                                _initialExtras.includes.isNotEmpty ||
                                 _initialExtras.options.isNotEmpty ||
+                                _initialExtras.includes.isNotEmpty ||
                                 _initialExtras.addOns.isNotEmpty,
                           ),
                         ],
@@ -2497,49 +2356,33 @@ class _MenuItemFormState extends State<_MenuItemForm> {
   }
 
   MenuItemExtras _buildExtras() {
-    final raw = _discountController.text.trim();
-    final discountValue = double.tryParse(raw);
-    double? percent;
-    double? flat;
-    if (_discountMode == _DiscountMode.percent &&
-        discountValue != null &&
-        discountValue > 0) {
-      percent = discountValue.clamp(0, 100).toDouble();
-    } else if (_discountMode == _DiscountMode.flat &&
-        discountValue != null &&
-        discountValue > 0) {
-      flat = discountValue;
-    }
-    final includes = _includesController.text
-        .split(RegExp(r'\r?\n'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
+    final includes = _includes
+        .map((r) => r.nameCtrl.text.trim())
+        .where((n) => n.isNotEmpty)
         .toList(growable: false);
-    final options = <MenuOption>[];
-    for (final line in _optionsController.text.split(RegExp(r'\r?\n'))) {
-      final option = MenuOption.parse(line.trim());
-      if (option != null) options.add(option);
-    }
-    final addOns = <MenuAddOn>[];
-    for (final line in _addOnsController.text.split(RegExp(r'\r?\n'))) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      final i = trimmed.lastIndexOf(':');
-      if (i <= 0 || i >= trimmed.length - 1) {
-        addOns.add(MenuAddOn(name: trimmed, price: 0));
-        continue;
-      }
-      final name = trimmed.substring(0, i).trim();
-      final price = double.tryParse(trimmed.substring(i + 1).trim()) ?? 0;
-      if (name.isNotEmpty) addOns.add(MenuAddOn(name: name, price: price));
-    }
+    final options = _options
+        .map((r) {
+          final name = r.nameCtrl.text.trim();
+          final price = double.tryParse(r.priceCtrl.text.trim()) ?? 0;
+          return MenuOption(name: name, priceDelta: price);
+        })
+        .where((o) => o.name.isNotEmpty)
+        .toList(growable: false);
+    final addOns = _addOns
+        .map((r) {
+          final name = r.nameCtrl.text.trim();
+          final price = double.tryParse(r.priceCtrl.text.trim()) ?? 0;
+          return MenuAddOn(name: name, price: price);
+        })
+        .where((a) => a.name.isNotEmpty)
+        .toList(growable: false);
     return _initialExtras.copyWith(
       iconKey: _imageController.text.trim().isEmpty
           ? _placeholderIconKey()
           : _initialExtras.iconKey,
-      clearDiscount: percent == null && flat == null,
-      discountPercent: percent,
-      discountFlat: flat,
+      clearDiscount: true,
+      discountPercent: null,
+      discountFlat: null,
       includes: includes,
       options: options,
       addOns: addOns,
@@ -2628,7 +2471,7 @@ class _EditorPhotoBlock extends StatelessWidget {
                 foregroundColor: PosColors.accentStrong,
                 side: const BorderSide(color: PosColors.lineStrong),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(PosRadii.lg),
+                  borderRadius: BorderRadius.circular(PosRadii.md),
                 ),
               ),
               child: Column(
@@ -2642,7 +2485,7 @@ class _EditorPhotoBlock extends StatelessWidget {
                     )
                   else
                     const Icon(Icons.photo_camera_outlined, size: 22),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: PosSpacing.sp1),
                   TfText(
                     addLabel,
                     maxLines: 1,
@@ -2667,198 +2510,35 @@ class _EditorPhotoBlock extends StatelessWidget {
   }
 }
 
-class _EditorToggleCard extends StatelessWidget {
-  const _EditorToggleCard({
-    required this.text,
-    required this.available,
-    required this.discountOn,
-    required this.discountMode,
-    required this.discountController,
-    required this.onAvailableChanged,
-    required this.onDiscountEnabledChanged,
-    required this.onDiscountModeChanged,
-  });
-
-  final AppStrings text;
-  final bool available;
-  final bool discountOn;
-  final _DiscountMode discountMode;
-  final TextEditingController discountController;
-  final ValueChanged<bool> onAvailableChanged;
-  final ValueChanged<bool> onDiscountEnabledChanged;
-  final ValueChanged<_DiscountMode> onDiscountModeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return TfCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          _EditorToggleRow(
-            icon: Icons.check_rounded,
-            label: text.menuAvailable,
-            hint: text.menuAvailableForOrder,
-            value: available,
-            onChanged: onAvailableChanged,
-            first: true,
-          ),
-          _EditorToggleRow(
-            icon: Icons.local_offer_outlined,
-            label: text.isBn ? 'ডিসকাউন্ট সেট করুন' : 'Set discount',
-            hint: discountOn
-                ? '${discountController.text.trim().isEmpty ? '10' : discountController.text.trim()}${discountMode == _DiscountMode.percent ? '%' : '৳'} ${text.menuDiscountSummary}'
-                : text.menuDiscountNone,
-            value: discountOn,
-            onChanged: onDiscountEnabledChanged,
-          ),
-          if (discountOn)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final v in const [5, 10, 15, 20, 25])
-                        TfChip(
-                          label: '$v%',
-                          active:
-                              discountMode == _DiscountMode.percent &&
-                              discountController.text.trim() == '$v',
-                          small: true,
-                          tint: true,
-                          onTap: () {
-                            discountController.text = '$v';
-                            onDiscountModeChanged(_DiscountMode.percent);
-                          },
-                        ),
-                      TfChip(
-                        label: text.isBn ? 'টাকা' : 'Flat',
-                        active: discountMode == _DiscountMode.flat,
-                        small: true,
-                        tint: true,
-                        onTap: () => onDiscountModeChanged(_DiscountMode.flat),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: discountController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'^\d*\.?\d{0,2}'),
-                      ),
-                    ],
-                    decoration: InputDecoration(
-                      labelText: text.menuDiscountValue,
-                      suffixText: discountMode == _DiscountMode.percent
-                          ? '%'
-                          : '৳',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EditorToggleRow extends StatelessWidget {
-  const _EditorToggleRow({
-    required this.icon,
-    required this.label,
-    required this.hint,
-    required this.value,
-    required this.onChanged,
-    this.first = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final String hint;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool first;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => onChanged(!value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          border: first
-              ? null
-              : const Border(top: BorderSide(color: PosColors.line)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: PosColors.surfaceSunk,
-                borderRadius: BorderRadius.circular(PosRadii.md),
-              ),
-              child: Icon(icon, size: 18, color: PosColors.inkSoft),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TfText(
-                    label,
-                    style: TfTextStyles.rowTitle.copyWith(
-                      color: PosColors.text,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  TfText(
-                    hint,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TfTextStyles.sectionStrip.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: PosColors.muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            TfToggle(value: value, onChanged: onChanged),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _AdvancedMenuOptions extends StatelessWidget {
   const _AdvancedMenuOptions({
     required this.text,
     required this.descriptionController,
     required this.prepController,
-    required this.includesController,
-    required this.optionsController,
-    required this.addOnsController,
+    required this.options,
+    required this.includes,
+    required this.addOns,
+    required this.onAddOption,
+    required this.onRemoveOption,
+    required this.onAddInclude,
+    required this.onRemoveInclude,
+    required this.onAddAddOn,
+    required this.onRemoveAddOn,
     required this.initiallyExpanded,
   });
 
   final AppStrings text;
   final TextEditingController descriptionController;
   final TextEditingController prepController;
-  final TextEditingController includesController;
-  final TextEditingController optionsController;
-  final TextEditingController addOnsController;
+  final List<_OptionRow> options;
+  final List<_IncludeRow> includes;
+  final List<_AddOnRow> addOns;
+  final VoidCallback onAddOption;
+  final ValueChanged<int> onRemoveOption;
+  final VoidCallback onAddInclude;
+  final ValueChanged<int> onRemoveInclude;
+  final VoidCallback onAddAddOn;
+  final ValueChanged<int> onRemoveAddOn;
   final bool initiallyExpanded;
 
   @override
@@ -2869,8 +2549,8 @@ class _AdvancedMenuOptions extends StatelessWidget {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: initiallyExpanded,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          tilePadding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3, vertical: 0),
+          childrenPadding: const EdgeInsets.fromLTRB(PosSpacing.sp3, 0, PosSpacing.sp3, PosSpacing.sp3),
           leading: Container(
             width: 36,
             height: 36,
@@ -2905,7 +2585,7 @@ class _AdvancedMenuOptions extends StatelessWidget {
                 labelText: text.menuDescriptionOptional,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: PosSpacing.sp2),
             TextFormField(
               controller: prepController,
               decoration: InputDecoration(
@@ -2915,38 +2595,242 @@ class _AdvancedMenuOptions extends StatelessWidget {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: optionsController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: text.menuSizeOptionsTitle,
-                hintText: text.menuSizeOptionsHint,
+            const SizedBox(height: PosSpacing.sp3),
+            _SectionLabel(text.menuSizeOptionsTitle),
+            const SizedBox(height: 8),
+            ...options.asMap().entries.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionRowWidget(
+                  controller: e.value,
+                  onRemove: () => onRemoveOption(e.key),
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: includesController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: text.menuIncludesTitle,
-                hintText: text.menuIncludesHint,
+            _AddRowButton(
+              label: text.addVariantLabel,
+              onTap: onAddOption,
+            ),
+            const SizedBox(height: PosSpacing.sp3),
+            _SectionLabel(text.menuIncludesTitle),
+            const SizedBox(height: 8),
+            ...includes.asMap().entries.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _IncludeRowWidget(
+                  controller: e.value,
+                  onRemove: () => onRemoveInclude(e.key),
+                ),
               ),
             ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: addOnsController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: text.menuAddOnsTitle,
-                hintText: text.menuAddOnsHint,
+            _AddRowButton(
+              label: text.addIncludeLabel,
+              onTap: onAddInclude,
+            ),
+            const SizedBox(height: PosSpacing.sp3),
+            _SectionLabel(text.menuAddOnsTitle),
+            const SizedBox(height: 8),
+            ...addOns.asMap().entries.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _AddOnRowWidget(
+                  controller: e.value,
+                  onRemove: () => onRemoveAddOn(e.key),
+                ),
               ),
+            ),
+            _AddRowButton(
+              label: text.addAddOnLabel,
+              onTap: onAddAddOn,
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return TfText(
+      label,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: PosColors.inkSoft,
+      ),
+    );
+  }
+}
+
+class _AddRowButton extends StatelessWidget {
+  const _AddRowButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: const Icon(Icons.add_rounded, size: 16),
+        label: TfText(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: PosColors.accentStrong,
+          side: const BorderSide(color: PosColors.lineStrong),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PosRadii.md)),
+        ),
+      ),
+    );
+  }
+}
+
+class _OptionRowWidget extends StatelessWidget {
+  const _OptionRowWidget({required this.controller, required this.onRemove});
+  final _OptionRow controller;
+  final VoidCallback onRemove;
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: TextFormField(
+            controller: controller.nameCtrl,
+            decoration: InputDecoration(hintText: text.menuOptionNameHint),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            controller: controller.priceCtrl,
+            decoration: InputDecoration(hintText: text.menuOptionPriceHint),
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 32,
+          height: 32,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: Icon(Icons.close_rounded, size: 16, color: PosColors.muted),
+            onPressed: onRemove,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IncludeRowWidget extends StatelessWidget {
+  const _IncludeRowWidget({required this.controller, required this.onRemove});
+  final _IncludeRow controller;
+  final VoidCallback onRemove;
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: controller.nameCtrl,
+            decoration: InputDecoration(hintText: text.menuIncludeNameHint),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 32,
+          height: 32,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: Icon(Icons.close_rounded, size: 16, color: PosColors.muted),
+            onPressed: onRemove,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddOnRowWidget extends StatelessWidget {
+  const _AddOnRowWidget({required this.controller, required this.onRemove});
+  final _AddOnRow controller;
+  final VoidCallback onRemove;
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: TextFormField(
+            controller: controller.nameCtrl,
+            decoration: InputDecoration(hintText: text.menuAddOnNameHint),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            controller: controller.priceCtrl,
+            decoration: InputDecoration(hintText: text.menuAddOnPriceHint),
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 32,
+          height: 32,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: Icon(Icons.close_rounded, size: 16, color: PosColors.muted),
+            onPressed: onRemove,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OptionRow {
+  _OptionRow({String name = '', double priceDelta = 0})
+    : nameCtrl = TextEditingController(text: name),
+      priceCtrl = TextEditingController(
+        text: priceDelta == priceDelta.roundToDouble()
+            ? priceDelta.toInt().toString()
+            : priceDelta.toStringAsFixed(2),
+      );
+  final TextEditingController nameCtrl;
+  final TextEditingController priceCtrl;
+  void dispose() { nameCtrl.dispose(); priceCtrl.dispose(); }
+}
+
+class _IncludeRow {
+  _IncludeRow(String name) : nameCtrl = TextEditingController(text: name);
+  final TextEditingController nameCtrl;
+  void dispose() { nameCtrl.dispose(); }
+}
+
+class _AddOnRow {
+  _AddOnRow({String name = '', double price = 0})
+    : nameCtrl = TextEditingController(text: name),
+      priceCtrl = TextEditingController(
+        text: price == price.roundToDouble()
+            ? price.toInt().toString()
+            : price.toStringAsFixed(2),
+      );
+  final TextEditingController nameCtrl;
+  final TextEditingController priceCtrl;
+  void dispose() { nameCtrl.dispose(); priceCtrl.dispose(); }
 }
 
 class _MenuFormResult {

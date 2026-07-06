@@ -635,7 +635,7 @@ class AppStrings {
   String get rejectOrderAction => isBn ? 'রিজেক্ট' : 'Reject';
   String get acceptAndSendToKitchen => isBn ? 'অ্যাকসেপ্ট' : 'Accept';
   String get reprintAction => isBn ? 'রিপ্রিন্ট' : 'Reprint';
-  String get printBillAction => isBn ? 'বিল প্রিন্ট' : 'Print bill';
+  String get printBillAction => isBn ? 'বিল প্রিন্ট' : 'Print Bill';
   String get printReceiptAction => isBn ? 'রিসিট প্রিন্ট' : 'Print receipt';
   String get servedAction => isBn ? 'পরিবেশিত' : 'Served';
   String get orderStatusPending => isBn ? 'পেন্ডিং' : 'Pending';
@@ -1047,6 +1047,7 @@ class AppStrings {
   String noItemForCode(String code) =>
       isBn ? 'কোড #$code-এর কোনো আইটেম নেই' : 'No item for code #$code';
   String get shortCodeLabel => isBn ? 'শর্ট কোড' : 'Short code';
+  String get quickBill => isBn ? 'দ্রুত বিল' : 'Quick Bill';
   String get shortCodeAutoHint =>
       isBn ? 'স্বয়ংক্রিয় (সিরিয়াল)' : 'Auto (serial)';
   String get menuEmptyTitle => isBn ? 'মেনু খালি' : 'Your menu is empty';
@@ -1103,6 +1104,9 @@ class AppStrings {
   String menuScanImported(int created, int skipped) => isBn
       ? '${_n(created)} টি আইটেম যোগ হয়েছে, ${_n(skipped)} টি ডুপ্লিকেট বাদ গেছে।'
       : '$created items added, $skipped duplicates skipped.';
+  String menuScanPages(int count) => isBn
+      ? '${_n(count)} টি পৃষ্ঠা স্ক্যান করুন'
+      : 'Scan $count page${count == 1 ? '' : 's'}';
   String categoryCountLabel(String category, int count) {
     final label = category == 'All' ? allCategories : category;
     return '$label ${_n(count)}';
@@ -1152,6 +1156,9 @@ class AppStrings {
   String get deleteAction => isBn ? 'মুছুন' : 'Delete';
   String get menuDeleted =>
       isBn ? 'মেনু আইটেম মুছে ফেলা হয়েছে' : 'Menu item deleted';
+  String menuDeletedBulk(int count) => isBn
+      ? '$count টি মেনু আইটেম মুছে ফেলা হয়েছে'
+      : '$count menu items deleted';
   String get menuChooseGallery =>
       isBn ? 'গ্যালারি থেকে বেছে নিন' : 'Choose from gallery';
   String get menuClearImage => isBn ? 'ছবি সরান' : 'Clear image';
@@ -1185,6 +1192,17 @@ class AppStrings {
       isBn ? 'অ্যাড-অন (ঐচ্ছিক)' : 'Add-ons (optional)';
   String get menuAddOnsHint =>
       isBn ? 'প্রতি লাইন: নাম : দাম' : 'One per line: name : price';
+  String get addVariantLabel =>
+      isBn ? 'ভ্যারিয়েন্ট যোগ করুন' : 'Add variant';
+  String get addIncludeLabel =>
+      isBn ? 'আইটেম যোগ করুন' : 'Add included item';
+  String get addAddOnLabel =>
+      isBn ? 'অ্যাড-অন যোগ করুন' : 'Add add-on';
+  String get menuOptionNameHint => isBn ? 'নাম' : 'Name';
+  String get menuOptionPriceHint => isBn ? 'দাম' : 'Price';
+  String get menuIncludeNameHint => isBn ? 'আইটেমের নাম' : 'Item name';
+  String get menuAddOnNameHint => isBn ? 'নাম' : 'Name';
+  String get menuAddOnPriceHint => isBn ? 'দাম' : 'Price';
   String get menuDiscountSummary => isBn ? 'ছাড়' : 'Discount';
   String get menuDeliveryCharge => isBn ? 'ডেলিভারি চার্জ' : 'Delivery charge';
   String get menuDeliveryChargeSubtitle => isBn
@@ -1203,6 +1221,15 @@ class AppStrings {
   String get menuImageSavedLocal => isBn
       ? 'ছবি লোকালি সেভ হয়েছে। ক্লাউড প্রস্তুত হলে সিঙ্ক হবে।'
       : 'Image saved locally. It will sync when cloud is ready.';
+
+  // ── Subscription / activation ──────────────────────────────────────────────
+  String get subscriptionWhatsAppMessage => isBn
+      ? 'আমার অ্যাকাউন্ট বিল পরিশোধ না করায় পজ করা হয়েছে। আমি ০১৫৭৫৮৭৩০০০ নম্বরে বিকাশ (সেন্ড মানি) দিয়ে পেমেন্ট করেছি। দয়া করে চেক করে অ্যাক্টিভেট করুন।'
+      : 'My account is paused due to unpaid bills. I have paid via bKash (Send Money) to 01575873000. Please check and activate.';
+  String get subscriptionChatSupport =>
+      isBn ? 'হোয়াটসঅ্যাপে চ্যাট করুন' : 'Chat on WhatsApp';
+  String get subscriptionIvePaid =>
+      isBn ? 'পেমেন্ট করেছি' : "I've Paid";
 
   // ── Hero media ─────────────────────────────────────────────────────────────
   String get heroMediaSubtitle => isBn
@@ -1323,6 +1350,11 @@ class AppStrings {
       isBn ? 'অর্ডারিং সেটিংস সেভ হয়েছে' : 'Ordering settings saved';
   String get orderingSaveFailed =>
       isBn ? 'সেভ করা যায়নি' : "Couldn't save settings";
+  String get bkashNagadPayments =>
+      isBn ? 'বিকাশ/নগদ পেমেন্ট' : 'bKash/Nagad payments';
+  String get bkashNagadPaymentsHint => isBn
+      ? 'বিল প্রিন্ট করার সময় পেমেন্ট পদ্ধতি নির্বাচন ডায়ালগ দেখান'
+      : 'Show payment method selection dialog when printing bill';
 
   // Staff (spec §4.10)
   String staffActiveCount(int active, int total) => isBn
@@ -1581,6 +1613,9 @@ class AppStrings {
   String get scanStock => isBn ? 'স্ক্যান' : 'Scan';
   String get scanStockHint => isBn ? 'বিল বা গণনার শিট' : 'Bill or count sheet';
   String get scanningStock => isBn ? 'স্ক্যান হচ্ছে…' : 'Scanning…';
+  String stockScanPages(int count) => isBn
+      ? '${_n(count)} টি পৃষ্ঠা স্ক্যান করুন'
+      : 'Scan $count page${count == 1 ? '' : 's'}';
   String get countScanUnmatched => isBn ? 'মেলানো যায়নি' : 'Couldn\'t match';
 
   // Daily report

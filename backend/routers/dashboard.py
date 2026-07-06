@@ -960,6 +960,10 @@ async def analytics(
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(
+        "analytics request outlet=%s range=%s start=%s end=%s channel=%s daypart=%s",
+        outlet_id, range_, start, end, channel, daypart,
+    )
     _ensure_outlet(current_outlet, outlet_id)
     now = datetime.now(timezone.utc)
     today_start, today_end = _bdt_day_bounds(now)
@@ -1260,9 +1264,13 @@ async def sales_table(
     current_outlet: str = Depends(get_current_outlet_id),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(
+        "sales_table request outlet=%s range=%s start=%s end=%s channel=%s",
+        outlet_id, range_, start, end, channel,
+    )
     _ensure_outlet(current_outlet, outlet_id)
     now = datetime.now(timezone.utc)
-    cur_start, cur_end, _prev_start, _prev_end = _analytics_period(range_, start, end, now)
+    cur_start, cur_end, _ps, _pe = _analytics_period(range_, start, end, now)
 
     rows = (
         await db.execute(
@@ -1650,7 +1658,7 @@ async def analytics_summary(
     prep_cost = 0.0
     due_receivable = 0.0
     collection: dict[str, float] = defaultdict(float)
-    service: dict[str, float] = defaultdict(float)
+    service_totals: dict[str, float] = defaultdict(float)
     # local-date -> revenue / order-count (Revenue trend chart)
     trend_rev: dict[str, float] = defaultdict(float)
     trend_ord: dict[str, int] = defaultdict(int)
@@ -1669,7 +1677,7 @@ async def analytics_summary(
         if method == "pay_later":
             due_receivable += total
         collection[method] += total
-        service[_service_key(order.service_type)] += total
+        service_totals[_service_key(order.service_type)] += total
         day = _bdt_date_key(order.created_at)
         trend_rev[day] += total
         trend_ord[day] += 1
@@ -1825,7 +1833,7 @@ async def analytics_summary(
             {
                 "key": k,
                 "label": label,
-                "valueBdt": round(service.get(k, 0.0), 2),
+                "valueBdt": round(service_totals.get(k, 0.0), 2),
             }
             for k, label in (
                 ("dineIn", "Dine-in"),
@@ -1876,6 +1884,12 @@ async def analytics_item_detail(
     # a meaningful chart.
     trend_start = min(cur_start, cur_end - timedelta(days=6))
 
+    logger.info(
+        "item_detail request item=%s range=%s trendStart=%s curStart=%s curEnd=%s",
+        menu_item_id, range_, trend_start.isoformat(),
+        cur_start.isoformat(), cur_end.isoformat(),
+    )
+
     daily: dict[str, float] = defaultdict(float)
     if trend_start < cur_start:
         extra_orders = (
@@ -1891,6 +1905,7 @@ async def analytics_item_detail(
                 )
             )
         ).scalars().all()
+        logger.info("item_detail extraOrders total=%s", len(extra_orders))
         for order in extra_orders:
             day = _bdt_date_key(order.created_at)
             for line in _line_items(order.items):
@@ -1937,9 +1952,14 @@ async def analytics_item_detail(
             total += rev
             units += _item_qty(line)
 
+    day_keys = _day_keys(trend_start, cur_end)
+    logger.info(
+        "item_detail response item=%s totalBdt=%.2f units=%s dayKeys=%s dailyKeys=%s",
+        menu_item_id, total, units, len(day_keys), len(daily),
+    )
     series = [
         {"date": d, "salesBdt": round(daily.get(d, 0.0), 2)}
-        for d in _day_keys(trend_start, cur_end)
+        for d in day_keys
     ]
     return ok(
         {

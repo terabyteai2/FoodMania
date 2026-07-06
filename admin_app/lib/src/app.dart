@@ -588,12 +588,14 @@ class _MainShellState extends State<MainShell> {
   /// Drawer group-child actions: quick screens/sheets that don't map to a tab.
   void _handleDrawerAction(_DrawerAction action) {
     switch (action) {
+      case _DrawerAction.stockScan:
+        unawaited(runStockScanFlow(context));
       case _DrawerAction.stockIn:
         unawaited(_pushThenRefreshInventory(const StockInScreen()));
       case _DrawerAction.stockCount:
         unawaited(_pushThenRefreshInventory(const EndOfDayCountScreen()));
-      case _DrawerAction.stockScan:
-        unawaited(runStockScanFlow(context));
+      case _DrawerAction.menuScan:
+        _selectTab(_AppTab.menu);
       case _DrawerAction.menuDeliveryCharge:
         unawaited(showMenuDeliveryChargeEditor(context));
       case _DrawerAction.menuDiscounts:
@@ -1015,19 +1017,20 @@ class _RailLogo extends StatelessWidget {
 /// Quick actions reachable from drawer group children — screens/sheets that
 /// don't map to a nav tab. Handled by [_MainShellState._handleDrawerAction].
 enum _DrawerAction {
+  stockScan,
   stockIn,
   stockCount,
-  stockScan,
+  menuScan,
   menuDeliveryCharge,
   menuDiscounts,
 }
 
 /// Petpooja-style left navigation drawer for the phone surface. Header =
-/// brand + outlet + role chip (+ owner Backoffice/Manager view toggle);
-/// body = the role's primary destinations with expandable groups
-/// (Analytics ▸ Reports, Stock ▸ Stock in/Count/Scan, Menu ▸ Delivery
-/// charge/Discounts), then Messages (permission-gated) and a Settings entry
-/// into the More hub. Selecting an item closes the drawer first.
+/// brand + outlet; body = the role's primary destinations with expandable
+/// groups (Analytics ▸ Reports, Stock ▸ Scan/Stock in/Count, Menu ▸ Scan
+/// menu card/Delivery charge/Discounts), then Messages (permission-gated)
+/// and a Settings entry into the More hub. Owner-only Backoffice/Counter
+/// view switch at the bottom. Selecting an item closes the drawer first.
 class _AppNavDrawer extends StatelessWidget {
   const _AppNavDrawer({
     required this.tabOrder,
@@ -1104,6 +1107,13 @@ class _AppNavDrawer extends StatelessWidget {
             initiallyExpanded: tab == selected,
             children: [
               _DrawerNavRow.icon(
+                icon: Icons.document_scanner_outlined,
+                label: text.scanStock,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.stockScan),
+              ),
+              _DrawerNavRow.icon(
                 icon: Icons.add_box_outlined,
                 label: text.stockIn,
                 selected: false,
@@ -1117,13 +1127,6 @@ class _AppNavDrawer extends StatelessWidget {
                 indented: true,
                 onTap: () => goAction(_DrawerAction.stockCount),
               ),
-              _DrawerNavRow.icon(
-                icon: Icons.document_scanner_outlined,
-                label: text.scanStock,
-                selected: false,
-                indented: true,
-                onTap: () => goAction(_DrawerAction.stockScan),
-              ),
             ],
           );
         case _AppTab.menu when app.accountRole.isManager:
@@ -1134,6 +1137,13 @@ class _AppNavDrawer extends StatelessWidget {
             onHeaderTap: () => goTab(tab),
             initiallyExpanded: tab == selected,
             children: [
+              _DrawerNavRow.icon(
+                icon: Icons.document_scanner_outlined,
+                label: text.menuScanCardButton,
+                selected: false,
+                indented: true,
+                onTap: () => goAction(_DrawerAction.menuScan),
+              ),
               _DrawerNavRow.icon(
                 icon: Icons.delivery_dining_outlined,
                 label: text.deliveryCharge,
@@ -1169,42 +1179,8 @@ class _AppNavDrawer extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _DrawerHeader(
-              role: app.accountRole,
               outletName: app.outletName.trim(),
-              isBn: isBn,
             ),
-            // Owner-only Backoffice/Manager view switch (kept visible while an
-            // owner previews the manager surface so they can switch back).
-            if (app.demoOwnerAccess)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  PosSpacing.sp4,
-                  0,
-                  PosSpacing.sp4,
-                  PosSpacing.sp3,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TfMicroLabel(
-                        tfPick(context, en: 'VIEW', bn: 'ভিউ'),
-                      ),
-                    ),
-                    TfCompactRoleToggle(
-                      role: app.accountRole.isOwner ? 'owner' : 'manager',
-                      options: [
-                        (text.backofficeLabel, 'owner'),
-                        (text.managerRole, 'manager'),
-                      ],
-                      onChanged: (value) => app.setAccountRoleDemo(
-                        value == 'owner'
-                            ? AccountRole.owner
-                            : AccountRole.manager,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             Divider(height: 1, thickness: 1, color: PosColors.line),
             Expanded(
               child: ListView(
@@ -1231,6 +1207,33 @@ class _AppNavDrawer extends StatelessWidget {
                 ],
               ),
             ),
+            // Owner-only Backoffice/Counter view switch at the bottom.
+            if (app.demoOwnerAccess)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  PosSpacing.sp4,
+                  PosSpacing.sp2,
+                  PosSpacing.sp4,
+                  PosSpacing.sp4,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TfCompactRoleToggle(
+                      role: app.accountRole.isOwner ? 'owner' : 'manager',
+                      options: [
+                        (text.backofficeLabel, 'owner'),
+                        (text.counterService, 'manager'),
+                      ],
+                      onChanged: (value) => app.setAccountRoleDemo(
+                        value == 'owner'
+                            ? AccountRole.owner
+                            : AccountRole.manager,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1325,14 +1328,10 @@ class _DrawerNavGroupState extends State<_DrawerNavGroup> {
 
 class _DrawerHeader extends StatelessWidget {
   const _DrawerHeader({
-    required this.role,
     required this.outletName,
-    required this.isBn,
   });
 
-  final AccountRole role;
   final String outletName;
-  final bool isBn;
 
   @override
   Widget build(BuildContext context) {
@@ -1340,49 +1339,12 @@ class _DrawerHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
         PosSpacing.sp4,
         PosSpacing.sp4,
-        PosSpacing.sp3,
+        PosSpacing.sp4,
         PosSpacing.sp4,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TfBrandHeader(
-              title: 'QuickBytes',
-              subtitle: outletName.isEmpty ? null : outletName,
-            ),
-          ),
-          const SizedBox(width: PosSpacing.sp2),
-          _RoleChip(label: isBn ? role.labelBn : role.label),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoleChip extends StatelessWidget {
-  const _RoleChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: PosSpacing.sp2,
-        vertical: PosSpacing.sp1,
-      ),
-      decoration: BoxDecoration(
-        color: PosColors.neutralSoft,
-        borderRadius: BorderRadius.circular(PosRadii.pill),
-        border: Border.all(color: PosColors.neutralWash),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: PosColors.neutralInk,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
+      child: TfBrandHeader(
+        title: 'QuickBytes',
+        subtitle: outletName.isEmpty ? null : outletName,
       ),
     );
   }

@@ -649,13 +649,15 @@ class _OrdersScreenState extends State<OrdersScreen>
     final app = AppScope.read(context);
     if (!app.isManager) return;
     final text = app.strings;
-    // Spec: settling an open order runs the Petpooja Settle & Save modal
-    // (payment mode + customer paid + return) before it is marked completed
-    // and printed. Re-prints on already-completed orders go straight to the
-    // printer.
+    // When settle-and-save is enabled (Settings > Ordering > bKash/Nagad
+    // payments), show the payment method modal before completing. Otherwise
+    // go straight to print. Re-prints on already-completed orders always skip
+    // the modal.
     if (order.status.adminStatus != OrderStatus.completed) {
-      final settled = await showSettleAndSaveDialog(context, order: order);
-      if (settled == null || !context.mounted) return;
+      if (app.settleAndSaveEnabled) {
+        final settled = await showSettleAndSaveDialog(context, order: order);
+        if (settled == null || !context.mounted) return;
+      }
       await app.updateOrderStatus(order.id, OrderStatus.completed);
     }
     if (!context.mounted) return;
@@ -1771,9 +1773,9 @@ class _OrderCardState extends State<_OrderCard> {
               ),
               const SizedBox(width: PosSpacing.sp2),
               TfButton(
-                label: text.billAction,
+                label: text.printBillAction,
                 icon: Icons.receipt_long_outlined,
-                variant: TfButtonVariant.accent,
+                variant: TfButtonVariant.success,
                 size: TfButtonSize.sm,
                 fullWidth: false,
                 onPressed: widget.onPrintBill,
@@ -3425,7 +3427,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     }
     final cats = widget.menuItems.map((i) => i.category).toSet().toList()
       ..sort((a, b) => (catPopularity[b] ?? 0).compareTo(catPopularity[a] ?? 0));
-    _categoriesMemo = cats;
+    _categoriesMemo = ['All', ...cats];
     // A stale category selection (menu edited/synced since) would filter
     // EVERYTHING out and leave an inexplicably empty grid — fall back to All.
     if (_selectedCategory != '' &&
@@ -3458,7 +3460,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final codeMode = _codeMode;
     final result = _sortedMenu
         .where((i) {
-          if (selectedCategory != '' && i.category != selectedCategory) {
+          if (selectedCategory != '' && selectedCategory != 'All' && i.category != selectedCategory) {
             return false;
           }
           if (rawQuery.isEmpty) return true;

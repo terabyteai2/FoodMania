@@ -185,41 +185,6 @@ class _TopControls extends StatelessWidget {
   }
 }
 
-class _SquareToggle extends StatelessWidget {
-  const _SquareToggle({
-    required this.icon,
-    required this.active,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: active ? PosColors.primary : PosColors.surfaceSunk,
-          border: Border.all(
-            color: active ? PosColors.primary : PosColors.line,
-          ),
-          borderRadius: BorderRadius.circular(PosRadii.card),
-        ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: active ? PosColors.accentInk : PosColors.ink2,
-        ),
-      ),
-    );
-  }
-}
-
 class _MenuSearchBar extends StatelessWidget {
   const _MenuSearchBar({
     required this.searchCtrl,
@@ -242,41 +207,71 @@ class _MenuSearchBar extends StatelessWidget {
     final text = AppScope.of(context).strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: searchCtrl,
-              onChanged: onSearchChanged,
-              autofocus: false,
-              keyboardType: codeMode ? TextInputType.number : TextInputType.text,
-              textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
-              onSubmitted: codeMode ? onCodeSubmit : null,
-              decoration: InputDecoration(
-                hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
-                prefixIcon: Icon(
-                  codeMode ? Icons.tag_rounded : Icons.search_rounded,
-                  color: PosColors.muted,
+      child: Container(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          border: Border.all(color: PosColors.line),
+          borderRadius: BorderRadius.circular(PosRadii.card),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: searchCtrl,
+                onChanged: onSearchChanged,
+                autofocus: false,
+                keyboardType: codeMode ? TextInputType.number : TextInputType.text,
+                textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
+                onSubmitted: codeMode ? onCodeSubmit : null,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
+                  prefixIcon: Icon(
+                    codeMode ? Icons.tag_rounded : Icons.search_rounded,
+                    color: PosColors.muted,
+                  ),
+                  suffixIcon: query.isEmpty
+                      ? null
+                      : IconButton(
+                          onPressed: () {
+                            searchCtrl.clear();
+                            onSearchChanged('');
+                          },
+                          icon: Icon(Icons.close_rounded, color: PosColors.muted),
+                        ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 ),
-                suffixIcon: query.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          searchCtrl.clear();
-                          onSearchChanged('');
-                        },
-                        icon: Icon(Icons.close_rounded, color: PosColors.muted),
-                      ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          _SquareToggle(
-            icon: Icons.bolt_rounded,
-            active: codeMode,
-            onTap: onToggleCode,
-          ),
-        ],
+            GestureDetector(
+              onTap: onToggleCode,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: codeMode ? PosColors.primary : PosColors.surfaceSunk,
+                  border: const Border(
+                    left: BorderSide(color: PosColors.line),
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(PosRadii.card),
+                    bottomRight: Radius.circular(PosRadii.card),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  text.quickBill,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: codeMode ? PosColors.accentInk : PosColors.ink2,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

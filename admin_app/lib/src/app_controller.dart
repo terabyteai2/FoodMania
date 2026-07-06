@@ -277,6 +277,11 @@ class PosAppController extends ChangeNotifier {
   String accountDisplayName = '';
   bool notificationSoundEnabled = true;
   String notificationSoundPath = '';
+  bool _settleAndSaveEnabled = false;
+
+  /// When true, Print Bill on the ongoing orders tab shows the settle & save
+  /// dialog (with bKash/Nagad payment options) before completing the order.
+  bool get settleAndSaveEnabled => _settleAndSaveEnabled;
 
   /// Counter (quick-sell) outlet: no tables configured. Drives the quick-sell
   /// Tables grid and the order wizard's skip-table flow.
@@ -592,6 +597,8 @@ class PosAppController extends ChangeNotifier {
       }
       _ownerViewPreview =
           preferences.getBool(_ownerViewPreviewKey) ?? false;
+      _settleAndSaveEnabled =
+          preferences.getBool(_settleAndSaveKey) ?? false;
       notificationSoundEnabled =
           preferences.getBool(_notificationSoundEnabledKey) ?? true;
       notificationSoundPath =
@@ -3711,6 +3718,13 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSettleAndSaveEnabled(bool value) async {
+    _settleAndSaveEnabled = value;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_settleAndSaveKey, value);
+    notifyListeners();
+  }
+
   Future<void> setNotificationSoundPath(String path) async {
     var stored = path.trim();
     if (stored.isNotEmpty && !stored.startsWith('content://')) {
@@ -4434,4 +4448,6 @@ class PosAppController extends ChangeNotifier {
   static final String _trialEndsAtKey = 'local_pos_trial_ends_at';
   static final String _unprintedKotOrderIdsKey =
       'local_pos_unprinted_kot_order_ids';
+  static final String _settleAndSaveKey =
+      'local_pos_settle_and_save_enabled';
 }

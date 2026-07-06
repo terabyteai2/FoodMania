@@ -94,23 +94,35 @@ class MenuImageService {
     final image = await _picker.pickImage(
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.rear,
-      maxWidth: maxEdgePx.toDouble(),
-      maxHeight: maxEdgePx.toDouble(),
-      imageQuality: 88,
       requestFullMetadata: false,
     );
     if (image == null) return null;
 
-    final bytes = await image.readAsBytes();
+    var bytes = await image.readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded != null) {
+      final oriented = img.bakeOrientation(decoded);
+      final longest = oriented.width > oriented.height ? oriented.width : oriented.height;
+      final resized = longest > maxEdgePx
+          ? img.copyResize(
+              oriented,
+              width: oriented.width >= oriented.height ? maxEdgePx : null,
+              height: oriented.height > oriented.width ? maxEdgePx : null,
+              interpolation: img.Interpolation.average,
+            )
+          : oriented;
+      bytes = Uint8List.fromList(img.encodeJpg(resized, quality: 88));
+    }
     if (bytes.length > maxBinaryBytes) {
       throw MenuImageException(
         'Captured menu photo is too large after compression. Please retake it a little farther away.',
       );
     }
     final fallbackName = 'menu-page-$pageNumber.jpg';
+    final mimeType = image.mimeType ?? _mimeTypeFromPath(image.name);
     return PickedMenuScanPage(
       bytes: bytes,
-      mimeType: image.mimeType ?? _mimeTypeFromPath(image.name),
+      mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg',
       fileName: image.name.trim().isEmpty ? fallbackName : image.name,
     );
   }

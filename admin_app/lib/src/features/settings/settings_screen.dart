@@ -57,6 +57,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _openRequestedReceiptPrinterIfNeeded();
   }
 
+  Future<void> _toggleSettleAndSave() async {
+    final app = AppScope.of(context);
+    await app.setSettleAndSaveEnabled(!app.settleAndSaveEnabled);
+    setState(() {});
+  }
+
   @override
   void didUpdateWidget(covariant SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -193,6 +199,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? text.connected
                       : text.connect,
                   onTap: _openReceiptPrinter,
+                ),
+              ],
+            ),
+            _SettingsGroupData(
+              label: text.isBn ? 'পিওএস' : 'POS',
+              items: [
+                _SettingActionData(
+                  title: text.bkashNagadPayments,
+                  subtitle: text.bkashNagadPaymentsHint,
+                  icon: Icons.payment_rounded,
+                  trailing: app.settleAndSaveEnabled
+                      ? (text.isBn ? 'চালু' : 'On')
+                      : (text.isBn ? 'বন্ধ' : 'Off'),
+                  onTap: _toggleSettleAndSave,
                 ),
               ],
             ),
