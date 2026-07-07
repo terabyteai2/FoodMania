@@ -191,6 +191,9 @@ class _ReceiptLabels {
       _bn ? '$total ($vatIncluded)' : '$total ($vatIncluded)';
   String get emptyItemName => _bn ? 'আইটেম' : 'Item';
   String get defaultRestaurantName => _bn ? 'রেস্টুরেন্ট' : 'Restaurant';
+  String qrCaption(bool isDelivery) => isDelivery
+      ? _bn ? 'ডেলিভারি ট্র্যাক করুন' : 'Track your delivery'
+      : _bn ? 'আপনার অর্ডার ট্র্যাক করুন' : 'Scan to track your order';
 
   String get _locale => _bn ? 'bn_BD' : 'en_US';
   String pick(String en, String bn) => _bn ? bn : en;
@@ -1287,11 +1290,10 @@ class PrinterService {
     final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
         ? img.copyResize(decoded, width: 576)
         : decoded;
-    final grayscale = img.grayscale(raster);
     final bytes = <int>[
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
-      ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.imageRaster(raster, align: PosAlign.left),
       ...generator.feed(4),
       ...generator.cut(),
     ];
@@ -1411,12 +1413,12 @@ class PrinterService {
     final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
         ? img.copyResize(decoded, width: 576)
         : decoded;
-    final grayscale = img.grayscale(raster);
     final bytes = <int>[
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
-      ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.imageRaster(raster, align: PosAlign.left),
       ...generator.feed(_trailingFeedLines),
+      ...generator.cut(),
     ];
     _debugPrintRasterResult(order, copyKind: 'kot', byteCount: bytes.length);
     return bytes;
@@ -1490,12 +1492,7 @@ class PrinterService {
       mobileNumberLabel: labels.phoneLabel,
       summaryRows: _receiptSummaryRows(order, labels: labels),
       paymentLine: _paymentLine(order, labels),
-      qrCaption: isDelivery
-          ? labels.pick('Track your delivery', 'ডেলিভারি ট্র্যাক করুন')
-          : labels.pick(
-              'Scan to track / rate us',
-              'ট্র্যাক / রেট করতে স্ক্যান করুন',
-            ),
+      qrCaption: labels.qrCaption(isDelivery),
       footerText: isDelivery
           ? null
           : labels.pick('Thank you for dining!', 'ধন্যবাদ!'),
@@ -1538,12 +1535,10 @@ class PrinterService {
       width: decoded.width,
       height: decoded.height,
     );
-    // Convert to grayscale before rasterisation so the ESC/POS driver gets
-    // clean luminance values instead of antialiased RGBA noise.
+    // Resize for 80 mm paper on Windows; otherwise use as-rendered.
     final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
         ? img.copyResize(decoded, width: 576)
         : decoded;
-    final grayscale = img.grayscale(raster);
 
     // The QR code is rendered inline into the receipt bitmap (top-right
     // corner) by [TicketBitmapRenderer]. We deliberately do NOT use the
@@ -1552,8 +1547,9 @@ class PrinterService {
     final bytes = <int>[
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
-      ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.imageRaster(raster, align: PosAlign.left),
       ...generator.feed(_trailingFeedLines),
+      ...generator.cut(),
     ];
     _debugPrintRasterResult(
       order,
@@ -1575,12 +1571,12 @@ class PrinterService {
     final raster = Platform.isWindows && _state.windowsPaperWidthMm == 80
         ? img.copyResize(decoded, width: 576)
         : decoded;
-    final grayscale = img.grayscale(raster);
     return <int>[
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
-      ...generator.imageRaster(grayscale, align: PosAlign.center),
+      ...generator.imageRaster(raster, align: PosAlign.left),
       ...generator.feed(_trailingFeedLines),
+      ...generator.cut(),
     ];
   }
 

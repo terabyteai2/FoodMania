@@ -283,10 +283,9 @@ class TicketBitmapRenderer {
         (isDelivery && data.deliveryAddress?.trim().isNotEmpty == true
             ? ((data.deliveryAddress!.length ~/ 32) * 24 + 10).toDouble()
             : 0) +
-        (isDelivery && data.mobileNumber?.trim().isNotEmpty == true ? 30.0 : 0) +
-        (!isDelivery && data.tableLine.trim().isNotEmpty == true ? 30.0 : 0);
+        (isDelivery && data.mobileNumber?.trim().isNotEmpty == true ? 30.0 : 0);
     final qrSection =
-        data.orderDetailsUrl?.trim().isNotEmpty == true ? 330.0 : 0;
+        data.orderDetailsUrl?.trim().isNotEmpty == true ? 165.0 : 0;
     final footerArea = data.qrCaption?.trim().isNotEmpty == true ? 36.0 : 0;
     final extraFooter = data.footerText?.trim().isNotEmpty == true ? 30.0 : 0;
     final height = (200 + itemRows + summaryRows + customerInfo + qrSection +
@@ -328,43 +327,52 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
 
-    // 4. Order number (Bold, centered)
+    // 4. Order number (Bold, left)
     y = _text(
       canvas,
       'Order: ${data.orderNumberDisplay}',
       y,
       fontSize: 22,
       weight: FontWeight.w700,
-      align: TextAlign.center,
+      align: TextAlign.left,
     );
 
-    // 5. Date line
+    // 5. Table line (same typography as Order #)
+    if (!isDelivery && data.tableLine.trim().isNotEmpty == true) {
+      y = _text(
+        canvas,
+        data.tableLine,
+        y,
+        fontSize: 22,
+        weight: FontWeight.w700,
+        align: TextAlign.left,
+      );
+    }
+
+    // 6. Date line
     y = _text(
       canvas,
       'Date: ${data.dateLine}',
       y,
       fontSize: 22,
       weight: FontWeight.w500,
-      align: TextAlign.center,
+      align: TextAlign.left,
     );
 
-    // 6. Source line
+    // 7. Source line
     y = _text(
       canvas,
       'Source: ${data.sourceLine}',
       y,
       fontSize: 22,
       weight: FontWeight.w500,
-      align: TextAlign.center,
+      align: TextAlign.left,
     );
 
     // 7. Single divider
     y = _rule(canvas, y + 4);
 
-    // 8. Column headers
-    y = _columnHeaderRow(canvas, y);
-
-    // 9. Item rows
+    // 8. Item rows
     for (final item in data.items) {
       y = _itemRow(canvas, item, y);
     }
@@ -404,7 +412,7 @@ class TicketBitmapRenderer {
         y,
         fontSize: 22,
         weight: FontWeight.w700,
-        align: TextAlign.center,
+        align: TextAlign.left,
       );
     }
 
@@ -433,15 +441,6 @@ class TicketBitmapRenderer {
         fontSize: 22,
       );
     }
-    if (!isDelivery && data.tableLine.trim().isNotEmpty == true) {
-      y = _text(
-        canvas,
-        data.tableLine,
-        y,
-        fontSize: 22,
-      );
-    }
-
     // 14. QR code
     final qrUrl = data.orderDetailsUrl?.trim();
     if (qrUrl != null && qrUrl.isNotEmpty) {
@@ -700,38 +699,6 @@ class TicketBitmapRenderer {
     return png.buffer.asUint8List();
   }
 
-  static double _columnHeaderRow(Canvas canvas, double y) {
-    final totalWidth = _width - (_padding * 2);
-    const indexWidth = 30.0;
-    const qtyWidth = 36.0;
-    const amountWidth = 90.0;
-    const gap = 4.0;
-    final descWidth = totalWidth - indexWidth - qtyWidth - amountWidth - gap * 3;
-
-    final index = _painter('INDEX', fontSize: 20, weight: FontWeight.w600)
-      ..layout(maxWidth: indexWidth);
-    final qty = _painter('QTY', fontSize: 20, weight: FontWeight.w600)
-      ..layout(maxWidth: qtyWidth);
-    final desc = _painter('DESCRIPTION', fontSize: 20, weight: FontWeight.w600)
-      ..layout(maxWidth: descWidth);
-    final price = _painter(
-      'PRICE',
-      fontSize: 20,
-      weight: FontWeight.w600,
-      align: TextAlign.right,
-    )..layout(maxWidth: amountWidth);
-
-    var x = _padding;
-    index.paint(canvas, Offset(x, y));
-    x += indexWidth + gap;
-    qty.paint(canvas, Offset(x, y));
-    x += qtyWidth + gap;
-    desc.paint(canvas, Offset(x, y));
-    price.paint(canvas, Offset(_width - _padding - price.width, y));
-
-    return y + index.height + 4;
-  }
-
   static double _doubleRule(Canvas canvas, double y) {
     final paint = Paint()
       ..color = Colors.black
@@ -766,9 +733,9 @@ class TicketBitmapRenderer {
         errorCorrectLevel: QrErrorCorrectLevel.L,
       );
       final qrImage = QrImage(qrCode);
-      const targetPx = 280;
+      const targetPx = 116;
       final modules = qrImage.moduleCount;
-      final modulePx = (targetPx / modules).floor().clamp(1, 12);
+      final modulePx = (targetPx / modules).floor().clamp(1, 6);
       final qrSizePx = modules * modulePx;
       final left = (_width - qrSizePx) / 2;
       final paint = Paint()..color = Colors.black;
@@ -867,55 +834,27 @@ class TicketBitmapRenderer {
   }
 
   static double _itemRow(Canvas canvas, TicketLineItem item, double y) {
-    final totalWidth = _width - (_padding * 2);
-    const indexWidth = 30.0;
-    const qtyWidth = 36.0;
-    const amountWidth = 90.0;
-    const gap = 4.0;
-    final descWidth = totalWidth - indexWidth - qtyWidth - amountWidth - gap * 3;
-
-    final index = _painter(
-      item.index.toString().padLeft(3, '0'),
-      fontSize: 20,
-      weight: FontWeight.w500,
-    )..layout(maxWidth: indexWidth);
-
-    final qty = _painter(
-      item.qtyText,
-      fontSize: 20,
-      weight: FontWeight.w500,
-    )..layout(maxWidth: qtyWidth);
-
-    final desc = _painter(
-      item.name,
-      fontSize: 20,
-      weight: FontWeight.w500,
-      maxLines: 2,
-    )..layout(maxWidth: descWidth);
-
+    const maxRightWidth = 98.0;
     final amount = _painter(
       item.lineTotalText,
       fontSize: 20,
       weight: FontWeight.w500,
       align: TextAlign.right,
-    )..layout(maxWidth: amountWidth);
+    )..layout(maxWidth: maxRightWidth);
+    final leftMaxWidth = (_width - (_padding * 2)) - amount.width - 18;
+    final left = _painter(
+      '${item.qtyText} ${item.name}',
+      fontSize: 20,
+      weight: FontWeight.w500,
+      maxLines: 2,
+    )..layout(maxWidth: leftMaxWidth.clamp(72, _width).toDouble());
 
-    var x = _padding;
-    index.paint(canvas, Offset(x, y));
-    x += indexWidth + gap;
-    qty.paint(canvas, Offset(x, y));
-    x += qtyWidth + gap;
-    desc.paint(canvas, Offset(x, y));
+    left.paint(canvas, Offset(_padding, y));
     amount.paint(canvas, Offset(_width - _padding - amount.width, y));
 
-    final rowHeight = [
-      index.height,
-      qty.height,
-      desc.height,
-      amount.height,
-    ].reduce((a, b) => a > b ? a : b);
-
-    return y + rowHeight + 6;
+    return y +
+        (left.height > amount.height ? left.height : amount.height) +
+        8;
   }
 
   static double _kotItemRow(Canvas canvas, KotLineItem item, double y) {
