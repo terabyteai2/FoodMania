@@ -82,6 +82,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
 
   String _tableUrl(String tableLabel) =>
       'https://$_slug.quickbytes.buzz/tableorder/$tableLabel';
+  String _restaurantUrl() => 'https://$_slug.quickbytes.buzz';
 
   List<PosFloorTable> _allTables() {
     final settings = _settings;
@@ -104,6 +105,9 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     }
     return 'Table $label';
   }
+
+  String get _restaurantName =>
+      AppScope.of(context).serverConfig.restaurantName.trim();
 
   Future<void> _printLabel(PosFloorTable table) async {
     final app = AppScope.of(context);
@@ -133,6 +137,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
       await app.printerService.printTableQrLabel(
         tableLabel: label,
         qrUrl: _tableUrl(label),
+        restaurantName: _restaurantName,
       );
       debugPrint('[TableQrLabels] print success label="$label"');
       if (!mounted) return;
@@ -145,6 +150,42 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('${text.printFailed}: $e')));
+    } finally {
+      if (mounted) setState(() => _printing.remove(label));
+    }
+  }
+
+  Future<void> _printRestaurantMenu() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final slug = _slug;
+    if (slug == null) return;
+
+    if (!app.printerState.connected && !app.printerState.hasSelectedPrinter) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(text.printerNotConnectedHint)),
+      );
+      return;
+    }
+
+    const label = 'RESTAURANT MENU';
+    setState(() => _printing.add(label));
+    try {
+      await app.printerService.printTableQrLabel(
+        tableLabel: label,
+        qrUrl: _restaurantUrl(),
+        restaurantName: _restaurantName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$label ${text.tableLabelPrinted}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${text.printFailed}: $e')),
+      );
     } finally {
       if (mounted) setState(() => _printing.remove(label));
     }
@@ -317,18 +358,96 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
       );
     }
 
+    final menuUrl = _restaurantUrl();
+    final menuPrinting = _printing.contains('RESTAURANT MENU');
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: tables.length + 1,
+      itemCount: 2 + tables.length,
       itemBuilder: (context, index) {
         if (index == 0) {
-          return _DiagnosticBanner(
-            slug: rawSlug,
-            tablesCount: tables.length,
-            printerConnected: AppScope.of(context).printerState.connected,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: TfCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  TfText(
+                    'RESTAURANT MENU',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: PosColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 150,
+                    child: Center(
+                      child: QrImageView(
+                        data: menuUrl,
+                        version: QrVersions.auto,
+                        gapless: true,
+                        size: 150,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: PosColors.slate,
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: PosColors.slate,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TfText(
+                    menuUrl,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: PosColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: IconButton(
+                      icon: Icon(
+                        menuPrinting
+                            ? Icons.hourglass_top_rounded
+                            : Icons.print_rounded,
+                        size: 20,
+                        color: menuPrinting
+                            ? PosColors.muted
+                            : PosColors.accentStrong,
+                      ),
+                      onPressed: menuPrinting ? null : _printRestaurantMenu,
+                      tooltip: text.print,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         }
-        final table = tables[index - 1];
+        if (index == 1) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _DiagnosticBanner(
+              slug: rawSlug,
+              tablesCount: tables.length,
+              printerConnected: AppScope.of(context).printerState.connected,
+            ),
+          );
+        }
+        final table = tables[index - 2];
         final label = table.label;
         final url = _tableUrl(label);
         final isPrinting = _printing.contains(label);

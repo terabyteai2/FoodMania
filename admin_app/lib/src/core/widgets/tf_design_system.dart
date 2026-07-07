@@ -2894,6 +2894,7 @@ class TfCompactRoleToggle extends StatelessWidget {
     required this.role,
     required this.onChanged,
     this.options = const [('Mgr', 'manager'), ('Owner', 'owner')],
+    this.expand = false,
     super.key,
   });
 
@@ -2903,18 +2904,24 @@ class TfCompactRoleToggle extends StatelessWidget {
   /// Segments as `(label, value)` pairs.
   final List<(String, String)> options;
 
+  /// When true, stretches to fill available width with equal segments.
+  final bool expand;
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(PosSpacing.sp1),
       decoration: BoxDecoration(
         color: PosColors.surfaceSunk,
         borderRadius: BorderRadius.circular(PosRadii.input),
         border: Border.all(color: PosColors.line, width: 1),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [for (final opt in options) _buildItem(opt.$1, opt.$2)],
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+        children: options.map((opt) {
+          final item = _buildItem(opt.$1, opt.$2);
+          return expand ? Expanded(child: item) : item;
+        }).toList(),
       ),
     );
   }
@@ -2924,20 +2931,22 @@ class TfCompactRoleToggle extends StatelessWidget {
     return GestureDetector(
       onTap: () => onChanged(value),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3, vertical: PosSpacing.sp2),
         decoration: BoxDecoration(
-          color: on ? PosColors.surface : Colors.transparent,
+          color: on ? PosColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(PosRadii.tag),
           border: on
-              ? Border.all(color: PosColors.lineStrong, width: 1)
+              ? Border.all(color: PosColors.primary, width: 1)
               : Border.all(color: Colors.transparent, width: 1),
         ),
         child: Text(
           label,
+          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: on ? PosColors.text : PosColors.textSec,
+            color: on ? PosColors.accentInk : PosColors.textSec,
             letterSpacing: -0.1,
           ),
         ),

@@ -207,15 +207,17 @@ class _MenuSearchBar extends StatelessWidget {
     final text = AppScope.of(context).strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          border: Border.all(color: PosColors.line),
-          borderRadius: BorderRadius.circular(PosRadii.card),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: PosColors.surface,
+            border: Border.all(color: PosColors.line),
+            borderRadius: BorderRadius.circular(PosRadii.card),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
             Expanded(
               child: TextField(
                 controller: searchCtrl,
@@ -253,10 +255,7 @@ class _MenuSearchBar extends StatelessWidget {
                   border: const Border(
                     left: BorderSide(color: PosColors.line),
                   ),
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(PosRadii.card),
-                    bottomRight: Radius.circular(PosRadii.card),
-                  ),
+
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -272,6 +271,7 @@ class _MenuSearchBar extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -313,8 +313,9 @@ class CategoryChips extends StatelessWidget {
               itemBuilder: (_, i) {
                 final cat = categories[i];
                 final sel = cat == selected;
+                final text = AppScope.of(context).strings;
                 return TfChip(
-                  label: cat,
+                  label: cat == 'All' ? text.categoryAll : cat,
                   active: sel,
                   small: true,
                   count: counts?[cat],

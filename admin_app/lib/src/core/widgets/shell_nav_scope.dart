@@ -9,6 +9,8 @@ import 'package:flutter/widgets.dart';
 class ShellNavScope extends InheritedWidget {
   const ShellNavScope({
     required this.openDrawer,
+    required this.showScanOverlay,
+    required this.hideScanOverlay,
     required super.child,
     super.key,
   });
@@ -16,10 +18,18 @@ class ShellNavScope extends InheritedWidget {
   /// Opens the [MainShell]'s navigation drawer.
   final VoidCallback openDrawer;
 
+  /// Shows a non-blocking scan overlay at the shell level.
+  final void Function(String message) showScanOverlay;
+
+  /// Hides the scan overlay.
+  final VoidCallback hideScanOverlay;
+
   static ShellNavScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ShellNavScope>();
 
   @override
   bool updateShouldNotify(ShellNavScope oldWidget) =>
-      openDrawer != oldWidget.openDrawer;
+      openDrawer != oldWidget.openDrawer ||
+      showScanOverlay != oldWidget.showScanOverlay ||
+      hideScanOverlay != oldWidget.hideScanOverlay;
 }

@@ -12,7 +12,15 @@ import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 
 class MenuScanScreen extends StatefulWidget {
-  const MenuScanScreen({super.key});
+  const MenuScanScreen({
+    this.onScan,
+    super.key,
+  });
+
+  /// When provided, the screen pops immediately after capturing images and
+  /// delegates the async scan to this callback. When null, the original
+  /// blocking-dialog behaviour is used (e.g. tenant setup).
+  final Future<void> Function(List<MenuScanPageUpload> uploads)? onScan;
 
   @override
   State<MenuScanScreen> createState() => _MenuScanScreenState();
@@ -150,21 +158,28 @@ class _MenuScanScreenState extends State<MenuScanScreen> {
     final app = AppScope.read(context);
     final text = app.strings;
 
+    final uploads = _pages
+        .map(
+          (page) => MenuScanPageUpload(
+            bytes: page.bytes,
+            fileName: page.fileName,
+            mimeType: page.mimeType,
+          ),
+        )
+        .toList(growable: false);
+
+    if (widget.onScan != null) {
+      widget.onScan!(uploads);
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
     final closeOverlay = ScanningProgressOverlay.show(
       context,
       message: text.menuScanning,
     );
 
     try {
-      final uploads = _pages
-          .map(
-            (page) => MenuScanPageUpload(
-              bytes: page.bytes,
-              fileName: page.fileName,
-              mimeType: page.mimeType,
-            ),
-          )
-          .toList(growable: false);
       final result = await app.scanAndImportMenu(uploads);
       closeOverlay();
       if (!mounted) return;

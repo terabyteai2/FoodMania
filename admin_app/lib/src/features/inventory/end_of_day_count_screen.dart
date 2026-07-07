@@ -434,7 +434,7 @@ class _CountLineState extends State<_CountLine> {
                 decoration: InputDecoration(
                   hintText: '—',
                   isDense: true,
-                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                   hintStyle: const TextStyle(
                     fontWeight: FontWeight.w700,
                     color: PosColors.mutedSoft,

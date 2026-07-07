@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
@@ -284,6 +284,7 @@ class PrinterService {
   static const String _autoPrintKey = 'printer_auto_print_enabled';
   static const String _printerNameKey = 'printer_selected_name';
   static const String _printerAddressKey = 'printer_selected_address';
+  static const String _printerTransportKey = 'printer_selected_transport';
   static const String _printedOrderIdsKey = 'printer_printed_order_ids';
   static const String _windowsQueueKey = 'printer_windows_queue';
   static const String _windowsPaperWidthKey = 'printer_windows_paper_width_mm';
@@ -318,8 +319,7 @@ class PrinterService {
   // grows this set (and its persisted copy) without limit.
   final BoundedStringSet _printedOrderIds = BoundedStringSet(cap: 2000);
   int _printerAttemptSeq = 0;
-  String? _cachedLogoUrl;
-  Uint8List? _cachedLogoBytes;
+
 
   PrinterRuntimeState get state => _state;
   Stream<PrinterRuntimeState> get stateStream => _stateController.stream;
@@ -389,6 +389,18 @@ class PrinterService {
     // wait on the native connection-status call until Bluetooth permission/state
     // is ready, which can keep the splash screen open. We check live status only
     // when the user opens printer actions or when printing.
+    final savedTransport = preferences.getString(_printerTransportKey);
+    final activeTransport = hasSystemQueue
+        ? PrinterTransport.windowsUsb
+        : savedTransport != null &&
+              (preferences.getString(_printerAddressKey)?.trim().isNotEmpty ==
+                      true ||
+                  local.preferred != PrinterTransport.none)
+        ? PrinterTransport.values.firstWhere(
+            (t) => t.name == savedTransport,
+            orElse: () => local.preferred,
+          )
+        : local.preferred;
     _emit(
       _state.copyWith(
         autoPrintEnabled: preferences.getBool(_autoPrintKey) ?? true,
@@ -396,12 +408,14 @@ class PrinterService {
         selectedPrinterAddress: preferences.getString(_printerAddressKey),
         selectedWindowsQueueName: selectedSystemQueue,
         windowsPaperWidthMm: preferences.getInt(_windowsPaperWidthKey) ?? 58,
-        activeTransport: hasSystemQueue
-            ? PrinterTransport.windowsUsb
-            : local.preferred,
+        activeTransport: activeTransport,
         builtInPrinterAvailable: local.builtIn,
         usbPrinterAvailable: local.usb,
-        connected: local.preferred != PrinterTransport.none || hasSystemQueue,
+        connected:
+            local.preferred != PrinterTransport.none ||
+            hasSystemQueue ||
+            preferences.getString(_printerAddressKey)?.trim().isNotEmpty ==
+                true,
         clearLastError: true,
       ),
     );
@@ -472,6 +486,10 @@ class PrinterService {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_windowsQueueKey, clean);
     await preferences.setInt(_windowsPaperWidthKey, width);
+    await preferences.setString(
+      _printerTransportKey,
+      PrinterTransport.windowsUsb.name,
+    );
     _emit(
       _state.copyWith(
         activeTransport: PrinterTransport.windowsUsb,
@@ -532,6 +550,8 @@ class PrinterService {
         'preferred=${local.preferred.name}',
       );
       if (local.preferred != PrinterTransport.none) {
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setString(_printerTransportKey, local.preferred.name);
         _emit(
           _state.copyWith(
             activeTransport: local.preferred,
@@ -741,13 +761,15 @@ class PrinterService {
           )
           .toList(growable: false);
     } catch (error) {
+      final friendly = _friendlyError(error);
       if (kDebugMode) {
         debugPrint(
           '[QB-PRINTER-DIAG] refreshPairedPrinters caught: $error '
-          '(${error.runtimeType})',
+          '(${error.runtimeType}) '
+          'friendly="$friendly"',
         );
       }
-      _emit(_state.copyWith(lastError: _friendlyError(error)));
+      _emit(_state.copyWith(lastError: friendly));
       return [];
     } finally {
       final local = await _probeLocalPrinters(diagId: attemptId);
@@ -796,6 +818,10 @@ class PrinterService {
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(_printerNameKey, printer.name);
       await preferences.setString(_printerAddressKey, printer.address);
+      await preferences.setString(
+        _printerTransportKey,
+        PrinterTransport.bluetooth.name,
+      );
       _emit(
         _state.copyWith(
           activeTransport: PrinterTransport.bluetooth,
@@ -991,11 +1017,9 @@ class PrinterService {
     String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
     String? orderDetailsUrl,
-    String? logoUrl,
     String? serverRole,
   }) async {
     final attemptId = _nextPrinterAttempt('print-bill-${order.id}');
-    debugPrint('[QB-LOGO] printCustomerInvoice called logoUrl="$logoUrl"');
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady(diagId: attemptId);
       final profile = await CapabilityProfile.load();
@@ -1010,7 +1034,6 @@ class PrinterService {
         restaurantAddress: restaurantAddress,
         restaurantPhone: restaurantPhone,
         orderDetailsUrl: orderDetailsUrl,
-        logoUrl: logoUrl,
         serverRole: serverRole,
       );
       _logPrinterDiag(
@@ -1197,16 +1220,26 @@ class PrinterService {
   Future<bool> printTableQrLabel({
     required String tableLabel,
     required String qrUrl,
+    String? restaurantName,
   }) async {
     final attemptId = _nextPrinterAttempt('print-table-qr-$tableLabel');
     return _withBusyBool(() async {
       await _ensureAnyPrinterReady(diagId: attemptId);
       final profile = await CapabilityProfile.load();
       final generator = Generator(_paperSize, profile);
-      final bytes = await _buildTableQrLabelBytes(generator, tableLabel, qrUrl);
+      final bytes = await _buildTableQrLabelBytes(
+        generator,
+        tableLabel,
+        qrUrl,
+        restaurantName: restaurantName,
+      );
       var ok = await _writeBytes(bytes, diagId: attemptId);
       if (!ok && _hasSelectedSystemPrinter) {
-        ok = await _printSystemTableQrPdfFallback(tableLabel, qrUrl);
+        ok = await _printSystemTableQrPdfFallback(
+          tableLabel,
+          qrUrl,
+          restaurantName: restaurantName,
+        );
       }
       if (!ok) {
         throw PrinterException('Printing QR label for $tableLabel failed.');
@@ -1226,8 +1259,9 @@ class PrinterService {
   Future<List<int>> _buildTableQrLabelBytes(
     Generator generator,
     String tableLabel,
-    String qrUrl,
-  ) async {
+    String qrUrl, {
+    String? restaurantName,
+  }) async {
     final paperWidthPx = (_paperSize == PaperSize.mm80 ? 576 : 384).toDouble();
     debugPrint(
       '[QB-PRINTER-DIAG] _buildTableQrLabelBytes tableLabel="$tableLabel" paperWidthPx=$paperWidthPx',
@@ -1235,6 +1269,7 @@ class PrinterService {
     final pngBytes = await TicketBitmapRenderer.renderTableQrLabel(
       tableLabel: tableLabel,
       qrUrl: qrUrl,
+      restaurantName: restaurantName,
       paperWidthPx: paperWidthPx,
     );
     debugPrint(
@@ -1268,8 +1303,9 @@ class PrinterService {
 
   Future<bool> _printSystemTableQrPdfFallback(
     String tableLabel,
-    String qrUrl,
-  ) async {
+    String qrUrl, {
+    String? restaurantName,
+  }) async {
     if (!_hasSelectedSystemPrinter) return false;
     final selected = _state.selectedWindowsQueueName?.trim() ?? '';
     if (selected.isEmpty) return false;
@@ -1286,6 +1322,7 @@ class PrinterService {
       final pngBytes = await TicketBitmapRenderer.renderTableQrLabel(
         tableLabel: tableLabel,
         qrUrl: qrUrl,
+        restaurantName: restaurantName,
         paperWidthPx: _state.windowsPaperWidthMm == 80 ? 576 : 384,
       );
       final doc = pw.Document();
@@ -1389,39 +1426,6 @@ class PrinterService {
   /// reset / feed / cut commands. The bitmap path keeps the on-paper layout
   /// pixel-identical to the in-app preview regardless of printer firmware
   /// language support.
-  Future<Uint8List?> _fetchLogoBytes(String? logoUrl) async {
-    if (logoUrl == null || logoUrl.trim().isEmpty) {
-      debugPrint('[QB-LOGO] _fetchLogoBytes logoUrl=null|empty -> skip');
-      return null;
-    }
-    if (logoUrl == _cachedLogoUrl && _cachedLogoBytes != null) {
-      debugPrint(
-        '[QB-LOGO] _fetchLogoBytes cache HIT url="$logoUrl" bytes=${_cachedLogoBytes!.length}',
-      );
-      return _cachedLogoBytes;
-    }
-    debugPrint('[QB-LOGO] _fetchLogoBytes downloading url="$logoUrl"');
-    try {
-      final res = await http
-          .get(Uri.parse(logoUrl))
-          .timeout(const Duration(seconds: 5));
-      debugPrint(
-        '[QB-LOGO] _fetchLogoBytes status=${res.statusCode} contentLength=${res.bodyBytes.length}',
-      );
-      if (res.statusCode == 200) {
-        _cachedLogoUrl = logoUrl;
-        _cachedLogoBytes = res.bodyBytes;
-        debugPrint(
-          '[QB-LOGO] _fetchLogoBytes cached url="$logoUrl" bytes=${_cachedLogoBytes!.length}',
-        );
-        return _cachedLogoBytes;
-      }
-    } catch (e) {
-      debugPrint('[QB-LOGO] _fetchLogoBytes error="$e"');
-    }
-    return null;
-  }
-
   Future<Uint8List> _buildBitmapCopyPng(
     OrderModel order, {
     required _ReceiptLabels labels,
@@ -1430,7 +1434,6 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     String? orderDetailsUrl,
-    String? logoUrl,
     String? serverRole,
   }) async {
     final tableRaw = order.serviceType == OrderServiceType.delivery
@@ -1450,7 +1453,6 @@ class PrinterService {
         ),
     ];
 
-    debugPrint('[QB-LOGO] _buildBitmapCopyPng logoUrl="$logoUrl"');
     final cleanRestaurant = restaurantName.trim();
     final resolvedRestaurant = cleanRestaurant.isEmpty
         ? labels.defaultRestaurantName
@@ -1463,18 +1465,12 @@ class PrinterService {
       effectiveTotal: effectiveTotal,
       labels: labels,
     );
-    final logoBytes = await _fetchLogoBytes(logoUrl);
     final data = TicketCopyData(
       restaurantName: resolvedRestaurant,
       outletName: null,
-      restaurantSubtitle: _restaurantSubtitle(
-        labels: labels,
-        address: restaurantAddress,
-        phone: restaurantPhone,
-      ),
-      orderNumberDisplay: labels.orderNo(order.displaySequence),
+      restaurantSubtitle: null,
+      orderNumberDisplay: order.displaySequence,
       orderTypeLabel: _orderTypeLabel(order, labels),
-      copyLabel: isManagerCopy ? labels.managerCopy : labels.customerCopy,
       dateLine: dateText,
       tableLine: labels.tableLabel(tableRaw),
       sourceLine: labels.sourceLabel(order.source),
@@ -1503,7 +1499,6 @@ class PrinterService {
       footerText: isDelivery
           ? null
           : labels.pick('Thank you for dining!', 'ধন্যবাদ!'),
-      logoImageBytes: logoBytes,
       serverRole: serverRole,
     );
 
@@ -1520,7 +1515,6 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     String? orderDetailsUrl,
-    String? logoUrl,
     String? serverRole,
   }) async {
     final pngBytes = await _buildBitmapCopyPng(
@@ -1531,7 +1525,6 @@ class PrinterService {
       restaurantAddress: restaurantAddress,
       restaurantPhone: restaurantPhone,
       orderDetailsUrl: orderDetailsUrl,
-      logoUrl: logoUrl,
       serverRole: serverRole,
     );
     final decoded = img.decodePng(pngBytes);
@@ -1673,10 +1666,13 @@ class PrinterService {
       ),
     ];
     if (discount > 0) {
+      final discountSuffix = order.discountLabel?.trim().isNotEmpty == true
+          ? ' (${order.discountLabel!.trim()})'
+          : '';
       rows.add(
         TicketSummaryRow(
           label: labels.pick('Discount', 'ডিসকাউন্ট'),
-          value: '-${labels.money(discount)}',
+          value: '-${labels.money(discount)}$discountSuffix',
         ),
       );
     }
@@ -1971,50 +1967,48 @@ class PrinterService {
     required String restaurantAddress,
     required String restaurantPhone,
   }) {
-    final tableRaw = order.serviceType == OrderServiceType.delivery
+    final isDelivery = order.serviceType == OrderServiceType.delivery;
+    final tableRaw = isDelivery
         ? ''
         : order.tableNo ?? labels.takeaway;
+    final name = restaurantName.trim();
     buffer
-      ..writeln(labels.orderNo(order.displaySequence))
-      ..writeln('[${_orderTypeLabel(order, labels).toUpperCase()}]')
-      ..writeln(labels.formatDate(order.createdAt))
       ..writeln(_separator('='))
-      ..writeln(_shortText(restaurantName, _ticketWidth));
-    final subtitle = _restaurantSubtitle(
-      labels: labels,
-      address: restaurantAddress,
-      phone: restaurantPhone,
-    );
-    if (subtitle != null) {
-      buffer.writeln(_shortText(subtitle, _ticketWidth));
+      ..writeln(_shortText(name.length > 24 ? name.substring(0, 24) : name, _ticketWidth))
+      ..writeln(_orderTypeLabel(order, labels).toUpperCase())
+      ..writeln('Order: ${order.displaySequence}')
+      ..writeln('Date: ${labels.formatDate(order.createdAt)}')
+      ..writeln('Source: ${labels.sourceLabel(order.source)}')
+      ..writeln(_separator('-'))
+      ..writeln('INDEX QTY DESCRIPTION                      PRICE');
+    for (var i = 0; i < order.items.length; i++) {
+      final item = order.items[i];
+      final index = labels.digits('${(i + 1).toString().padLeft(3, '0')}');
+      final qty = labels.qtyText(item.qty);
+      final desc = _shortText(labels.itemName(item), 20);
+      final amount = labels.money(_lineTotalFor(item));
+      buffer.writeln('$index $qty $desc $amount');
     }
-    if (tableRaw.trim().isNotEmpty) {
-      buffer.writeln(labels.tableLabel(tableRaw));
-    }
+    buffer.writeln(_separator('-'));
+    buffer.write(_previewSummary(order, labels));
+    buffer.writeln(_paymentLine(order, labels));
     if (order.customerName?.trim().isNotEmpty == true) {
       buffer.writeln('${labels.nameLabel}: ${order.customerName!.trim()}');
     }
-    if (order.deliveryAddress?.trim().isNotEmpty == true) {
-      buffer.writeln(
-        '${labels.addressLabel}: ${order.deliveryAddress!.trim()}',
-      );
+    if (isDelivery) {
+      if (order.deliveryAddress?.trim().isNotEmpty == true) {
+        buffer.writeln('${labels.addressLabel}: ${order.deliveryAddress!.trim()}');
+      }
+      if (order.mobileNumber?.trim().isNotEmpty == true) {
+        buffer.writeln('${labels.phoneLabel}: ${order.mobileNumber!.trim()}');
+      }
+    } else {
+      if (tableRaw.trim().isNotEmpty) {
+        buffer.writeln(labels.tableLabel(tableRaw));
+      }
     }
-    if (order.mobileNumber?.trim().isNotEmpty == true) {
-      buffer.writeln('${labels.phoneLabel}: ${order.mobileNumber!.trim()}');
-    }
-    buffer.writeln(_separator('-'));
-    for (var i = 0; i < order.items.length; i++) {
-      final item = order.items[i];
-      buffer.writeln(
-        '${labels.digits('${i + 1}')}. ${_shortText(labels.itemName(item), 18)} '
-        '${labels.qtyText(item.qty)} ${labels.money(_lineTotalFor(item))}',
-      );
-    }
-    buffer
-      ..writeln(_separator('-'))
-      ..write(_previewSummary(order, labels))
-      ..writeln(_paymentLine(order, labels))
-      ..writeln('SCAN FOR LIVE ORDER DETAILS');
+    buffer.writeln('SCAN FOR LIVE ORDER DETAILS');
+    buffer.writeln(_separator('='));
   }
 
   String _previewSummary(OrderModel order, _ReceiptLabels labels) {
@@ -2464,7 +2458,8 @@ class PrinterService {
       debugPrint(
         '[QB-PRINTER-DIAG] $attemptId _ensureBluetoothReady enter '
         'android=${Platform.isAndroid} ios=${Platform.isIOS} '
-        'macos=${Platform.isMacOS} windows=${Platform.isWindows}',
+        'macos=${Platform.isMacOS} windows=${Platform.isWindows} '
+        'osVersion=${Platform.operatingSystemVersion}',
       );
     }
     if (!Platform.isAndroid &&
@@ -2495,17 +2490,32 @@ class PrinterService {
 
     var connectStatus = await Permission.bluetoothConnect.status;
     var scanStatus = await Permission.bluetoothScan.status;
+    final connectRationale =
+        await Permission.bluetoothConnect.shouldShowRequestRationale;
+    final scanRationale =
+        await Permission.bluetoothScan.shouldShowRequestRationale;
 
-    log('initial: connect=$connectStatus scan=$scanStatus');
+    log(
+      'initial: connect=$connectStatus scan=$scanStatus '
+      'connectRationale=$connectRationale scanRationale=$scanRationale',
+    );
 
     if (connectStatus.isGranted && scanStatus.isGranted) return;
 
-    if (connectStatus.isPermanentlyDenied || scanStatus.isPermanentlyDenied) {
-      log('permanently denied — redirecting to settings');
+    // If denied AND the system won't show a rationale dialog, the user
+    // previously checked "Don't ask again" — treat as permanently denied.
+    if (connectStatus.isPermanentlyDenied ||
+        scanStatus.isPermanentlyDenied ||
+        (connectStatus.isDenied && !connectRationale) ||
+        (scanStatus.isDenied && !scanRationale)) {
+      log(
+        'permanently denied or will not show rationale — '
+        'redirecting to app settings',
+      );
       await openAppSettings();
       throw PrinterException(
-        'Bluetooth permission was permanently denied. '
-        'Please enable it in Settings > Nearby devices.',
+        'Bluetooth permission was denied permanently. '
+        'Please enable it in Settings > Apps > QuickBytes > Permissions.',
       );
     }
 
@@ -2517,7 +2527,12 @@ class PrinterService {
 
     connectStatus = statuses[Permission.bluetoothConnect] ?? connectStatus;
     scanStatus = statuses[Permission.bluetoothScan] ?? scanStatus;
-    log('result: connect=$connectStatus scan=$scanStatus');
+    final postRationale =
+        await Permission.bluetoothConnect.shouldShowRequestRationale;
+    log(
+      'result: connect=$connectStatus scan=$scanStatus '
+      'postRationale=$postRationale',
+    );
 
     if (!connectStatus.isGranted || !scanStatus.isGranted) {
       throw PrinterException('Bluetooth permission is required.');
@@ -2568,6 +2583,9 @@ class PrinterService {
       connected = await PrintBluetoothThermal.connect(
         macPrinterAddress: address,
       );
+      if (connected) {
+        _logPrinterDiag(attemptId, 'bt auto-connect SUCCEEDED');
+      }
     }
     if (!connected) {
       throw PrinterException('Printer is not connected.');
@@ -2916,7 +2934,8 @@ class PrinterService {
       debugPrint(
         '[QB-PRINTER-DIAG] _friendlyError raw="$error" '
         'type=${error.runtimeType} '
-        'isPrinterException=${error is PrinterException}',
+        'isPrinterException=${error is PrinterException}'
+        '${error is PrinterException ? " msg=${error.message}" : ""}',
       );
     }
     if (error is PrinterException) return error.message;

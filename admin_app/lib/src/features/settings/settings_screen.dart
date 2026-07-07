@@ -20,8 +20,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/menu_image_service.dart';
 import '../../services/printer_service.dart';
 import 'customer_menu_themes.dart';
-import 'qr_pdf_screen.dart';
 import 'table_qr_labels_screen.dart';
+import '../audit/audit_screen.dart';
+import '../staff/staff_screen.dart';
 
 const bool _showFacebookChatbotSettings = true;
 
@@ -44,8 +45,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _settingsSearchController =
       TextEditingController();
-  final MenuImageService _imageService = MenuImageService();
-  bool _savingLogo = false;
   bool _hydrated = false;
   int _handledReceiptPrinterOpenRequest = 0;
 
@@ -97,100 +96,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final groups = app.isManager
         ? [
             _SettingsGroupData(
-              label: text.myRestaurantDetailsGroup,
+              label: text.quickActions,
               items: [
-                _SettingActionData(
-                  title: text.accountHolderName,
-                  subtitle: text.accountHolderNameSubtitle,
-                  icon: Icons.person_outline_rounded,
-                  trailing: app.accountDisplayName.trim().isEmpty
-                      ? text.setUpLabel
-                      : app.accountDisplayName,
-                  onTap: () => _editAccountHolderName(app, text),
-                ),
-                _SettingActionData(
-                  title: text.restaurantName,
-                  subtitle: text.restaurantNameFieldSubtitle,
-                  icon: Icons.storefront_outlined,
-                  trailing: app.serverConfig.restaurantName.trim().isEmpty
-                      ? text.setUpLabel
-                      : app.serverConfig.restaurantName,
-                  onTap: () => _editRestaurantName(app, text),
-                ),
-                _SettingActionData(
-                  title: text.restaurantPhoneLabel,
-                  subtitle: text.restaurantPhoneSubtitle,
-                  icon: Icons.call_outlined,
-                  trailing: app.serverConfig.outletPhone.trim().isEmpty
-                      ? text.setUpLabel
-                      : app.serverConfig.outletPhone,
-                  onTap: () => _editRestaurantPhone(app, text),
-                ),
-                _SettingActionData(
-                  title: text.websiteUrlLabel,
-                  subtitle: text.websiteUrlSubtitle,
-                  icon: Icons.link_rounded,
-                  trailing: app.serverConfig.publicSlug.trim().isEmpty
-                      ? text.setUpLabel
-                      : '${app.serverConfig.publicSlug}.quickbytes.buzz',
-                  onTap: () => _editWebsiteUrl(app, text),
-                ),
-                _SettingActionData(
-                  title: text.heroLogoTitle,
-                  subtitle: text.heroLogoSubtitle,
-                  icon: Icons.image_outlined,
-                  trailing: _savingLogo
-                      ? (text.isBn ? 'আপলোড হচ্ছে...' : 'Uploading...')
-                      : null,
-                  onTap: _savingLogo ? null : _openRestaurantLogoUpload,
-                ),
-                _SettingActionData(
-                  title: text.settingsSetTableNumbers,
-                  subtitle: text.tablesSubtitle,
-                  icon: Icons.table_restaurant_outlined,
-                  trailing: text.tableCountLabel(app.serverConfig.tableCount),
-                  onTap: _openTableSettings,
-                ),
-                _SettingActionData(
-                  title: text.settingsAllQrCodes,
-                  subtitle: text.tableQrSubtitle,
-                  icon: Icons.qr_code_rounded,
-                  onTap: _openQrCodes,
-                ),
-                _SettingActionData(
-                  title: text.tableQrLabels,
-                  subtitle: text.tableQrLabelsSubtitle,
-                  icon: Icons.qr_code_rounded,
-                  onTap: _openTableQrLabels,
-                ),
-                _SettingActionData(
-                  title: text.websiteImageVideoTitle,
-                  subtitle: text.heroMediaSubtitle,
-                  icon: Icons.photo_library_outlined,
-                  onTap: _openHeroMedia,
-                ),
-                _SettingActionData(
-                  title: text.settingsWebsiteTheme,
-                  subtitle: text.customerMenuThemeSubtitle,
-                  icon: Icons.palette_outlined,
-                  trailing: resolveCustomerMenuTheme(
-                    app.serverConfig.customerMenuTheme,
-                  ).displayName(isBn: text.isBn),
-                  onTap: _openCustomerMenuTheme,
-                ),
-              ],
-            ),
-            _SettingsGroupData(
-              label: text.deviceGroup,
-              items: [
-                if (_showFacebookChatbotSettings)
-                  _SettingActionData(
-                    title: text.facebookMessengerBot,
-                    subtitle: text.facebookMessengerBotSubtitle,
-                    icon: Icons.chat_bubble_outline_rounded,
-                    trailing: _facebookBotTrailing(app, text),
-                    onTap: _openFacebookChatbot,
-                  ),
                 _SettingActionData(
                   title: text.settingsConnectPrinter,
                   subtitle: text.receiptPrinterSubtitle,
@@ -200,11 +107,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : text.connect,
                   onTap: _openReceiptPrinter,
                 ),
+                if (_showFacebookChatbotSettings)
+                  _SettingActionData(
+                    title: text.facebookMessengerBot,
+                    subtitle: text.facebookMessengerBotSubtitle,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    trailing: _facebookBotTrailing(app, text),
+                    onTap: _openFacebookChatbot,
+                  ),
+                _SettingActionData(
+                  title: text.auditTrail,
+                  subtitle: text.auditTrailSubtitle,
+                  icon: Icons.fact_check_outlined,
+                  onTap: _openAuditTrail,
+                ),
+                _SettingActionData(
+                  title: text.staff,
+                  subtitle: text.staffSubtitle,
+                  icon: Icons.groups_outlined,
+                  onTap: _openStaff,
+                ),
               ],
             ),
             _SettingsGroupData(
-              label: text.isBn ? 'পিওএস' : 'POS',
+              label: text.manageSection,
               items: [
+                _SettingActionData(
+                  title: text.myRestaurantDetailsGroup,
+                  subtitle: text.restaurantDetailsSubtitle,
+                  icon: Icons.storefront_outlined,
+                  trailing: app.serverConfig.restaurantName.trim().isEmpty
+                      ? text.setUpLabel
+                      : app.serverConfig.restaurantName,
+                  onTap: _openRestaurantDetails,
+                ),
+                _SettingActionData(
+                  title: text.settingsSetTableNumbers,
+                  subtitle: text.tablesSubtitle,
+                  icon: Icons.table_restaurant_outlined,
+                  trailing: text.tableCountLabel(app.serverConfig.tableCount),
+                  onTap: _openTableSettings,
+                ),
+                _SettingActionData(
+                  title: text.tableQrLabels,
+                  subtitle: text.tableQrLabelsSubtitle,
+                  icon: Icons.qr_code_rounded,
+                  onTap: _openTableQrLabels,
+                ),
                 _SettingActionData(
                   title: text.bkashNagadPayments,
                   subtitle: text.bkashNagadPaymentsHint,
@@ -273,12 +222,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _SettingsGroupData(
               label: text.adminGroup,
               items: [
-                _SettingActionData(
-                  title: text.settingsAllQrCodes,
-                  subtitle: text.tableQrSubtitle,
-                  icon: Icons.qr_code_rounded,
-                  onTap: _openQrCodes,
-                ),
                 _SettingActionData(
                   title: text.aboutUs,
                   subtitle: text.isBn
@@ -362,18 +305,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _openCustomerMenuTheme() async {
-    final text = AppScope.of(context).strings;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: text.customerMenuTheme,
-          child: const _CustomerMenuThemeCard(),
-        ),
-      ),
-    );
-  }
-
   String _facebookBotTrailing(PosAppController app, AppStrings text) {
     final config = app.facebookChatbotConfig;
     if (config == null || !config.isConfigured) {
@@ -394,162 +325,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
-  }
-
-  /// Shared "tap a button, edit one value in a bottom sheet, save, return
-  /// immediately" pattern — modeled on menu_management_screen.dart's
-  /// _DeliveryChargeSheet. Used for the four "My restaurant details" identity
-  /// fields so none of them push a separate page.
-  Future<void> _editSingleField({
-    required String title,
-    required String label,
-    required String initialValue,
-    required String saveLabel,
-    required Future<bool> Function(String value) onSave,
-    String? hint,
-    String? helperText,
-    String? suffixText,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    String? Function(String value)? validator,
-  }) async {
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _SingleFieldEditSheet(
-        title: title,
-        label: label,
-        initialValue: initialValue,
-        saveLabel: saveLabel,
-        hint: hint,
-        helperText: helperText,
-        suffixText: suffixText,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        validator: validator,
-      ),
-    );
-    if (value == null || !mounted) return;
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final messenger = ScaffoldMessenger.of(context);
-    final ok = await onSave(value);
-    if (!mounted) return;
-    setState(() {});
-    messenger.showSnackBar(
-      SnackBar(
-        content: TfText(
-          ok ? text.detailsPushed : (app.lastError ?? text.saveFailed),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _editAccountHolderName(PosAppController app, AppStrings text) {
-    return _editSingleField(
-      title: text.accountHolderName,
-      label: text.accountHolderName,
-      initialValue: app.accountDisplayName,
-      saveLabel: text.save,
-      validator: (value) => value.trim().isEmpty ? text.requiredField : null,
-      onSave: (value) => app.updateAccountDisplayName(value),
-    );
-  }
-
-  Future<void> _editRestaurantName(PosAppController app, AppStrings text) {
-    return _editSingleField(
-      title: text.restaurantName,
-      label: text.restaurantName,
-      initialValue: app.serverConfig.restaurantName,
-      saveLabel: text.save,
-      validator: (value) => value.trim().isEmpty ? text.requiredField : null,
-      onSave: (value) => app.updateRestaurantProfile(restaurantName: value),
-    );
-  }
-
-  Future<void> _editRestaurantPhone(PosAppController app, AppStrings text) {
-    return _editSingleField(
-      title: text.restaurantPhoneLabel,
-      label: text.restaurantPhoneLabel,
-      initialValue: app.serverConfig.outletPhone,
-      saveLabel: text.save,
-      hint: '01XXXXXXXXX',
-      keyboardType: TextInputType.phone,
-      onSave: (value) => app.updateRestaurantProfile(phone: value),
-    );
-  }
-
-  Future<void> _editWebsiteUrl(PosAppController app, AppStrings text) {
-    return _editSingleField(
-      title: text.websiteUrlLabel,
-      label: text.websiteUrlLabel,
-      initialValue: app.serverConfig.publicSlug,
-      saveLabel: text.save,
-      helperText: 'https://name.quickbytes.buzz',
-      suffixText: '.quickbytes.buzz',
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
-        TextInputFormatter.withFunction((oldValue, newValue) {
-          return newValue.copyWith(
-            text: newValue.text.toLowerCase(),
-            selection: newValue.selection,
-          );
-        }),
-      ],
-      validator: (value) =>
-          value.trim().length < 3 ? text.urlNameTooShort : null,
-      onSave: (value) => app.updatePublicMenuUrl(value),
-    );
-  }
-
-  Future<void> _openHeroMedia() async {
-    final app = AppScope.of(context);
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _HeroMediaPage(
-          outletId: app.serverConfig.outletId,
-          cloudApiService: app.cloudApiService,
-          baseUrl: app.cloudConfig.baseUrl,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openRestaurantLogoUpload() async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    try {
-      final dataUrl = await _imageService.pickMenuImageDataUrl();
-      if (dataUrl == null) return;
-      setState(() => _savingLogo = true);
-      final result = await app.cloudApiService.uploadOutletLogo(dataUrl);
-      final url = result['logoUrl'];
-      final bitmapUrl = result['logoBitmapUrl'];
-      debugPrint(
-        '[QB-LOGO] _openRestaurantLogoUpload result logoUrl="$url" logoBitmapUrl="$bitmapUrl"',
-      );
-      if (mounted) {
-        if (url != null) AppScope.of(context).setLogoUrl(url);
-        if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
-      }
-      setState(() => _savingLogo = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(text.heroLogoUploaded)));
-    } catch (e) {
-      setState(() => _savingLogo = false);
-      debugPrint('[QB-LOGO] _openRestaurantLogoUpload error="$e"');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
-  Future<void> _openQrCodes() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const QrPdfScreen()));
   }
 
   Future<void> _openTableQrLabels() async {
@@ -577,9 +352,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context) => _SettingsSectionPage(
           title: text.receiptPrinter,
           child: _PrinterSettingsCard(
-            onUsbConnect: _connectUsbPrinter,
-            onRefresh: _refreshPrinters,
-            onConnect: _connectPrinter,
+            onScan: _scanPrinters,
+            onConnectUsb: _connectUsbPrinter,
+            onConnectBluetooth: _connectPrinter,
             onTestPrint: _testPrinter,
           ),
         ),
@@ -589,8 +364,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _toggleLanguage() {
     final app = AppScope.of(context);
-    final next =
-        app.language == AppLanguage.bn ? AppLanguage.en : AppLanguage.bn;
+    final next = app.language == AppLanguage.bn
+        ? AppLanguage.en
+        : AppLanguage.bn;
     app.updateLanguage(next);
   }
 
@@ -632,71 +408,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _refreshPrinters() async {
+  Future<void> _scanPrinters() async {
     final app = AppScope.of(context);
-    final text = app.strings;
     if (kDebugMode) {
       debugPrint(
-        '[QB-PRINTER-DIAG] settings tap Bluetooth refresh '
-        'supportsDirect=${app.supportsDirectBluetoothPrinting} '
-        'busy=${app.printerState.busy}',
+        '[QB-PRINTER-DIAG] settings scan printers '
+        'supportsDirectBT=${app.supportsDirectBluetoothPrinting} '
+        'busy=${app.printerState.busy} '
+        'lastError="${app.printerState.lastError}"',
       );
     }
-    if (!app.supportsDirectBluetoothPrinting) {
-      await _connectBluetoothSystemPrinter();
-      return;
-    }
-    final printers = await app.refreshPairedPrinters();
-    if (!mounted) return;
-    final error = app.printerState.lastError;
-    final message =
-        error ??
-        (printers.isEmpty
-            ? text.noPairedPrintersFound
-            : text.pairedPrinterFound(printers.length));
+    await app.refreshPairedPrinters();
     if (kDebugMode) {
       debugPrint(
-        '[QB-PRINTER-DIAG] settings Bluetooth refresh result '
-        'printers=${printers.length} lastError="$error" snackbar="$message"',
+        '[QB-PRINTER-DIAG] settings scan printers done '
+        'busy=${app.printerState.busy} '
+        'connected=${app.printerState.connected} '
+        'devices=${app.pairedPrinters.length} '
+        'lastError="${app.printerState.lastError}"',
       );
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _connectBluetoothSystemPrinter() async {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final queues = await app.listSystemPrinterQueues();
-    if (!mounted) return;
-    if (queues.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: TfText(
-            text.isBn
-                ? 'Bluetooth প্রিন্টার OS/CUPS-এ pair/install করুন, তারপর আবার চেষ্টা করুন।'
-                : 'Pair/install the Bluetooth printer in the OS first, then try again.',
-          ),
-        ),
-      );
-      return;
-    }
-    final choice = await showDialog<(String, int)>(
-      context: context,
-      builder: (_) => _SystemPrinterQueueDialog(
-        printers: queues,
-        selectedPrinter: app.printerState.selectedWindowsQueueName,
-        initialWidth: app.printerState.windowsPaperWidthMm,
-        title: text.isBn ? 'Bluetooth প্রিন্টার' : 'Bluetooth printer',
-      ),
-    );
-    if (choice == null) return;
-    await app.selectSystemPrinterQueue(choice.$1, paperWidthMm: choice.$2);
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: TfText(text.connectedTo(choice.$1))));
   }
 
   Future<void> _connectUsbPrinter() async {
@@ -847,6 +578,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     return message;
   }
+
+  Future<void> _openAuditTrail() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AuditScreen()));
+  }
+
+  Future<void> _openStaff() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const StaffScreen()));
+  }
+
+  Future<void> _openRestaurantDetails() async {
+    final text = AppScope.of(context).strings;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _SettingsSectionPage(
+          title: text.myRestaurantDetailsGroup,
+          child: const _RestaurantDetailsContent(),
+        ),
+      ),
+    );
+  }
 }
 
 Widget _settingsCard({
@@ -863,6 +618,250 @@ Widget _settingsCard({
       child: child,
     ),
   );
+}
+
+class _RestaurantDetailsContent extends StatefulWidget {
+  const _RestaurantDetailsContent();
+
+  @override
+  State<_RestaurantDetailsContent> createState() =>
+      _RestaurantDetailsContentState();
+}
+
+class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
+  final MenuImageService _imageService = MenuImageService();
+  bool _savingLogo = false;
+
+  Future<void> _editSingleField({
+    required String title,
+    required String label,
+    required String initialValue,
+    required String saveLabel,
+    required Future<bool> Function(String value) onSave,
+    String? hint,
+    String? helperText,
+    String? suffixText,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String value)? validator,
+  }) async {
+    final value = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SingleFieldEditSheet(
+        title: title,
+        label: label,
+        initialValue: initialValue,
+        saveLabel: saveLabel,
+        hint: hint,
+        helperText: helperText,
+        suffixText: suffixText,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        validator: validator,
+      ),
+    );
+    if (value == null || !mounted) return;
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await onSave(value);
+    if (!mounted) return;
+    setState(() {});
+    messenger.showSnackBar(
+      SnackBar(content: TfText(ok ? text.detailsPushed : text.saveFailed)),
+    );
+  }
+
+  Future<void> _editAccountHolderName() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    return _editSingleField(
+      title: text.accountHolderName,
+      label: text.accountHolderName,
+      initialValue: app.accountDisplayName,
+      saveLabel: text.save,
+      validator: (value) => value.trim().isEmpty ? text.requiredField : null,
+      onSave: (value) => app.updateAccountDisplayName(value),
+    );
+  }
+
+  Future<void> _editRestaurantName() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    return _editSingleField(
+      title: text.restaurantName,
+      label: text.restaurantName,
+      initialValue: app.serverConfig.restaurantName,
+      saveLabel: text.save,
+      validator: (value) => value.trim().isEmpty ? text.requiredField : null,
+      onSave: (value) => app.updateRestaurantProfile(restaurantName: value),
+    );
+  }
+
+  Future<void> _editRestaurantPhone() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    return _editSingleField(
+      title: text.restaurantPhoneLabel,
+      label: text.restaurantPhoneLabel,
+      initialValue: app.serverConfig.outletPhone,
+      saveLabel: text.save,
+      hint: '01XXXXXXXXX',
+      keyboardType: TextInputType.phone,
+      onSave: (value) => app.updateRestaurantProfile(phone: value),
+    );
+  }
+
+  Future<void> _editWebsiteUrl() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    return _editSingleField(
+      title: text.websiteUrlLabel,
+      label: text.websiteUrlLabel,
+      initialValue: app.serverConfig.publicSlug,
+      saveLabel: text.save,
+      helperText: 'https://name.quickbytes.buzz',
+      suffixText: '.quickbytes.buzz',
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
+        TextInputFormatter.withFunction((oldValue, newValue) {
+          return newValue.copyWith(
+            text: newValue.text.toLowerCase(),
+            selection: newValue.selection,
+          );
+        }),
+      ],
+      validator: (value) =>
+          value.trim().length < 3 ? text.urlNameTooShort : null,
+      onSave: (value) => app.updatePublicMenuUrl(value),
+    );
+  }
+
+  Future<void> _openHeroMedia() async {
+    final app = AppScope.of(context);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _HeroMediaPage(
+          outletId: app.serverConfig.outletId,
+          cloudApiService: app.cloudApiService,
+          baseUrl: app.cloudConfig.baseUrl,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRestaurantLogoUpload() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    try {
+      final dataUrl = await _imageService.pickMenuImageDataUrl();
+      if (dataUrl == null) return;
+      setState(() => _savingLogo = true);
+      final result = await app.cloudApiService.uploadOutletLogo(dataUrl);
+      final url = result['logoUrl'];
+      final bitmapUrl = result['logoBitmapUrl'];
+      debugPrint(
+        '[QB-LOGO] _openRestaurantLogoUpload result logoUrl="$url" logoBitmapUrl="$bitmapUrl"',
+      );
+      if (mounted) {
+        if (url != null) AppScope.of(context).setLogoUrl(url);
+        if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
+      }
+      setState(() => _savingLogo = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(text.heroLogoUploaded)));
+    } catch (e) {
+      setState(() => _savingLogo = false);
+      debugPrint('[QB-LOGO] _openRestaurantLogoUpload error="$e"');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _openCustomerMenuTheme() async {
+    final text = AppScope.of(context).strings;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _SettingsSectionPage(
+          title: text.customerMenuTheme,
+          child: const _CustomerMenuThemeCard(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final items = <_SettingActionData>[
+      _SettingActionData(
+        title: text.accountHolderName,
+        subtitle: text.accountHolderNameSubtitle,
+        icon: Icons.person_outline_rounded,
+        trailing: app.accountDisplayName.trim().isEmpty
+            ? text.setUpLabel
+            : app.accountDisplayName,
+        onTap: _editAccountHolderName,
+      ),
+      _SettingActionData(
+        title: text.restaurantName,
+        subtitle: text.restaurantNameFieldSubtitle,
+        icon: Icons.storefront_outlined,
+        trailing: app.serverConfig.restaurantName.trim().isEmpty
+            ? text.setUpLabel
+            : app.serverConfig.restaurantName,
+        onTap: _editRestaurantName,
+      ),
+      _SettingActionData(
+        title: text.restaurantPhoneLabel,
+        subtitle: text.restaurantPhoneSubtitle,
+        icon: Icons.call_outlined,
+        trailing: app.serverConfig.outletPhone.trim().isEmpty
+            ? text.setUpLabel
+            : app.serverConfig.outletPhone,
+        onTap: _editRestaurantPhone,
+      ),
+      _SettingActionData(
+        title: text.websiteUrlLabel,
+        subtitle: text.websiteUrlSubtitle,
+        icon: Icons.link_rounded,
+        trailing: app.serverConfig.publicSlug.trim().isEmpty
+            ? text.setUpLabel
+            : '${app.serverConfig.publicSlug}.quickbytes.buzz',
+        onTap: _editWebsiteUrl,
+      ),
+      _SettingActionData(
+        title: text.heroLogoTitle,
+        subtitle: text.heroLogoSubtitle,
+        icon: Icons.image_outlined,
+        trailing: _savingLogo
+            ? (text.isBn ? 'আপলোড হচ্ছে...' : 'Uploading...')
+            : null,
+        onTap: _savingLogo ? null : _openRestaurantLogoUpload,
+      ),
+      _SettingActionData(
+        title: text.websiteImageVideoTitle,
+        subtitle: text.heroMediaSubtitle,
+        icon: Icons.photo_library_outlined,
+        onTap: _openHeroMedia,
+      ),
+      _SettingActionData(
+        title: text.settingsWebsiteTheme,
+        subtitle: text.customerMenuThemeSubtitle,
+        icon: Icons.palette_outlined,
+        trailing: resolveCustomerMenuTheme(
+          app.serverConfig.customerMenuTheme,
+        ).displayName(isBn: text.isBn),
+        onTap: _openCustomerMenuTheme,
+      ),
+    ];
+    return _SettingsGroupCard(items: items);
+  }
 }
 
 class _SettingsGroupData {
@@ -1019,11 +1018,7 @@ class _SettingsSectionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      title: title,
-      showBackButton: true,
-      child: child,
-    );
+    return AppScaffold(title: title, showBackButton: true, child: child);
   }
 }
 
@@ -1889,18 +1884,40 @@ class _CustomerMenuThemePreview extends StatelessWidget {
   }
 }
 
-class _PrinterSettingsCard extends StatelessWidget {
+class _PrinterSettingsCard extends StatefulWidget {
   const _PrinterSettingsCard({
-    required this.onUsbConnect,
-    required this.onRefresh,
-    required this.onConnect,
+    required this.onScan,
+    required this.onConnectUsb,
+    required this.onConnectBluetooth,
     required this.onTestPrint,
   });
 
-  final Future<void> Function() onUsbConnect;
-  final Future<void> Function() onRefresh;
-  final Future<void> Function(BluetoothPrinterDevice printer) onConnect;
+  final Future<void> Function() onScan;
+  final Future<void> Function() onConnectUsb;
+  final Future<void> Function(BluetoothPrinterDevice printer)
+  onConnectBluetooth;
   final Future<void> Function() onTestPrint;
+
+  @override
+  State<_PrinterSettingsCard> createState() => _PrinterSettingsCardState();
+}
+
+class _PrinterSettingsCardState extends State<_PrinterSettingsCard> {
+  bool _autoScanned = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_autoScanned) {
+      _autoScanned = true;
+      final app = AppScope.of(context);
+      if (!app.printerState.connected) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.onScan();
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1908,84 +1925,62 @@ class _PrinterSettingsCard extends StatelessWidget {
     final text = app.strings;
     final state = app.printerState;
     final devices = app.pairedPrinters;
-    final usbSelected =
-        state.activeTransport == PrinterTransport.usb ||
-        state.activeTransport == PrinterTransport.windowsUsb ||
-        state.usbPrinterAvailable ||
-        (state.selectedWindowsQueueName?.trim().isNotEmpty ?? false);
-    final bluetoothSelected =
-        state.activeTransport == PrinterTransport.bluetooth ||
-        (state.selectedPrinterAddress?.trim().isNotEmpty ?? false);
-    if (kDebugMode) {
-      debugPrint(
-        '[QB-PRINTER-DIAG] settings printer page build '
-        'usbSelected=$usbSelected bluetoothSelected=$bluetoothSelected '
-        'busy=${state.busy} devices=${devices.length} '
-        'testVisible=${state.hasSelectedPrinter} '
-        'transport=${state.activeTransport.name} '
-        'usbAvailable=${state.usbPrinterAvailable} '
-        'builtInHidden=${state.builtInPrinterAvailable}',
-      );
-    }
 
     return _SectionCard(
       title: text.receiptPrinter,
-      subtitle: text.pairPrinterInstruction,
       icon: Icons.print_outlined,
       children: [
-        _PrinterStatusPanel(state: state, text: text),
-        const SizedBox(height: 12),
-        _PrinterConnectionOption(
-          title: text.isBn ? 'USB প্রিন্টার' : 'USB printer',
-          subtitle: text.isBn
-              ? 'USB কেবল লাগান। অ্যাপ নিজে প্রিন্টার খুঁজে নেবে।'
-              : 'Plug in USB. The app will detect the printer automatically.',
-          icon: Icons.usb_rounded,
-          selected: usbSelected,
+        _PrinterStatusTile(state: state, text: text),
+        SizedBox(height: PosSpacing.sp3),
+        TfButton(
+          label: text.refreshPairedPrinters,
+          icon: Icons.search_rounded,
+          variant: TfButtonVariant.primary,
           busy: state.busy,
-          buttonLabel: usbSelected ? text.reconnect : text.connect,
-          onPressed: state.busy ? null : onUsbConnect,
+          onPressed: state.busy ? null : widget.onScan,
         ),
-        const SizedBox(height: 10),
-        _PrinterConnectionOption(
-          title: text.isBn ? 'Bluetooth প্রিন্টার' : 'Bluetooth printer',
-          subtitle: text.isBn
-              ? 'USB না থাকলে Bluetooth ডিভাইস স্ক্যান করে কানেক্ট করুন।'
-              : 'If USB is not available, scan and connect a Bluetooth device.',
-          icon: Icons.bluetooth_rounded,
-          selected: bluetoothSelected,
-          busy: state.busy,
-          buttonLabel: text.refreshPairedPrinters,
-          onPressed: state.busy ? null : onRefresh,
-        ),
-        if (devices.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          ...devices.map(
-            (printer) => _PrinterDeviceTile(
-              printer: printer,
-              selected: printer.address == state.selectedPrinterAddress,
-              busy: state.busy,
-              text: text,
-              onConnect: () => onConnect(printer),
+        if (state.usbPrinterAvailable ||
+            state.builtInPrinterAvailable ||
+            devices.isNotEmpty) ...[
+          SizedBox(height: PosSpacing.sp2),
+          if (state.usbPrinterAvailable)
+            _PrinterTile(
+              icon: Icons.usb_rounded,
+              label: text.isBn ? 'USB প্রিন্টার' : 'USB Printer',
+              connected:
+                  state.activeTransport == PrinterTransport.usb ||
+                  state.activeTransport == PrinterTransport.windowsUsb,
+              onTap: state.busy ? null : widget.onConnectUsb,
             ),
-          ),
+          if (state.builtInPrinterAvailable)
+            _PrinterTile(
+              icon: Icons.print_rounded,
+              label: text.isBn ? 'বিল্ট-ইন প্রিন্টার' : 'Built-in Printer',
+              connected: state.activeTransport == PrinterTransport.builtIn,
+              onTap: state.busy ? null : widget.onConnectUsb,
+            ),
+          for (final device in devices)
+            _PrinterTile(
+              icon: Icons.bluetooth_rounded,
+              label: device.label,
+              connected: device.address == state.selectedPrinterAddress,
+              onTap: state.busy
+                  ? null
+                  : () => widget.onConnectBluetooth(device),
+            ),
         ],
         if (state.lastError?.trim().isNotEmpty == true) ...[
-          const SizedBox(height: 10),
-          _PrinterHint(
-            icon: Icons.error_outline_rounded,
-            message: state.lastError!,
-            color: PosColors.danger,
-          ),
+          SizedBox(height: PosSpacing.sp2),
+          _PrinterErrorHint(message: state.lastError!),
         ],
-        if (state.hasSelectedPrinter) ...[
-          const SizedBox(height: 12),
+        if (state.connected) ...[
+          SizedBox(height: PosSpacing.sp3),
           TfButton(
             label: text.testPrint,
             icon: Icons.receipt_long_outlined,
-            variant: TfButtonVariant.dark,
+            variant: TfButtonVariant.primary,
             busy: state.busy,
-            onPressed: state.busy ? null : onTestPrint,
+            onPressed: state.busy ? null : widget.onTestPrint,
           ),
         ],
       ],
@@ -1993,168 +1988,147 @@ class _PrinterSettingsCard extends StatelessWidget {
   }
 }
 
-class _PrinterStatusPanel extends StatelessWidget {
-  const _PrinterStatusPanel({required this.state, required this.text});
+class _PrinterStatusTile extends StatelessWidget {
+  const _PrinterStatusTile({required this.state, required this.text});
 
   final PrinterRuntimeState state;
   final AppStrings text;
 
   @override
   Widget build(BuildContext context) {
-    final ready = state.connected;
+    final connected = state.connected;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(PosSpacing.sp3),
       decoration: BoxDecoration(
-        color: ready
-            ? PosColors.success.withValues(alpha: 0.08)
-            : PosColors.background,
-        borderRadius: BorderRadius.circular(12),
+        color: connected ? PosColors.successSoft : PosColors.background,
+        borderRadius: BorderRadius.circular(PosRadii.md),
         border: Border.all(
-          color: ready
-              ? PosColors.success.withValues(alpha: 0.26)
-              : PosColors.lineStrong,
+          color: connected ? PosColors.successSoft : PosColors.lineStrong,
         ),
       ),
       child: Row(
         children: [
           Icon(
-            ready ? Icons.check_circle_rounded : Icons.print_disabled_outlined,
-            color: ready ? PosColors.success : PosColors.muted,
+            connected
+                ? Icons.check_circle_rounded
+                : Icons.print_disabled_outlined,
+            color: connected ? PosColors.success : PosColors.muted,
+            size: 20,
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: PosSpacing.sp2),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(
-                  ready ? text.printerConnectedAuto : text.noPrinterSelected,
+            child: TfText(
+              connected
+                  ? text.isBn
+                        ? '${state.selectedPrinterLabel} কানেক্টেড'
+                        : 'Connected to ${state.selectedPrinterLabel}'
+                  : text.noPrinterSelected,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrinterTile extends StatelessWidget {
+  const _PrinterTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.connected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool connected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppScope.of(context).strings;
+    return Padding(
+      padding: EdgeInsets.only(bottom: PosSpacing.sp2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        child: Container(
+          padding: EdgeInsets.all(PosSpacing.sp3),
+          decoration: BoxDecoration(
+            color: connected ? PosColors.primarySoft : PosColors.background,
+            borderRadius: BorderRadius.circular(PosRadii.md),
+            border: Border.all(
+              color: connected
+                  ? PosColors.primaryWash
+                  : PosColors.lineStrong.withValues(alpha: 0.48),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: connected ? PosColors.primarySoft : PosColors.surface,
+                  borderRadius: BorderRadius.circular(PosRadii.md),
+                  border: Border.all(
+                    color: connected ? PosColors.primaryWash : PosColors.line,
+                  ),
+                ),
+                child: Icon(
+                  connected ? Icons.check_circle_rounded : icon,
+                  color: connected ? PosColors.primary : PosColors.muted,
+                  size: 18,
+                ),
+              ),
+              SizedBox(width: PosSpacing.sp2),
+              Expanded(
+                child: TfText(
+                  label,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 3),
+              ),
+              if (connected)
                 TfText(
-                  state.selectedPrinterLabel,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
+                  strings.connected,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.success,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ],
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PrinterConnectionOption extends StatelessWidget {
-  const _PrinterConnectionOption({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.selected,
-    required this.busy,
-    required this.buttonLabel,
-    required this.onPressed,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool selected;
-  final bool busy;
-  final String buttonLabel;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: PosColors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected
-              ? PosColors.primary.withValues(alpha: 0.28)
-              : PosColors.lineStrong.withValues(alpha: 0.48),
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: selected
-                  ? PosColors.primary.withValues(alpha: 0.10)
-                  : PosColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: PosColors.line),
-            ),
-            child: Icon(
-              selected ? Icons.check_circle_rounded : icon,
-              color: selected ? PosColors.primary : PosColors.muted,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(title, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 3),
-                TfText(
-                  subtitle,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: PosColors.muted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          TfButton(
-            label: buttonLabel,
-            size: TfButtonSize.sm,
-            fullWidth: false,
-            busy: busy,
-            onPressed: onPressed,
-          ),
-        ],
-      ),
     );
   }
 }
 
-class _PrinterHint extends StatelessWidget {
-  const _PrinterHint({
-    required this.icon,
-    required this.message,
-    required this.color,
-  });
+class _PrinterErrorHint extends StatelessWidget {
+  const _PrinterErrorHint({required this.message});
 
-  final IconData icon;
   final String message;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(PosSpacing.sp2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
+        color: PosColors.dangerSoft,
+        borderRadius: BorderRadius.circular(PosRadii.md),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
+          Icon(Icons.error_outline_rounded, color: PosColors.danger, size: 18),
+          SizedBox(width: PosSpacing.sp2),
           Expanded(
             child: TfText(
               message,
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: PosColors.slate),
+              ).textTheme.bodySmall?.copyWith(color: PosColors.inkSoft),
             ),
           ),
         ],
@@ -2245,60 +2219,6 @@ class _SystemPrinterQueueDialogState extends State<_SystemPrinterQueueDialog> {
           child: TfText(text.connect),
         ),
       ],
-    );
-  }
-}
-
-class _PrinterDeviceTile extends StatelessWidget {
-  const _PrinterDeviceTile({
-    required this.printer,
-    required this.selected,
-    required this.busy,
-    required this.text,
-    required this.onConnect,
-  });
-
-  final BluetoothPrinterDevice printer;
-  final bool selected;
-  final bool busy;
-  final AppStrings text;
-  final Future<void> Function() onConnect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: PosColors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected
-              ? PosColors.primary.withValues(alpha: 0.24)
-              : PosColors.lineStrong.withValues(alpha: 0.48),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            selected ? Icons.check_circle_rounded : Icons.bluetooth_rounded,
-            color: selected ? PosColors.primary : PosColors.muted,
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: TfText(
-              printer.label,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          TfButton(
-            label: selected ? text.reconnect : text.connect,
-            size: TfButtonSize.sm,
-            fullWidth: false,
-            onPressed: busy ? null : onConnect,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -3940,5 +3860,3 @@ class _PrivacyPolicyPage extends StatelessWidget {
     );
   }
 }
-
-

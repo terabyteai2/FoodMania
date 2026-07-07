@@ -3540,17 +3540,12 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printCustomerInvoice(OrderModel order) async {
-    final usedUrl = serverConfig.logoBitmapUrl ?? serverConfig.logoUrl;
-    debugPrint(
-      '[QB-LOGO] printCustomerInvoice logoBitmapUrl="${serverConfig.logoBitmapUrl}" logoUrl="${serverConfig.logoUrl}" usedUrl="$usedUrl"',
-    );
     final ok = await printerService.printCustomerInvoice(
       order,
       restaurantName: restaurantName,
       outletName: outletName,
       language: language,
       orderDetailsUrl: _orderDetailsUrl(order),
-      logoUrl: usedUrl,
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {

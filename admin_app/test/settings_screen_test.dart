@@ -96,28 +96,25 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('manager settings follow the requested visible order, '
-      'with restaurant identity fields up top and no Restaurant/Restaurant '
-      'Details detour', (tester) async {
+  testWidgets('manager settings are grouped as Quick Actions, Management, '
+      'Account with Restaurant Details behind a subpage', (tester) async {
     final controller = PosAppController()
       ..language = AppLanguage.en;
 
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
     const expected = [
-      'Name',
-      'Restaurant name',
-      'Restaurant phone',
-      'Website URL',
-      'Restaurant Logo',
-      'Set Table Numbers',
-      'All QR Codes',
-      'Website image/video',
-      'Website Theme',
-      'ChatBot',
       'Connect Printer',
+      'Facebook Messenger bot',
+      'Audit trail',
+      'Staff',
+      'My restaurant details',
+      'Set Table Numbers',
+      'Table QR Labels',
+      'bKash/Nagad payments',
       'About Us',
       'Privacy Policy',
+      'App language',
       'Log Out',
     ];
     final textValues = tester
@@ -129,8 +126,16 @@ void main() {
 
     expect(positions, everyElement(greaterThanOrEqualTo(0)));
     expect(positions, orderedEquals([...positions]..sort()));
-    // The old "Restaurant Details" sub-page and the deferred "Restaurant"
-    // entry are both gone — their fields live in the flat list above now.
+
+    // Restaurant identity fields are behind the "My restaurant details" subpage now.
+    expect(find.text('Restaurant name'), findsNothing);
+    expect(find.text('Restaurant phone'), findsNothing);
+    expect(find.text('Website URL'), findsNothing);
+    expect(find.text('Restaurant Logo'), findsNothing);
+    expect(find.text('Website image/video'), findsNothing);
+    expect(find.text('Website Theme'), findsNothing);
+
+    // Stale entries from the old layout are still absent.
     expect(find.text('Restaurant Details'), findsNothing);
     expect(find.text('Employee Account Management'), findsNothing);
     expect(find.text('Inventory settings'), findsNothing);
@@ -142,7 +147,8 @@ void main() {
   });
 
   testWidgets(
-    'tapping a restaurant identity row opens a bottom sheet, not a page',
+    'tapping a restaurant identity row opens a bottom sheet inside the '
+    'restaurant details subpage',
     (tester) async {
       final controller = PosAppController()
         ..language = AppLanguage.en
@@ -155,6 +161,17 @@ void main() {
         );
 
       await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+
+      // Enter the Restaurant Details subpage first.
+      await tester.scrollUntilVisible(
+        find.text('My restaurant details'),
+        260,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('My restaurant details'));
+      await tester.pumpAndSettle();
+
+      // Now tap a restaurant identity row inside the subpage.
       await tester.tap(find.text('Restaurant name'));
       await tester.pumpAndSettle();
 
@@ -163,12 +180,9 @@ void main() {
       expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.widgetWithText(TextField, 'Cafe One'), findsOneWidget);
       expect(find.text('Save'), findsOneWidget);
-      // No back button / new page chrome — the underlying settings list is
-      // still in the tree behind the sheet.
-      expect(find.text('Restaurant Logo'), findsOneWidget);
 
       // Clearing the field and saving surfaces the required-field validator
-      // without ever leaving the sheet or hitting the network.
+      // without ever leaving the sheet.
       await tester.enterText(find.widgetWithText(TextField, 'Cafe One'), '');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
@@ -261,7 +275,6 @@ void main() {
     expect(find.text('Restaurant name'), findsNothing);
     expect(find.text('Website URL'), findsNothing);
     expect(find.text('Connect Printer'), findsOneWidget);
-    expect(find.text('All QR Codes'), findsOneWidget);
     expect(find.text('About Us'), findsOneWidget);
     expect(find.text('Log Out'), findsOneWidget);
     // Language now lives only in the Settings panel — its single home after

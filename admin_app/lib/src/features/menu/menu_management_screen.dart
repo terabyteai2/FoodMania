@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/shell_nav_scope.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
@@ -41,10 +42,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   final Set<String> _selectedItemIds = <String>{};
   bool _scanBusy = false;
 
-  /// ⚡ short-code mode — shows the code badge on item cards and makes the
-  /// search field numeric so a code lookup is a couple of taps.
-  bool _codeMode = false;
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -75,8 +72,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               item.localizedCategory(language) == _selectedCategory;
           final matchesSearch = query.isEmpty
               ? true
-              : _codeMode
-              ? (item.shortCode?.toString().startsWith(query) ?? false)
               : item.searchText(language).contains(query);
           return matchesCategory && matchesSearch;
         })
@@ -182,32 +177,11 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TfSearchField(
-                    controller: _searchController,
-                    hintText: _codeMode
-                        ? text.shortCodeSearchHint
-                        : text.menuSearchHint,
-                    keyboardType: _codeMode ? TextInputType.number : null,
-                    prefixIcon: _codeMode
-                        ? Icons.bolt_rounded
-                        : Icons.search_rounded,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                TfIconButton(
-                  icon: Icons.bolt_rounded,
-                  tooltip: text.shortCodeSearchHint,
-                  dark: _codeMode,
-                  onPressed: () => setState(() {
-                    _codeMode = !_codeMode;
-                    _searchController.clear();
-                  }),
-                ),
-              ],
+            child: TfSearchField(
+              controller: _searchController,
+              hintText: text.menuSearchHint,
+              prefixIcon: Icons.search_rounded,
+              onChanged: (_) => setState(() {}),
             ),
           ),
           if (app.menuItems.isNotEmpty) ...[
@@ -524,25 +498,42 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     if (_scanBusy) return;
     final text = AppScope.of(context).strings;
     setState(() => _scanBusy = true);
-    try {
-      final result = await Navigator.push<MenuScanImportResult>(
-        context,
-        MaterialPageRoute(builder: (_) => const MenuScanScreen()),
-      );
-      if (result == null || !mounted) return;
-      ScaffoldMessenger.of(this.context).showSnackBar(
-        SnackBar(
-          content: TfText(
-            text.menuScanImported(
-              result.createdCount,
-              result.skippedDuplicateCount,
-            ),
-          ),
+    final shellNav = ShellNavScope.maybeOf(context);
+    await Navigator.push<MenuScanImportResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MenuScanScreen(
+          onScan: (uploads) async {
+            final app = AppScope.read(context);
+            shellNav?.showScanOverlay(text.menuScanning);
+            try {
+              final result = await app.scanAndImportMenu(uploads);
+              if (!mounted) return;
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: TfText(
+                    text.menuScanImported(
+                      result.createdCount,
+                      result.skippedDuplicateCount,
+                    ),
+                  ),
+                ),
+              );
+            } catch (error) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: TfText('${text.menuScanFailed}: $error'),
+                ),
+              );
+            } finally {
+              shellNav?.hideScanOverlay();
+              if (mounted) setState(() => _scanBusy = false);
+            }
+          },
         ),
-      );
-    } finally {
-      if (mounted) setState(() => _scanBusy = false);
-    }
+      ),
+    );
   }
 
   Future<void> _applyBulkDiscount(BuildContext context) async {
@@ -1698,10 +1689,10 @@ class _BulkDiscountSheetState extends State<_BulkDiscountSheet> {
   }
 }
 
-/// Petpooja "Management"-style item table: a column header (select-all · Status ·
-/// Name · Mark as) over flat rows of [checkbox · status dot · name · ON/OFF
-/// toggle]. Thumbnail/price/code intentionally dropped — tap a row to edit for
-/// the rest. The category filter chips above still scope which items show.
+/// Petpooja "Management"-style item table: a column header (Status · Name ·
+/// Mark as) over flat rows of [status dot · name · ON/OFF
+/// toggle]. A selection-mode header adds the select-all checkbox.
+/// Long-press a row to multi-select; the bulk toolbar appears.
 class _MenuList extends StatelessWidget {
   const _MenuList({
     required this.items,
@@ -1723,6 +1714,7 @@ class _MenuList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectionMode = selectedIds.isNotEmpty;
     final allSelected =
         items.isNotEmpty && items.every((i) => selectedIds.contains(i.id));
     return Container(
@@ -1736,6 +1728,7 @@ class _MenuList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _MenuListHeader(
+            selectionMode: selectionMode,
             allSelected: allSelected,
             onToggleAll: () => onSelectAll(!allSelected),
           ),
@@ -1745,6 +1738,7 @@ class _MenuList extends StatelessWidget {
             _MenuManageRow(
               item: items[i],
               language: language,
+              selectionMode: selectionMode,
               selected: selectedIds.contains(items[i].id),
               onToggleSelect: () => onSelect(items[i]),
               onEdit: () => onEdit(items[i]),
@@ -1758,11 +1752,17 @@ class _MenuList extends StatelessWidget {
   }
 }
 
-/// Column header row for [_MenuList] — select-all checkbox + Status/Name/Mark as
-/// labels. Fixed column widths keep it aligned with [_MenuManageRow].
+/// Column header row for [_MenuList] — select-all checkbox (only in selection
+/// mode) + Name / Mark as labels. Fixed column widths keep it aligned with
+/// [_MenuManageRow].
 class _MenuListHeader extends StatelessWidget {
-  const _MenuListHeader({required this.allSelected, required this.onToggleAll});
+  const _MenuListHeader({
+    required this.selectionMode,
+    required this.allSelected,
+    required this.onToggleAll,
+  });
 
+  final bool selectionMode;
   final bool allSelected;
   final VoidCallback onToggleAll;
 
@@ -1775,14 +1775,16 @@ class _MenuListHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
       child: Row(
         children: [
-          SizedBox(
-            width: _kMenuColCheckbox,
-            child: _MenuCheckbox(
-              value: allSelected,
-              onChanged: (_) => onToggleAll(),
+          if (selectionMode) ...[
+            SizedBox(
+              width: _kMenuColCheckbox,
+              child: _MenuCheckbox(
+                value: allSelected,
+                onChanged: (_) => onToggleAll(),
+              ),
             ),
-          ),
-          const SizedBox(width: 4),
+            const SizedBox(width: 4),
+          ],
           Expanded(child: Text(text.menuColName.toUpperCase(), style: style)),
           const SizedBox(width: 8),
           SizedBox(
@@ -1797,14 +1799,14 @@ class _MenuListHeader extends StatelessWidget {
   }
 }
 
-/// One menu item rendered as a Petpooja Management row: checkbox · name ·
-/// ON/OFF "Mark as" toggle (the toggle alone encodes availability — the old
-/// status dot double-encoded it). Tapping the row opens the editor; the
-/// checkbox toggles multi-select.
+/// One menu item rendered as a flat row: checkbox (only in selection mode) ·
+/// name · ON/OFF "Mark as" toggle. Tap to edit; long-press or tap-in-selection
+/// to multi-select. When selection is active the bulk toolbar appears above.
 class _MenuManageRow extends StatelessWidget {
   const _MenuManageRow({
     required this.item,
     required this.language,
+    required this.selectionMode,
     required this.selected,
     required this.onToggleSelect,
     required this.onEdit,
@@ -1813,6 +1815,7 @@ class _MenuManageRow extends StatelessWidget {
 
   final MenuItem item;
   final AppLanguage language;
+  final bool selectionMode;
   final bool selected;
   final VoidCallback onToggleSelect;
   final VoidCallback onEdit;
@@ -1826,7 +1829,8 @@ class _MenuManageRow extends StatelessWidget {
       // read as selection, not decoration (v4 §5.4).
       color: selected ? PosColors.primarySoft : PosColors.surface,
       child: InkWell(
-        onTap: onEdit,
+        onTap: selectionMode ? onToggleSelect : onEdit,
+        onLongPress: onToggleSelect,
         child: Container(
           constraints: const BoxConstraints(minHeight: PosDensity.rowMin),
           alignment: Alignment.centerLeft,
@@ -1841,14 +1845,16 @@ class _MenuManageRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              SizedBox(
-                width: _kMenuColCheckbox,
-                child: _MenuCheckbox(
-                  value: selected,
-                  onChanged: (_) => onToggleSelect(),
+              if (selectionMode) ...[
+                SizedBox(
+                  width: _kMenuColCheckbox,
+                  child: _MenuCheckbox(
+                    value: selected,
+                    onChanged: (_) => onToggleSelect(),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 4),
+                const SizedBox(width: 4),
+              ],
               Expanded(
                 child: TfText(
                   item.localizedName(language),

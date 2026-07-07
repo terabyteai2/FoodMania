@@ -575,11 +575,8 @@ class _LineCard extends StatelessWidget {
                   onChanged: (_) => onChanged(),
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    isCollapsed: true,
                     hintText: 'Item name',
-                    contentPadding: EdgeInsets.zero,
+                    isDense: true,
                   ),
                   style: const TextStyle(
                     color: PosColors.slate,
@@ -714,8 +711,7 @@ class _QuantityField extends StatelessWidget {
                   border: InputBorder.none,
                   hintText: '0',
                   isDense: true,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
                 style: const TextStyle(
                   color: PosColors.slate,
@@ -763,23 +759,22 @@ class _CostField extends StatelessWidget {
             ),
             const SizedBox(width: 7),
             Expanded(
-              child: TextField(
-                key: fieldKey,
-                controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-                ],
-                onChanged: onChanged,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: '0',
-                  isDense: true,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
+                child: TextField(
+                  key: fieldKey,
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                  ],
+                  onChanged: onChanged,
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: '0',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  ),
                 style: const TextStyle(
                   color: PosColors.slate,
                   fontSize: 14,
@@ -1029,7 +1024,7 @@ class _ExistingStockInRow extends StatelessWidget {
                 decoration: const InputDecoration(
                   hintText: '—',
                   isDense: true,
-                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                   hintStyle: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: PosColors.mutedSoft,

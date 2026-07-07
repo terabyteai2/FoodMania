@@ -433,6 +433,12 @@ class AppStrings {
   String get dangerZoneGroup => isBn ? 'ডেঞ্জার জোন' : 'Danger Zone';
   String get myRestaurantDetailsGroup =>
       isBn ? 'আমার রেস্টুরেন্টের তথ্য' : 'My restaurant details';
+  String get restaurantDetailsSubtitle =>
+      isBn ? 'নাম, ফোন, লোগো ও আরও' : 'Name, phone, logo & more';
+  String get staffSubtitle =>
+      isBn ? 'স্টাফ সদস্যদের পরিচালনা করুন' : 'Manage staff members';
+  String get auditTrailSubtitle =>
+      isBn ? 'বাতিল, ফেরত ও ডিসকাউন্ট ইতিহাস' : 'Void, refund & discount history';
   String get accountHolderName => isBn ? 'নাম' : 'Name';
   String get accountHolderNameSubtitle =>
       isBn ? 'অ্যাকাউন্ট হোল্ডারের নাম' : 'Account holder name';

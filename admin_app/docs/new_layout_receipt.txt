@@ -1,0 +1,65 @@
+================================================ [48-char boundary]
+                      [RESTAURANT NAME]          <-- Font A (Double-W/H), Centered (Max 24 char)
+                          DELIVERY               <-- Font A (Standard, Bold), Centered
+                        Order: #1235             <-- Font A (Standard, Bold), Centered
+                   Date: 2026-07-07 12:45 PM     <-- Font A (Regular), Centered
+                       Source: Online App        <-- Font A (Regular), Centered
+------------------------------------------------ <-- Font A (Regular), Divider Line
+INDEX QTY DESCRIPTION                      PRICE <-- Font A (Regular), Column Header
+001    1x Large Pizza                     £14.99 <-- Qty left, Desc left (wrap at col 39), Price right
+002    2x Garlic Bread                     £4.00 
+003    1x Diet Coke                        £1.50 
+------------------------------------------------ 
+SUBTOTAL                                  £20.49 <-- Label left, Price right-aligned
+DISCOUNT                        -£2.05 (10% OFF) 
+DELIVERY FEE                               £3.50 
+TOTAL (VAT INCLUDED)                      £21.94 <-- Font A (Bold), Label left, Price right
+VAT @ 20%                                  £3.66 <-- Font A (Regular), Label left, Price right
+------------------------------------------------ 
+PAID BY CARD (MASTER)                     £21.94 <-- Font A (Regular), Label left, Price right
+
+NAME: [CUSTOMER NAME]                            <-- Font A (Regular), Left-aligned
+ADDRESS: [123 ANYSTREET, APT 4B,                 <-- Font A (Regular), Left-aligned, Multiline wrap
+          CITY, POSTCODE]
+PHONE: [07700 900 123]                           <-- Font A (Regular), Left-aligned
+
+                         [ QR CODE ]             <-- Centered Bitmap Element (300x300px)
+
+                     Track your delivery         <-- Font A (Regular), Centered
+================================================
+
+
+
+
+
+
+
+
+================================================ [48-char boundary]
+                      [RESTAURANT NAME]          <-- Font A (Double-W/H), Centered (Max 24 char)
+                           DINE IN               <-- Font A (Standard, Bold), Centered
+                        Order: #1234             <-- Font A (Standard, Bold), Centered
+                   Date: 2026-07-07 12:30 PM     <-- Font A (Regular), Centered
+                        Source: POS Main         <-- Font A (Regular), Centered
+------------------------------------------------ <-- Font A (Regular), Divider Line
+INDEX QTY DESCRIPTION                      PRICE <-- Font A (Regular), Column Header
+001    2x Classic Burger                  £12.00 <-- Qty left, Desc left (wrap at col 39), Price right
+002    1x French Fries                     £3.50 
+003    2x Coke Zero                        £5.00 
+------------------------------------------------ 
+SUBTOTAL                                  £20.50 <-- Label left, Price right-aligned
+DISCOUNT                        -£2.05 (10% OFF) 
+SERVICE CHARGE                             £1.85 
+TOTAL (VAT INCLUDED)                      £20.30 <-- Font A (Bold), Label left, Price right
+VAT @ 20%                                  £3.38 <-- Font A (Regular), Label left, Price right
+------------------------------------------------ 
+PAID BY CARD (VISA)                       £20.30 <-- Font A (Regular), Label left, Price right
+
+NAME: [CUSTOMER NAME]                            <-- Font A (Regular), Left-aligned
+TABLE: 12                                        <-- Font A (Regular), Left-aligned
+
+                         [ QR CODE ]             <-- Centered Bitmap Element (300x300px)
+
+                   Scan to track / rate us       <-- Font A (Regular), Centered
+                    Thank you for dining!        <-- Font A (Regular), Centered
+================================================

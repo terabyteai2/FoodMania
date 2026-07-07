@@ -346,6 +346,54 @@ class _MainShellState extends State<MainShell> {
   bool _appUpdateDialogShowing = false;
   int _receiptPrinterOpenRequest = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  OverlayEntry? _scanOverlay;
+
+  void _showScanOverlay(String message) {
+    _hideScanOverlay();
+    _scanOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        top: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
+        right: 8,
+        child: Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(12),
+          color: PosColors.surface,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: PosColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: PosColors.line),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: PosColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TfText(
+                  message,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_scanOverlay!);
+  }
+
+  void _hideScanOverlay() {
+    _scanOverlay?.remove();
+    _scanOverlay = null;
+  }
 
   @override
   void initState() {
@@ -369,6 +417,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _hideScanOverlay();
     _notificationToastDebounce?.cancel();
     super.dispose();
   }
@@ -463,6 +512,8 @@ class _MainShellState extends State<MainShell> {
             ),
             body: ShellNavScope(
               openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+              showScanOverlay: _showScanOverlay,
+              hideScanOverlay: _hideScanOverlay,
               child: body,
             ),
           );
@@ -525,6 +576,8 @@ class _MainShellState extends State<MainShell> {
               Expanded(
                 child: ShellNavScope(
                   openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                  showScanOverlay: _showScanOverlay,
+                  hideScanOverlay: _hideScanOverlay,
                   child: body,
                 ),
               ),
@@ -589,7 +642,11 @@ class _MainShellState extends State<MainShell> {
   void _handleDrawerAction(_DrawerAction action) {
     switch (action) {
       case _DrawerAction.stockScan:
-        unawaited(runStockScanFlow(context));
+        unawaited(runStockScanFlow(
+          context,
+          showScanOverlay: _showScanOverlay,
+          hideScanOverlay: _hideScanOverlay,
+        ));
       case _DrawerAction.stockIn:
         unawaited(_pushThenRefreshInventory(const StockInScreen()));
       case _DrawerAction.stockCount:
@@ -1216,22 +1273,18 @@ class _AppNavDrawer extends StatelessWidget {
                   PosSpacing.sp4,
                   PosSpacing.sp4,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    TfCompactRoleToggle(
-                      role: app.accountRole.isOwner ? 'owner' : 'manager',
-                      options: [
-                        (text.backofficeLabel, 'owner'),
-                        (text.counterService, 'manager'),
-                      ],
-                      onChanged: (value) => app.setAccountRoleDemo(
-                        value == 'owner'
-                            ? AccountRole.owner
-                            : AccountRole.manager,
-                      ),
-                    ),
+                child: TfCompactRoleToggle(
+                  expand: true,
+                  role: app.accountRole.isOwner ? 'owner' : 'manager',
+                  options: [
+                    (text.backofficeLabel, 'owner'),
+                    (text.counterService, 'manager'),
                   ],
+                  onChanged: (value) => app.setAccountRoleDemo(
+                    value == 'owner'
+                        ? AccountRole.owner
+                        : AccountRole.manager,
+                  ),
                 ),
               ),
           ],

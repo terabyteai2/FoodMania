@@ -844,15 +844,18 @@ class _StatTile extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          TfText(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-              color: PosColors.muted,
-              height: 1.2,
+          SizedBox(
+            height: 28,
+            child: TfText(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: PosColors.muted,
+                height: 1.2,
+              ),
             ),
           ),
         ],

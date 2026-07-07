@@ -3243,7 +3243,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   String? _selectedTable;
 
   final List<DesktopMenuLineSelection> _cartLines = [];
-  String _selectedCategory = '';
+  String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   final _discountCtrl = TextEditingController();
@@ -3432,7 +3432,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     // EVERYTHING out and leave an inexplicably empty grid — fall back to All.
     if (_selectedCategory != '' &&
         !_categoriesMemo.contains(_selectedCategory)) {
-      _selectedCategory = '';
+      _selectedCategory = 'All';
     }
     _searchBlobs = {
       for (final i in widget.menuItems)
@@ -3784,7 +3784,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     onSetShortCode: (item) => unawaited(_setShortCode(item)),
                     onSubmit: _cartLines.isNotEmpty ? _goToReview : null,
                     onResetFilters: () => setState(() {
-                      _selectedCategory = '';
+                      _selectedCategory = 'All';
                       _query = '';
                       _searchCtrl.clear();
                     }),

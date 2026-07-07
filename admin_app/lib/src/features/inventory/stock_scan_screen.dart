@@ -6,14 +6,21 @@ import 'package:image/image.dart' as img;
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/scanning_progress.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/receipt_scan.dart';
 import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 
 class StockScanScreen extends StatefulWidget {
-  const StockScanScreen({super.key});
+  const StockScanScreen({
+    this.onScan,
+    super.key,
+  });
+
+  /// When provided, the screen pops immediately after capturing images and
+  /// delegates the async scan to this callback. When null, the original
+  /// blocking-dialog behaviour is used.
+  final Future<void> Function(List<MenuScanPageUpload> uploads)? onScan;
 
   @override
   State<StockScanScreen> createState() => _StockScanScreenState();
@@ -148,35 +155,36 @@ class _StockScanScreenState extends State<StockScanScreen> {
 
   Future<void> _scanAll() async {
     if (_pages.isEmpty) return;
+
+    final uploads = _pages
+        .map(
+          (page) => MenuScanPageUpload(
+            bytes: page.bytes,
+            fileName: page.fileName,
+            mimeType: page.mimeType,
+          ),
+        )
+        .toList(growable: false);
+
+    if (widget.onScan != null) {
+      widget.onScan!(uploads);
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
+    // Fallback (blocking) path for any caller that doesn't set up onScan.
     final app = AppScope.read(context);
     final text = app.strings;
-
-    final closeOverlay = ScanningProgressOverlay.show(
-      context,
-      message: text.scanningStock,
-    );
-
     StockScanResult? result;
     try {
-      final uploads = _pages
-          .map(
-            (page) => MenuScanPageUpload(
-              bytes: page.bytes,
-              fileName: page.fileName,
-              mimeType: page.mimeType,
-            ),
-          )
-          .toList(growable: false);
       result = await app.scanInventoryStock(uploads);
     } catch (error) {
-      closeOverlay();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: TfText('${text.receiptScanFailed}: $error')),
       );
       return;
     }
-    closeOverlay();
     if (!mounted) return;
     Navigator.of(context).pop(result);
   }

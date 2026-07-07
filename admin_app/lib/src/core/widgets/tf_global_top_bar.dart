@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
 import '../../models/pos_notification.dart';
+import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
 import 'notification_center.dart';
 import 'shell_nav_scope.dart';
@@ -136,7 +137,7 @@ class TfGlobalTopBar extends StatelessWidget {
   }
 }
 
-enum _TopAction { settings, signOut }
+enum _TopAction { language, printer, settings, signOut }
 
 class _AvatarDropdown extends StatelessWidget {
   const _AvatarDropdown({this.onNavigateToTarget});
@@ -172,6 +173,12 @@ class _AvatarDropdown extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 224, maxWidth: 280),
       onSelected: (action) {
         switch (action) {
+          case _TopAction.language:
+            app.updateLanguage(
+              app.language == AppLanguage.bn ? AppLanguage.en : AppLanguage.bn,
+            );
+          case _TopAction.printer:
+            onNavigateToTarget?.call(PosNotificationTarget.receiptPrinter);
           case _TopAction.settings:
             onNavigateToTarget?.call(PosNotificationTarget.settings);
           case _TopAction.signOut:
@@ -179,48 +186,76 @@ class _AvatarDropdown extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
+        PopupMenuItem<_TopAction>(
+          value: _TopAction.language,
+          height: 42,
+          child: Row(
+            children: [
+              const Icon(Icons.translate_rounded, size: 18, color: PosColors.ink2),
+              const SizedBox(width: 10),
+              TfText(
+                tfPick(context, en: 'Language', bn: 'ভাষা'),
+                style: const TextStyle(color: PosColors.text, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              TfText(
+                app.language == AppLanguage.bn ? 'বাংলা' : 'English',
+                style: const TextStyle(color: PosColors.muted, fontSize: 14, fontWeight: FontWeight.w400),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<_TopAction>(
+          value: _TopAction.printer,
+          height: 42,
+          child: Row(
+            children: [
+              const Icon(Icons.print_outlined, size: 18, color: PosColors.ink2),
+              const SizedBox(width: 10),
+              TfText(
+                tfPick(context, en: 'Printer', bn: 'প্রিন্টার'),
+                style: const TextStyle(color: PosColors.text, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              TfText(
+                app.printerState.connected
+                    ? tfPick(context, en: 'Connected', bn: 'কানেক্টেড')
+                    : tfPick(context, en: 'Connect', bn: 'কানেক্ট'),
+                style: TextStyle(
+                  color: app.printerState.connected ? PosColors.success : PosColors.muted,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
         if (canOpenSettings)
           PopupMenuItem<_TopAction>(
             value: _TopAction.settings,
             height: 42,
             child: Row(
               children: [
-                const Icon(
-                  Icons.settings_outlined,
-                  size: 18,
-                  color: PosColors.ink2,
-                ),
+                const Icon(Icons.settings_outlined, size: 18, color: PosColors.ink2),
                 const SizedBox(width: 10),
                 TfText(
                   tfPick(context, en: 'Settings', bn: 'সেটিংস'),
-                  style: const TextStyle(
-                    color: PosColors.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: PosColors.text, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
           ),
-        if (canOpenSettings) const PopupMenuDivider(),
+        const PopupMenuDivider(),
         PopupMenuItem<_TopAction>(
           value: _TopAction.signOut,
           height: 42,
           child: Row(
             children: [
-              const Icon(
-                Icons.logout_rounded,
-                size: 18,
-                color: PosColors.danger,
-              ),
+              const Icon(Icons.logout_rounded, size: 18, color: PosColors.danger),
               const SizedBox(width: 10),
               TfText(
                 tfPick(context, en: 'Sign out', bn: 'সাইন আউট'),
-                style: const TextStyle(
-                  color: PosColors.danger,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: PosColors.danger, fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ],
           ),

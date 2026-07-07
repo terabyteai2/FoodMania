@@ -54,13 +54,14 @@ void main() {
     );
 
     expect(ticket, contains('#30'));
+    expect(ticket, contains('Order: #30'));
     expect(ticket, contains('Helium'));
-    expect(ticket, contains('[DINE IN]'));
+    expect(ticket, contains('DINE IN'));
     expect(ticket, contains('24 May 2026 - 1.17 pm'));
-    expect(ticket, contains('1. Chicken Burger'));
+    expect(ticket, contains('001 1x Chicken Burger'));
     expect(ticket, contains('1x'));
     expect(ticket, contains('500/-'));
-    expect(ticket, contains('2. Egger Burger'));
+    expect(ticket, contains('002 2x Egger Burger'));
     expect(ticket, contains('2x'));
     expect(ticket, contains('200/-'));
     expect(ticket, contains('Total (VAT included)'));
