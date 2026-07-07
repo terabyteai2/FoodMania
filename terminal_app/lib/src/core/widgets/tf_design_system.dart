@@ -48,7 +48,7 @@ String tfPick(BuildContext context, {required String en, String? bn}) {
 }
 
 const String tfEnglishFontFamily = 'Inter';
-const String tfBanglaFontFamily = 'Hind Siliguri';
+const String tfBanglaFontFamily = 'Noto Sans Bengali';
 const double tfBanglaMinLineHeight = 1.36;
 
 /// Dynamic Font Family utility ensuring baseline synchronization.
@@ -74,7 +74,7 @@ TextStyle tfSafeTextStyle(
   return base.copyWith(
     fontFamily: family,
     fontFamilyFallback: isBn
-        ? const [tfBanglaFontFamily]
+        ? const ['Hind Siliguri']
         : base.fontFamilyFallback,
     letterSpacing: tracking,
     height: safeHeight,
@@ -95,7 +95,7 @@ StrutStyle? tfSafeStrutStyle(
       : base.height;
   return StrutStyle(
     fontFamily: tfBanglaFontFamily,
-    fontFamilyFallback: const [tfBanglaFontFamily],
+    fontFamilyFallback: const ['Hind Siliguri'],
     fontSize: base.fontSize,
     height: safeHeight,
     leadingDistribution: TextLeadingDistribution.even,
