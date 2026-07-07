@@ -462,10 +462,12 @@ class PlatformAccountPatchRequest(BaseModel):
 
 class OnboardingPlanRequest(BaseModel):
     plan: str = "monthly"
+    package: str | None = None  # standard | pro | premium (new; overrides plan mapping)
 
 
 class PlatformSubscriptionRequest(BaseModel):
     plan: str = "monthly"
+    package: str | None = None  # standard | pro | premium
     status: str = "active"
     extendDays: int | None = None
     expiresAt: str | None = None  # ISO date string — takes priority over extendDays

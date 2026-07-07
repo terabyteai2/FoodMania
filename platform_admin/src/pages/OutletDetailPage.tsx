@@ -10,6 +10,8 @@ import {
 } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 
+const PACKAGES = ["standard", "pro", "premium"] as const;
+
 type CustomerInfo = {
   outletId: string;
   outletName: string;
@@ -403,14 +405,14 @@ export default function OutletDetailPage() {
       {tab === "subscription" && (
         <div className="tab-panel card">
           <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-            Grant access here after the manager picks a plan in the app. No payment gateway is required.
+            Manual monthly billing — no payment gateway required.
           </p>
           {sub ? (
             <>
               <div className="detail-grid" style={{ marginBottom: 16 }}>
                 <div className="detail-row">
-                  <span className="label">Plan</span>
-                  <strong>{sub.plan}</strong>
+                  <span className="label">Package</span>
+                  <strong>{sub.package || (sub.plan === "trial" ? "—" : sub.plan)}</strong>
                 </div>
                 <div className="detail-row">
                   <span className="label">Status</span>
@@ -427,51 +429,108 @@ export default function OutletDetailPage() {
                   </span>
                 </div>
               </div>
+
+              <div className="detail-grid" style={{ marginBottom: 16, padding: 12, background: "var(--surface2)", borderRadius: 8 }}>
+                <div className="detail-row">
+                  <span className="label">Change package</span>
+                  <select
+                    defaultValue={sub.package || "standard"}
+                    onChange={(e) =>
+                      subscriptionAction({
+                        package: e.target.value,
+                        status: sub.status,
+                        plan: sub.plan,
+                      })
+                    }
+                    style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)" }}
+                  >
+                    {PACKAGES.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </>
           ) : (
             <p className="muted">No subscription record yet.</p>
           )}
           <div className="actions-row">
-            <button
-              type="button"
-              className="btn"
-              onClick={() =>
-                subscriptionAction({ plan: "monthly", status: "active", extendDays: 30 })
-              }
-            >
-              Extend 30 days
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() =>
-                subscriptionAction({ plan: "annual", status: "active", extendDays: 365 })
-              }
-            >
-              Extend 1 year
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() =>
-                subscriptionAction({
-                  plan: sub?.plan || "monthly",
-                  status: "active",
-                  extendDays: (sub?.plan || "monthly") === "annual" ? 365 : 30,
-                })
-              }
-            >
-              Activate app access
-            </button>
-            <button
-              type="button"
-              className="btn-danger btn"
-              onClick={() =>
-                subscriptionAction({ plan: sub?.plan || "monthly", status: "cancelled" })
-              }
-            >
-              Cancel
-            </button>
+            {sub?.status !== "cancelled" && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  subscriptionAction({
+                    plan: sub?.plan || "monthly",
+                    package: sub?.package || "standard",
+                    status: "active",
+                    extendDays: 30,
+                  })
+                }
+                disabled={sub?.status === "trial" || sub?.status === "on_hold"}
+              >
+                Extend 30 days & set active
+              </button>
+            )}
+            {(!sub || sub.status === "trial") && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  subscriptionAction({
+                    package: sub?.package || "standard",
+                    status: "on_hold",
+                    plan: sub?.plan || "monthly",
+                  })
+                }
+              >
+                End trial (on hold)
+              </button>
+            )}
+            {sub && sub.status !== "cancelled" && sub.status !== "paused" && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  subscriptionAction({
+                    plan: sub.plan,
+                    package: sub.package,
+                    status: "paused",
+                  })
+                }
+              >
+                Pause
+              </button>
+            )}
+            {(sub?.status === "paused" || sub?.status === "on_hold") && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  subscriptionAction({
+                    plan: sub?.plan || "monthly",
+                    package: sub?.package || "standard",
+                    status: "active",
+                    extendDays: sub?.expiresAt
+                      ? Math.max(1, Math.ceil((new Date(sub.expiresAt).getTime() - Date.now()) / 86400000))
+                      : 30,
+                  })
+                }
+              >
+                Resume (active)
+              </button>
+            )}
+            {sub && !["cancelled", "paused"].includes(sub.status) && (
+              <button
+                type="button"
+                className="btn-danger btn"
+                onClick={() =>
+                  subscriptionAction({ plan: sub.plan, package: sub.package, status: "cancelled" })
+                }
+              >
+                Cancel
+              </button>
+            )}
           </div>
         </div>
       )}

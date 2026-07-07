@@ -228,7 +228,7 @@ async def admin_register_onboarding_plan(
     outlet_id = payload.get("sub") or payload.get("outlet_id")
     if not outlet_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
-    sub = await register_onboarding_plan(db, outlet_id, plan=body.plan)
+    sub = await register_onboarding_plan(db, outlet_id, plan=body.plan, package=body.package)
     await db.commit()
     await db.refresh(sub)
     return ok(

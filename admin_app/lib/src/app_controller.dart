@@ -839,7 +839,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> startFreeTrial() async {
     final preferences = await SharedPreferences.getInstance();
-    final ends = DateTime.now().add(const Duration(days: 7));
+    final ends = DateTime.now().add(const Duration(days: 10));
     subscriptionState = 'trial';
     trialEndsAt = ends;
     pendingOnboardingLanding = true;

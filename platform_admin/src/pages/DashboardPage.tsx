@@ -40,6 +40,12 @@ export default function DashboardPage() {
           <div className="value">{stats.outlets}</div>
         </div>
         <div className="stat-card">
+          <div className="label">Trial subscriptions</div>
+          <div className="value" style={{ color: (stats.trialSubscriptions ?? 0) > 0 ? "#60a5fa" : undefined }}>
+            {stats.trialSubscriptions ?? 0}
+          </div>
+        </div>
+        <div className="stat-card">
           <div className="label">Active subscriptions</div>
           <div className="value">{stats.activeSubscriptions}</div>
         </div>

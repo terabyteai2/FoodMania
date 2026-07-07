@@ -373,6 +373,12 @@ class AppStrings {
   String get autoPrintNewOrdersSubtitle => isBn
       ? 'ক্লাউড বা ম্যানুয়াল অর্ডার এলে রান্নাঘরের টিকেট স্বয়ংক্রিয়ভাবে প্রিন্ট হবে এবং নিশ্চিতকরণ মডাল বাদ যাবে।'
       : 'When a cloud/manual order arrives, the kitchen ticket prints automatically and the confirmation modal is skipped — ideal for fast-paced cafes.';
+  String get autoKotPrint => isBn
+      ? 'অটো KOT প্রিন্ট'
+      : 'Auto KOT Print';
+  String get autoKotPrintSubtitle => isBn
+      ? 'নতুন অর্ডার অ্যাকসেপ্ট হলে KOT অটোমেটিক প্রিন্ট হবে।'
+      : 'Automatically print KOT when an order is accepted.';
   String get refreshPairedPrinters =>
       isBn ? 'কাছের ডিভাইস স্ক্যান' : 'Scan for devices';
   String get refresh => isBn ? 'রিফ্রেশ' : 'Refresh';

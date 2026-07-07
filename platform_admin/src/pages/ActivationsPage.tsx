@@ -3,10 +3,13 @@ import { Link } from "react-router-dom";
 import { Activation, apiFetch } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 
+const PACKAGES = ["standard", "pro", "premium"] as const;
+
 export default function ActivationsPage() {
   const [rows, setRows] = useState<Activation[]>([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [packageSel, setPackageSel] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     apiFetch<Activation[]>("/platform/activations?limit=100")
@@ -18,16 +21,16 @@ export default function ActivationsPage() {
     load();
   }, [load]);
 
-  async function activate(outletId: string, plan: string) {
+  async function activate(outletId: string, pkg: string) {
     setBusyId(outletId);
     setError("");
     try {
       await apiFetch(`/platform/outlets/${outletId}/subscription`, {
         method: "POST",
         body: JSON.stringify({
-          plan: plan === "annual" ? "annual" : "monthly",
+          package: pkg,
           status: "active",
-          extendDays: plan === "annual" ? 365 : 30,
+          extendDays: 30,
         }),
       });
       setRows((list) => list.filter((r) => r.outletId !== outletId));
@@ -80,12 +83,23 @@ export default function ActivationsPage() {
                     <StatusBadge status={r.status} />
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
+                    <select
+                      value={packageSel[r.outletId] || "standard"}
+                      onChange={(e) =>
+                        setPackageSel((prev) => ({ ...prev, [r.outletId]: e.target.value }))
+                      }
+                      style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", fontSize: 12 }}
+                    >
+                      {PACKAGES.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       className="btn"
-                      style={{ fontSize: 12, padding: "6px 12px", marginRight: 8 }}
+                      style={{ fontSize: 12, padding: "6px 12px", margin: "0 8px" }}
                       disabled={busyId === r.outletId}
-                      onClick={() => void activate(r.outletId, r.plan)}
+                      onClick={() => void activate(r.outletId, packageSel[r.outletId] || "standard")}
                     >
                       {busyId === r.outletId ? "…" : "Activate"}
                     </button>

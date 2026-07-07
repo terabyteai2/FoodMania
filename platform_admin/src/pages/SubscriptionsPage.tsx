@@ -24,10 +24,10 @@ export default function SubscriptionsPage() {
       <div className="search-bar">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
-          <option value="active">active</option>
-          <option value="pending">pending</option>
           <option value="trial">trial</option>
-          <option value="expired">expired</option>
+          <option value="active">active</option>
+          <option value="on_hold">on hold</option>
+          <option value="paused">paused</option>
           <option value="cancelled">cancelled</option>
         </select>
       </div>
@@ -41,7 +41,7 @@ export default function SubscriptionsPage() {
               <tr>
                 <th>Outlet</th>
                 <th>Restaurant</th>
-                <th>Plan</th>
+                <th>Package</th>
                 <th>Status</th>
                 <th>Expires</th>
                 <th></th>
@@ -52,7 +52,7 @@ export default function SubscriptionsPage() {
                 <tr key={s.id}>
                   <td>{s.outletName || s.outletId}</td>
                   <td>{s.restaurantName || "—"}</td>
-                  <td>{s.plan}</td>
+                  <td>{s.package || (s.plan === "trial" ? "—" : s.plan)}</td>
                   <td>
                     <StatusBadge status={s.status} />
                   </td>

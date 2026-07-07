@@ -276,21 +276,7 @@ class TicketBitmapRenderer {
   static Future<Uint8List> render(TicketCopyData data) async {
     final isDelivery = data.deliveryAddress?.trim().isNotEmpty == true;
 
-    final itemRows = data.items.length * 42.0;
-    final summaryRows = data.summaryRows.length * 32.0;
-    final customerInfo =
-        (data.customerName?.trim().isNotEmpty == true ? 30.0 : 0) +
-        (isDelivery && data.deliveryAddress?.trim().isNotEmpty == true
-            ? ((data.deliveryAddress!.length ~/ 32) * 24 + 10).toDouble()
-            : 0) +
-        (isDelivery && data.mobileNumber?.trim().isNotEmpty == true ? 30.0 : 0);
-    final qrSection =
-        data.orderDetailsUrl?.trim().isNotEmpty == true ? 165.0 : 0;
-    final footerArea = data.qrCaption?.trim().isNotEmpty == true ? 36.0 : 0;
-    final extraFooter = data.footerText?.trim().isNotEmpty == true ? 30.0 : 0;
-    final height = (200 + itemRows + summaryRows + customerInfo + qrSection +
-            footerArea + extraFooter)
-        .toDouble();
+    final height = 4000.0;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -301,10 +287,7 @@ class TicketBitmapRenderer {
 
     var y = 0.0;
 
-    // 1. Double-line top border
-    y = _doubleRule(canvas, y + 6);
-
-    // 2. Restaurant name (Double-W/H, max 24 chars)
+    // 1. Restaurant name (Double-W/H, max 24 chars)
     final name = data.restaurantName.length > 24
         ? data.restaurantName.substring(0, 24)
         : data.restaurantName;

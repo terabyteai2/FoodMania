@@ -54,7 +54,6 @@ from subscription_service import (
     outlet_has_app_access,
     outlet_needs_activation,
     resolve_outlet_by_server_id,
-    subscription_period_days,
     subscription_to_dict,
 )
 from services.app_update import (
@@ -273,6 +272,7 @@ def _activation_dict(
         "managerEmail": manager_email,
         "managerPhone": manager_phone,
         "plan": sub.plan if sub else "monthly",
+        "package": sub.package if sub else None,
         "status": sub.status if sub else "none",
         "hasAppAccess": outlet_has_app_access(sub),
         "createdAt": outlet.created_at.isoformat(),
@@ -369,6 +369,13 @@ async def platform_stats(
 
     restaurants_count = (await db.execute(select(func.count()).select_from(Restaurant))).scalar() or 0
     outlets_count = (await db.execute(select(func.count()).select_from(Outlet))).scalar() or 0
+    trial_subs = (
+        await db.execute(
+            select(func.count()).select_from(OutletSubscription).where(
+                OutletSubscription.status == "trial"
+            )
+        )
+    ).scalar() or 0
     active_subs = (
         await db.execute(
             select(func.count()).select_from(OutletSubscription).where(
@@ -403,7 +410,7 @@ async def platform_stats(
             select(func.count())
             .select_from(OutletSubscription)
             .where(
-                OutletSubscription.status == "active",
+                OutletSubscription.status.in_(["trial", "active"]),
                 OutletSubscription.expires_at <= seven_days_ahead,
                 OutletSubscription.expires_at >= now,
             )
@@ -425,6 +432,7 @@ async def platform_stats(
         {
             "restaurants": restaurants_count,
             "outlets": outlets_count,
+            "trialSubscriptions": trial_subs,
             "activeSubscriptions": active_subs,
             "pendingActivations": pending_activations,
             "pendingPayments": pending_activations,
@@ -703,11 +711,13 @@ async def create_outlet(
     db.add(outlet)
     await db.flush()
 
+    now = _now()
     sub = OutletSubscription(
         outlet_id=outlet.id,
-        plan="monthly",
-        status="pending",
-        starts_at=_now(),
+        plan="trial",
+        status="trial",
+        starts_at=now,
+        expires_at=now + timedelta(days=10),
     )
     db.add(sub)
     await db.commit()
@@ -1056,6 +1066,10 @@ async def list_subscriptions(
     )
 
 
+_VALID_SUB_STATUSES = frozenset({"trial", "active", "on_hold", "paused", "cancelled"})
+_LEGACY_STATUS_MAP = {"pending": "on_hold", "expired": "on_hold"}
+
+
 @router.post("/outlets/{outlet_id}/subscription")
 async def manage_subscription(
     outlet_id: str,
@@ -1068,11 +1082,26 @@ async def manage_subscription(
     sub = await get_or_create_subscription(db, outlet_id)
     now = _now()
 
-    if body.status not in {"pending", "trial", "active", "expired", "cancelled"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status")
+    # Normalise status — accept new values and map legacy ones
+    raw_status = (body.status or "").strip().lower()
+    status = _LEGACY_STATUS_MAP.get(raw_status, raw_status)
+    if status not in _VALID_SUB_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Use one of: {', '.join(sorted(_VALID_SUB_STATUSES))}",
+        )
+
+    if body.package:
+        clean = body.package.strip().lower()
+        if clean not in {"standard", "pro", "premium"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Package must be one of: standard, pro, premium",
+            )
+        sub.package = clean
 
     sub.plan = body.plan if body.plan in {"monthly", "annual"} else sub.plan
-    sub.status = body.status
+    sub.status = status
 
     # Custom expiresAt takes priority over extendDays
     custom_expires_at: datetime | None = None
@@ -1083,7 +1112,8 @@ async def manage_subscription(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid expiresAt date")
 
-    if body.status == "active":
+    if status == "active":
+        pkg = body.package.strip().lower() if body.package else (sub.package or "standard")
         if custom_expires_at is not None:
             sub.status = "active"
             sub.starts_at = now
@@ -1095,15 +1125,15 @@ async def manage_subscription(
             sub = await grant_outlet_access(
                 db,
                 outlet_id,
-                plan=sub.plan,
-                extend_days=days,
+                package=pkg,
+                grant_days=days,
             )
     elif body.extendDays is not None and body.extendDays > 0:
         base = sub.expires_at if sub.expires_at and sub.expires_at > now else now
         sub.expires_at = base + timedelta(days=body.extendDays)
         sub.updated_at = now
-    elif body.status == "active" and sub.expires_at is None:
-        sub.expires_at = now + timedelta(days=subscription_period_days(sub.plan))
+    elif status == "active" and sub.expires_at is None:
+        sub.expires_at = now + timedelta(days=30)
         sub.updated_at = now
     else:
         sub.updated_at = now
@@ -1289,7 +1319,7 @@ async def platform_alerts(
             .join(Outlet, OutletSubscription.outlet_id == Outlet.id)
             .join(Restaurant, Outlet.restaurant_id == Restaurant.id)
             .where(
-                OutletSubscription.status == "active",
+                OutletSubscription.status.in_(["trial", "active"]),
                 OutletSubscription.expires_at <= seven_days_ahead,
                 OutletSubscription.expires_at >= now,
             )

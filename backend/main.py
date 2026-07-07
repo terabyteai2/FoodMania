@@ -61,25 +61,27 @@ def _start_ngrok() -> str | None:
 
 
 async def _expire_stale_subscriptions_loop() -> None:
-    """Periodically flip expired active subscriptions back to pending."""
+    """Periodically flip expired trial/active subscriptions to on_hold."""
     while True:
         try:
             await asyncio.sleep(3600)  # run every hour
             async with AsyncSessionLocal() as db:
-                active_subs = (
+                check_subs = (
                     await db.execute(
-                        select(OutletSubscription).where(OutletSubscription.status == "active")
+                        select(OutletSubscription).where(
+                            OutletSubscription.status.in_(["trial", "active"])
+                        )
                     )
                 ).scalars().all()
                 changed = 0
-                for sub in active_subs:
+                for sub in check_subs:
                     original_status = sub.status
                     await maybe_expire_subscription(db, sub)
                     if sub.status != original_status:
                         changed += 1
                 if changed:
                     await db.commit()
-                    print(f"[expiry] Moved {changed} subscription(s) from active → pending")
+                    print(f"[expiry] Moved {changed} subscription(s) to on_hold")
         except asyncio.CancelledError:
             break
         except Exception as exc:

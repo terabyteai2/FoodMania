@@ -4,15 +4,17 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select, text
 
 from auth import bearer_scheme, decode_device_payload
 from config import settings
 from database import AsyncSessionLocal
-from models import Outlet
+from models import Outlet, OutletSubscription
 from schemas import BlockingNoticeRespondRequest, ok
 from services import phone_otp
 from services.blocking_notice import get_blocking_notice, respond_to_blocking_notice
+from subscription_service import blocking_notice_for_subscription
 
 router = APIRouter()
 
@@ -116,8 +118,27 @@ async def health():
 
 
 @router.get("/admin/blocking-notice")
-async def admin_blocking_notice():
+async def admin_blocking_notice(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+):
+    """Return a per-outlet blocking notice based on subscription status,
+    falling back to the global notice if no outlet context is available.
+    """
     async with AsyncSessionLocal() as db:
+        if credentials:
+            payload = decode_device_payload(credentials.credentials)
+            outlet_id = payload.get("sub") or payload.get("outlet_id")
+            if outlet_id:
+                sub = (
+                    await db.execute(
+                        select(OutletSubscription).where(
+                            OutletSubscription.outlet_id == outlet_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                notice = blocking_notice_for_subscription(sub)
+                if notice.get("enabled"):
+                    return ok(notice)
         return ok(await get_blocking_notice(db))
 
 

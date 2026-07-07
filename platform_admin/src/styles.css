@@ -176,11 +176,20 @@ tr:hover td {
 }
 
 .badge-trial {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.badge-on-hold {
   background: rgba(245, 158, 11, 0.2);
   color: var(--warning);
 }
 
-.badge-expired,
+.badge-paused {
+  background: rgba(148, 163, 184, 0.2);
+  color: #94a3b8;
+}
+
 .badge-cancelled,
 .badge-suspended {
   background: rgba(239, 68, 68, 0.2);
@@ -190,6 +199,11 @@ tr:hover td {
 .badge-pending {
   background: rgba(59, 130, 246, 0.2);
   color: var(--accent);
+}
+
+.badge-expired {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
 }
 
 .login-page {

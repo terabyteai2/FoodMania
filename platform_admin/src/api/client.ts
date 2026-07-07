@@ -185,6 +185,7 @@ export type Subscription = {
   outletName?: string;
   restaurantName?: string;
   plan: string;
+  package: string | null;
   status: string;
   startsAt: string;
   expiresAt: string | null;
@@ -214,6 +215,7 @@ export type Activation = {
   managerEmail: string | null;
   managerPhone: string | null;
   plan: string;
+  package: string | null;
   status: string;
   hasAppAccess: boolean;
   createdAt: string;
@@ -253,6 +255,7 @@ export type Order = {
 export type Stats = {
   restaurants: number;
   outlets: number;
+  trialSubscriptions?: number;
   activeSubscriptions: number;
   pendingActivations: number;
   pendingPayments?: number;

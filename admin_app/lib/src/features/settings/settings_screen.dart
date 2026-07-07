@@ -155,6 +155,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openTableQrLabels,
                 ),
                 _SettingActionData(
+                  title: text.autoKotPrint,
+                  subtitle: text.autoKotPrintSubtitle,
+                  icon: Icons.print_outlined,
+                  action: Switch(
+                    value: app.printerState.autoPrintEnabled,
+                    onChanged: (v) => app.setAutoPrintOrders(v),
+                    activeThumbColor: PosColors.primary,
+                  ),
+                ),
+                _SettingActionData(
                   title: text.bkashNagadPayments,
                   subtitle: text.bkashNagadPaymentsHint,
                   icon: Icons.payment_rounded,
@@ -892,6 +902,7 @@ class _SettingActionData {
     required this.subtitle,
     required this.icon,
     this.trailing,
+    this.action,
     this.onTap,
     this.danger = false,
   });
@@ -900,6 +911,7 @@ class _SettingActionData {
   final String subtitle;
   final IconData icon;
   final String? trailing;
+  final Widget? action;
   final VoidCallback? onTap;
   final bool danger;
 }
@@ -979,7 +991,9 @@ class _SettingsActionTile extends StatelessWidget {
             ),
           ),
           SizedBox(width: PosSpacing.sp2),
-          ...[
+          if (item.action != null)
+            item.action!
+          else ...[
             if (item.trailing != null)
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: 104),

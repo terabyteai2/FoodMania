@@ -25,7 +25,6 @@ import 'features/messaging/messages_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/reports/reports_hub_screen.dart';
-import 'features/onboarding/subscription_screen.dart';
 import 'features/auth/staff_invite_screen.dart';
 import 'features/setup/tenant_setup_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
@@ -177,17 +176,6 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     if (!_controller.isTenantReady) {
       return TenantSetupScreen(
         onProvisioned: () {
-          setState(() {
-            _initialShellIndex = _defaultShellIndex();
-          });
-        },
-      );
-    }
-    if (_controller.isManager &&
-        (_controller.mustCompleteOnboardingPayment ||
-            _controller.subscriptionState != 'paid')) {
-      return SubscriptionScreen(
-        onFinished: () {
           setState(() {
             _initialShellIndex = _defaultShellIndex();
           });

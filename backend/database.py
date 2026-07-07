@@ -32,6 +32,7 @@ async def create_tables() -> None:
         await _ensure_pos_columns(conn)
         await _ensure_chatbot_columns(conn)
         await _ensure_role_migration(conn)
+        await _ensure_subscription_columns(conn)
     await seed_platform_admin()
     await seed_system_config()
 
@@ -450,6 +451,49 @@ async def _ensure_chatbot_columns(conn) -> None:
                 f"history_json {json_type} DEFAULT '[]'::{json_type}"
             )
         )
+
+
+async def _ensure_subscription_columns(conn) -> None:
+    """Add package column and migrate old statuses to the new 5-status model.
+
+    Before: plan=(trial|monthly|annual), status=(active|pending|expired|cancelled)
+    After:  package=(null|standard|pro|premium), status=(trial|active|on_hold|paused|cancelled)
+    """
+    dialect = conn.dialect.name
+    if dialect == "sqlite":
+        try:
+            await conn.execute(
+                text("ALTER TABLE outlet_subscriptions ADD COLUMN package VARCHAR")
+            )
+        except Exception:
+            pass
+    else:
+        await conn.execute(
+            text(
+                "ALTER TABLE outlet_subscriptions ADD COLUMN IF NOT EXISTS package VARCHAR"
+            )
+        )
+
+    # Migrate status values
+    await conn.execute(
+        text(
+            "UPDATE outlet_subscriptions SET status = 'trial' "
+            "WHERE plan = 'trial' AND status = 'active'"
+        )
+    )
+    await conn.execute(
+        text(
+            "UPDATE outlet_subscriptions SET status = 'on_hold' "
+            "WHERE status IN ('pending', 'expired')"
+        )
+    )
+    # Set default package for active subscriptions that were on a paid plan
+    await conn.execute(
+        text(
+            "UPDATE outlet_subscriptions SET package = 'standard' "
+            "WHERE status = 'active' AND package IS NULL"
+        )
+    )
 
 
 async def seed_system_config() -> None:
