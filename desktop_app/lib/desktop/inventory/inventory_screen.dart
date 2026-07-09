@@ -5,6 +5,7 @@ import 'package:local_pos/src/models/inventory_unit.dart';
 
 import '../theme/desk_format.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 import 'inventory_item_form.dart';
 import 'stock_move_dialog.dart';
 
@@ -94,21 +95,84 @@ class _InventoryScreenState extends State<InventoryScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _toolbar(app.inventoryItems.length),
-        _headerRow(),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : items.isEmpty
-                  ? Center(
-                      child: Text('No stock items',
-                          style: TextStyle(color: PosColors.muted)))
-                  : ListView.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1, color: PosColors.line),
-                      itemBuilder: (_, i) => _row(items[i]),
-                    ),
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  child: Column(
+                    children: [
+                      _statRow(app.inventoryItems),
+                      const SizedBox(height: DeskMetrics.panelGap),
+                      Expanded(
+                        child: Container(
+                          clipBehavior: Clip.antiAlias,
+                          decoration: deskCardDecoration(),
+                          child: Column(
+                            children: [
+                              _headerRow(),
+                              Expanded(
+                                child: items.isEmpty
+                                    ? Center(
+                                        child: Text('No stock items',
+                                            style: TextStyle(
+                                                color: PosColors.muted)))
+                                    : ListView.separated(
+                                        itemCount: items.length,
+                                        separatorBuilder: (_, _) =>
+                                            const Divider(
+                                                height: 1,
+                                                color: PosColors.line),
+                                        itemBuilder: (_, i) => _row(items[i]),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
         ),
+      ],
+    );
+  }
+
+  /// Live inventory KPIs computed from the real items (stock value = Σ qty ×
+  /// cost/unit; low/out from InventoryItem.isLowStock/isOutOfStock).
+  Widget _statRow(List<InventoryItem> all) {
+    final stockValue =
+        all.fold<double>(0, (s, i) => s + i.quantity * i.costPerUnit);
+    final low = all.where((i) => i.isLowStock).length;
+    final out = all.where((i) => i.isOutOfStock).length;
+    return Wrap(
+      spacing: DeskMetrics.panelGap,
+      runSpacing: DeskMetrics.panelGap,
+      children: [
+        DeskStatTile(
+            icon: Icons.savings_rounded,
+            label: 'Stock value',
+            value: money(context, stockValue),
+            width: 190),
+        DeskStatTile(
+            icon: Icons.inventory_2_rounded,
+            label: 'Items',
+            value: '${all.length}',
+            width: 190),
+        DeskStatTile(
+            icon: Icons.warning_amber_rounded,
+            label: 'Low stock',
+            value: '$low',
+            width: 190,
+            accent: PosColors.warning,
+            tint: PosColors.warnSoft),
+        DeskStatTile(
+            icon: Icons.error_outline_rounded,
+            label: 'Out of stock',
+            value: '$out',
+            width: 190,
+            accent: PosColors.danger,
+            tint: PosColors.dangerSoft),
       ],
     );
   }

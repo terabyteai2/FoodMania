@@ -101,10 +101,12 @@ class _TablesScreenState extends State<TablesScreen> {
       }
     }
     final zones = _settings?.floorLayout ?? const <PosFloorZone>[];
+    final totalTables = zones.fold<int>(0, (s, z) => s + z.tables.length);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _header(occupied.length, totalTables),
         if (online.isNotEmpty) _onlineStrip(online),
         Expanded(
           child: zones.isEmpty
@@ -119,6 +121,32 @@ class _TablesScreenState extends State<TablesScreen> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _header(int occupied, int total) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        border: Border(bottom: BorderSide(color: PosColors.line)),
+      ),
+      child: Row(
+        children: [
+          const Text('Tables',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(width: 8),
+          if (total > 0)
+            Text('$occupied/$total seated',
+                style: TextStyle(fontSize: 13, color: PosColors.muted)),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            color: PosColors.ink2,
+            onPressed: _load,
+          ),
+        ],
+      ),
     );
   }
 
@@ -242,8 +270,9 @@ class _TablesScreenState extends State<TablesScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.md),
+        borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
         border: Border.all(color: PosColors.pendingBorder),
+        boxShadow: PosShadows.soft,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,5 +1,9 @@
 # QuickBytes Desktop — Design Reference (Petpooja-desktop fidelity, blue)
 
+> ⚠️ **SUPERSEDED.** The authoritative desktop design truth is now
+> **`DESIGN_RESET_REFERENCE.md`**. This file is **historical** and is to be re-derived
+> from that reset reference; when the two disagree, `DESIGN_RESET_REFERENCE.md` wins.
+
 > **Source of truth = `admin_app/context_pictures/petpooja13–17.png`** (the native
 > desktop app). Web dashboards petpooja18–23 inform analytics/inventory *content*
 > only. This doc names the values; when it and the pictures disagree, the pictures win.

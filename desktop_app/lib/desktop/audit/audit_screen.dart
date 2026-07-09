@@ -5,6 +5,7 @@ import 'package:local_pos/src/models/audit_entry.dart';
 
 import '../theme/desk_format.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 
 /// Audit trail — void / refund / comp / discount events (last 30 days).
 class AuditScreen extends StatefulWidget {
@@ -25,31 +26,51 @@ class _AuditScreenState extends State<AuditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<AuditEntry>>(
-      future: _future,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Center(
-              child: Text(
-                  snap.error.toString().replaceFirst('Exception: ', ''),
-                  style: TextStyle(color: PosColors.muted)));
-        }
-        final entries = snap.data ?? const [];
-        if (entries.isEmpty) {
-          return Center(
-              child: Text('No audit events',
-                  style: TextStyle(color: PosColors.muted)));
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: entries.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => _row(entries[i]),
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _header(),
+        Expanded(
+          child: FutureBuilder<List<AuditEntry>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                return Center(
+                    child: Text(
+                        snap.error.toString().replaceFirst('Exception: ', ''),
+                        style: TextStyle(color: PosColors.muted)));
+              }
+              final entries = snap.data ?? const [];
+              if (entries.isEmpty) {
+                return Center(
+                    child: Text('No audit events',
+                        style: TextStyle(color: PosColors.muted)));
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: entries.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _row(entries[i]),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _header() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        border: Border(bottom: BorderSide(color: PosColors.line)),
+      ),
+      child: const Text('Audit',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
     );
   }
 
@@ -62,11 +83,7 @@ class _AuditScreenState extends State<AuditScreen> {
     ].join(' · ');
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.line),
-      ),
+      decoration: deskCardDecoration(radius: DeskMetrics.tileRadius),
       child: Row(
         children: [
           Container(

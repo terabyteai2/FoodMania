@@ -4,11 +4,13 @@ import 'package:local_pos/src/models/analytics_summary_data.dart';
 
 import '../theme/desk_format.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 
-/// Owner analytics (petpooja18–20 content): headline KPIs, revenue trend,
-/// collection + service-wise split, profit estimate and popular dishes. Reuses
-/// the reduced-vocabulary backend (Gross/Net Sales, Collection, Prep Cost,
-/// Wastage, Gross Profit). Missing metrics are hidden, never zero-filled.
+/// Owner analytics, reset to the M3 chart-first language
+/// (DESIGN_RESET_REFERENCE.md): KPI tiles, a revenue trend line, a collection
+/// donut and service / dish bars, over the real reduced-vocabulary backend
+/// (Gross/Net Sales, Collection, Prep Cost, Wastage, Gross Profit). Missing
+/// metrics are hidden, never zero-filled.
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
 
@@ -62,6 +64,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               }
               final data = snap.data;
               if (data == null) return const SizedBox.shrink();
+              if (data.hasNoData) return _empty();
               return _body(data);
             },
           ),
@@ -82,42 +85,32 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           const Text('Analytics',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const Spacer(),
-          _segment(),
+          DeskSegment<String>(
+            options: const [
+              ('today', 'Today'),
+              ('week', '7 days'),
+              ('month', '30 days'),
+            ],
+            value: _range,
+            onChanged: _setRange,
+          ),
         ],
       ),
     );
   }
 
-  Widget _segment() {
-    const options = [('today', 'Today'), ('week', '7 days'), ('month', '30 days')];
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: PosColors.surfaceSunk,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-      ),
-      child: Row(
+  Widget _empty() {
+    return Center(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final (value, label) in options)
-            GestureDetector(
-              onTap: () => _setRange(value),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                decoration: BoxDecoration(
-                  color: _range == value ? PosColors.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(PosRadii.sm),
-                ),
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: _range == value
-                            ? Colors.white
-                            : PosColors.ink2)),
-              ),
-            ),
+          Icon(Icons.insights_rounded, size: 34, color: PosColors.muted),
+          const SizedBox(height: 10),
+          const Text('No sales in this period',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text('Pick a wider range to see trends.',
+              style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
         ],
       ),
     );
@@ -131,9 +124,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         children: [
           const Icon(Icons.cloud_off_rounded, size: 34, color: PosColors.muted),
           const SizedBox(height: 10),
-          Text('Analytics unavailable',
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700)),
+          const Text('Analytics unavailable',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           SizedBox(
             width: 360,
@@ -152,122 +144,97 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   Widget _body(AnalyticsSummaryData d) {
+    final collection = d.collection.where((r) => r.value > 0).toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: DeskMetrics.panelGap,
+            runSpacing: DeskMetrics.panelGap,
             children: [
-              _stat('Orders', '${d.ordersCompleted}'),
-              _stat('Gross sales', money(context, d.grossSales)),
-              _stat('Net sales', money(context, d.netSales)),
-              _stat('Collection', money(context, d.totalCollection)),
+              DeskStatTile(
+                icon: Icons.receipt_long_rounded,
+                label: 'Orders',
+                value: '${d.ordersCompleted}',
+              ),
+              DeskStatTile(
+                icon: Icons.payments_rounded,
+                label: 'Gross sales',
+                value: money(context, d.grossSales),
+              ),
+              DeskStatTile(
+                icon: Icons.trending_up_rounded,
+                label: 'Net sales',
+                value: money(context, d.netSales),
+              ),
+              DeskStatTile(
+                icon: Icons.account_balance_wallet_rounded,
+                label: 'Collection',
+                value: money(context, d.totalCollection),
+              ),
             ],
           ),
           if (d.trend.length > 1) ...[
-            const SizedBox(height: 22),
-            _panel('Revenue trend', _trend(d.trend)),
+            const SizedBox(height: DeskMetrics.panelGap),
+            DeskCard(
+              title: 'Revenue trend',
+              child: DeskTrendChart(
+                values: [for (final p in d.trend) p.revenue],
+              ),
+            ),
           ],
-          const SizedBox(height: 22),
+          const SizedBox(height: DeskMetrics.panelGap),
           Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: DeskMetrics.panelGap,
+            runSpacing: DeskMetrics.panelGap,
             children: [
-              if (d.collection.isNotEmpty)
-                _panel('Collection', _moneyRows(d.collection), width: 320),
+              if (collection.isNotEmpty)
+                DeskCard(
+                  width: 420,
+                  title: 'Collection',
+                  child: DeskDonut(
+                    centerValue: money(context, d.totalCollection),
+                    centerLabel: 'collected',
+                    data: [
+                      for (final r in collection)
+                        DeskDatum(r.label, r.value, money(context, r.value)),
+                    ],
+                  ),
+                ),
               if (d.serviceWise.isNotEmpty)
-                _panel('Service-wise sales', _moneyRows(d.serviceWise),
-                    width: 320),
+                DeskCard(
+                  width: 380,
+                  title: 'Service-wise sales',
+                  child: DeskBars(
+                    data: [
+                      for (final r in d.serviceWise)
+                        DeskDatum(r.label, r.value, money(context, r.value)),
+                    ],
+                  ),
+                ),
               if (d.popular.isNotEmpty)
-                _panel('Popular dishes', _dishes(d.popular), width: 320),
-              _panel('Profit estimate', _profit(d.profit), width: 320),
+                DeskCard(
+                  width: 380,
+                  title: 'Popular dishes',
+                  child: DeskBars(
+                    data: [
+                      for (final dish in d.popular.take(6))
+                        DeskDatum(dish.name, dish.salesBdt,
+                            money(context, dish.salesBdt)),
+                    ],
+                  ),
+                ),
+              DeskCard(
+                width: 360,
+                title: 'Profit estimate',
+                child: _profit(d.profit),
+              ),
             ],
           ),
         ],
       ),
-    );
-  }
-
-  // ── pieces ──
-  Widget _stat(String label, String value) {
-    return Container(
-      width: 190,
-      padding: const EdgeInsets.all(16),
-      decoration: _deco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: PosColors.primaryDark)),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
-        ],
-      ),
-    );
-  }
-
-  Widget _panel(String title, Widget child, {double? width}) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(16),
-      decoration: _deco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _moneyRows(List<AnalyticsMoneyRow> rows) {
-    return Column(
-      children: [
-        for (final r in rows)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Text(r.label, style: TextStyle(color: PosColors.ink2)),
-                const Spacer(),
-                Text(money(context, r.value),
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _dishes(List<AnalyticsDish> dishes) {
-    return Column(
-      children: [
-        for (final dish in dishes.take(6))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(dish.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: PosColors.ink2)),
-                ),
-                Text(money(context, dish.salesBdt),
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-      ],
     );
   }
 
@@ -307,45 +274,4 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       ),
     );
   }
-
-  Widget _trend(List<AnalyticsTrendPoint> points) {
-    final maxRev =
-        points.map((p) => p.revenue).fold<double>(0, (a, b) => a > b ? a : b);
-    return SizedBox(
-      height: 140,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (final p in points)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      height: maxRev <= 0
-                          ? 2
-                          : (110 * (p.revenue / maxRev)).clamp(2, 110),
-                      decoration: BoxDecoration(
-                        color: PosColors.primary,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(3)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  BoxDecoration _deco() => BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.line),
-        boxShadow: PosShadows.soft,
-      );
 }

@@ -4,6 +4,7 @@ import 'package:local_pos/src/models/menu_item.dart';
 
 import '../theme/desk_format.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 import 'menu_item_form.dart';
 
 /// Menu management (petpooja12): a dense table of items with inline
@@ -98,18 +99,31 @@ class _MenuScreenState extends State<MenuScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _toolbar(app.menuItems.length),
-        _headerRow(),
         Expanded(
-          child: items.isEmpty
-              ? Center(
-                  child: Text('No menu items',
-                      style: TextStyle(color: PosColors.muted)))
-              : ListView.separated(
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) =>
-                      const Divider(height: 1, color: PosColors.line),
-                  itemBuilder: (_, i) => _row(items[i]),
-                ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: deskCardDecoration(),
+              child: Column(
+                children: [
+                  _headerRow(),
+                  Expanded(
+                    child: items.isEmpty
+                        ? Center(
+                            child: Text('No menu items',
+                                style: TextStyle(color: PosColors.muted)))
+                        : ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1, color: PosColors.line),
+                            itemBuilder: (_, i) => _row(items[i]),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );

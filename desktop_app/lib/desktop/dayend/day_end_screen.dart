@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/models/desktop_pos.dart';
+import 'package:local_pos/src/models/order_payment_method.dart';
+import 'package:local_pos/src/models/order_service_type.dart';
 
 import '../theme/desk_format.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 import 'denomination_grid.dart';
 
 /// Register shift + Day-End / Z-report (petpooja16/17). Open the register with a
@@ -200,41 +203,60 @@ class _DayEndScreenState extends State<DayEndScreen> {
         const SizedBox(height: 18),
         if (report != null) ...[
           Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: DeskMetrics.panelGap,
+            runSpacing: DeskMetrics.panelGap,
             children: [
-              _statCard('Sales', money(context, report.sales)),
-              _statCard('Orders', '${report.orders}'),
-              _statCard('Covers', '${report.covers}'),
-              _statCard('Discounts', money(context, report.discounts)),
-              _statCard('VAT', money(context, report.vatIncluded)),
+              DeskStatTile(
+                  icon: Icons.payments_rounded,
+                  label: 'Sales',
+                  value: money(context, report.sales),
+                  width: 180),
+              DeskStatTile(
+                  icon: Icons.receipt_long_rounded,
+                  label: 'Orders',
+                  value: '${report.orders}',
+                  width: 180),
+              DeskStatTile(
+                  icon: Icons.groups_rounded,
+                  label: 'Covers',
+                  value: '${report.covers}',
+                  width: 180),
+              DeskStatTile(
+                  icon: Icons.sell_rounded,
+                  label: 'Discounts',
+                  value: money(context, report.discounts),
+                  width: 180),
+              DeskStatTile(
+                  icon: Icons.percent_rounded,
+                  label: 'VAT',
+                  value: money(context, report.vatIncluded),
+                  width: 180),
             ],
           ),
-          if (report.paymentSplit.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            _sectionTitle('Payment collection'),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: _cardDeco(),
-              child: Column(
-                children: [
-                  for (final entry in report.paymentSplit.entries)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Text(_titleCase(entry.key),
-                              style: TextStyle(color: PosColors.ink2)),
-                          const Spacer(),
-                          Text(money(context, entry.value),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700)),
-                        ],
-                      ),
+          if (_paymentSlices(report).isNotEmpty ||
+              _serviceSlices(report).isNotEmpty) ...[
+            const SizedBox(height: DeskMetrics.panelGap),
+            Wrap(
+              spacing: DeskMetrics.panelGap,
+              runSpacing: DeskMetrics.panelGap,
+              children: [
+                if (_paymentSlices(report).isNotEmpty)
+                  DeskCard(
+                    width: 440,
+                    title: 'Payment collection',
+                    child: DeskDonut(
+                      centerValue: money(context, _paymentTotal(report)),
+                      centerLabel: 'collected',
+                      data: _paymentSlices(report),
                     ),
-                ],
-              ),
+                  ),
+                if (_serviceSlices(report).isNotEmpty)
+                  DeskCard(
+                    width: 360,
+                    title: 'Service-wise sales',
+                    child: DeskBars(data: _serviceSlices(report)),
+                  ),
+              ],
             ),
           ],
         ],
@@ -268,31 +290,39 @@ class _DayEndScreenState extends State<DayEndScreen> {
   }
 
   // ── shared bits ──
-  BoxDecoration _cardDeco() => BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.line),
-        boxShadow: PosShadows.soft,
-      );
+  BoxDecoration _cardDeco() => deskCardDecoration();
 
-  Widget _statCard(String label, String value) {
-    return Container(
-      width: 180,
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value,
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: PosColors.primaryDark)),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
-        ],
-      ),
-    );
+  /// Payment split → donut slices, keyed through the real OrderPaymentMethod
+  /// labels (bkash/nagad/…), not raw wire strings.
+  List<DeskDatum> _paymentSlices(PosReportSnapshot report) {
+    final isBn = AppScope.of(context).language.code == 'bn';
+    final slices = <DeskDatum>[];
+    for (final entry in report.paymentSplit.entries) {
+      if (entry.value <= 0) continue;
+      final method = OrderPaymentMethod.tryParse(entry.key);
+      final label = method == null
+          ? _titleCase(entry.key)
+          : (isBn ? method.banglaLabel : method.label);
+      slices.add(DeskDatum(label, entry.value, money(context, entry.value)));
+    }
+    return slices;
+  }
+
+  double _paymentTotal(PosReportSnapshot report) => report.paymentSplit.values
+      .where((v) => v > 0)
+      .fold(0.0, (a, b) => a + b);
+
+  /// Service split → bars, keyed through OrderServiceType (Dine-in/Parcel/…).
+  List<DeskDatum> _serviceSlices(PosReportSnapshot report) {
+    final isBn = AppScope.of(context).language.code == 'bn';
+    final slices = <DeskDatum>[];
+    for (final entry in report.serviceSplit.entries) {
+      if (entry.value <= 0) continue;
+      final type = OrderServiceType.tryParse(entry.key);
+      final label = type?.localized(isBn) ?? _titleCase(entry.key);
+      slices.add(DeskDatum(label, entry.value, money(context, entry.value)));
+    }
+    return slices;
   }
 
   Widget _sectionTitle(String text) => Text(text,

@@ -7,6 +7,7 @@ import '../messaging/messages_screen.dart';
 import '../printing/bt_printer_channel.dart';
 import '../staff/staff_screen.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 
 /// Settings hub: printer setup, language, admin links (Staff / Audit /
 /// Messages) and logout. Camera/scan and webview-based sub-pages are excluded.
@@ -400,13 +401,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _card(String title, List<Widget> children) {
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.line),
-        boxShadow: PosShadows.soft,
-      ),
+      padding: const EdgeInsets.all(DeskMetrics.cardPad),
+      decoration: deskCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

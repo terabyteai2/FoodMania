@@ -3,6 +3,7 @@ import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/models/staff_member.dart';
 
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 
 /// Staff list with active toggle + invite (owner can invite managers, managers
 /// invite waiters — the backend enforces the gate).
@@ -57,51 +58,75 @@ class _StaffScreenState extends State<StaffScreen> {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              const Spacer(),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: PosColors.primary),
-                onPressed: _invite,
-                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                label: const Text('Invite'),
-              ),
-            ],
-          ),
-        ),
+        _header(),
         Expanded(
-          child: FutureBuilder<List<StaffMember>>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snap.hasError) {
-                return Center(
-                    child: Text(
-                        snap.error.toString().replaceFirst('Exception: ', ''),
-                        style: TextStyle(color: PosColors.muted)));
-              }
-              final staff = snap.data ?? const [];
-              if (staff.isEmpty) {
-                return Center(
-                    child: Text('No staff yet',
-                        style: TextStyle(color: PosColors.muted)));
-              }
-              return ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: staff.length,
-                separatorBuilder: (_, _) =>
-                    const Divider(height: 1, color: PosColors.line),
-                itemBuilder: (_, i) => _row(staff[i]),
-              );
-            },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: deskCardDecoration(),
+              child: FutureBuilder<List<StaffMember>>(
+                future: _future,
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snap.hasError) {
+                    return Center(
+                        child: Text(
+                            snap.error
+                                .toString()
+                                .replaceFirst('Exception: ', ''),
+                            style: TextStyle(color: PosColors.muted)));
+                  }
+                  final staff = snap.data ?? const [];
+                  if (staff.isEmpty) {
+                    return Center(
+                        child: Text('No staff yet',
+                            style: TextStyle(color: PosColors.muted)));
+                  }
+                  return ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: staff.length,
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, color: PosColors.line),
+                    itemBuilder: (_, i) => _row(staff[i]),
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _header() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        border: Border(bottom: BorderSide(color: PosColors.line)),
+      ),
+      child: Row(
+        children: [
+          const Text('Staff',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Spacer(),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: PosColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            onPressed: _invite,
+            icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+            label: const Text('Invite',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+          ),
+        ],
+      ),
     );
   }
 

@@ -229,7 +229,7 @@ class _OngoingCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
+        borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
         border: Border.all(
             color: pending ? PosColors.pendingBorder : PosColors.line),
         boxShadow: PosShadows.soft,
@@ -338,7 +338,7 @@ class _CompletedCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
+        borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
         border: Border.all(color: PosColors.line),
         boxShadow: PosShadows.soft,
       ),

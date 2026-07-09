@@ -10,6 +10,7 @@ import '../orders/orders_screen.dart';
 import '../settings/settings_screen.dart';
 import '../tables/tables_screen.dart';
 import '../theme/desk_theme.dart';
+import '../theme/desk_widgets.dart';
 import 'desk_nav.dart';
 
 /// The desktop register chrome: slim top app bar + left navigation rail +
@@ -25,6 +26,7 @@ class DeskShell extends StatefulWidget {
 
 class _DeskShellState extends State<DeskShell> {
   int _index = 0;
+  bool _navExpanded = true;
   BillingSeed? _billingSeed;
 
   static const _dests = <_Dest>[
@@ -56,15 +58,24 @@ class _DeskShellState extends State<DeskShell> {
         backgroundColor: PosColors.background,
         body: Column(
           children: [
-            _TopBar(onNewOrder: () => setState(() {
-              _billingSeed = null;
-              _index = 1;
-            })),
+            _TopBar(
+              onNewOrder: () => setState(() {
+                _billingSeed = null;
+                _index = 1;
+              }),
+              onToggleNav: () =>
+                  setState(() => _navExpanded = !_navExpanded),
+            ),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _Rail(dests: _dests, selected: _index, onSelect: _select),
+                  _Rail(
+                    dests: _dests,
+                    selected: _index,
+                    onSelect: _select,
+                    expanded: _navExpanded,
+                  ),
                   Expanded(child: _body()),
                 ],
               ),
@@ -111,9 +122,10 @@ class _Dest {
 // ─────────────────────────── Top bar ───────────────────────────
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onNewOrder});
+  const _TopBar({required this.onNewOrder, required this.onToggleNav});
 
   final VoidCallback onNewOrder;
+  final VoidCallback onToggleNav;
 
   @override
   Widget build(BuildContext context) {
@@ -127,6 +139,14 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          IconButton(
+            icon: const Icon(Icons.menu_rounded, size: 22),
+            color: PosColors.ink2,
+            splashRadius: 20,
+            tooltip: 'Toggle navigation',
+            onPressed: onToggleNav,
+          ),
+          const SizedBox(width: 4),
           const Icon(Icons.point_of_sale_rounded,
               color: PosColors.primary, size: 22),
           const SizedBox(width: 8),
@@ -217,17 +237,24 @@ class _Rail extends StatelessWidget {
     required this.dests,
     required this.selected,
     required this.onSelect,
+    required this.expanded,
   });
 
   final List<_Dest> dests;
   final int selected;
   final ValueChanged<int> onSelect;
+  final bool expanded;
+
+  /// Icons-only width when the sidebar is collapsed.
+  static const double collapsedWidth = 64;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    return Container(
-      width: DeskMetrics.railWidth,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      width: expanded ? DeskMetrics.railWidth : collapsedWidth,
       decoration: const BoxDecoration(
         color: PosColors.surface,
         border: Border(right: BorderSide(color: PosColors.line)),
@@ -236,25 +263,32 @@ class _Rail extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+            padding: expanded
+                ? const EdgeInsets.fromLTRB(14, 14, 14, 8)
+                : const EdgeInsets.fromLTRB(0, 14, 0, 8),
             child: Row(
+              mainAxisAlignment: expanded
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.center,
               children: [
                 const Icon(Icons.storefront_rounded,
                     size: 18, color: PosColors.ink2),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    app.restaurantName.isEmpty
-                        ? 'QuickBytes'
-                        : app.restaurantName,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: PosColors.primaryDark,
+                if (expanded) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      app.restaurantName.isEmpty
+                          ? 'QuickBytes'
+                          : app.restaurantName,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: PosColors.primaryDark,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -267,19 +301,32 @@ class _Rail extends StatelessWidget {
                   _RailItem(
                     dest: dests[i],
                     active: i == selected,
+                    expanded: expanded,
                     onTap: () => onSelect(i),
                   ),
               ],
             ),
           ),
           const Divider(height: 1, color: PosColors.line),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(
-              '${app.accountDisplayName.isEmpty ? 'Signed in' : app.accountDisplayName} · ${app.accountRole.label}',
-              style: TextStyle(fontSize: 11.5, color: PosColors.muted),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                '${app.accountDisplayName.isEmpty ? 'Signed in' : app.accountDisplayName} · ${app.accountRole.label}',
+                style: TextStyle(fontSize: 11.5, color: PosColors.muted),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Tooltip(
+                message: app.accountDisplayName.isEmpty
+                    ? app.accountRole.label
+                    : '${app.accountDisplayName} · ${app.accountRole.label}',
+                child: const Icon(Icons.account_circle_rounded,
+                    size: 22, color: PosColors.muted),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -290,15 +337,39 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.dest,
     required this.active,
+    required this.expanded,
     required this.onTap,
   });
 
   final _Dest dest;
   final bool active;
+  final bool expanded;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final icon = Icon(
+      dest.icon,
+      size: 19,
+      color: active ? PosColors.primary : PosColors.ink2,
+    );
+    final content = expanded
+        ? Row(
+            children: [
+              icon,
+              const SizedBox(width: 12),
+              Text(
+                dest.label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                  color: active ? PosColors.primary : PosColors.primaryDark,
+                ),
+              ),
+            ],
+          )
+        : Center(child: icon);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Material(
@@ -307,25 +378,12 @@ class _RailItem extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(PosRadii.md),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            child: Row(
-              children: [
-                Icon(
-                  dest.icon,
-                  size: 19,
-                  color: active ? PosColors.primary : PosColors.ink2,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  dest.label,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                    color: active ? PosColors.primary : PosColors.primaryDark,
-                  ),
-                ),
-              ],
+          child: Tooltip(
+            message: expanded ? '' : dest.label,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: expanded ? 12 : 8, vertical: 11),
+              child: content,
             ),
           ),
         ),
@@ -365,25 +423,25 @@ class _Overview extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: DeskMetrics.panelGap,
+            runSpacing: DeskMetrics.panelGap,
             children: [
-              _StatCard(
+              DeskStatTile(
                 icon: Icons.restaurant_menu_rounded,
                 label: 'Menu items',
                 value: '${app.menuItems.length}',
               ),
-              _StatCard(
+              DeskStatTile(
                 icon: Icons.receipt_long_rounded,
                 label: 'Open orders',
                 value: '$openOrders',
               ),
-              _StatCard(
+              DeskStatTile(
                 icon: Icons.inventory_2_rounded,
                 label: 'Stock items',
                 value: '${app.inventoryItems.length}',
               ),
-              _StatCard(
+              DeskStatTile(
                 icon: sync.cloudConnected
                     ? Icons.cloud_done_rounded
                     : Icons.cloud_off_rounded,
@@ -391,9 +449,12 @@ class _Overview extends StatelessWidget {
                 value: sync.pendingCount > 0
                     ? '${sync.pendingCount} pending'
                     : 'Synced',
-                tone: sync.cloudConnected
+                accent: sync.cloudConnected
                     ? PosColors.success
                     : PosColors.warning,
+                tint: sync.cloudConnected
+                    ? PosColors.successSoft
+                    : PosColors.warnSoft,
               ),
             ],
           ),
@@ -421,53 +482,6 @@ class _Overview extends StatelessWidget {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.tone,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = tone ?? PosColors.primary;
-    return Container(
-      width: 210,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.line),
-        boxShadow: PosShadows.soft,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: PosColors.primaryDark,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(label,
-              style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
         ],
       ),
     );

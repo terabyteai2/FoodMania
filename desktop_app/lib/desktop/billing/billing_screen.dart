@@ -779,15 +779,15 @@ class _ItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: PosColors.surface,
-      borderRadius: BorderRadius.circular(PosRadii.sm),
+      borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(PosRadii.sm),
+        borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.sm),
-            border: Border.all(color: PosColors.lineStrong),
+            borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
+            border: Border.all(color: PosColors.line),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -818,14 +818,18 @@ class _ServiceTabs extends StatelessWidget {
   final OrderServiceType selected;
   final ValueChanged<OrderServiceType> onSelect;
 
-  static const _tabs = <(OrderServiceType, String)>[
-    (OrderServiceType.dineIn, 'Dine In'),
-    (OrderServiceType.delivery, 'Delivery'),
-    (OrderServiceType.takeaway, 'Pick Up'),
+  // Order of the service-type tabs. Labels come from the model
+  // (OrderServiceType.localized) — never hardcoded — so takeaway reads the
+  // canonical 'Parcel'/'পার্সেল', not a PetPooja-ism.
+  static const _order = <OrderServiceType>[
+    OrderServiceType.dineIn,
+    OrderServiceType.delivery,
+    OrderServiceType.takeaway,
   ];
 
   @override
   Widget build(BuildContext context) {
+    final isBn = AppScope.of(context).language.code == 'bn';
     return Container(
       height: 46,
       decoration: const BoxDecoration(
@@ -833,7 +837,7 @@ class _ServiceTabs extends StatelessWidget {
       ),
       child: Row(
         children: [
-          for (final (type, label) in _tabs)
+          for (final type in _order)
             Expanded(
               child: InkWell(
                 onTap: () => onSelect(type),
@@ -843,7 +847,7 @@ class _ServiceTabs extends StatelessWidget {
                       ? PosColors.primary
                       : Colors.transparent,
                   child: Text(
-                    label,
+                    type.localized(isBn),
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w700,
