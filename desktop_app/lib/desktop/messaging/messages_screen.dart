@@ -116,7 +116,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                                fontSize: 13.5, fontWeight: FontWeight.w700)),
+                                fontSize: DeskTypography.bodySmall, fontWeight: FontWeight.w700)),
                       ),
                       if (t.unread > 0)
                         Container(
@@ -131,7 +131,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   Text(t.lastUserMessage ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: PosColors.muted)),
+                      style: TextStyle(fontSize: DeskTypography.caption, color: PosColors.muted)),
                 ],
               ),
             ),
@@ -178,7 +178,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         child: Text(
           message.text,
           style: TextStyle(
-              fontSize: 13.5,
+              fontSize: DeskTypography.bodySmall,
               color: fromCustomer ? PosColors.primaryDark : Colors.white),
         ),
       ),

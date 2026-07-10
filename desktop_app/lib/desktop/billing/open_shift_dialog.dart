@@ -43,7 +43,7 @@ class _OpenShiftDialogState extends State<_OpenShiftDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Enter the opening cash float (৳) to start the shift.',
-              style: TextStyle(fontSize: 13, color: PosColors.ink2)),
+              style: TextStyle(fontSize: DeskTypography.bodySmall, color: PosColors.ink2)),
           const SizedBox(height: 14),
           TextField(
             controller: _cash,

@@ -39,8 +39,11 @@ class TicketCopyData {
     this.restaurantSubtitle,
     required this.orderNumberDisplay,
     required this.orderTypeLabel,
+    required this.orderLabel,
     required this.dateLine,
+    required this.dateLabel,
     required this.tableLine,
+    required this.staffLabel,
     required this.sourceLine,
     required this.items,
     required this.totalLabel,
@@ -68,8 +71,11 @@ class TicketCopyData {
   final String? restaurantSubtitle;
   final String orderNumberDisplay;
   final String orderTypeLabel;
+  final String orderLabel;
   final String dateLine;
+  final String dateLabel;
   final String tableLine;
+  final String staffLabel;
   final String sourceLine;
   final List<TicketLineItem> items;
   final String totalLabel;
@@ -110,6 +116,7 @@ class KotTicketData {
   const KotTicketData({
     required this.restaurantName,
     this.restaurantSubtitle,
+    required this.title,
     required this.serialLabel,
     required this.serialValue,
     required this.dateLabel,
@@ -129,6 +136,7 @@ class KotTicketData {
 
   final String restaurantName;
   final String? restaurantSubtitle;
+  final String title;
   final String serialLabel;
   final String serialValue;
   final String dateLabel;
@@ -208,17 +216,17 @@ class TicketBitmapRenderer {
     var y = 0.0;
     y = _text(
       canvas,
-      'KITCHEN ORDER',
+      data.title,
       y + 10,
       fontSize: 42,
       weight: FontWeight.w800,
       align: TextAlign.center,
     );
     y = _rule(canvas, y + 8);
-    y = _row(canvas, '${data.serialLabel}:', data.serialValue, y, fontSize: 26);
-    y = _row(canvas, '${data.dateLabel}:', data.dateValue, y, fontSize: 26);
-    y = _row(canvas, '${data.timeLabel}:', data.timeValue, y, fontSize: 26);
-    y = _row(canvas, '${data.typeLabel}:', data.typeValue, y, fontSize: 26);
+    y = _row(canvas, '${data.serialLabel}:', data.serialValue, y, fontSize: 26, gap: 2);
+    y = _row(canvas, '${data.dateLabel}:', data.dateValue, y, fontSize: 26, gap: 2);
+    y = _row(canvas, '${data.timeLabel}:', data.timeValue, y, fontSize: 26, gap: 2);
+    y = _row(canvas, '${data.typeLabel}:', data.typeValue, y, fontSize: 26, gap: 2);
     if (hasTable) {
       y = _row(
         canvas,
@@ -226,6 +234,7 @@ class TicketBitmapRenderer {
         data.tableValue!.trim(),
         y,
         fontSize: 26,
+        gap: 2,
       );
     }
     y = _rule(canvas, y + 8);
@@ -313,11 +322,12 @@ class TicketBitmapRenderer {
     // 4. Order number (Bold, left)
     y = _text(
       canvas,
-      'Order: ${data.orderNumberDisplay}',
+      '${data.orderLabel} ${data.orderNumberDisplay}',
       y,
       fontSize: 22,
-      weight: FontWeight.w700,
+      weight: FontWeight.w500,
       align: TextAlign.left,
+      gap: 2,
     );
 
     // 5. Table line (same typography as Order #)
@@ -327,30 +337,35 @@ class TicketBitmapRenderer {
         data.tableLine,
         y,
         fontSize: 22,
-        weight: FontWeight.w700,
+        weight: FontWeight.w500,
         align: TextAlign.left,
+        gap: 2,
       );
     }
 
     // 6. Date line
     y = _text(
       canvas,
-      'Date: ${data.dateLine}',
+      '${data.dateLabel} ${data.dateLine}',
       y,
       fontSize: 22,
       weight: FontWeight.w500,
       align: TextAlign.left,
+      gap: 2,
     );
 
-    // 7. Source line
-    y = _text(
-      canvas,
-      'Source: ${data.sourceLine}',
-      y,
-      fontSize: 22,
-      weight: FontWeight.w500,
-      align: TextAlign.left,
-    );
+    // 7. Staff line
+    if (data.serverRole?.trim().isNotEmpty == true) {
+      y = _text(
+        canvas,
+        '${data.staffLabel} ${data.serverRole!.trim()}',
+        y,
+        fontSize: 22,
+        weight: FontWeight.w500,
+        align: TextAlign.left,
+        gap: 2,
+      );
+    }
 
     // 7. Single divider
     y = _rule(canvas, y + 4);
@@ -370,8 +385,9 @@ class TicketBitmapRenderer {
         data.totalLabel,
         data.totalAmount,
         y,
-        fontSize: 24,
+        fontSize: 20,
         weight: FontWeight.w700,
+        gap: 2,
       );
     } else {
       for (final row in data.summaryRows) {
@@ -380,8 +396,9 @@ class TicketBitmapRenderer {
           row.label,
           row.value,
           y,
-          fontSize: row.emphasis ? 24 : 22,
+          fontSize: 20,
           weight: row.emphasis ? FontWeight.w800 : FontWeight.w500,
+          gap: 2,
         );
       }
     }
@@ -760,6 +777,7 @@ class TicketBitmapRenderer {
     double fontSize = 25,
     FontWeight weight = FontWeight.w500,
     TextAlign align = TextAlign.left,
+    double gap = 5,
   }) {
     final painter = TextPainter(
       text: TextSpan(
@@ -781,7 +799,7 @@ class TicketBitmapRenderer {
       _ => _padding,
     };
     painter.paint(canvas, Offset(x, y));
-    return y + painter.height + 5;
+    return y + painter.height + gap;
   }
 
   static double _row(
@@ -791,6 +809,7 @@ class TicketBitmapRenderer {
     double y, {
     double fontSize = 25,
     FontWeight weight = FontWeight.w500,
+    double gap = 5,
   }) {
     final leftPainter = _painter(left, fontSize: fontSize, weight: weight);
     final rightPainter = _painter(
@@ -813,7 +832,7 @@ class TicketBitmapRenderer {
         (leftPainter.height > rightPainter.height
             ? leftPainter.height
             : rightPainter.height) +
-        5;
+        gap;
   }
 
   static double _itemRow(Canvas canvas, TicketLineItem item, double y) {

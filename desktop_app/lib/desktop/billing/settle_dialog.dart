@@ -141,7 +141,7 @@ class _SettleDialogState extends State<_SettleDialog> {
   }
 
   Widget _label(String text) => Text(text,
-      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5));
+      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: DeskTypography.bodySmall));
 
   Widget _amountRow(String label, double value,
       {bool strong = false, Color? tone}) {
@@ -149,13 +149,13 @@ class _SettleDialogState extends State<_SettleDialog> {
       children: [
         Text(label,
             style: TextStyle(
-                fontSize: strong ? 15 : 13.5,
+                fontSize: strong ? DeskTypography.title : DeskTypography.bodySmall,
                 fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
                 color: tone ?? PosColors.ink2)),
         const Spacer(),
         Text(money(context, value),
             style: TextStyle(
-                fontSize: strong ? 18 : 14,
+                fontSize: strong ? DeskTypography.orderSerial : DeskTypography.body,
                 fontWeight: FontWeight.w800,
                 color: tone ?? PosColors.primaryDark)),
       ],
@@ -178,7 +178,7 @@ class _SettleDialogState extends State<_SettleDialog> {
         child: Text(
           isBn ? mode.banglaLabel : mode.label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: DeskTypography.bodySmall,
             fontWeight: FontWeight.w700,
             color: active ? Colors.white : PosColors.primaryDark,
           ),

@@ -103,7 +103,7 @@ class _StockMoveDialogState extends State<_StockMoveDialog> {
             Text(widget.item.name,
                 style: const TextStyle(fontWeight: FontWeight.w700)),
             Text('On hand: ${widget.item.quantity} $unit',
-                style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+                style: TextStyle(fontSize: DeskTypography.caption, color: PosColors.muted)),
             const SizedBox(height: 14),
             _field('Quantity ($unit)', _qty),
             if (_isStockIn) ...[
@@ -127,7 +127,7 @@ class _StockMoveDialogState extends State<_StockMoveDialog> {
               const SizedBox(height: 10),
               Text(_error!,
                   style: const TextStyle(
-                      color: PosColors.danger, fontSize: 12.5)),
+                      color: PosColors.danger, fontSize: DeskTypography.caption)),
             ],
           ],
         ),
@@ -165,13 +165,13 @@ class _StockMoveDialogState extends State<_StockMoveDialog> {
       labelStyle: TextStyle(
           color: active ? Colors.white : PosColors.primaryDark,
           fontWeight: FontWeight.w600,
-          fontSize: 12.5),
+          fontSize: DeskTypography.caption),
     );
   }
 
   Widget _label(String text) => Text(text,
       style: TextStyle(
-          fontSize: 12, fontWeight: FontWeight.w600, color: PosColors.ink2));
+          fontSize: DeskTypography.caption, fontWeight: FontWeight.w600, color: PosColors.ink2));
 
   Widget _field(String label, TextEditingController controller,
       {bool numeric = true}) {

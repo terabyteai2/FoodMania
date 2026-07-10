@@ -13,8 +13,6 @@ import '../theme/desk_format.dart';
 import '../theme/desk_theme.dart';
 import 'table_order_sheet.dart';
 
-/// Front-of-house floor view (petpooja15): zoned table grid with vacant /
-/// occupied state, plus an online-orders strip to accept/reject.
 class TablesScreen extends StatefulWidget {
   const TablesScreen({super.key});
 
@@ -32,7 +30,6 @@ class _TablesScreenState extends State<TablesScreen> {
   void initState() {
     super.initState();
     _load();
-    // Live elapsed timers on occupied tiles.
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
@@ -93,6 +90,7 @@ class _TablesScreenState extends State<TablesScreen> {
             (o.source == OrderSource.facebookMessenger ||
                 o.source == OrderSource.cloud))
         .toList(growable: false);
+
     final occupied = <String, OrderModel>{};
     for (final o in open) {
       if (o.serviceType == OrderServiceType.dineIn) {
@@ -100,22 +98,22 @@ class _TablesScreenState extends State<TablesScreen> {
         if (key.isNotEmpty) occupied[key] = o;
       }
     }
+
     final zones = _settings?.floorLayout ?? const <PosFloorZone>[];
     final totalTables = zones.fold<int>(0, (s, z) => s + z.tables.length);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(occupied.length, totalTables),
+        _topBar(occupied.length, totalTables),
+        _legendRow(),
         if (online.isNotEmpty) _onlineStrip(online),
         Expanded(
           child: zones.isEmpty
               ? _emptyFloor()
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
                   children: [
-                    _legend(),
-                    const SizedBox(height: 8),
                     for (final zone in zones) _zone(zone, occupied),
                   ],
                 ),
@@ -124,29 +122,123 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
-  Widget _header(int occupied, int total) {
+  Widget _topBar(int occupied, int total) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       decoration: const BoxDecoration(
         color: PosColors.surface,
         border: Border(bottom: BorderSide(color: PosColors.line)),
       ),
       child: Row(
         children: [
-          const Text('Tables',
+          const Text('Table View',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(width: 8),
-          if (total > 0)
-            Text('$occupied/$total seated',
-                style: TextStyle(fontSize: 13, color: PosColors.muted)),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            color: PosColors.ink2,
-            onPressed: _load,
+          InkWell(
+            onTap: _load,
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: PosColors.surface,
+                borderRadius: BorderRadius.circular(PosRadii.sm),
+                border: Border.all(color: PosColors.line),
+              ),
+              child: const Icon(Icons.refresh_rounded,
+                  size: 18, color: PosColors.ink2),
+            ),
           ),
+          const Spacer(),
+          _outlinedActionButton('Delivery', Icons.local_shipping_rounded),
+          const SizedBox(width: 8),
+          _outlinedActionButton('Pick Up', Icons.shopping_bag_rounded),
+          const SizedBox(width: 8),
+          _filledActionButton('+ Add Table', Icons.add_rounded),
         ],
       ),
+    );
+  }
+
+  Widget _filledActionButton(String label, IconData icon) {
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        backgroundColor: PosColors.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PosRadii.sm)),
+      ),
+      onPressed: () {},
+      icon: Icon(icon, size: 16),
+      label: Text(label,
+          style: const TextStyle(
+              fontSize: DeskTypography.button, fontWeight: FontWeight.w700)),
+    );
+  }
+
+  Widget _outlinedActionButton(String label, IconData icon) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: PosColors.ink2,
+        side: const BorderSide(color: PosColors.lineStrong),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PosRadii.sm)),
+      ),
+      onPressed: () {},
+      icon: Icon(icon, size: 16),
+      label: Text(label,
+          style: const TextStyle(
+              fontSize: DeskTypography.button, fontWeight: FontWeight.w700)),
+    );
+  }
+
+  Widget _legendRow() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 10),
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        border: Border(bottom: BorderSide(color: PosColors.line)),
+      ),
+      child: Row(
+        children: [
+          _legendDot(Colors.transparent, 'Vacant',
+              border: true, borderColor: PosColors.muted),
+          const SizedBox(width: 18),
+          _legendDot(PosColors.primary, 'Running'),
+          const SizedBox(width: 18),
+          _legendDot(PosColors.warning, 'Running KOT'),
+          const SizedBox(width: 18),
+          _legendDot(PosColors.success, 'Paid'),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label,
+      {bool border = false, Color? borderColor}) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: border ? Colors.transparent : color,
+            borderRadius: BorderRadius.circular(4),
+            border: border
+                ? Border.all(
+                    color: borderColor ?? PosColors.lineStrong,
+                    width: 1,
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label,
+            style: const TextStyle(
+                fontSize: DeskTypography.caption,
+                fontWeight: FontWeight.w600,
+                color: PosColors.ink2)),
+      ],
     );
   }
 
@@ -155,70 +247,65 @@ class _TablesScreenState extends State<TablesScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.storefront_rounded,
-                size: 34, color: PosColors.muted),
-            const SizedBox(height: 10),
+                size: 40, color: PosColors.muted),
+            const SizedBox(height: 12),
             Text('No tables configured',
                 style: TextStyle(
-                    fontSize: 15,
+                    fontSize: DeskTypography.h3,
                     fontWeight: FontWeight.w700,
                     color: PosColors.primaryDark)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text('Counter outlet — sell from the Billing screen.',
-                style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+                style: TextStyle(
+                    fontSize: DeskTypography.body, color: PosColors.muted)),
           ],
         ),
       );
 
-  Widget _legend() {
-    return Row(
-      children: [
-        _legendDot(PosColors.surface, 'Vacant', border: true),
-        const SizedBox(width: 16),
-        _legendDot(PosColors.stateOccupied, 'Occupied'),
-      ],
-    );
-  }
-
-  Widget _legendDot(Color color, String label, {bool border = false}) {
-    return Row(
-      children: [
-        Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-            border: border ? Border.all(color: PosColors.lineStrong) : null,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 12, color: PosColors.ink2)),
-      ],
-    );
+  String _tableStateOf(OrderModel? order) {
+    if (order == null) return 'vacant';
+    if (order.settledAt != null) return 'paid';
+    final hasKot = order.kotBatches.isNotEmpty ||
+        order.items.any((it) => it.kotSentAt != null);
+    return hasKot ? 'kot' : 'running';
   }
 
   Widget _zone(PosFloorZone zone, Map<String, OrderModel> occupied) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(2, 12, 0, 8),
-          child: Text(zone.name,
+          Padding(
+          padding: const EdgeInsets.fromLTRB(2, 14, 0, 8),
+          child: Text(zone.name.toUpperCase(),
               style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w700)),
+                  fontSize: DeskTypography.body,
+                  fontWeight: FontWeight.w800,
+                  color: PosColors.ink2,
+                  letterSpacing: 0.4)),
         ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final table in zone.tables)
-              _TableTile(
-                label: table.label,
-                order: occupied[table.label.trim()],
-                onTap: () => _tapTable(table.label, occupied[table.label.trim()]),
-              ),
-          ],
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 120,
+            mainAxisExtent: DeskMetrics.tableTileHeight,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+          ),
+          itemCount: zone.tables.length,
+          itemBuilder: (_, i) {
+            final table = zone.tables[i];
+            final order = occupied[table.label.trim()];
+            return _TableTile(
+              label: table.label,
+              seats: table.seats,
+              order: order,
+              state: _tableStateOf(order),
+              onTap: () => _tapTable(table.label, order),
+            );
+          },
         ),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -246,7 +333,8 @@ class _TablesScreenState extends State<TablesScreen> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
             child: Text('Online orders · ${online.length}',
                 style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700)),
+                    fontSize: DeskTypography.bodySmall,
+                    fontWeight: FontWeight.w700)),
           ),
           Expanded(
             child: ListView.separated(
@@ -283,7 +371,8 @@ class _TablesScreenState extends State<TablesScreen> {
               const SizedBox(width: 6),
               Text(order.displaySequence,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 14)),
+                      fontWeight: FontWeight.w800,
+                      fontSize: DeskTypography.body)),
               const Spacer(),
               Text(money(context, order.total),
                   style: TextStyle(
@@ -293,7 +382,8 @@ class _TablesScreenState extends State<TablesScreen> {
           ),
           const SizedBox(height: 2),
           Text('$itemCount item${itemCount == 1 ? '' : 's'}',
-              style: TextStyle(fontSize: 12, color: PosColors.muted)),
+              style: TextStyle(
+                  fontSize: DeskTypography.caption, color: PosColors.muted)),
           const Spacer(),
           Row(
             children: [
@@ -309,7 +399,8 @@ class _TablesScreenState extends State<TablesScreen> {
                     await app.updateOrderStatus(
                         order.id, OrderStatus.rejected);
                   }),
-                  child: const Text('Reject', style: TextStyle(fontSize: 12.5)),
+                  child: const Text('Reject',
+                    style: TextStyle(fontSize: DeskTypography.caption)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -325,9 +416,10 @@ class _TablesScreenState extends State<TablesScreen> {
                         order.id, OrderStatus.accepted);
                     _toast('Accepted ${order.displaySequence}');
                   }),
-                  child: const Text('Accept',
-                      style: TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w700)),
+                child: const Text('Accept',
+                    style: TextStyle(
+                        fontSize: DeskTypography.caption,
+                        fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -341,66 +433,95 @@ class _TablesScreenState extends State<TablesScreen> {
 class _TableTile extends StatelessWidget {
   const _TableTile({
     required this.label,
+    required this.seats,
     required this.order,
+    required this.state,
     required this.onTap,
   });
 
   final String label;
+  final int seats;
   final OrderModel? order;
+  final String state;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final occupied = order != null;
-    final elapsed = occupied
+    final elapsed = order != null
         ? DateTime.now().difference(order!.createdAt).inMinutes
         : 0;
+
+    Color bgColor;
+    Color borderColor;
+    Color fgColor;
+    Color subColor;
+    switch (state) {
+      case 'running':
+        bgColor = PosColors.primarySoft;
+        borderColor = PosColors.primary;
+        fgColor = PosColors.primary;
+        subColor = PosColors.ink2;
+        break;
+      case 'kot':
+        bgColor = PosColors.warningSoft;
+        borderColor = PosColors.warning;
+        fgColor = PosColors.warning;
+        subColor = PosColors.ink2;
+        break;
+      case 'paid':
+        bgColor = PosColors.successSoft;
+        borderColor = PosColors.success;
+        fgColor = PosColors.success;
+        subColor = PosColors.ink2;
+        break;
+      default:
+        bgColor = Colors.transparent;
+        borderColor = PosColors.muted;
+        fgColor = PosColors.ink2;
+        subColor = PosColors.muted;
+    }
+
     return InkWell(
-      borderRadius: BorderRadius.circular(PosRadii.md),
+      borderRadius: BorderRadius.circular(DeskMetrics.tableTileRadius),
       onTap: onTap,
       child: Container(
-        width: 96,
-        height: 96,
-        padding: const EdgeInsets.all(8),
+        height: DeskMetrics.tableTileHeight,
         decoration: BoxDecoration(
-          color: occupied ? PosColors.stateOccupied : PosColors.surface,
-          borderRadius: BorderRadius.circular(PosRadii.md),
+          color: bgColor,
+          borderRadius: BorderRadius.circular(DeskMetrics.tableTileRadius),
           border: Border.all(
-            color: occupied ? PosColors.stateOccupiedLine : PosColors.lineStrong,
-            width: 1.2,
+            color: borderColor,
+            width: state == 'vacant' ? 1 : 1.5,
+            style: BorderStyle.solid,
           ),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (occupied)
-              Text('⏱ ${elapsed}m',
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: PosColors.stateOccupiedInk)),
-            Expanded(
-              child: Center(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: occupied
-                        ? PosColors.stateOccupiedInk
-                        : PosColors.primaryDark,
-                  ),
-                ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: DeskTypography.tableNumber,
+                fontWeight: FontWeight.w800,
+                color: fgColor,
               ),
             ),
-            if (occupied)
+            const SizedBox(height: 3),
+            if (order != null) ...[
               Text(money(context, order!.total),
                   style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: PosColors.stateOccupiedInk)),
+                      fontSize: DeskTypography.tableMeta,
+                      fontWeight: FontWeight.w800,
+                      color: fgColor)),
+              Text(
+                elapsed < 60 ? '${elapsed}m' : '${elapsed ~/ 60}h ${(elapsed % 60).toString().padLeft(2, '0')}m',
+                style: TextStyle(
+                    fontSize: DeskTypography.eyebrow, color: subColor),
+              ),
+            ] else
+              Text('$seats seats',
+                  style: TextStyle(
+                      fontSize: DeskTypography.eyebrow, color: subColor)),
           ],
         ),
       ),

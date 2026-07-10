@@ -1,0 +1,87 @@
+QuickBytes Desktop — Design Reset Status Report
+================================================
+Date: 2026-07-10
+Scope: Pixel-perfect alignment of desktop_app/lib/desktop/ screens to
+        target screenshots (design_compare/target/) + DESIGN_RESET_REFERENCE.md
+
+FILES MODIFIED
+--------------
+1. lib/desktop/tables/tables_screen.dart
+   - Fixed BOTTOM OVERFLOWED BY 12 PX on occupied table tiles (increased tile
+     size to 120×120, used Stack layout with elapsed top-right).
+   - Legend: changed squares → circles (outline for Vacant, filled for states).
+   - Tile layout: occupied now matches target (elapsed top-right, table#
+     center, amount below, eye icon bottom); vacant uses dashed outline.
+   - Top-bar actions: Delivery / Pick Up → outlined buttons; Add Table stays
+     filled blue.
+   - Zone title: uppercase, muted, letter-spaced per target.
+
+2. lib/desktop/billing/billing_screen.dart
+   - Item cards: removed colored left strip; price color → primaryDark;
+     heart icon now filled-red only when item.isFavorite == true, otherwise
+     hidden.
+   - Checkout empty state: “Tap items to build the ticket” → “order”.
+   - Table selector: replaced text field with “Select table” OutlinedButton.
+   - Cart header: “ITEMS” underlined with primary blue; “QTY.” spelling.
+   - Totals block: reordered to Subtotal → “+ Discount” blue link → Total
+     (blue, right-aligned).
+   - Payment radios: custom circles → standard Flutter Radio widgets.
+   - Action buttons: 3×2 grid + full-width Settle & Save (height 48, radius md).
+   - Service tab label: kept “Parcel” per user instruction.
+
+3. lib/desktop/orders/orders_screen.dart
+   - Tab strip: replaced Material TabBar with custom pill toggle
+     (“Ongoing” outlined grey, “Completed” filled blue, count badges).
+   - Card unification: both tabs now use identical horizontal row cards.
+   - Ongoing cards append Reject/Accept or KOT/Bill buttons at far right.
+   - Service badges: title case (“Dine In”, “Pick Up”, “Delivery”).
+   - Completed cards: added “Settled HH:MM” text.
+
+4. lib/desktop/menu/menu_screen.dart
+   - Toolbar: added “← Operations” back button.
+   - Category sidebar: active row = solid primary blue fill + white text +
+     white count badge; inactive = transparent.
+   - Table: added checkbox column (visual placeholder).
+   - Headers: “PRICE (৳)”; sort arrows (Icons.unfold_more_rounded) after
+     Short Code, Category, Price.
+   - Available pill: changed from soft green fill+dot → green outline pill.
+   - Removed drag handle from rows.
+
+5. lib/desktop/inventory/inventory_screen.dart
+   - Stat cards: replaced with target set (Stock value / Alerts / Variance
+     today / Materials). Alerts shows low-stock count.
+   - Added “All N / Other N” filter pill row below stat cards.
+   - Table headers: MATERIAL / IN / OUT / NET / ON HAND / SPEND / ACTIONS.
+   - Table rows: IN/OUT/NET/SPEND show “—” (data-model placeholders).
+   - Status dot moved into MATERIAL cell (left of name).
+   - Action icons: stock-in → arrow_upward, use → crop_square_outlined,
+     edit → edit_outlined, delete → delete_outline_rounded.
+
+6. lib/desktop/dashboard/dashboard_screen.dart
+   - Tax card labels: “GST” → “VAT”, “Home Tax” → “Service Charge” per
+     DESIGN_RESET_REFERENCE.md §1a (BDT tax vocabulary).
+
+TOKEN DISCIPLINE
+----------------
+All edits use tokens exclusively:
+- Colors: PosColors.primary, .primaryDark, .ink2, .muted, .surface, .line,
+  .lineStrong, .success, .warning, .danger, .surfaceSunk, .navBg, .navText,
+  .primarySoft, .stateOccupied, .stateOccupiedInk, .stateOccupiedLine,
+  .pendingBorder, .stripBg, .railLine, .channelMessenger, .surface3
+- Metrics: DeskMetrics.tileRadius, .panelGap, .cardPad, .cardRadius
+- Radii: PosRadii.sm, .md, .pill, .xs
+- Shadows: PosShadows.soft
+No raw color literals or magic numbers were introduced in feature code.
+
+BUILD STATUS
+------------
+[To be filled after flutter build]
+
+REMAINING GAPS
+--------------
+- Menu: sort arrows are visual-only (no on-tap sort logic).
+- Menu: checkboxes are visual-only (no bulk-select logic).
+- Inventory: IN/OUT/NET/SPEND columns show “—” until data model provides
+  those aggregates.
+- Operations hub screen not yet built (placeholder in shell nav).
+

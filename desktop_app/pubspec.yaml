@@ -13,12 +13,12 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # Reuse the ENTIRE domain + data + controller layer from the mobile app.
-  # No duplication: models, CloudApiService, LocalDatabaseService, SyncService,
-  # PrinterService, PosAppController, AppScope, AppStrings and design tokens are
-  # imported via package:local_pos/src/...  (admin_app already targets Windows).
+  # Self-contained vendored copy of the domain + data + controller layer.
+  # Forked from admin_app into ./pos_core so the desktop app no longer depends
+  # on admin_app and can evolve/align with the backend independently.
+  # Imports stay `package:local_pos/src/...` (pos_core is published as local_pos).
   local_pos:
-    path: ../admin_app
+    path: ./pos_core
 
   cupertino_icons: ^1.0.8
   intl: ^0.20.2

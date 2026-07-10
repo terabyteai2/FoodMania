@@ -1,16 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react'
-import {
-  ThemeProvider,
-  useTokens,
-  resolveTheme,
-  resolveOverrides,
-  themeAssetPaths,
-  DEFAULT_THEME_SLUG,
-} from './themes'
 
 const API_BASE = ''
 const MENU_REFRESH_MS = 5000
 export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
+
+// ── Hardcoded design tokens ──────────────────────────────────────────────────
+const T = {
+  bg: '#1C1410',
+  bgWarm: '#221814',
+  bgCard: '#2A1F18',
+  ink: '#FFF3E0',
+  inkSoft: 'rgba(255,243,224,.7)',
+  inkFaint: 'rgba(255,243,224,.45)',
+  amber: '#FFB547',
+  ember: '#FF6A3D',
+  line: 'rgba(255,243,224,.12)',
+  display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
+  body: '"Hind Siliguri", system-ui, sans-serif',
+}
 
 // ── PDF receipt generator ─────────────────────────────────────────────────────
 function pdfTk(n) { return 'Tk ' + Math.round(n).toLocaleString() }
@@ -121,14 +128,7 @@ export async function generateReceipt(order, info, cartItems) {
   doc.save(`receipt-${order.serialNumber ?? order.orderId?.slice(0, 8) ?? 'order'}.pdf`)
 }
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
-// Module-level fallback tokens used only by the menu-icon constants below
-// (which are evaluated at import time, before any React tree exists). Every
-// component grabs its live theme tokens via `useTokens()` at render time.
-const T_FALLBACK = {
-  amber: '#ffb547',
-  display: '"Anton", "Bebas Neue", "Inter Tight", system-ui, sans-serif',
-}
+// ── Menu icon constants ──────────────────────────────────────────────────────
 
 const MENU_ICON_STYLES = {
   pizza:    { glyph: '🍕', color: '#e65a3c', bg: 'rgba(230,90,60,.18)' },
@@ -151,7 +151,7 @@ const MENU_ICON_STYLES = {
   tea:      { glyph: '◡', color: '#7a6b2d', bg: 'rgba(122,107,45,.22)' },
   breakfast:{ glyph: '◐', color: '#f0a51c', bg: 'rgba(240,165,28,.18)' },
   set_meal: { glyph: '▦', color: '#e28714', bg: 'rgba(226,135,20,.18)' },
-  general:  { glyph: '✦', color: T_FALLBACK.amber, bg: 'rgba(255,181,71,.14)' },
+  general:  { glyph: '✦', color: T.amber, bg: 'rgba(255,181,71,.14)' },
 }
 
 export function inferIconKey(item) {
@@ -187,7 +187,6 @@ export function iconStyleFor(item) {
 }
 
 export function MenuFallbackIcon({ item, size = 32 }) {
-  const T = useTokens()
   const style = iconStyleFor(item)
   return (
     <div style={{
@@ -518,69 +517,25 @@ export default function App() {
     finally { setSub(false) }
   }
 
-  const themeSlug = info?.menuTheme || DEFAULT_THEME_SLUG
-  const overrides = resolveOverrides(themeSlug)
-
   let body
   if (phase === 'loading') {
-    body = overrides ? <overrides.Loading /> : <LoadingScreen />
+    body = <LoadingScreen />
   } else if (phase === 'error') {
-    body = overrides
-      ? <overrides.Error message={errorMsg} />
-      : <ErrorScreen message={errorMsg} />
+    body = <ErrorScreen message={errorMsg} />
   } else if (phase === 'success') {
     const onBack = () => {
       setCart({}); setLastCart([]); setNote('')
       setDelivery({ name: '', address: '', mobile: '' })
       setPhase('menu')
     }
-    body = overrides
-      ? <overrides.Success order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
-      : <SuccessScreen order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
+    body = <SuccessScreen order={orderRef} info={info} cartItems={lastCart} onBack={onBack} />
   } else if (phase === 'cart') {
-    body = overrides ? (
-      <overrides.Cart
-        cart={cart} cartExtras={cartExtras} items={items} note={note} onNote={setNote}
-        delivery={delivery} onDelivery={setDelivery}
-        onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
-        onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
-        isTableOrder={isTableOrder} tableNo={tableNo}
-      />
-    ) : (
+    body = (
       <CartScreen cart={cart} items={items} note={note} onNote={setNote}
         delivery={delivery} onDelivery={setDelivery}
         onAdd={add} onRemove={rem} onBack={() => setPhase('menu')}
         onPlace={placeOrder} submitting={submitting} info={info} outletId={outletId}
         isTableOrder={isTableOrder} tableNo={tableNo} />
-    )
-  } else if (overrides) {
-    body = (
-      <>
-        <overrides.Storefront
-          info={info} items={items} cart={cart} cartExtras={cartExtras}
-          onAdd={add} onRemove={rem}
-          onOpenCart={() => setPhase('cart')}
-          onOpenDetail={item => setLightbox({ item })}
-          onOpenVariants={item => setVariantSheet(item)}
-          initialView={phase === 'menu' ? 'menu' : 'hero'}
-        />
-        {lightbox && (
-          <overrides.ItemSheet
-            item={lightbox.item}
-            qty={cart[lightbox.item.id] || 0}
-            onAdd={() => add(lightbox.item.id)}
-            onRemove={() => rem(lightbox.item.id)}
-            onClose={() => setLightbox(null)}
-          />
-        )}
-        {variantSheet && overrides.ModifierSheet && (
-          <overrides.ModifierSheet
-            item={variantSheet}
-            onClose={() => setVariantSheet(null)}
-            onAddWithMods={(item, opts) => { addWithMods(item, opts); setVariantSheet(null) }}
-          />
-        )}
-      </>
     )
   } else if (phase === 'welcome') {
     body = <WelcomeScreen info={info} onEnter={() => setPhase('menu')} />
@@ -607,12 +562,11 @@ export default function App() {
     )
   }
 
-  return <ThemeProvider slug={themeSlug}>{body}</ThemeProvider>
+  return body
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 function LoadingScreen() {
-  const T = useTokens()
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -634,7 +588,6 @@ function LoadingScreen() {
 }
 
 function ErrorScreen({ message }) {
-  const T = useTokens()
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -651,22 +604,18 @@ function ErrorScreen({ message }) {
 
 // ── Welcome Screen ────────────────────────────────────────────────────────────
 function WelcomeScreen({ info, onEnter }) {
-  const T = useTokens()
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const touchX = useRef(null)
   const gallery = info?.galleryImages || []
-  const placeholderAssets = themeAssetPaths(T._slug)
   const hasVideo = !!info?.videoUrl
   const hasGallery = !hasVideo && gallery.length > 0
   const hasBanner = !hasVideo && !hasGallery && !!info?.bannerUrl
   const hasPlaceholder = !hasVideo && !hasGallery && !hasBanner
   const hasMedia = hasVideo || hasGallery || hasBanner || hasPlaceholder
-  console.log('[WelcomeScreen] info?.videoUrl:', info?.videoUrl, '| hasVideo:', hasVideo, '| hasPlaceholder:', hasPlaceholder, '| placeholderAssets:', placeholderAssets)
 
-  const placeholderPoster = hasPlaceholder ? (info?.bannerUrl || info?.galleryImages?.[0] || placeholderAssets.placeholderImage) : null
-  const placeholderVideoUrl = hasPlaceholder ? placeholderAssets.placeholderVideo : null
-  console.log('[WelcomeScreen] placeholderPoster:', placeholderPoster, '| placeholderVideoUrl:', placeholderVideoUrl)
+  const placeholderPoster = hasPlaceholder ? (info?.bannerUrl || info?.galleryImages?.[0] || null) : null
+  const placeholderVideoUrl = hasPlaceholder ? '/hero_video_placeholder.mp4' : null
 
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return
@@ -750,34 +699,12 @@ function WelcomeScreen({ info, onEnter }) {
         alignItems: 'center', justifyContent: 'center',
         padding: '60px 28px', textAlign: 'center',
       }}>
-        {/* Logo mark */}
-        <div style={{
-          width: 96, height: 96, borderRadius: 48,
-          background: 'rgba(28,20,16,.65)', border: `1.5px solid ${T.amber}`,
-          display: 'grid', placeItems: 'center',
-          fontFamily: T.display, fontSize: 56, color: T.amber, lineHeight: 1,
-          boxShadow: '0 12px 40px rgba(255,181,71,.2)',
-        }}>
-          {info?.logoUrl ? (
-            <img src={info.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 48 }} />
-          ) : (
-            info?.restaurantName?.[0]?.toUpperCase() || 'R'
-          )}
-        </div>
-
         {/* Restaurant name */}
         <div style={{
           fontFamily: T.display, fontSize: 60, color: '#fff', marginTop: 24, lineHeight: .9,
           textTransform: 'uppercase', letterSpacing: '-.015em',
           textShadow: '0 2px 20px rgba(0,0,0,.5)',
         }}>{info?.restaurantName || 'Restaurant'}</div>
-
-        {/* Outlet subtitle */}
-        {info?.outletName && (
-          <div style={{ marginTop: 8, fontSize: 13, color: T.inkSoft, letterSpacing: '.05em' }}>
-            {info.outletName}
-          </div>
-        )}
 
         {/* CTA button */}
         <button
@@ -815,7 +742,6 @@ function WelcomeScreen({ info, onEnter }) {
 
 // ── Menu Screen ───────────────────────────────────────────────────────────────
 function MenuScreen({ info, items, allItems, cart, categories, activeCategory, onCategory, onAdd, onRemove, onOpenCart, onOpenDetail }) {
-  const T = useTokens()
   const count = cartCount(cart)
   const total = cartTotal(cart, allItems)
 
@@ -911,7 +837,6 @@ function MenuScreen({ info, items, allItems, cart, categories, activeCategory, o
 
 // ── Menu Hero (short, inside menu page) ───────────────────────────────────────
 function MenuHero({ info }) {
-  const T = useTokens()
   const videoRef = useRef(null)
   const [slide, setSlide] = useState(0)
   const gallery = info?.galleryImages || []
@@ -980,7 +905,6 @@ function MenuHero({ info }) {
 
 // ── Menu Card (2-col grid) ────────────────────────────────────────────────────
 function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
-  const T = useTokens()
   const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const hasImage = !!item.imageUrl
   const displayName = localizedItemName(item, lang)
@@ -1081,7 +1005,6 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
 
 // ── Item Detail Sheet ─────────────────────────────────────────────────────────
 function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
-  const T = useTokens()
   const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const media = buildMedia(item)
   const videoRef = useRef(null)
@@ -1223,7 +1146,6 @@ function ItemDetailSheet({ item, qty, onAdd, onRemove, onClose }) {
 
 // ── Cart Screen ───────────────────────────────────────────────────────────────
 function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, onRemove, onBack, onPlace, submitting, info, outletId, isTableOrder = false, tableNo = '' }) {
-  const T = useTokens()
   const lang = new URLSearchParams(window.location.search).get('lang') === 'bn' ? 'bn' : 'en'
   const cartItems = Object.entries(cart)
     .map(([id, qty]) => ({ ...items.find(i => i.id === id), qty }))
@@ -1474,7 +1396,6 @@ function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, on
 }
 
 function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
-  const T = useTokens()
   const isLoading = geo.status === 'locating' || geo.status === 'geocoding'
   const hasAddress = geo.status === 'ready' && geo.address
   const hasError = geo.status === 'error'
@@ -1563,7 +1484,6 @@ function AddressAssistSection({ geo, currentAddress, onRetry, onUseAddress }) {
 
 // ── Success Screen ────────────────────────────────────────────────────────────
 function SuccessScreen({ order, info, cartItems, onBack }) {
-  const T = useTokens()
   const totalItems = cartItems.reduce((s, i) => s + i.qty, 0)
 
   return (

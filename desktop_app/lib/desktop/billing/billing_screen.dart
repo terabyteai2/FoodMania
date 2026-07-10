@@ -16,6 +16,7 @@ import 'open_shift_dialog.dart';
 import 'settle_flow.dart';
 
 const _allCategory = '__all__';
+const _favCategory = '__fav__';
 
 /// The core register — 3-pane billing screen (petpooja13/14): category rail,
 /// item grid + search, and the checkout/cart panel. Sits behind an open shift.
@@ -28,6 +29,8 @@ class BillingScreen extends StatefulWidget {
   @override
   State<BillingScreen> createState() => _BillingScreenState();
 }
+
+enum _ActionStyle { primary, dark, outline }
 
 class _BillingScreenState extends State<BillingScreen> {
   PosShift? _shift;
@@ -142,7 +145,10 @@ class _BillingScreenState extends State<BillingScreen> {
   double get _vatRate => _settings?.vatRatePercent ?? 0;
   double get _vatAmount =>
       double.parse((_subtotal * _vatRate / 100).toStringAsFixed(2));
-  double get _grandTotal => _subtotal + _vatAmount;
+  double get _serviceChargeRate => _settings?.serviceChargePercent ?? 0;
+  double get _serviceChargeAmount =>
+      double.parse((_subtotal * _serviceChargeRate / 100).toStringAsFixed(2));
+  double get _grandTotal => _subtotal + _vatAmount + _serviceChargeAmount;
 
   // ── order actions ─────────────────────────────────────────
   Future<OrderModel?> _createOrder() async {
@@ -233,6 +239,7 @@ class _BillingScreenState extends State<BillingScreen> {
           categories: _categories(),
           selected: _category,
           onSelect: (c) => setState(() => _category = c),
+          itemCountFor: _categoryItemCount,
         ),
         Expanded(child: _itemPane()),
         _checkoutPanel(),
@@ -259,13 +266,15 @@ class _BillingScreenState extends State<BillingScreen> {
             const SizedBox(height: 12),
             Text('Register is closed',
                 style: TextStyle(
-                    fontSize: 17,
+                    fontSize: DeskTypography.h3,
                     fontWeight: FontWeight.w800,
                     color: PosColors.primaryDark)),
             const SizedBox(height: 6),
             Text('Open the register with a cash float to start billing.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: PosColors.muted)),
+                style: TextStyle(
+                    fontSize: DeskTypography.bodySmall,
+                    color: PosColors.muted)),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
@@ -293,7 +302,20 @@ class _BillingScreenState extends State<BillingScreen> {
       if (c.isNotEmpty) set.add(c);
     }
     final list = set.toList()..sort();
-    return [_allCategory, ...list];
+    return [_favCategory, _allCategory, ...list];
+  }
+
+  int _categoryItemCount(String category) {
+    final app = AppScope.read(context);
+    if (category == _allCategory) {
+      return app.menuItems.where((i) => i.isAvailable).length;
+    }
+    if (category == _favCategory) {
+      return app.menuItems.where((i) => i.isAvailable && i.isFavorite).length;
+    }
+    return app.menuItems
+        .where((i) => i.isAvailable && i.category.trim() == category)
+        .length;
   }
 
   List<MenuItem> _visibleItems() {
@@ -301,7 +323,8 @@ class _BillingScreenState extends State<BillingScreen> {
     final query = _searchCtl.text.trim().toLowerCase();
     return app.menuItems.where((item) {
       if (!item.isAvailable) return false;
-      if (_category != _allCategory && item.category.trim() != _category) {
+      if (_category == _favCategory && !item.isFavorite) return false;
+      if (_category != _allCategory && _category != _favCategory && item.category.trim() != _category) {
         return false;
       }
       if (query.isEmpty) return true;
@@ -329,8 +352,9 @@ class _BillingScreenState extends State<BillingScreen> {
       color: PosColors.background,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          Container(
+            color: PosColors.surface,
+            padding: const EdgeInsets.all(10),
             child: Row(
               children: [
                 Expanded(
@@ -341,12 +365,12 @@ class _BillingScreenState extends State<BillingScreen> {
                     onChanged: () => setState(() {}),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 SizedBox(
-                  width: 200,
+                  width: 180,
                   child: _searchField(
                     _shortCodeCtl,
-                    'Short code',
+                    'Short Code',
                     Icons.tag_rounded,
                     onSubmitted: _submitShortCode,
                     numeric: true,
@@ -359,15 +383,16 @@ class _BillingScreenState extends State<BillingScreen> {
             child: items.isEmpty
                 ? Center(
                     child: Text('No items',
-                        style: TextStyle(color: PosColors.muted)))
+                        style: TextStyle(
+                            fontSize: 15, color: PosColors.muted)))
                 : GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    padding: const EdgeInsets.all(12),
                     gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 200,
-                      mainAxisExtent: 88,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisExtent: 64,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
                     ),
                     itemCount: items.length,
                     itemBuilder: (_, i) =>
@@ -380,6 +405,8 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 
   // ── checkout ──
+  String _selectedPayment = 'Cash';
+
   Widget _checkoutPanel() {
     final lang = AppScope.of(context).language;
     return Container(
@@ -395,51 +422,89 @@ class _BillingScreenState extends State<BillingScreen> {
             selected: _serviceType,
             onSelect: (s) => setState(() => _serviceType = s),
           ),
-          if (_serviceType == OrderServiceType.dineIn) _tableRow(),
+          if (_serviceType == OrderServiceType.dineIn) _tableSelectorButton(),
           _cartHeader(),
           Expanded(
             child: _cart.isEmpty
                 ? Center(
-                    child: Text('Tap items to build the ticket',
-                        style: TextStyle(color: PosColors.muted)),
+                    child: Text('Tap items to build the order',
+                        style: TextStyle(
+                            fontSize: DeskTypography.bodySmall,
+                            color: PosColors.muted)),
                   )
-                : ListView.separated(
+                : ListView(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: _cart.length,
-                    separatorBuilder: (_, _) =>
+                    children: [
+                      _kotGroupHeader('KOT 1'),
+                      for (final line in _cart) ...[
+                        _cartRow(line, lang),
                         const Divider(height: 1, color: PosColors.line),
-                    itemBuilder: (_, i) => _cartRow(_cart[i], lang),
+                      ],
+                    ],
                   ),
           ),
           _totals(),
+          _paymentRow(),
           _actions(),
         ],
       ),
     );
   }
 
-  Widget _tableRow() {
+  Widget _tableSelectorButton() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
       child: Row(
         children: [
-          const Icon(Icons.table_restaurant_rounded,
-              size: 18, color: PosColors.ink2),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 120,
-            child: TextField(
-              controller: _tableCtl,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Table no',
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(PosRadii.sm),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: PosColors.ink,
+              side: const BorderSide(color: PosColors.lineStrong),
+              backgroundColor: PosColors.surfaceSunk,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(PosRadii.sm)),
+            ),
+            onPressed: () {},
+            icon: const Icon(Icons.table_restaurant_rounded, size: 16),
+            label: Text(
+              _tableCtl.text.isEmpty ? 'Select table' : _tableCtl.text,
+              style: const TextStyle(
+                  fontSize: DeskTypography.caption,
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kotGroupHeader(String label) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+      color: PosColors.surfaceSunk,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: PosColors.primary,
+              borderRadius: BorderRadius.circular(PosRadii.xs),
+            ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: DeskTypography.eyebrow,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
-            ),
+          ),
+          const Spacer(),
+          Text(
+            '${_cart.length} items',
+            style: TextStyle(
+                fontSize: DeskTypography.eyebrow, color: PosColors.muted),
           ),
         ],
       ),
@@ -448,16 +513,29 @@ class _BillingScreenState extends State<BillingScreen> {
 
   Widget _cartHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: PosColors.line)),
       ),
       child: Row(
         children: [
-          Expanded(child: _eyebrow('ITEMS')),
-          SizedBox(width: 96, child: Center(child: _eyebrow('QTY'))),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 2),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: PosColors.primary, width: 2),
+                  ),
+                ),
+                child: _eyebrow('ITEMS'),
+              ),
+            ),
+          ),
+          SizedBox(width: 92, child: Center(child: _eyebrow('QTY.'))),
           SizedBox(
-              width: 72,
+              width: 84,
               child: Align(
                   alignment: Alignment.centerRight, child: _eyebrow('PRICE'))),
         ],
@@ -466,33 +544,41 @@ class _BillingScreenState extends State<BillingScreen> {
   }
 
   Widget _cartRow(CartLine line, AppLanguage lang) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 7, 10, 7),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: PosColors.line)),
+      ),
       child: Row(
         children: [
-          InkResponse(
-            onTap: () => setState(() => _cart.remove(line)),
-            radius: 18,
-            child: const Icon(Icons.close_rounded,
-                size: 18, color: PosColors.danger),
+          SizedBox(
+            width: 22,
+            child: InkWell(
+              onTap: () => setState(() => _cart.remove(line)),
+              child: const Text('✕',
+                  style: TextStyle(
+                      fontSize: 12, color: PosColors.danger)),
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(line.displayName(lang),
                     style: const TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        fontSize: DeskTypography.bodySmall,
+                        fontWeight: FontWeight.w600)),
                 if (line.note != null && line.note!.isNotEmpty)
                   Text(line.note!,
-                      style:
-                          TextStyle(fontSize: 11.5, color: PosColors.muted)),
+                      style: TextStyle(
+                          fontSize: DeskTypography.eyebrow,
+                          color: PosColors.muted)),
               ],
             ),
           ),
           SizedBox(
-            width: 96,
+            width: 92,
             child: _MiniStepper(
               qty: line.qty,
               onMinus: () => _changeQty(line, -1),
@@ -500,11 +586,12 @@ class _BillingScreenState extends State<BillingScreen> {
             ),
           ),
           SizedBox(
-            width: 72,
+            width: 84,
             child: Text(money(context, line.lineTotal),
                 textAlign: TextAlign.right,
                 style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700)),
+                    fontSize: DeskTypography.bodySmall,
+                    fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -513,20 +600,126 @@ class _BillingScreenState extends State<BillingScreen> {
 
   Widget _totals() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: const BoxDecoration(
-        color: PosColors.surfaceSunk,
         border: Border(top: BorderSide(color: PosColors.line)),
       ),
       child: Column(
         children: [
           _totalRow('Subtotal', _subtotal),
-          if (_vatRate > 0) ...[
-            const SizedBox(height: 4),
+          if (_vatAmount > 0)
             _totalRow('VAT (${_vatRate.toStringAsFixed(0)}%)', _vatAmount),
-          ],
+          if (_serviceChargeAmount > 0)
+            _totalRow('Service (${_serviceChargeRate.toStringAsFixed(0)}%)', _serviceChargeAmount),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                onTap: () {},
+                child: Text('+ Discount',
+                    style: TextStyle(
+                        fontSize: DeskTypography.bodySmall,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.primary)),
+              ),
+              Text(
+                '',
+                style: TextStyle(
+                    fontSize: DeskTypography.bodySmall,
+                    color: PosColors.ink2),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
-          _totalRow('Total', _grandTotal, strong: true),
+          Row(
+            children: [
+              const Spacer(),
+              Text('Total',
+                  style: TextStyle(
+                      fontSize: DeskTypography.body,
+                      fontWeight: FontWeight.w700,
+                      color: PosColors.ink2)),
+              const SizedBox(width: 4),
+              Text(money(context, _grandTotal),
+                  style: const TextStyle(
+                      fontSize: DeskTypography.moneyRow,
+                      fontWeight: FontWeight.w800,
+                      color: PosColors.primary)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paymentRow() {
+    const methods = ['Cash', 'Card', 'bKash', 'Nagad', 'Due'];
+    return Container(
+      color: PosColors.stripBg,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final m in methods)
+            GestureDetector(
+              onTap: () => setState(() => _selectedPayment = m),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: Radio<String>(
+                      value: m,
+                      groupValue: _selectedPayment,
+                      onChanged: (v) => setState(() => _selectedPayment = v!),
+                      activeColor: PosColors.primary,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    m,
+                    style: TextStyle(
+                      fontSize: DeskTypography.bodySmall,
+                      fontWeight: _selectedPayment == m
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                      color: _selectedPayment == m
+                          ? Colors.white
+                          : const Color(0xB3FFFFFF),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: PosColors.primary,
+              minimumSize: const Size(0, 28),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(PosRadii.sm)),
+            ),
+            onPressed: _cart.isNotEmpty ? () {} : null,
+            child: const Text('Split',
+                style: TextStyle(
+                    fontSize: DeskTypography.caption,
+                    fontWeight: FontWeight.w700)),
+          ),
+          const Spacer(),
+          Text('Total ',
+              style: TextStyle(
+                  fontSize: DeskTypography.body,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xB3FFFFFF))),
+          Text(money(context, _grandTotal),
+              style: const TextStyle(
+                  fontSize: DeskTypography.moneyRow,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white)),
         ],
       ),
     );
@@ -535,35 +728,56 @@ class _BillingScreenState extends State<BillingScreen> {
   Widget _actions() {
     final enabled = _cart.isNotEmpty && !_busy;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: const BoxDecoration(
-        color: PosColors.surface,
-        border: Border(top: BorderSide(color: PosColors.line)),
-        boxShadow: PosShadows.bar,
+        color: PosColors.stripBg,
+        border: Border(top: BorderSide(color: PosColors.railLine)),
       ),
       child: Column(
         children: [
           Row(
             children: [
               Expanded(
-                child: _ghostBtn('Save', enabled ? _save : null),
+                child: _actionBtn('Save', enabled ? _save : null,
+                    style: _ActionStyle.primary),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
-                child: _ghostBtn(
-                    'KOT', enabled ? () => _kot(print: false) : null),
+                child: _actionBtn('Save & Print',
+                    enabled ? _save : null,
+                    style: _ActionStyle.primary),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
-                child: _ghostBtn('KOT & Print',
-                    enabled ? () => _kot(print: true) : null),
+                child: _actionBtn('Save & eBill', null,
+                    style: _ActionStyle.outline),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: _actionBtn('KOT',
+                    enabled ? () => _kot(print: false) : null,
+                    style: _ActionStyle.dark),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _actionBtn('KOT & Print',
+                    enabled ? () => _kot(print: true) : null,
+                    style: _ActionStyle.outline),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _actionBtn('Hold', null, style: _ActionStyle.outline),
               ),
             ],
           ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
-            height: 46,
+            height: 40,
             child: FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: PosColors.primary,
@@ -573,16 +787,52 @@ class _BillingScreenState extends State<BillingScreen> {
               onPressed: enabled ? _settle : null,
               child: _busy
                   ? const SizedBox(
-                      width: 20,
-                      height: 20,
+                      width: 22,
+                      height: 22,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2.4, color: Colors.white))
-                  : Text('Settle & Save · ${money(context, _grandTotal)}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 15)),
+                          strokeWidth: 2.6, color: Colors.white))
+                  : const Text('Settle & Save',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: DeskTypography.h3)),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _actionBtn(String label, VoidCallback? onTap,
+      {required _ActionStyle style}) {
+    final bg = switch (style) {
+      _ActionStyle.primary => PosColors.primary,
+      _ActionStyle.dark => PosColors.secondary,
+      _ActionStyle.outline => PosColors.surface,
+    };
+    final fg = switch (style) {
+      _ActionStyle.primary || _ActionStyle.dark => Colors.white,
+      _ActionStyle.outline => PosColors.ink,
+    };
+    return SizedBox(
+      height: 40,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: bg,
+          foregroundColor: fg,
+          elevation: 0,
+          side: style == _ActionStyle.outline
+              ? const BorderSide(color: PosColors.lineStrong)
+              : null,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(PosRadii.md)),
+          textStyle:
+              const TextStyle(
+                  fontSize: DeskTypography.button,
+                  fontWeight: FontWeight.w700),
+        ),
+        onPressed: onTap,
+        child: Text(label),
       ),
     );
   }
@@ -591,7 +841,7 @@ class _BillingScreenState extends State<BillingScreen> {
   Widget _eyebrow(String text) => Text(
         text,
         style: TextStyle(
-          fontSize: 10.5,
+          fontSize: DeskTypography.eyebrow,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
           color: PosColors.muted,
@@ -603,35 +853,16 @@ class _BillingScreenState extends State<BillingScreen> {
       children: [
         Text(label,
             style: TextStyle(
-                fontSize: strong ? 15 : 12.5,
+                fontSize: strong ? 16 : 13.5,
                 fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
                 color: strong ? PosColors.primaryDark : PosColors.ink2)),
         const Spacer(),
         Text(money(context, value),
             style: TextStyle(
-                fontSize: strong ? 18 : 13,
+                fontSize: strong ? 20 : 14,
                 fontWeight: FontWeight.w800,
                 color: strong ? PosColors.primary : PosColors.primaryDark)),
       ],
-    );
-  }
-
-  Widget _ghostBtn(String label, VoidCallback? onTap) {
-    return SizedBox(
-      height: 40,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: PosColors.primaryDark,
-          side: BorderSide(
-              color: onTap == null ? PosColors.line : PosColors.lineStrong),
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(PosRadii.md)),
-        ),
-        onPressed: onTap,
-        child: Text(label,
-            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-      ),
     );
   }
 
@@ -644,7 +875,7 @@ class _BillingScreenState extends State<BillingScreen> {
     bool numeric = false,
   }) {
     return SizedBox(
-      height: 38,
+      height: 40,
       child: TextField(
         controller: ctl,
         onChanged: onChanged == null ? null : (_) => onChanged(),
@@ -655,11 +886,11 @@ class _BillingScreenState extends State<BillingScreen> {
             : null,
         decoration: InputDecoration(
           isDense: true,
-          prefixIcon: Icon(icon, size: 18, color: PosColors.muted),
+          prefixIcon: Icon(icon, size: 20, color: PosColors.muted),
           hintText: hint,
           filled: true,
           fillColor: PosColors.surface,
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(PosRadii.md),
             borderSide: const BorderSide(color: PosColors.lineStrong),
@@ -682,13 +913,16 @@ class _BillingScreenState extends State<BillingScreen> {
           const SizedBox(height: 10),
           Text(title,
               style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w700)),
+                  fontSize: DeskTypography.h2,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           SizedBox(
             width: 360,
             child: Text(body,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+                style: TextStyle(
+                    fontSize: DeskTypography.caption,
+                    color: PosColors.muted)),
           ),
         ],
       ),
@@ -717,50 +951,91 @@ class _CategoryRail extends StatelessWidget {
     required this.categories,
     required this.selected,
     required this.onSelect,
+    required this.itemCountFor,
   });
 
   final List<String> categories;
   final String selected;
   final ValueChanged<String> onSelect;
+  final int Function(String category) itemCountFor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 176,
-      decoration: const BoxDecoration(
-        color: PosColors.surface,
-        border: Border(right: BorderSide(color: PosColors.line)),
-      ),
+      width: DeskMetrics.categoryRailWidth,
+      color: PosColors.railBg,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
         itemCount: categories.length,
         itemBuilder: (_, i) {
           final c = categories[i];
           final active = c == selected;
-          final label = c == _allCategory ? 'All items' : c;
+          final isFav = c == _favCategory;
+          final isAll = c == _allCategory;
+          final label = isFav
+              ? 'Favorite Items'
+              : isAll
+                  ? 'All Items'
+                  : c;
+          final count = itemCountFor(c);
+
+          Color bg;
+          Color fg;
+          if (isFav) {
+            bg = active ? PosColors.primary : PosColors.success;
+            fg = Colors.white;
+          } else if (isAll) {
+            bg = active ? PosColors.primary : PosColors.railItem;
+            fg = Colors.white;
+          } else {
+            bg = active ? PosColors.primary : PosColors.railItem;
+            fg = active ? Colors.white : const Color(0xFFE6E9F0);
+          }
+
           return InkWell(
             onTap: () => onSelect(c),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
               decoration: BoxDecoration(
-                color: active ? PosColors.primarySoft : Colors.transparent,
+                color: bg,
                 border: Border(
-                  left: BorderSide(
-                    color: active ? PosColors.primary : Colors.transparent,
-                    width: 3,
-                  ),
+                  bottom: BorderSide(color: PosColors.railLine),
                 ),
               ),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                  color: active ? PosColors.primary : PosColors.primaryDark,
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: DeskTypography.nav,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                        color: fg,
+                      ),
+                    ),
+                  ),
+                  if (isAll) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(PosRadii.pill),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                          fontSize: DeskTypography.eyebrow,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           );
@@ -779,32 +1054,54 @@ class _ItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: PosColors.surface,
-      borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
+      borderRadius: BorderRadius.circular(PosRadii.sm),
       child: InkWell(
-        borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
+        borderRadius: BorderRadius.circular(PosRadii.sm),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(DeskMetrics.tileRadius),
-            border: Border.all(color: PosColors.line),
+            borderRadius: BorderRadius.circular(PosRadii.sm),
+            border: Border(
+              left: BorderSide(color: PosColors.lineStrong, width: 4),
+              top: BorderSide(color: PosColors.lineStrong),
+              right: BorderSide(color: PosColors.lineStrong),
+              bottom: BorderSide(color: PosColors.lineStrong),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          child: Stack(
             children: [
-              Text(
-                item.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600, height: 1.2),
-              ),
-              Text(money(context, item.price),
-                  style: TextStyle(
-                      fontSize: 13,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: DeskTypography.title,
+                      fontWeight: FontWeight.w600,
+                      height: 1.25,
+                    ),
+                  ),
+                  Text(
+                    money(context, item.price),
+                    style: const TextStyle(
+                      fontSize: DeskTypography.itemPrice,
                       fontWeight: FontWeight.w700,
-                      color: PosColors.primary)),
+                      color: PosColors.ink2,
+                    ),
+                  ),
+                ],
+              ),
+              if (item.isFavorite)
+                const Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Text('♥',
+                      style: TextStyle(fontSize: 11, color: Colors.red)),
+                ),
             ],
           ),
         ),
@@ -818,47 +1115,44 @@ class _ServiceTabs extends StatelessWidget {
   final OrderServiceType selected;
   final ValueChanged<OrderServiceType> onSelect;
 
-  // Order of the service-type tabs. Labels come from the model
-  // (OrderServiceType.localized) — never hardcoded — so takeaway reads the
-  // canonical 'Parcel'/'পার্সেল', not a PetPooja-ism.
-  static const _order = <OrderServiceType>[
-    OrderServiceType.dineIn,
-    OrderServiceType.delivery,
-    OrderServiceType.takeaway,
+  static const _labels = <(OrderServiceType, String)>[
+    (OrderServiceType.dineIn, 'Dine In'),
+    (OrderServiceType.delivery, 'Delivery'),
+    (OrderServiceType.takeaway, 'Pick Up'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isBn = AppScope.of(context).language.code == 'bn';
     return Container(
-      height: 46,
+      height: DeskMetrics.serviceTabHeight,
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: PosColors.line)),
       ),
       child: Row(
         children: [
-          for (final type in _order)
+          for (var i = 0; i < _labels.length; i++) ...[
+            if (i > 0)
+              Container(width: 1, color: const Color(0x1FFFFFFF)),
             Expanded(
               child: InkWell(
-                onTap: () => onSelect(type),
+                onTap: () => onSelect(_labels[i].$1),
                 child: Container(
                   alignment: Alignment.center,
-                  color: type == selected
+                  color: _labels[i].$1 == selected
                       ? PosColors.primary
-                      : Colors.transparent,
+                      : PosColors.stripBg,
                   child: Text(
-                    type.localized(isBn),
-                    style: TextStyle(
-                      fontSize: 13.5,
+                    _labels[i].$2,
+                    style: const TextStyle(
+                      fontSize: DeskTypography.tab,
                       fontWeight: FontWeight.w700,
-                      color: type == selected
-                          ? Colors.white
-                          : PosColors.ink2,
+                      color: Colors.white,
                     ),
                   ),
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -886,7 +1180,8 @@ class _MiniStepper extends StatelessWidget {
           child: Text('$qty',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  fontSize: DeskTypography.bodySmall,
+                  fontWeight: FontWeight.w700)),
         ),
         _btn(Icons.add_rounded, onPlus),
       ],
@@ -902,7 +1197,8 @@ class _MiniStepper extends StatelessWidget {
         height: 24,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: PosColors.primary, width: 1.3),
+          color: PosColors.surface,
+          border: Border.all(color: PosColors.primary, width: 1.5),
         ),
         child: Icon(icon, size: 14, color: PosColors.primary),
       ),

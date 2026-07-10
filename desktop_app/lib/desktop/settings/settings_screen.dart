@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/core/localization/app_strings.dart';
+import 'package:local_pos/src/services/sync_service.dart';
 
 import '../audit/audit_screen.dart';
 import '../messaging/messages_screen.dart';
@@ -105,6 +106,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         printer.autoPrintEnabled),
                     const SizedBox(height: 16),
                     _btCard(),
+                    const SizedBox(height: 16),
+                    _syncCard(app.syncState),
                     const SizedBox(height: 16),
                     _languageCard(app.language),
                     if (app.isManager) ...[
@@ -290,6 +293,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ],
     ]);
+  }
+
+  Widget _syncCard(SyncRuntimeState sync) {
+    return _card('Sync & Data', [
+      _infoRow('Cloud', sync.cloudConnected ? 'Connected' : 'Disconnected'),
+      _infoRow('Last sync', sync.lastSyncAt != null ? _formatTime(sync.lastSyncAt!) : 'Never'),
+      _infoRow('Pending', sync.pendingCount.toString()),
+      _infoRow('Failed', sync.failedCount.toString()),
+      if (sync.lastError != null) ...[
+        const SizedBox(height: 8),
+        Text('Error: ${sync.lastError}',
+            style: TextStyle(fontSize: 12.5, color: PosColors.danger)),
+      ],
+      const SizedBox(height: 12),
+      const Text('Last Pull Diagnostics',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      _sectionRow('Menu', sync.menu),
+      _sectionRow('Orders', sync.orders),
+      _sectionRow('Inventory', sync.inventory),
+    ]);
+  }
+
+  Widget _sectionRow(String label, SyncSectionDiagnostics section) {
+    final status = section.hasError ? 'Error' : 'OK';
+    final statusColor = section.hasError ? PosColors.danger : PosColors.success;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontSize: 13, color: PosColors.muted)),
+          const SizedBox(width: 8),
+          Text(status, style: TextStyle(fontSize: 13, color: statusColor, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          Text('Pulled: ${section.pulled}', style: TextStyle(fontSize: 12, color: PosColors.muted)),
+          const SizedBox(width: 8),
+          Text('Applied: ${section.applied}', style: TextStyle(fontSize: 12, color: PosColors.muted)),
+          const SizedBox(width: 8),
+          Text('Skipped: ${section.skipped}', style: TextStyle(fontSize: 12, color: PosColors.muted)),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final diff = now.difference(time);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Widget _languageCard(AppLanguage current) {

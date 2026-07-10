@@ -389,8 +389,15 @@ class _MainShellState extends State<MainShell> {
     final vi = widget.initialIndex.clamp(0, _ownerTabOrder.length - 1);
     _selected = _ownerTabOrder[vi];
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppScope.read(context).systemNotifications.requestNotificationAccess();
+      final app = AppScope.read(context);
+      app.systemNotifications.requestNotificationAccess();
       widget.onMounted?.call();
+      // Handle FCM notification that launched the app (killed state).
+      final pending = app.pendingFcmNavigation;
+      if (pending != null) {
+        app.pendingFcmNavigation = null;
+        _handleFcmNavigationTap(pending);
+      }
     });
   }
 
@@ -426,6 +433,7 @@ class _MainShellState extends State<MainShell> {
       _selected = _currentTabOrder.first;
     }
     _maybeShowNotification(app);
+    _consumeFcmNavigation(app);
     final tabOrder = _currentTabOrder;
     final visualIndex = tabOrder
         .indexOf(_selected)
@@ -671,6 +679,34 @@ class _MainShellState extends State<MainShell> {
     } catch (_) {
       if (mounted) _pushScreen(const MessagesScreen());
     }
+  }
+
+  void _consumeFcmNavigation(PosAppController app) {
+    final data = app.pendingFcmNavigation;
+    if (data == null) return;
+    app.pendingFcmNavigation = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _handleFcmNavigationTap(data);
+    });
+  }
+
+  void _handleFcmNavigationTap(Map<String, String> data) {
+    final actionTarget = data['actionTarget'] ?? 'orders';
+    if (actionTarget == 'orders' || actionTarget == 'order') {
+      _selectTab(_AppTab.orders);
+      // Optionally focus the specific order if needed — the orders screen
+      // picks up orderId from a shared state if we add it there.
+      return;
+    }
+    if (actionTarget == 'messages' || actionTarget == 'chat') {
+      if (AppScope.read(context).canMessages) {
+        _pushScreen(const MessagesScreen());
+      }
+      return;
+    }
+    final target = PosNotificationTarget.parse(actionTarget);
+    _navigateNotificationTarget(target);
   }
 
   void _pushScreen(Widget screen) {

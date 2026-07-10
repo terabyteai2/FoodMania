@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,5 +26,15 @@ Future<void> main() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
+
+  // Initialise Firebase for push notifications (FCM).
+  // On non-Android platforms where Firebase is not configured, the call
+  // throws; catching it allows the app to start without Firebase there.
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('[QB-FCM] Firebase init skipped: $e');
+  }
+
   runApp(LocalPosApp());
 }

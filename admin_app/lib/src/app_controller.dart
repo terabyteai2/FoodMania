@@ -226,6 +226,11 @@ class PosAppController extends ChangeNotifier {
   bool _lastIsSyncing = false;
   bool _coalesceNextOrderAlertBatch = false;
 
+  /// Pending FCM notification tap data — set by the push notification service
+  /// when a remote notification is tapped. The shell picks this up on its next
+  /// build and navigates accordingly.
+  Map<String, String>? pendingFcmNavigation;
+
   /// Chat conversations already surfaced while in manager-help state.
   final BoundedStringSet _alertedNeedsHelpChatIds = BoundedStringSet(
     cap: kAlertSetCap,
@@ -3291,7 +3296,13 @@ class PosAppController extends ChangeNotifier {
     await pushNotificationService.initialize(
       systemNotifications: systemNotifications,
       onToken: _registerPushToken,
+      onNotificationTap: _handleFcmNotificationTap,
     );
+  }
+
+  Future<void> _handleFcmNotificationTap(Map<String, String> data) async {
+    pendingFcmNavigation = data;
+    notifyListeners();
   }
 
   Future<void> _registerPushToken(String token, String platform) async {

@@ -83,7 +83,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: Row(
         children: [
           const Text('Analytics',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              style: TextStyle(fontSize: DeskTypography.h1, fontWeight: FontWeight.w800)),
           const Spacer(),
           DeskSegment<String>(
             options: const [
@@ -107,10 +107,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           Icon(Icons.insights_rounded, size: 34, color: PosColors.muted),
           const SizedBox(height: 10),
           const Text('No sales in this period',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              style: TextStyle(fontSize: DeskTypography.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text('Pick a wider range to see trends.',
-              style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+              style: TextStyle(fontSize: DeskTypography.caption, color: PosColors.muted)),
         ],
       ),
     );
@@ -125,13 +125,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           const Icon(Icons.cloud_off_rounded, size: 34, color: PosColors.muted),
           const SizedBox(height: 10),
           const Text('Analytics unavailable',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              style: TextStyle(fontSize: DeskTypography.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           SizedBox(
             width: 360,
             child: Text(clean,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+                style: TextStyle(fontSize: DeskTypography.caption, color: PosColors.muted)),
           ),
           const SizedBox(height: 14),
           OutlinedButton(

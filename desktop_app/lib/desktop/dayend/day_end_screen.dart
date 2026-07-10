@@ -119,7 +119,7 @@ class _DayEndScreenState extends State<DayEndScreen> {
 
   Widget _header() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
       decoration: const BoxDecoration(
         color: PosColors.surface,
         border: Border(bottom: BorderSide(color: PosColors.line)),
@@ -127,10 +127,10 @@ class _DayEndScreenState extends State<DayEndScreen> {
       child: Row(
         children: [
           const Text('Day End',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              style: TextStyle(fontSize: DeskTypography.displayPushed, fontWeight: FontWeight.w800)),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20),
+            icon: const Icon(Icons.refresh_rounded, size: 22),
             color: PosColors.ink2,
             onPressed: _load,
           ),
@@ -142,29 +142,29 @@ class _DayEndScreenState extends State<DayEndScreen> {
   Widget _openPanel() {
     return Center(
       child: Container(
-        width: 420,
-        padding: const EdgeInsets.all(22),
+        width: 460,
+        padding: const EdgeInsets.all(26),
         decoration: _cardDeco(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Open register',
                 style: TextStyle(
-                    fontSize: 17,
+                    fontSize: DeskTypography.h1,
                     fontWeight: FontWeight.w800,
                     color: PosColors.primaryDark)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text('Count the opening cash float.',
-                style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
-            const SizedBox(height: 14),
+                style: TextStyle(fontSize: DeskTypography.body, color: PosColors.muted)),
+            const SizedBox(height: 18),
             DenominationGrid(
                 onChanged: (total, counts) => setState(() {
                       _drawerTotal = total;
                       _drawerCounts = counts;
                     })),
-            const Divider(height: 24),
+            const Divider(height: 28),
             _totalRow('Opening cash', _drawerTotal),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             _primaryButton('Open register', _busy ? null : _open),
           ],
         ),
@@ -180,7 +180,7 @@ class _DayEndScreenState extends State<DayEndScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: PosColors.successSoft,
             borderRadius: BorderRadius.circular(PosRadii.md),
@@ -188,19 +188,19 @@ class _DayEndScreenState extends State<DayEndScreen> {
           child: Row(
             children: [
               const Icon(Icons.lock_open_rounded,
-                  size: 18, color: PosColors.success),
-              const SizedBox(width: 10),
+                  size: 20, color: PosColors.success),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Register open since $openedAt · opening ${money(context, shift.openingCash)}',
                   style: TextStyle(
-                      fontSize: 13, color: PosColors.statePrintedInk),
+                      fontSize: DeskTypography.body, color: PosColors.statePrintedInk),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 22),
         if (report != null) ...[
           Wrap(
             spacing: DeskMetrics.panelGap,
@@ -210,27 +210,27 @@ class _DayEndScreenState extends State<DayEndScreen> {
                   icon: Icons.payments_rounded,
                   label: 'Sales',
                   value: money(context, report.sales),
-                  width: 180),
+                  width: 210),
               DeskStatTile(
                   icon: Icons.receipt_long_rounded,
                   label: 'Orders',
                   value: '${report.orders}',
-                  width: 180),
+                  width: 210),
               DeskStatTile(
                   icon: Icons.groups_rounded,
                   label: 'Covers',
                   value: '${report.covers}',
-                  width: 180),
+                  width: 210),
               DeskStatTile(
                   icon: Icons.sell_rounded,
                   label: 'Discounts',
                   value: money(context, report.discounts),
-                  width: 180),
+                  width: 210),
               DeskStatTile(
                   icon: Icons.percent_rounded,
                   label: 'VAT',
                   value: money(context, report.vatIncluded),
-                  width: 180),
+                  width: 210),
             ],
           ),
           if (_paymentSlices(report).isNotEmpty ||
@@ -260,26 +260,26 @@ class _DayEndScreenState extends State<DayEndScreen> {
             ),
           ],
         ],
-        const SizedBox(height: 22),
+        const SizedBox(height: 26),
         _sectionTitle('Close register'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           decoration: _cardDeco(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('Count the cash in the drawer to close and get variance.',
-                  style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
-              const SizedBox(height: 12),
+                  style: TextStyle(fontSize: DeskTypography.body, color: PosColors.muted)),
+              const SizedBox(height: 14),
               DenominationGrid(
                   onChanged: (total, counts) => setState(() {
                         _drawerTotal = total;
                         _drawerCounts = counts;
                       })),
-              const Divider(height: 24),
+              const Divider(height: 28),
               _totalRow('Counted cash', _drawerTotal),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               _primaryButton('Close register', _busy ? null : _close,
                   danger: true),
             ],
@@ -326,16 +326,16 @@ class _DayEndScreenState extends State<DayEndScreen> {
   }
 
   Widget _sectionTitle(String text) => Text(text,
-      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800));
+      style: const TextStyle(fontSize: DeskTypography.h3, fontWeight: FontWeight.w800));
 
   Widget _totalRow(String label, double value) => Row(
         children: [
           Text(label,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: DeskTypography.h2)),
           const Spacer(),
           Text(money(context, value),
               style: TextStyle(
-                  fontSize: 18,
+                  fontSize: DeskTypography.h1,
                   fontWeight: FontWeight.w800,
                   color: PosColors.primary)),
         ],
@@ -344,7 +344,7 @@ class _DayEndScreenState extends State<DayEndScreen> {
   Widget _primaryButton(String label, VoidCallback? onTap,
       {bool danger = false}) {
     return SizedBox(
-      height: 46,
+      height: 52,
       child: FilledButton(
         style: FilledButton.styleFrom(
           backgroundColor: danger ? PosColors.danger : PosColors.primary,
@@ -354,13 +354,13 @@ class _DayEndScreenState extends State<DayEndScreen> {
         onPressed: onTap,
         child: _busy
             ? const SizedBox(
-                width: 20,
-                height: 20,
+                width: 22,
+                height: 22,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2.4, color: Colors.white))
+                    strokeWidth: 2.6, color: Colors.white))
             : Text(label,
                 style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 15)),
+                    fontWeight: FontWeight.w800, fontSize: DeskTypography.h2)),
       ),
     );
   }

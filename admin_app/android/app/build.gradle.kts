@@ -16,7 +16,7 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
 }
-val posTerminalMinSdk = 22
+val posTerminalMinSdk = 23
 val isPosTerminalBuild =
     providers.gradleProperty("posTerminalBuild").orNull.toBoolean() ||
         System.getenv("POS_TERMINAL_BUILD").orEmpty().let {

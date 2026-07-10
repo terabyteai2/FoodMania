@@ -98,7 +98,7 @@ class AppModel extends InheritedModel<AppAspect> {
         AppAspect.menu: c.menuItems,
         AppAspect.inventory: (c.inventoryItems, c.inventorySummary),
         AppAspect.suppliers: c.inventorySuppliers,
-        AppAspect.notifications: c.notifications,
+        AppAspect.notifications: (c.notifications, c.pendingFcmNavigation),
         AppAspect.sync: c.syncState,
         AppAspect.printer: c.printerState,
         AppAspect.dashboard: c.dashboardSummary,

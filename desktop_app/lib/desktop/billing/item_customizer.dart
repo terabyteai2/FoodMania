@@ -70,7 +70,7 @@ class _ItemCustomizerDialogState extends State<_ItemCustomizerDialog> {
       ),
       title: Text(
         widget.item.localizedName(lang),
-        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: DeskTypography.h3),
       ),
       content: SizedBox(
         width: 440,
@@ -80,7 +80,7 @@ class _ItemCustomizerDialogState extends State<_ItemCustomizerDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('${money(context, widget.item.price)} base',
-                  style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+                  style: TextStyle(fontSize: DeskTypography.caption, color: PosColors.muted)),
               if (_options.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _sectionLabel('Size / option'),
@@ -104,7 +104,7 @@ class _ItemCustomizerDialogState extends State<_ItemCustomizerDialog> {
                     activeColor: PosColors.primary,
                     value: _addOnIndexes.contains(i),
                     title: Text(_addOns[i].name,
-                        style: const TextStyle(fontSize: 13.5)),
+                        style: const TextStyle(fontSize: DeskTypography.bodySmall)),
                     secondary: _addOns[i].price == 0
                         ? null
                         : Text('+${money(context, _addOns[i].price)}',
@@ -164,7 +164,7 @@ class _ItemCustomizerDialogState extends State<_ItemCustomizerDialog> {
 
   Widget _sectionLabel(String text) => Text(
         text,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: DeskTypography.bodySmall),
       );
 
   Widget _optionChip(int i) {
@@ -189,7 +189,7 @@ class _ItemCustomizerDialogState extends State<_ItemCustomizerDialog> {
         child: Text(
           '${option.name}$suffix',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: DeskTypography.bodySmall,
             fontWeight: FontWeight.w600,
             color: active ? Colors.white : PosColors.primaryDark,
           ),
@@ -215,7 +215,7 @@ class _Stepper extends StatelessWidget {
           child: Text('$qty',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 15)),
+                  fontWeight: FontWeight.w700, fontSize: DeskTypography.title)),
         ),
         _circle(Icons.add_rounded, onPlus),
       ],

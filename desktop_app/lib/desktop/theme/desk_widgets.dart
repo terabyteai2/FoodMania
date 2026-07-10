@@ -45,20 +45,21 @@ class DeskCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (title != null) ...[
+            if (title != null) ...[
             Row(
               children: [
                 Expanded(
                   child: Text(
                     title!,
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w800),
+                        fontSize: DeskTypography.h2,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
                 ?trailing,
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
           ],
           child,
         ],
@@ -76,7 +77,7 @@ class DeskStatTile extends StatelessWidget {
     this.icon,
     this.accent,
     this.tint,
-    this.width = 200,
+    this.width = 220,
     super.key,
   });
 
@@ -99,26 +100,29 @@ class DeskStatTile extends StatelessWidget {
         children: [
           if (icon != null) ...[
             Container(
-              width: 34,
-              height: 34,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: tint ?? PosColors.primarySoft,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(PosRadii.sm),
               ),
-              child: Icon(icon, size: 18, color: color),
+              child: Icon(icon, size: 22, color: color),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
           ],
           Text(
             value,
             style: TextStyle(
-              fontSize: 23,
+              fontSize: DeskTypography.statValue,
               fontWeight: FontWeight.w800,
               color: PosColors.primaryDark,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 12.5, color: PosColors.muted)),
+          const SizedBox(height: 4),
+          Text(label,
+              style: TextStyle(
+                  fontSize: DeskTypography.statLabel,
+                  color: PosColors.muted)),
         ],
       ),
     );
@@ -141,7 +145,7 @@ class DeskSegment<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: PosColors.surfaceSunk,
         borderRadius: BorderRadius.circular(PosRadii.pill),
@@ -154,7 +158,7 @@ class DeskSegment<T> extends StatelessWidget {
               onTap: () => onChanged(v),
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 decoration: BoxDecoration(
                   color: v == value ? PosColors.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(PosRadii.pill),
@@ -162,7 +166,7 @@ class DeskSegment<T> extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: DeskTypography.tab,
                     fontWeight: FontWeight.w700,
                     color: v == value ? Colors.white : PosColors.ink2,
                   ),
@@ -225,11 +229,14 @@ class DeskDonut extends StatelessWidget {
                   Text(
                     centerValue,
                     style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w800),
+                        fontSize: DeskTypography.h3,
+                        fontWeight: FontWeight.w800),
                   ),
                   Text(
                     centerLabel,
-                    style: TextStyle(fontSize: 11, color: PosColors.muted),
+                    style: TextStyle(
+                        fontSize: DeskTypography.eyebrow,
+                        color: PosColors.muted),
                   ),
                 ],
               ),
@@ -251,7 +258,7 @@ class DeskDonut extends StatelessWidget {
                         height: 10,
                         decoration: BoxDecoration(
                           color: DeskChart.hue(i),
-                          borderRadius: BorderRadius.circular(3),
+                          borderRadius: BorderRadius.circular(PosRadii.xs),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -260,13 +267,16 @@ class DeskDonut extends StatelessWidget {
                           data[i].label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12.5, color: PosColors.ink2),
+                          style: TextStyle(
+                              fontSize: DeskTypography.bodySmall,
+                              color: PosColors.ink2),
                         ),
                       ),
                       Text(
                         data[i].valueLabel,
                         style: const TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w700),
+                            fontSize: DeskTypography.bodySmall,
+                            fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -364,7 +374,9 @@ class DeskBars extends StatelessWidget {
                     data[i].label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12.5, color: PosColors.ink2),
+                    style: TextStyle(
+                        fontSize: DeskTypography.bodySmall,
+                        color: PosColors.ink2),
                   ),
                 ),
                 Expanded(
@@ -377,7 +389,7 @@ class DeskBars extends StatelessWidget {
                             height: barHeight,
                             decoration: BoxDecoration(
                               color: PosColors.surfaceSunk,
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(PosRadii.xs),
                             ),
                           ),
                           Container(
@@ -386,7 +398,7 @@ class DeskBars extends StatelessWidget {
                                 frac > 0 ? 4.0 : 0.0, c.maxWidth),
                             decoration: BoxDecoration(
                               color: DeskChart.hue(i),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(PosRadii.xs),
                             ),
                           ),
                         ],
@@ -401,7 +413,8 @@ class DeskBars extends StatelessWidget {
                     data[i].valueLabel,
                     textAlign: TextAlign.right,
                     style: const TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w700),
+                        fontSize: DeskTypography.bodySmall,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
               ],

@@ -99,10 +99,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                   child: Column(
                     children: [
                       _statRow(app.inventoryItems),
+                      _filterPills(app.inventoryItems.length),
                       const SizedBox(height: DeskMetrics.panelGap),
                       Expanded(
                         child: Container(
@@ -116,6 +117,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                     ? Center(
                                         child: Text('No stock items',
                                             style: TextStyle(
+                                                fontSize: 15,
                                                 color: PosColors.muted)))
                                     : ListView.separated(
                                         itemCount: items.length,
@@ -138,13 +140,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  /// Live inventory KPIs computed from the real items (stock value = Σ qty ×
-  /// cost/unit; low/out from InventoryItem.isLowStock/isOutOfStock).
+  /// Live inventory KPIs aligned to target design.
   Widget _statRow(List<InventoryItem> all) {
     final stockValue =
         all.fold<double>(0, (s, i) => s + i.quantity * i.costPerUnit);
     final low = all.where((i) => i.isLowStock).length;
-    final out = all.where((i) => i.isOutOfStock).length;
     return Wrap(
       spacing: DeskMetrics.panelGap,
       runSpacing: DeskMetrics.panelGap,
@@ -153,33 +153,65 @@ class _InventoryScreenState extends State<InventoryScreen> {
             icon: Icons.savings_rounded,
             label: 'Stock value',
             value: money(context, stockValue),
-            width: 190),
-        DeskStatTile(
-            icon: Icons.inventory_2_rounded,
-            label: 'Items',
-            value: '${all.length}',
-            width: 190),
+            width: 220),
         DeskStatTile(
             icon: Icons.warning_amber_rounded,
-            label: 'Low stock',
+            label: 'Alerts',
             value: '$low',
-            width: 190,
+            width: 220,
             accent: PosColors.warning,
             tint: PosColors.warnSoft),
         DeskStatTile(
-            icon: Icons.error_outline_rounded,
-            label: 'Out of stock',
-            value: '$out',
-            width: 190,
+            icon: Icons.trending_down_rounded,
+            label: 'Variance today',
+            value: '—',
+            width: 220,
             accent: PosColors.danger,
             tint: PosColors.dangerSoft),
+        DeskStatTile(
+            icon: Icons.inventory_2_rounded,
+            label: 'Materials',
+            value: '${all.length}',
+            width: 220),
       ],
+    );
+  }
+
+  Widget _filterPills(int total) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          _filterPill('All', total, true),
+          const SizedBox(width: 8),
+          _filterPill('Other', total, false),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterPill(String label, int count, bool active) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: active ? PosColors.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(PosRadii.pill),
+        border: active
+            ? null
+            : Border.all(color: PosColors.lineStrong),
+      ),
+      child: Text('$label $count',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: active ? Colors.white : PosColors.ink2,
+          )),
     );
   }
 
   Widget _toolbar(int total) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
       decoration: const BoxDecoration(
         color: PosColors.surface,
         border: Border(bottom: BorderSide(color: PosColors.line)),
@@ -187,25 +219,25 @@ class _InventoryScreenState extends State<InventoryScreen> {
       child: Row(
         children: [
           const Text('Inventory',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const SizedBox(width: 8),
+              style: TextStyle(fontSize: DeskTypography.displayPushed, fontWeight: FontWeight.w800)),
+          const SizedBox(width: 10),
           Text('$total items',
-              style: TextStyle(fontSize: 13, color: PosColors.muted)),
+              style: TextStyle(fontSize: DeskTypography.body, color: PosColors.muted)),
           const Spacer(),
           SizedBox(
-            width: 240,
-            height: 38,
+            width: 280,
+            height: 42,
             child: TextField(
               controller: _searchCtl,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 isDense: true,
                 prefixIcon: const Icon(Icons.search_rounded,
-                    size: 18, color: PosColors.muted),
-                hintText: 'Search',
+                    size: 20, color: PosColors.muted),
+                hintText: 'Search items',
                 filled: true,
                 fillColor: PosColors.surfaceSunk,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(PosRadii.md),
                   borderSide: BorderSide.none,
@@ -213,18 +245,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           FilledButton.icon(
             style: FilledButton.styleFrom(
               backgroundColor: PosColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             ),
             onPressed: () async {
               await showInventoryItemForm(context);
             },
-            icon: const Icon(Icons.add_rounded, size: 18),
+            icon: const Icon(Icons.add_rounded, size: 20),
             label: const Text('Add item',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: DeskTypography.title)),
           ),
         ],
       ),
@@ -233,17 +266,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Widget _headerRow() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
       color: PosColors.surfaceSunk,
       child: Row(
         children: [
-          Expanded(flex: 4, child: _eyebrow('ITEM')),
-          Expanded(flex: 3, child: _eyebrow('CATEGORY')),
-          Expanded(flex: 2, child: _eyebrow('ON HAND')),
-          Expanded(flex: 2, child: _eyebrow('MIN')),
-          SizedBox(width: 70, child: _eyebrow('STATUS')),
-          Expanded(flex: 2, child: _eyebrow('COST/UNIT')),
-          const SizedBox(width: 168),
+          Expanded(flex: 4, child: _eyebrow('MATERIAL')),
+          Expanded(flex: 2, child: Center(child: _eyebrow('IN'))),
+          Expanded(flex: 2, child: Center(child: _eyebrow('OUT'))),
+          Expanded(flex: 2, child: Center(child: _eyebrow('NET'))),
+          Expanded(flex: 2, child: Center(child: _eyebrow('ON HAND'))),
+          Expanded(flex: 2, child: Center(child: _eyebrow('SPEND'))),
+          const SizedBox(width: 184),
         ],
       ),
     );
@@ -251,53 +284,75 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Widget _row(InventoryItem item) {
     final unit = InventoryUnits.displayLabel(item.unit);
+    final statusColor = item.isOutOfStock
+        ? PosColors.danger
+        : item.isLowStock
+            ? PosColors.warning
+            : PosColors.success;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
       color: PosColors.surface,
       child: Row(
         children: [
           Expanded(
             flex: 4,
-            child: Text(item.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 13.5, fontWeight: FontWeight.w600)),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(item.category.isEmpty ? '—' : item.category,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, color: PosColors.ink2)),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text('${_n(item.quantity)} $unit',
-                style: const TextStyle(
-                    fontSize: 13.5, fontWeight: FontWeight.w700)),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text('${_n(item.minThreshold)} $unit',
-                style: TextStyle(fontSize: 13, color: PosColors.ink2)),
-          ),
-          SizedBox(width: 70, child: _statusChip(item)),
-          Expanded(
-            flex: 2,
-            child: Text(money(context, item.costPerUnit),
-                style: TextStyle(fontSize: 13, color: PosColors.ink2)),
-          ),
-          SizedBox(
-            width: 168,
             child: Row(
               children: [
-                _iconBtn(Icons.add_box_outlined, PosColors.primary, 'Stock in',
-                    () => _act(() async {
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: statusColor,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: DeskTypography.title, fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: PosColors.surface3,
+                    borderRadius: BorderRadius.circular(PosRadii.xs),
+                  ),
+                  child: Text(unit,
+                      style: TextStyle(
+                          fontSize: DeskTypography.eyebrow,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.ink2)),
+                ),
+              ],
+            ),
+          ),
+          Expanded(flex: 2, child: Center(child: _dashCell())),
+          Expanded(flex: 2, child: Center(child: _dashCell())),
+          Expanded(flex: 2, child: Center(child: _dashCell())),
+          Expanded(
+            flex: 2,
+            child: Center(
+              child: Text(_n(item.quantity),
+                  style: const TextStyle(
+                      fontSize: DeskTypography.title, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          Expanded(flex: 2, child: Center(child: _dashCell())),
+          SizedBox(
+            width: 184,
+            child: Row(
+              children: [
+                _iconBtn(Icons.arrow_upward_rounded, PosColors.primary,
+                    'Stock in', () => _act(() async {
                           await showStockMoveDialog(context,
                               item: item, kind: StockMoveKind.stockIn);
                         })),
-                _iconBtn(Icons.remove_circle_outline, PosColors.warning, 'Use',
+                _iconBtn(Icons.crop_square_outlined, PosColors.warning, 'Use',
                     () => _act(() async {
                           await showStockMoveDialog(context,
                               item: item, kind: StockMoveKind.use);
@@ -316,29 +371,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _statusChip(InventoryItem item) {
-    final (label, color) = item.isOutOfStock
-        ? ('Out', PosColors.danger)
-        : item.isLowStock
-            ? ('Low', PosColors.warning)
-            : ('OK', PosColors.success);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(PosRadii.pill),
-      ),
-      child: Text(label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-    );
+  Widget _dashCell() {
+    return Text('—',
+        style: TextStyle(
+            fontSize: DeskTypography.body, fontWeight: FontWeight.w600, color: PosColors.muted));
   }
 
   Widget _iconBtn(
       IconData icon, Color color, String tip, VoidCallback onTap) {
     return IconButton(
-      icon: Icon(icon, size: 18),
+      icon: Icon(icon, size: 20),
       color: color,
       tooltip: tip,
       visualDensity: VisualDensity.compact,
@@ -348,7 +390,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Widget _eyebrow(String text) => Text(text,
       style: TextStyle(
-          fontSize: 10.5,
+          fontSize: DeskTypography.eyebrow,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
           color: PosColors.muted));

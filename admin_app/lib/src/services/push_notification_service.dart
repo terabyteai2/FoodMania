@@ -1,28 +1,181 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/pos_notification.dart';
 import 'system_notification_service.dart';
+
+export 'package:firebase_messaging/firebase_messaging.dart'
+    show RemoteMessage;
 
 typedef PushTokenCallback =
     Future<void> Function(String token, String platform);
 
-/// POS-terminal builds rely on the app's realtime sync plus local notification
-/// service while the app is running. Firebase Messaging currently raises the
-/// Android minSdk floor above Android 5.1/API 22, so this service intentionally
-/// stays as a no-op until a separate modern APK flavor is introduced.
+typedef NotificationTapCallback = Future<void> Function(
+  Map<String, String> data,
+);
+
+/// Top-level background message handler – must be a static function (not a
+/// class method) because FCM runs it in a separate isolate.
+@pragma('vm:entry-point')
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  if (kDebugMode) {
+    debugPrint(
+      '[QB-FCM] background message type=${message.data['type']} '
+      'serial=${message.data['serialNumber']}',
+    );
+  }
+}
+
 class PushNotificationService {
   PushNotificationService();
 
-  String? get token => null;
-  String get platform => 'disabled';
+  FirebaseMessaging? _messaging;
+  String? _currentToken;
+  SystemNotificationService? _systemNotifications;
+  NotificationTapCallback? _onTap;
+  StreamSubscription<String?>? _tokenSubscription;
+  StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  StreamSubscription<RemoteMessage>? _tapSubscription;
+  bool _initialized = false;
+
+  String? get token => _currentToken;
+  String get platform => 'android';
 
   Future<void> initialize({
     required SystemNotificationService systemNotifications,
     required PushTokenCallback onToken,
+    NotificationTapCallback? onNotificationTap,
   }) async {
+    if (_initialized) return;
+    _initialized = true;
+
+    _systemNotifications = systemNotifications;
+    _onTap = onNotificationTap;
+
+    try {
+      _messaging = FirebaseMessaging.instance;
+    } catch (e) {
+      debugPrint('[QB-FCM] FirebaseMessaging unavailable: $e');
+      return;
+    }
+
+    // Register the top-level background handler so data messages are
+    // processed even when the app is terminated.
+    FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+
+    // Request notification permission (Android 13+).
+    final permission = await _messaging!.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      announcement: false,
+      provisional: false,
+    );
     if (kDebugMode) {
-      debugPrint('[QB-NOTIF] FCM disabled for POS terminal APK');
+      debugPrint(
+        '[QB-FCM] permission granted=${permission.authorizationStatus}',
+      );
+    }
+
+    // Get the current FCM registration token.
+    _currentToken = await _messaging!.getToken();
+    if (_currentToken != null && _currentToken!.isNotEmpty) {
+      await onToken(_currentToken!, platform);
+    }
+    debugPrint('[QB-FCM] initial token=${_currentToken?.isNotEmpty == true}');
+
+    // Listen for token refresh (Google rotates tokens periodically).
+    _tokenSubscription =
+        _messaging!.onTokenRefresh.listen((String refreshedToken) {
+      _currentToken = refreshedToken;
+      unawaited(onToken(refreshedToken, platform));
+      debugPrint('[QB-FCM] token refreshed');
+    });
+
+    // Foreground messages: show as OS notification via
+    // SystemNotificationService so the user sees a heads-up banner even
+    // if the WebSocket event hasn't arrived yet (e.g. reconnecting).
+    _foregroundSubscription = FirebaseMessaging.onMessage.listen(
+      _handleForegroundMessage,
+    );
+
+    // Notification tapped while app was in background.
+    _tapSubscription =
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+    // Check if app was launched by tapping a notification (killed state).
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationTap(initialMessage);
     }
   }
 
-  Future<void> dispose() async {}
+  void _handleForegroundMessage(RemoteMessage message) {
+    final data = message.data;
+    final type = data['type'] ?? '';
+    final serial = data['serialNumber'] ?? '';
+    final orderId = data['orderId'] ?? '';
+    final actionTarget = data['actionTarget'] ?? 'orders';
+
+    // The FCM message includes a notification payload with title+body.
+    // If present, use it; otherwise fall back to data keys.
+    final title = message.notification?.title ?? data['title'] ?? 'Order update';
+    final body =
+        message.notification?.body ??
+        data['body'] ??
+        'Serial #$serial';
+
+    if (kDebugMode) {
+      debugPrint(
+        '[QB-FCM] foreground type=$type serial=$serial title=$title',
+      );
+    }
+
+    // Map FCM event type to PosNotificationType for correct channel/sound.
+    final statusVal = (data['status'] ?? '').toString().toLowerCase();
+    final notifType = (statusVal == 'accepted' ||
+            statusVal == 'completed' ||
+            statusVal == 'served')
+        ? PosNotificationType.acceptedOrder
+        : statusVal == 'pending'
+        ? PosNotificationType.pendingOrder
+        : PosNotificationType.system;
+
+    final stableId = orderId.isNotEmpty
+        ? Object.hash(orderId, type).abs() & 0x7fffffff
+        : DateTime.now().millisecondsSinceEpoch & 0x7fffffff;
+
+    unawaited(
+      _systemNotifications?.show(
+        id: stableId,
+        title: title,
+        body: body,
+        payload: actionTarget,
+        type: notifType,
+        playSound: true,
+        actionTarget: actionTarget,
+      ),
+    );
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    final data = Map<String, String>.from(
+      message.data.map((k, v) => MapEntry(k, v.toString())),
+    );
+    debugPrint('[QB-FCM] notification tapped data=$data');
+    if (_onTap != null && data.isNotEmpty) {
+      unawaited(_onTap!(data));
+    }
+  }
+
+  Future<void> dispose() async {
+    await _tokenSubscription?.cancel();
+    await _foregroundSubscription?.cancel();
+    await _tapSubscription?.cancel();
+    _initialized = false;
+  }
 }
+
+

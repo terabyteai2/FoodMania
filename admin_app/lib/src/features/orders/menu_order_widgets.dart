@@ -207,71 +207,70 @@ class _MenuSearchBar extends StatelessWidget {
     final text = AppScope.of(context).strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-        child: Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: PosColors.surface,
-            border: Border.all(color: PosColors.line),
-            borderRadius: BorderRadius.circular(PosRadii.card),
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-            Expanded(
-              child: TextField(
-                controller: searchCtrl,
-                onChanged: onSearchChanged,
-                autofocus: false,
-                keyboardType: codeMode ? TextInputType.number : TextInputType.text,
-                textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
-                onSubmitted: codeMode ? onCodeSubmit : null,
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
-                  prefixIcon: Icon(
-                    codeMode ? Icons.tag_rounded : Icons.search_rounded,
-                    color: PosColors.muted,
-                  ),
-                  suffixIcon: query.isEmpty
-                      ? null
-                      : IconButton(
-                          onPressed: () {
-                            searchCtrl.clear();
-                            onSearchChanged('');
-                          },
-                          icon: Icon(Icons.close_rounded, color: PosColors.muted),
-                        ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          border: Border.all(color: PosColors.line),
+          borderRadius: BorderRadius.circular(PosRadii.card),
+        ),
+        child: Stack(
+          children: [
+            TextField(
+              controller: searchCtrl,
+              onChanged: onSearchChanged,
+              autofocus: false,
+              keyboardType: codeMode ? TextInputType.number : TextInputType.text,
+              textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
+              onSubmitted: codeMode ? onCodeSubmit : null,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
+                prefixIcon: Icon(
+                  codeMode ? Icons.tag_rounded : Icons.search_rounded,
+                  color: PosColors.muted,
                 ),
+                suffixIcon: query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          searchCtrl.clear();
+                          onSearchChanged('');
+                        },
+                        icon: Icon(Icons.close_rounded, color: PosColors.muted),
+                      ),
+                contentPadding: const EdgeInsets.only(top: 10, bottom: 10, left: 12, right: 90),
               ),
             ),
-            GestureDetector(
-              onTap: onToggleCode,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: codeMode ? PosColors.primary : PosColors.surfaceSunk,
-                  border: const Border(
-                    left: BorderSide(color: PosColors.line),
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: GestureDetector(
+                onTap: onToggleCode,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: codeMode ? PosColors.primary : PosColors.surfaceSunk,
+                    border: const Border(
+                      left: BorderSide(color: PosColors.line),
+                    ),
                   ),
-
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  text.quickBill,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: codeMode ? PosColors.accentInk : PosColors.ink2,
-                    letterSpacing: 0.3,
+                  alignment: Alignment.center,
+                  child: Text(
+                    text.quickBill,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: codeMode ? PosColors.accentInk : PosColors.ink2,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ),
             ),
           ],
         ),
-      ),
       ),
     );
   }

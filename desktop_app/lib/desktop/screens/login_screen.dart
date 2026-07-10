@@ -176,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       'QuickBytes',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: DeskTypography.displayPushed,
                         fontWeight: FontWeight.w800,
                         color: PosColors.primary,
                       ),
@@ -184,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       '  Desktop POS',
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: DeskTypography.title,
                         fontWeight: FontWeight.w600,
                         color: PosColors.muted,
                       ),
@@ -229,7 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Text(
                         'Change phone number',
                         style: TextStyle(
-                          fontSize: 12.5,
+                          fontSize: DeskTypography.caption,
                           fontWeight: FontWeight.w600,
                           color: PosColors.primary,
                         ),
@@ -250,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       _error!,
                       style: const TextStyle(
-                          color: PosColors.danger, fontSize: 12.5),
+                          color: PosColors.danger, fontSize: DeskTypography.caption),
                     ),
                   ),
                 ],
@@ -275,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         : Text(
                             _otpSent ? 'Verify' : 'Send code',
                             style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w700),
+                                fontSize: DeskTypography.title, fontWeight: FontWeight.w700),
                           ),
                   ),
                 ),
@@ -303,7 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: DeskTypography.caption,
             fontWeight: FontWeight.w600,
             color: PosColors.ink2,
           ),

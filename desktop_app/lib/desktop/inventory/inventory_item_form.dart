@@ -125,7 +125,7 @@ class _InventoryItemFormState extends State<_InventoryItemForm> {
               const SizedBox(height: 10),
               Text(_error!,
                   style: const TextStyle(
-                      color: PosColors.danger, fontSize: 12.5)),
+                      color: PosColors.danger, fontSize: DeskTypography.caption)),
             ],
           ],
         ),
@@ -180,7 +180,7 @@ class _InventoryItemFormState extends State<_InventoryItemForm> {
 
   Widget _label(String text) => Text(text,
       style: TextStyle(
-          fontSize: 12, fontWeight: FontWeight.w600, color: PosColors.ink2));
+          fontSize: DeskTypography.caption, fontWeight: FontWeight.w600, color: PosColors.ink2));
 
   Widget _field(String label, TextEditingController controller,
       {bool numeric = false}) {

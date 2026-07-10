@@ -298,14 +298,6 @@ class _InventoryScreenState extends State<InventoryScreen>
         title: text.stockTab,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
-        // View control (not navigation) — the one legit extraActions use.
-        extraActions: [
-          AdvToggle(
-            value: _advanced,
-            onChanged: _onToggleAdvanced,
-            label: text.advanced,
-          ),
-        ],
       ),
       pinHeader: true,
       fillBody: true,
@@ -327,6 +319,19 @@ class _InventoryScreenState extends State<InventoryScreen>
             lowCount: lowCount,
             lowActive: _sort == _StockSort.status,
             onTapLow: _surfaceBelowPar,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                AdvToggle(
+                  value: _advanced,
+                  onChanged: _onToggleAdvanced,
+                  label: text.advanced,
+                ),
+              ],
+            ),
           ),
           SizeTransition(
             sizeFactor: _tfAnimation,

@@ -178,6 +178,15 @@ class _ReceiptLabels {
   String get managerCopy => _bn ? 'ম্যানেজার কপি' : 'Manager Copy';
   String get customerCopy => _bn ? 'কাস্টমার কপি' : 'Customer Copy';
   String get orderNoLabel => _bn ? 'অর্ডার নং:' : 'Order No:';
+  String get orderLabel => _bn ? 'অর্ডার:' : 'Order:';
+  String get dateLabel => _bn ? 'তারিখ:' : 'Date:';
+  String get staffLabel => _bn ? 'স্টাফ:' : 'Staff:';
+  String get sourceHeading => _bn ? 'সোর্স:' : 'Source:';
+  String get scanQrLabel => _bn ? 'লাইভ অর্ডার দেখুন' : 'SCAN FOR LIVE ORDER DETAILS';
+  String get indexHeader => _bn ? 'ইনডেক্স' : 'INDEX';
+  String get qtyHeader => _bn ? 'পরিমাণ' : 'QTY';
+  String get descriptionHeader => _bn ? 'বিবরণ' : 'DESCRIPTION';
+  String get priceHeader => _bn ? 'মূল্য' : 'PRICE';
   String orderNo(String seq) => '$orderNoLabel ${digits(seq)}';
   String tableLabel(String t) => _bn ? 'টেবিল ${digits(t)}' : 'Table $t';
   String get takeaway => _bn ? 'টেকওয়ে' : 'Takeaway';
@@ -191,6 +200,7 @@ class _ReceiptLabels {
       _bn ? '$total ($vatIncluded)' : '$total ($vatIncluded)';
   String get emptyItemName => _bn ? 'আইটেম' : 'Item';
   String get defaultRestaurantName => _bn ? 'রেস্টুরেন্ট' : 'Restaurant';
+  String get kotLabel => _bn ? 'রান্নাঘর অর্ডার' : 'KITCHEN ORDER';
   String qrCaption(bool isDelivery) => isDelivery
       ? _bn ? 'ডেলিভারি ট্র্যাক করুন' : 'Track your delivery'
       : _bn ? 'আপনার অর্ডার ট্র্যাক করুন' : 'Scan to track your order';
@@ -1473,8 +1483,11 @@ class PrinterService {
       restaurantSubtitle: null,
       orderNumberDisplay: order.displaySequence,
       orderTypeLabel: _orderTypeLabel(order, labels),
+      orderLabel: labels.orderLabel,
       dateLine: dateText,
+      dateLabel: labels.dateLabel,
       tableLine: labels.tableLabel(tableRaw),
+      staffLabel: labels.staffLabel,
       sourceLine: labels.sourceLabel(order.source),
       items: items,
       totalLabel: labels.totalVatIncluded,
@@ -1688,20 +1701,13 @@ class PrinterService {
         ),
       );
     }
-    rows
-      ..add(
-        TicketSummaryRow(
-          label: labels.total,
-          value: labels.money(total),
-          emphasis: true,
-        ),
-      )
-      ..add(
-        TicketSummaryRow(
-          label: _vatIncludedLabel(order, labels),
-          value: labels.money(_includedVatFor(order, total)),
-        ),
-      );
+    rows.add(
+      TicketSummaryRow(
+        label: labels.total,
+        value: labels.money(total),
+        emphasis: true,
+      ),
+    );
     return rows;
   }
 
@@ -1926,6 +1932,7 @@ class PrinterService {
     String restaurantAddress = '',
     String restaurantPhone = '',
     AppLanguage language = AppLanguage.en,
+    String? serverRole,
   }) async {
     final labels = _ReceiptLabels(language);
     final buffer = StringBuffer();
@@ -1937,6 +1944,7 @@ class PrinterService {
       restaurantName: restaurantName ?? 'HYBRID POS',
       restaurantAddress: restaurantAddress,
       restaurantPhone: restaurantPhone,
+      serverRole: serverRole,
     );
     buffer.writeln();
     buffer.writeln(_separator('*'));
@@ -1950,6 +1958,7 @@ class PrinterService {
       restaurantName: restaurantName ?? 'HYBRID POS',
       restaurantAddress: restaurantAddress,
       restaurantPhone: restaurantPhone,
+      serverRole: serverRole,
     );
     return buffer.toString();
   }
@@ -1962,21 +1971,25 @@ class PrinterService {
     required String restaurantName,
     required String restaurantAddress,
     required String restaurantPhone,
+    String? serverRole,
   }) {
     final isDelivery = order.serviceType == OrderServiceType.delivery;
     final tableRaw = isDelivery
         ? ''
         : order.tableNo ?? labels.takeaway;
     final name = restaurantName.trim();
-    buffer
-      ..writeln(_separator('='))
-      ..writeln(_shortText(name.length > 24 ? name.substring(0, 24) : name, _ticketWidth))
-      ..writeln(_orderTypeLabel(order, labels).toUpperCase())
-      ..writeln('Order: ${order.displaySequence}')
-      ..writeln('Date: ${labels.formatDate(order.createdAt)}')
-      ..writeln('Source: ${labels.sourceLabel(order.source)}')
-      ..writeln(_separator('-'))
-      ..writeln('INDEX QTY DESCRIPTION                      PRICE');
+    buffer.writeln(_separator('='));
+    buffer.writeln(_shortText(name.length > 24 ? name.substring(0, 24) : name, _ticketWidth));
+    buffer.writeln(_orderTypeLabel(order, labels).toUpperCase());
+    buffer.writeln('${labels.orderLabel} ${order.displaySequence}');
+    buffer.writeln('${labels.dateLabel} ${labels.formatDate(order.createdAt)}');
+    if (serverRole?.trim().isNotEmpty == true) {
+      buffer.writeln('${labels.staffLabel} ${serverRole!.trim()}');
+    } else {
+      buffer.writeln('${labels.sourceHeading} ${labels.sourceLabel(order.source)}');
+    }
+    buffer.writeln(_separator('-'));
+    buffer.writeln('${labels.indexHeader} ${labels.qtyHeader} ${labels.descriptionHeader}                      ${labels.priceHeader}');
     for (var i = 0; i < order.items.length; i++) {
       final item = order.items[i];
       final index = labels.digits('${(i + 1).toString().padLeft(3, '0')}');
@@ -2003,7 +2016,7 @@ class PrinterService {
         buffer.writeln(labels.tableLabel(tableRaw));
       }
     }
-    buffer.writeln('SCAN FOR LIVE ORDER DETAILS');
+    buffer.writeln(labels.scanQrLabel);
     buffer.writeln(_separator('='));
   }
 
@@ -2032,7 +2045,7 @@ class PrinterService {
       serverName: serverName,
     );
     final buffer = StringBuffer()
-      ..writeln('KITCHEN ORDER')
+      ..writeln(data.title)
       ..writeln('${data.serialLabel}: ${data.serialValue}')
       ..writeln('${data.timeLabel}: ${data.timeValue}')
       ..writeln('${data.typeLabel}: ${data.typeValue}');
@@ -2248,6 +2261,7 @@ class PrinterService {
     return KotTicketData(
       restaurantName: restaurantName,
       restaurantSubtitle: restaurantSubtitle,
+      title: labels.kotLabel,
       serialLabel: labels.pick('Serial #', 'সিরিয়াল #'),
       serialValue: labels.orderNo(order.displaySequence),
       dateLabel: labels.pick('Date', 'তারিখ'),

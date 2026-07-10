@@ -613,7 +613,7 @@ class _PendingOrdersGroupTile extends StatelessWidget {
                   child: TfText(
                     '$count',
                     style: const TextStyle(
-                      color: PosColors.primaryDark,
+                      color: PosColors.accentInk,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                       height: 1,
@@ -678,49 +678,11 @@ class _NotificationBanner extends StatelessWidget {
   final String acceptLabel;
   final VoidCallback onTap;
 
-  Color _iconBg() {
-    switch (item.type) {
-      case PosNotificationType.pendingOrder:
-        return PosColors.primary;
-      case PosNotificationType.acceptedOrder:
-        return PosColors.success;
-      case PosNotificationType.printFailed:
-        return PosColors.danger;
-      case PosNotificationType.printSuccess:
-        return PosColors.successSoft;
-      case PosNotificationType.system:
-        return PosColors.mutedSoft;
-    }
-  }
+  Color _iconBg() => PosColors.primary;
 
-  IconData _iconFor() {
-    switch (item.type) {
-      case PosNotificationType.pendingOrder:
-        return Icons.receipt_long_rounded;
-      case PosNotificationType.acceptedOrder:
-        return Icons.check_circle_rounded;
-      case PosNotificationType.printSuccess:
-        return Icons.print_rounded;
-      case PosNotificationType.printFailed:
-        return Icons.print_disabled_rounded;
-      case PosNotificationType.system:
-        return Icons.info_rounded;
-    }
-  }
+  IconData _iconFor() => Icons.bolt_rounded;
 
-  Color _iconFg() {
-    switch (item.type) {
-      case PosNotificationType.pendingOrder:
-        return PosColors.primaryDark;
-      case PosNotificationType.acceptedOrder:
-      case PosNotificationType.printFailed:
-        return Colors.white;
-      case PosNotificationType.printSuccess:
-        return PosColors.success;
-      case PosNotificationType.system:
-        return PosColors.slate;
-    }
-  }
+  Color _iconFg() => PosColors.accentInk;
 
   @override
   Widget build(BuildContext context) {
@@ -841,7 +803,7 @@ class _MiniActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = filled ? PosColors.primary : PosColors.surface;
-    final fg = filled ? PosColors.primaryDark : PosColors.slate;
+    final fg = filled ? PosColors.accentInk : PosColors.slate;
     final border = filled ? PosColors.primary : PosColors.line;
     return Material(
       color: bg,
@@ -961,8 +923,8 @@ class _TopToastCard extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: const Icon(
-                Icons.receipt_long_rounded,
-                color: PosColors.primaryDark,
+                Icons.bolt_rounded,
+                color: PosColors.accentInk,
                 size: 18,
               ),
             ),

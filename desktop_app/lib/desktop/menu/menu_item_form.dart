@@ -134,12 +134,12 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                 onChanged: (v) => setState(() => _available = v),
                 title: const Text('Available',
                     style: TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        fontSize: DeskTypography.bodySmall, fontWeight: FontWeight.w600)),
               ),
               if (_error != null)
                 Text(_error!,
                     style: const TextStyle(
-                        color: PosColors.danger, fontSize: 12.5)),
+                        color: PosColors.danger, fontSize: DeskTypography.caption)),
             ],
           ),
         ),
@@ -174,7 +174,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         children: [
           for (final c in widget.categories.take(12))
             ActionChip(
-              label: Text(c, style: const TextStyle(fontSize: 11.5)),
+              label: Text(c, style: const TextStyle(fontSize: DeskTypography.eyebrow)),
               onPressed: () => setState(() => _category.text = c),
               backgroundColor: PosColors.surfaceSunk,
               side: const BorderSide(color: PosColors.line),
@@ -196,7 +196,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
       children: [
         Text(label,
             style: TextStyle(
-                fontSize: 12,
+                fontSize: DeskTypography.caption,
                 fontWeight: FontWeight.w600,
                 color: PosColors.ink2)),
         const SizedBox(height: 6),

@@ -56,7 +56,7 @@ class _DenominationGridState extends State<DenominationGrid> {
             width: 64,
             child: Text('৳$denom',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13.5)),
+                    fontWeight: FontWeight.w700, fontSize: DeskTypography.bodySmall)),
           ),
           const Text('×', style: TextStyle(color: PosColors.muted)),
           const SizedBox(width: 8),
@@ -81,7 +81,7 @@ class _DenominationGridState extends State<DenominationGrid> {
           const Spacer(),
           Text(money(context, subtotal),
               style: TextStyle(
-                  fontSize: 13,
+                  fontSize: DeskTypography.bodySmall,
                   fontWeight: FontWeight.w600,
                   color: subtotal == 0 ? PosColors.muted : PosColors.primaryDark)),
         ],

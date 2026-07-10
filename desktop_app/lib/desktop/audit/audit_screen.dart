@@ -70,7 +70,7 @@ class _AuditScreenState extends State<AuditScreen> {
         border: Border(bottom: BorderSide(color: PosColors.line)),
       ),
       child: const Text('Audit',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          style: TextStyle(fontSize: DeskTypography.h1, fontWeight: FontWeight.w800)),
     );
   }
 
@@ -94,7 +94,7 @@ class _AuditScreenState extends State<AuditScreen> {
             ),
             child: Text(label,
                 style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+                    fontSize: DeskTypography.eyebrow, fontWeight: FontWeight.w700, color: color)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -106,17 +106,17 @@ class _AuditScreenState extends State<AuditScreen> {
                   if ((entry.reason ?? '').isNotEmpty) entry.reason!,
                 ].join('  ·  '),
                     style: const TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        fontSize: DeskTypography.bodySmall, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text([when, if (who.isNotEmpty) who].join('  ·  '),
-                    style: TextStyle(fontSize: 12, color: PosColors.muted)),
+                    style: TextStyle(fontSize: DeskTypography.caption, color: PosColors.muted)),
               ],
             ),
           ),
           if (entry.amount != null)
             Text(money(context, entry.amount!),
                 style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w800)),
+                    fontSize: DeskTypography.body, fontWeight: FontWeight.w800)),
         ],
       ),
     );

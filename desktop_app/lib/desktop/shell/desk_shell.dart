@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:local_pos/src/app_scope.dart';
+import 'package:local_pos/src/core/localization/app_strings.dart'
+    show AppLanguage;
 
 import '../analytics/analytics_screen.dart';
 import '../billing/billing_screen.dart';
+import '../dashboard/dashboard_screen.dart';
 import '../dayend/day_end_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../menu/menu_screen.dart';
@@ -10,13 +13,11 @@ import '../orders/orders_screen.dart';
 import '../settings/settings_screen.dart';
 import '../tables/tables_screen.dart';
 import '../theme/desk_theme.dart';
-import '../theme/desk_widgets.dart';
 import 'desk_nav.dart';
 
-/// The desktop register chrome: slim top app bar + left navigation rail +
-/// main region (petpooja13/16). Feature screens are slotted into [_body] as
-/// each phase lands; Phase 0 ships the chrome and a live status overview that
-/// proves login, cloud/DB reuse and data loading all work.
+/// Desktop register chrome aligned to the pos_web design system.
+  /// 9-section collapsible rail + top bar aligned to Petpooja reference.
+  /// Nav order: Dashboard, Billing, Tables, Orders, Menu, Inventory, Day End, Analytics, Settings.
 class DeskShell extends StatefulWidget {
   const DeskShell({super.key});
 
@@ -26,19 +27,18 @@ class DeskShell extends StatefulWidget {
 
 class _DeskShellState extends State<DeskShell> {
   int _index = 0;
-  bool _navExpanded = true;
   BillingSeed? _billingSeed;
 
   static const _dests = <_Dest>[
-    _Dest(Icons.dashboard_rounded, 'Overview', 0),
-    _Dest(Icons.point_of_sale_rounded, 'Billing', 1),
-    _Dest(Icons.table_restaurant_rounded, 'Tables', 2),
-    _Dest(Icons.receipt_long_rounded, 'Orders', 3),
-    _Dest(Icons.restaurant_menu_rounded, 'Menu', 4),
-    _Dest(Icons.summarize_rounded, 'Day End', 5),
-    _Dest(Icons.inventory_2_rounded, 'Inventory', 6),
-    _Dest(Icons.insights_rounded, 'Analytics', 7),
-    _Dest(Icons.settings_rounded, 'Settings', 8),
+    _Dest(Icons.dashboard_rounded, 'Dashboard'),
+    _Dest(Icons.point_of_sale_rounded, 'Billing'),
+    _Dest(Icons.table_restaurant_rounded, 'Tables'),
+    _Dest(Icons.receipt_long_rounded, 'Orders'),
+    _Dest(Icons.restaurant_menu_rounded, 'Menu'),
+    _Dest(Icons.inventory_2_rounded, 'Inventory'),
+    _Dest(Icons.summarize_rounded, 'Day End'),
+    _Dest(Icons.insights_rounded, 'Analytics'),
+    _Dest(Icons.settings_rounded, 'Settings'),
   ];
 
   void _select(int i) => setState(() {
@@ -63,8 +63,6 @@ class _DeskShellState extends State<DeskShell> {
                 _billingSeed = null;
                 _index = 1;
               }),
-              onToggleNav: () =>
-                  setState(() => _navExpanded = !_navExpanded),
             ),
             Expanded(
               child: Row(
@@ -74,7 +72,6 @@ class _DeskShellState extends State<DeskShell> {
                     dests: _dests,
                     selected: _index,
                     onSelect: _select,
-                    expanded: _navExpanded,
                   ),
                   Expanded(child: _body()),
                 ],
@@ -87,49 +84,44 @@ class _DeskShellState extends State<DeskShell> {
   }
 
   Widget _body() {
-    switch (_index) {
-      case 0:
-        return const _Overview();
-      case 1:
-        return BillingScreen(seed: _billingSeed);
-      case 2:
-        return const TablesScreen();
-      case 3:
-        return const OrdersScreen();
-      case 4:
-        return const MenuScreen();
-      case 5:
-        return const DayEndScreen();
-      case 6:
-        return const InventoryScreen();
-      case 7:
-        return const AnalyticsScreen();
-      case 8:
-        return const SettingsScreen();
+    if (_index < 0 || _index >= _dests.length) {
+      return const _ComingSoon(label: 'Unknown', phase: 0);
     }
-    final dest = _dests[_index];
-    return _ComingSoon(label: dest.label, phase: dest.phase);
+    return switch (_index) {
+      0 => const DashboardScreen(),
+      1 => BillingScreen(seed: _billingSeed),
+      2 => const TablesScreen(),
+      3 => const OrdersScreen(),
+      4 => const MenuScreen(),
+      5 => const InventoryScreen(),
+      6 => const DayEndScreen(),
+      7 => const AnalyticsScreen(),
+      8 => const SettingsScreen(),
+      _ => _ComingSoon(label: _dests[_index].label, phase: 0),
+    };
   }
 }
 
 class _Dest {
-  const _Dest(this.icon, this.label, this.phase);
+  const _Dest(this.icon, this.label);
   final IconData icon;
   final String label;
-  final int phase; // the plan phase that fills this destination
 }
 
 // ─────────────────────────── Top bar ───────────────────────────
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.onNewOrder, required this.onToggleNav});
+  const _TopBar({required this.onNewOrder});
 
   final VoidCallback onNewOrder;
-  final VoidCallback onToggleNav;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final sync = app.syncState;
+    final lang = app.language;
+    final isBn = lang.code == 'bn';
+
     return Container(
       height: DeskMetrics.topBar,
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -139,42 +131,98 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, size: 22),
-            color: PosColors.ink2,
-            splashRadius: 20,
-            tooltip: 'Toggle navigation',
-            onPressed: onToggleNav,
-          ),
           const SizedBox(width: 4),
-          const Icon(Icons.point_of_sale_rounded,
-              color: PosColors.primary, size: 22),
+          // New Order
+          _NewOrderButton(onPressed: onNewOrder),
+          const SizedBox(width: 14),
+          // Bill No search
+          const SizedBox(width: 150, child: _BillSearch()),
+          const Spacer(),
+          // Petpooja-style utility icons (UI only)
+          _barIcon(Icons.print_rounded, 'Printer', () {}),
+          _barIcon(Icons.receipt_rounded, 'KOT', () {}),
+          _barIcon(Icons.storefront_rounded, 'Shop', () {}),
+          _barIcon(Icons.grid_view_rounded, 'Tables', () => DeskNav.of(context).goToIndex(2)),
+          _barIcon(Icons.bar_chart_rounded, 'Reports', () => DeskNav.of(context).goToIndex(7)),
           const SizedBox(width: 8),
-          Text(
-            'QuickBytes',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: PosColors.primary,
+          // Sync badge
+          if (sync.pendingCount > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: PosColors.stateOccupiedLine,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '⇅ ${sync.pendingCount}',
+              style: const TextStyle(
+                fontSize: DeskTypography.caption,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF3A2E00),
+              ),
             ),
           ),
-          const SizedBox(width: 16),
-          _NewOrderButton(onPressed: onNewOrder),
-          const SizedBox(width: 12),
-          const Expanded(child: _BillSearch()),
-          const SizedBox(width: 12),
-          _barIcon(Icons.notifications_none_rounded, () {}),
-          _barIcon(Icons.help_outline_rounded, () {}),
-          _barIcon(Icons.power_settings_new_rounded, () => app.logOut()),
+          if (sync.pendingCount > 0) const SizedBox(width: 10),
+          // Connection dot
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: sync.cloudConnected
+                  ? PosColors.success
+                  : PosColors.stateOccupiedLine,
+            ),
+          ),
+          const SizedBox(width: 10),
+          _barIcon(Icons.notifications_none_rounded, 'Notifications', () {}),
+          const SizedBox(width: 8),
+          // User + Logout
+          Text(
+            app.accountDisplayName.isEmpty
+                ? app.accountRole.label
+                : app.accountDisplayName,
+            style: TextStyle(
+              fontSize: DeskTypography.bodySmall,
+              fontWeight: FontWeight.w600,
+              color: PosColors.ink2,
+            ),
+          ),
+          const SizedBox(width: 4),
+          _barIcon(Icons.power_settings_new_rounded, 'Logout', () => app.logOut()),
+          const SizedBox(width: 4),
+          // Language toggle
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(44, 32),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              side: const BorderSide(color: PosColors.lineStrong),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(PosRadii.sm),
+              ),
+            ),
+            onPressed: () {
+              final next = isBn ? AppLanguage.en : AppLanguage.bn;
+              AppScope.read(context).updateLanguage(next);
+            },
+            child: Text(
+              isBn ? 'EN' : 'বাংলা',
+              style: const TextStyle(
+                fontSize: DeskTypography.caption,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _barIcon(IconData icon, VoidCallback onTap) {
+  Widget _barIcon(IconData icon, String tooltip, VoidCallback onTap) {
     return IconButton(
-      icon: Icon(icon, size: 20, color: PosColors.ink2),
-      splashRadius: 20,
+      icon: Icon(icon, size: 22, color: PosColors.ink2),
+      splashRadius: 22,
+      tooltip: tooltip,
       onPressed: onTap,
     );
   }
@@ -190,15 +238,16 @@ class _NewOrderButton extends StatelessWidget {
     return FilledButton.icon(
       style: FilledButton.styleFrom(
         backgroundColor: PosColors.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.md),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
         ),
       ),
       onPressed: onPressed,
-      icon: const Icon(Icons.add_rounded, size: 18),
+      icon: const Icon(Icons.add_rounded, size: 20),
       label: const Text('New Order',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+          style: TextStyle(
+              fontWeight: FontWeight.w700, fontSize: DeskTypography.nav)),
     );
   }
 }
@@ -209,19 +258,19 @@ class _BillSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 36,
+      height: 40,
       child: TextField(
         enabled: false,
         decoration: InputDecoration(
           isDense: true,
           prefixIcon: const Icon(Icons.search_rounded,
-              size: 18, color: PosColors.muted),
+              size: 20, color: PosColors.muted),
           hintText: 'Bill No',
           filled: true,
           fillColor: PosColors.surfaceSunk,
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(PosRadii.md),
+            borderRadius: BorderRadius.circular(PosRadii.sm),
             borderSide: BorderSide.none,
           ),
         ),
@@ -237,24 +286,17 @@ class _Rail extends StatelessWidget {
     required this.dests,
     required this.selected,
     required this.onSelect,
-    required this.expanded,
   });
 
   final List<_Dest> dests;
   final int selected;
   final ValueChanged<int> onSelect;
-  final bool expanded;
-
-  /// Icons-only width when the sidebar is collapsed.
-  static const double collapsedWidth = 64;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-      width: expanded ? DeskMetrics.railWidth : collapsedWidth,
+    return Container(
+      width: DeskMetrics.railWidth,
       decoration: const BoxDecoration(
         color: PosColors.surface,
         border: Border(right: BorderSide(color: PosColors.line)),
@@ -262,33 +304,54 @@ class _Rail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Header — hamburger + brand + outlet dropdown
           Padding(
-            padding: expanded
-                ? const EdgeInsets.fromLTRB(14, 14, 14, 8)
-                : const EdgeInsets.fromLTRB(0, 14, 0, 8),
-            child: Row(
-              mainAxisAlignment: expanded
-                  ? MainAxisAlignment.start
-                  : MainAxisAlignment.center,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.storefront_rounded,
-                    size: 18, color: PosColors.ink2),
-                if (expanded) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      app.restaurantName.isEmpty
-                          ? 'QuickBytes'
-                          : app.restaurantName,
-                      overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.menu_rounded, size: 22),
+                      color: PosColors.ink2,
+                      splashRadius: 20,
+                      onPressed: () {},
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.point_of_sale_rounded,
+                        size: 22, color: PosColors.primary),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'QuickBytes',
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.primaryDark,
+                        fontSize: DeskTypography.h1,
+                        fontWeight: FontWeight.w800,
+                        color: PosColors.primary,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        app.restaurantName.isEmpty
+                            ? 'POS Register'
+                            : app.restaurantName,
+                        overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: DeskTypography.bodySmall,
+                        fontWeight: FontWeight.w600,
+                        color: PosColors.ink2,
+                      ),
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down_rounded,
+                        size: 18, color: PosColors.ink2),
+                  ],
+                ),
               ],
             ),
           ),
@@ -301,32 +364,57 @@ class _Rail extends StatelessWidget {
                   _RailItem(
                     dest: dests[i],
                     active: i == selected,
-                    expanded: expanded,
                     onTap: () => onSelect(i),
                   ),
               ],
             ),
           ),
           const Divider(height: 1, color: PosColors.line),
-          if (expanded)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                '${app.accountDisplayName.isEmpty ? 'Signed in' : app.accountDisplayName} · ${app.accountRole.label}',
-                style: TextStyle(fontSize: 11.5, color: PosColors.muted),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Tooltip(
-                message: app.accountDisplayName.isEmpty
-                    ? app.accountRole.label
-                    : '${app.accountDisplayName} · ${app.accountRole.label}',
-                child: const Icon(Icons.account_circle_rounded,
-                    size: 22, color: PosColors.muted),
-              ),
+          // User profile mini-card (light)
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: PosColors.primary,
+                    borderRadius: BorderRadius.circular(PosRadii.sm),
+                  ),
+                  child: const Icon(Icons.person_rounded,
+                      size: 20, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        app.accountDisplayName.isEmpty
+                            ? 'Signed in'
+                            : app.accountDisplayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: DeskTypography.bodySmall,
+                          fontWeight: FontWeight.w700,
+                          color: PosColors.ink,
+                        ),
+                      ),
+                      Text(
+                        app.accountRole.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: DeskTypography.eyebrow,
+                          color: PosColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -337,53 +425,46 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.dest,
     required this.active,
-    required this.expanded,
     required this.onTap,
   });
 
   final _Dest dest;
   final bool active;
-  final bool expanded;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      dest.icon,
-      size: 19,
-      color: active ? PosColors.primary : PosColors.ink2,
-    );
-    final content = expanded
-        ? Row(
-            children: [
-              icon,
-              const SizedBox(width: 12),
-              Text(
-                dest.label,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                  color: active ? PosColors.primary : PosColors.primaryDark,
-                ),
-              ),
-            ],
-          )
-        : Center(child: icon);
+    final iconColor = active ? PosColors.primary : PosColors.muted;
+    final textColor = active ? PosColors.primary : PosColors.ink2;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Material(
         color: active ? PosColors.primarySoft : Colors.transparent,
-        borderRadius: BorderRadius.circular(PosRadii.md),
+        borderRadius: BorderRadius.circular(PosRadii.sm),
         child: InkWell(
-          borderRadius: BorderRadius.circular(PosRadii.md),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
           onTap: onTap,
-          child: Tooltip(
-            message: expanded ? '' : dest.label,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                  horizontal: expanded ? 12 : 8, vertical: 11),
-              child: content,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(dest.icon, size: 22, color: iconColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    dest.label,
+                    style: TextStyle(
+                      fontSize: DeskTypography.nav,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    size: 18,
+                    color: active ? PosColors.primary : PosColors.muted),
+              ],
             ),
           ),
         ),
@@ -393,100 +474,6 @@ class _RailItem extends StatelessWidget {
 }
 
 // ─────────────────────────── Bodies ───────────────────────────
-
-class _Overview extends StatelessWidget {
-  const _Overview();
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final openOrders =
-        app.orders.where((o) => o.status.adminStatus.isOpen).length;
-    final sync = app.syncState;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Overview',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: PosColors.primaryDark,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${app.restaurantName}${app.outletName.isEmpty ? '' : ' · ${app.outletName}'}',
-            style: TextStyle(fontSize: 13.5, color: PosColors.muted),
-          ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: DeskMetrics.panelGap,
-            runSpacing: DeskMetrics.panelGap,
-            children: [
-              DeskStatTile(
-                icon: Icons.restaurant_menu_rounded,
-                label: 'Menu items',
-                value: '${app.menuItems.length}',
-              ),
-              DeskStatTile(
-                icon: Icons.receipt_long_rounded,
-                label: 'Open orders',
-                value: '$openOrders',
-              ),
-              DeskStatTile(
-                icon: Icons.inventory_2_rounded,
-                label: 'Stock items',
-                value: '${app.inventoryItems.length}',
-              ),
-              DeskStatTile(
-                icon: sync.cloudConnected
-                    ? Icons.cloud_done_rounded
-                    : Icons.cloud_off_rounded,
-                label: sync.cloudConnected ? 'Cloud connected' : 'Offline',
-                value: sync.pendingCount > 0
-                    ? '${sync.pendingCount} pending'
-                    : 'Synced',
-                accent: sync.cloudConnected
-                    ? PosColors.success
-                    : PosColors.warning,
-                tint: sync.cloudConnected
-                    ? PosColors.successSoft
-                    : PosColors.warnSoft,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: PosColors.primarySoft,
-              borderRadius: BorderRadius.circular(PosRadii.md),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.build_circle_rounded,
-                    size: 18, color: PosColors.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Phase 0 scaffold is live. Billing, Tables, Orders, Menu, '
-                    'Inventory, Analytics and Day-End screens land in the '
-                    'following phases.',
-                    style: TextStyle(
-                        fontSize: 12.5, color: PosColors.accentSoftInk),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ComingSoon extends StatelessWidget {
   const _ComingSoon({required this.label, required this.phase});
@@ -504,14 +491,16 @@ class _ComingSoon extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 17,
+              fontSize: DeskTypography.h3,
               fontWeight: FontWeight.w700,
-              color: PosColors.primaryDark,
+              color: PosColors.ink,
             ),
           ),
           const SizedBox(height: 4),
           Text('Arrives in Phase $phase',
-              style: TextStyle(fontSize: 13, color: PosColors.muted)),
+              style: TextStyle(
+                  fontSize: DeskTypography.bodySmall,
+                  color: PosColors.muted)),
         ],
       ),
     );

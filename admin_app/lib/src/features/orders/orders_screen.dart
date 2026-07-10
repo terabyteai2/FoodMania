@@ -3782,7 +3782,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     onToggleFavorite: (item) =>
                         unawaited(_toggleFavorite(item)),
                     onSetShortCode: (item) => unawaited(_setShortCode(item)),
-                    onSubmit: _cartLines.isNotEmpty ? _goToReview : null,
+                    onSubmit: _goToReview,
                     onResetFilters: () => setState(() {
                       _selectedCategory = 'All';
                       _query = '';
