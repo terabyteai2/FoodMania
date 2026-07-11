@@ -279,11 +279,10 @@ class _OrdersScreenState extends State<OrdersScreen>
       searchActive: searchQuery.isNotEmpty,
     );
     _syncTabWithPendingOrders(pendingCount, ongoingOrders.length);
-    final hasAnyOpenOrders = ongoingOrders.isNotEmpty;
 
     return Scaffold(
       backgroundColor: PosColors.background,
-      floatingActionButton: canCreate && hasAnyOpenOrders
+      floatingActionButton: canCreate
           ? TfFab(
               tooltip: text.newOrder,
               onPressed: () =>
@@ -299,20 +298,22 @@ class _OrdersScreenState extends State<OrdersScreen>
               // bare glyph when idle, dark box while active — `bare`
               // suppresses `dark`, so the pair flips together.
               extraActions: [
-                TfIconButton(
-                  icon: TfNavIcon.search,
-                  tooltip: text.orderSearchHint,
-                  bare: !_searchRowVisible,
-                  dark: _searchRowVisible,
-                  onPressed: _toggleSearch,
-                ),
-                TfIconButton(
-                  icon: Icons.tune_rounded,
-                  tooltip: text.filterOrders,
-                  bare: !_filters.isActive,
-                  dark: _filters.isActive,
-                  onPressed: () => _openOrderFilters(context),
-                ),
+                if (app.isOwner) ...[
+                  TfIconButton(
+                    icon: TfNavIcon.search,
+                    tooltip: text.orderSearchHint,
+                    bare: !_searchRowVisible,
+                    dark: _searchRowVisible,
+                    onPressed: _toggleSearch,
+                  ),
+                  TfIconButton(
+                    icon: Icons.tune_rounded,
+                    tooltip: text.filterOrders,
+                    bare: !_filters.isActive,
+                    dark: _filters.isActive,
+                    onPressed: () => _openOrderFilters(context),
+                  ),
+                ],
               ],
             ),
             if (_searchRowVisible)
@@ -1383,14 +1384,6 @@ class _SmartOrdersEmptyState extends StatelessWidget {
                     onPressed: shortcut!.onTap,
                   ),
                 ],
-                const SizedBox(height: 16),
-                TfButton(
-                  label: text.newOrder,
-                  icon: TfNavIcon.plus,
-                  size: TfButtonSize.lg,
-                  fullWidth: false,
-                  onPressed: canCreate ? onCreate : null,
-                ),
               ],
             ),
           ),
@@ -3641,6 +3634,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     for (final item in widget.menuItems) {
       counts[item.category] = (counts[item.category] ?? 0) + 1;
     }
+    counts['All'] = widget.menuItems.length;
     return counts;
   }
 
@@ -3739,6 +3733,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     : null,
                 counterMode: widget.counterMode,
                 skipsSourceStep: skipsSourceStep,
+                color: (_step == 0 || _step == 2) ? PosColors.primary : null,
               ),
             Expanded(
               child: PageView(
@@ -3765,9 +3760,9 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     query: _query,
                     codeMode: _codeMode,
                     categoryCounts: _categoryCounts,
-                    title: text.itemsTitle(
-                      _tableLabel.isEmpty ? '—' : _tableLabel,
-                    ),
+                    title: _tableLabel.isEmpty
+                        ? (text.isBn ? 'মেনু' : 'Menu')
+                        : _tableLabel,
                     onBack: _step > firstReachableStep
                         ? () => _goToStep(_step - 1)
                         : () => Navigator.pop(context),
@@ -3837,6 +3832,7 @@ class _WizardHeader extends StatelessWidget {
     required this.onBack,
     this.counterMode = false,
     this.skipsSourceStep = false,
+    this.color,
   });
 
   final int step;
@@ -3845,6 +3841,7 @@ class _WizardHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final bool counterMode;
   final bool skipsSourceStep;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -3869,23 +3866,48 @@ class _WizardHeader extends StatelessWidget {
                   'Order created',
                 ]);
     final stepLabel = stepLabels[step.clamp(0, stepLabels.length - 1)];
+    final isBlue = color != null;
 
-    return Padding(
+    return Container(
+      color: color,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         children: [
-          TfIconButton(
-            icon: onBack != null ? TfNavIcon.back : TfNavIcon.close,
-            tooltip: onBack != null
-                ? (isBn ? 'পেছনে' : 'Back')
-                : (isBn ? 'বাতিল' : 'Close'),
-            onPressed: onBack ?? onClose,
-          ),
-          const SizedBox(width: 12),
+          if (onBack != null) ...[
+            GestureDetector(
+              onTap: onBack,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(
+                  TfNavIcon.back,
+                  size: 24,
+                  color: isBlue ? PosColors.accentInk : PosColors.slate,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ] else ...[
+            GestureDetector(
+              onTap: onClose,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(
+                  TfNavIcon.close,
+                  size: 24,
+                  color: isBlue ? PosColors.accentInk : PosColors.slate,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: TfText(
               stepLabel,
-              style: TfTextStyles.pushedTitle.copyWith(color: PosColors.slate),
+              style: TfTextStyles.pushedTitle.copyWith(
+                color: isBlue ? PosColors.accentInk : PosColors.slate,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -3895,9 +3917,16 @@ class _WizardHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: PosColors.surfaceSunk,
+                color: isBlue
+                    ? PosColors.accentInk.withValues(alpha: 0.15)
+                    : PosColors.surfaceSunk,
                 borderRadius: BorderRadius.circular(PosRadii.chip),
-                border: Border.all(color: PosColors.line, width: 1),
+                border: Border.all(
+                  color: isBlue
+                      ? PosColors.accentInk.withValues(alpha: 0.3)
+                      : PosColors.line,
+                  width: 1,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -3905,8 +3934,10 @@ class _WizardHeader extends StatelessWidget {
                   Container(
                     width: 6,
                     height: 6,
-                    decoration: const BoxDecoration(
-                      color: PosColors.primaryDark,
+                    decoration: BoxDecoration(
+                      color: isBlue
+                          ? PosColors.accentInk
+                          : PosColors.primaryDark,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -3914,7 +3945,9 @@ class _WizardHeader extends StatelessWidget {
                   Text(
                     'COUNTER',
                     style: TfTextStyles.label.copyWith(
-                      color: PosColors.primaryDark,
+                      color: isBlue
+                          ? PosColors.accentInk
+                          : PosColors.primaryDark,
                     ),
                   ),
                 ],
@@ -3924,7 +3957,9 @@ class _WizardHeader extends StatelessWidget {
             const SizedBox(width: 8),
             TfText(
               tableLabel,
-              style: TfTextStyles.label.copyWith(color: PosColors.muted),
+              style: TfTextStyles.label.copyWith(
+                color: isBlue ? PosColors.accentInk : PosColors.muted,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -4178,7 +4213,7 @@ class _ReviewStep extends StatelessWidget {
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             children: [
               if (onServiceChanged != null) ...[
                 TfPeriodSelector(
@@ -4281,122 +4316,130 @@ class _ReviewStep extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: PosDensity.sectionGap),
-              Padding(
-                padding: const EdgeInsets.only(left: 2, bottom: 6),
-                child: Row(
-                  children: [
-                    TfText(
-                      text.kitchenNote,
-                      style: TfTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: PosColors.slate,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    TfText(
-                      text.kitchenNoteOptional,
-                      style: TfTextStyles.label.copyWith(
-                        fontWeight: FontWeight.w400,
-                        color: PosColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TfCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
-                ),
-                child: TextField(
-                  controller: noteCtrl,
-                  textCapitalization: TextCapitalization.sentences,
-                  minLines: 1,
-                  maxLines: 3,
-                  style: TfTextStyles.rowTitle.copyWith(
-                    fontFamily: tfFontFamily(context),
-                    fontWeight: FontWeight.w400,
-                    color: PosColors.slate,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    isCollapsed: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    hintText: text.kitchenNoteHint,
-                    hintStyle: TfTextStyles.body.copyWith(
-                      fontFamily: tfFontFamily(context),
-                      color: PosColors.muted,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: PosDensity.sectionGap),
-              Padding(
-                padding: const EdgeInsets.only(left: 2, bottom: 6),
-                child: TfText(
-                  text.isBn ? 'ডিসকাউন্ট (ফ্ল্যাট ৳)' : 'Discount (flat ৳)',
-                  style: TfTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: PosColors.slate,
-                  ),
-                ),
-              ),
-              TfCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.local_offer_outlined,
-                      size: 16,
-                      color: PosColors.muted,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: discountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        style: TfTextStyles.rowTitle.copyWith(
-                          fontFamily: tfFontFamily(context),
-                          fontWeight: FontWeight.w400,
-                          color: PosColors.slate,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          isCollapsed: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                          ),
-                          hintText: '0',
-                          hintStyle: TfTextStyles.rowTitle.copyWith(
-                            fontFamily: tfFontFamily(context),
-                            fontWeight: FontWeight.w400,
-                            color: PosColors.muted,
-                          ),
-                        ),
-                        onChanged: (_) => onDiscountChanged(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
+          ),
+        ),
+        // Bottom action buttons: kitchen note + discount
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          decoration: const BoxDecoration(
+            color: PosColors.surface,
+            border: Border(
+              top: BorderSide(color: PosColors.line),
+            ),
+            boxShadow: PosShadows.bar,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => _showKitchenNoteSheet(context, noteCtrl),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: noteCtrl.text.isEmpty
+                            ? PosColors.surfaceSunk
+                            : PosColors.primarySoft,
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        border: Border.all(
+                          color: noteCtrl.text.isEmpty
+                              ? PosColors.lineStrong
+                              : PosColors.primary,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.notes_outlined,
+                            size: 16,
+                            color: noteCtrl.text.isEmpty
+                                ? PosColors.ink2
+                                : PosColors.accentStrong,
+                          ),
+                          const SizedBox(width: 6),
+                          TfText(
+                            noteCtrl.text.isEmpty
+                                ? text.kitchenNote
+                                : noteCtrl.text,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: noteCtrl.text.isEmpty
+                                  ? PosColors.ink2
+                                  : PosColors.accentStrong,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => _showDiscountSheet(
+                      context,
+                      discountCtrl,
+                      onDiscountChanged,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: discount > 0.005
+                            ? PosColors.primarySoft
+                            : PosColors.surfaceSunk,
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        border: Border.all(
+                          color: discount > 0.005
+                              ? PosColors.primary
+                              : PosColors.lineStrong,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.local_offer_outlined,
+                            size: 16,
+                            color: discount > 0.005
+                                ? PosColors.accentStrong
+                                : PosColors.ink2,
+                          ),
+                          const SizedBox(width: 6),
+                          TfText(
+                            discount > 0.005
+                                ? '-${tfFormatCurrency(context, discount)}'
+                                : (text.isBn ? 'ডিসকাউন্ট' : 'Discount'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: discount > 0.005
+                                  ? PosColors.accentStrong
+                                  : PosColors.ink2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         TfStickyCTA(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final hasDiscount = discount > 0;
+              final hasDiscount = discount > 0.005;
               final action = TfButton(
                 label: creating ? '...' : text.sendToKitchen,
                 icon: creating ? null : TfNavIcon.check,
@@ -4460,6 +4503,239 @@ class _ReviewStep extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _showKitchenNoteSheet(
+    BuildContext context,
+    TextEditingController controller,
+  ) {
+    final text = AppScope.of(context).strings;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.5,
+            ),
+            decoration: const BoxDecoration(
+              color: PosColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.xl)),
+              boxShadow: PosShadows.raised,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 9, bottom: 12),
+                  decoration: BoxDecoration(
+                    color: PosColors.lineStrong,
+                    borderRadius: BorderRadius.circular(PosRadii.pill),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                  child: Row(
+                    children: [
+                      Text(
+                        text.kitchenNote,
+                        style: TfTextStyles.pushedTitle,
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(ctx),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: PosColors.surface,
+                            border: Border.all(color: PosColors.lineStrong),
+                            borderRadius: BorderRadius.circular(PosRadii.md),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: PosColors.ink2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                    child: TextField(
+                      controller: controller,
+                      textCapitalization: TextCapitalization.sentences,
+                      minLines: 2,
+                      maxLines: 4,
+                      autofocus: true,
+                      style: TfTextStyles.rowTitle.copyWith(
+                        fontFamily: tfFontFamily(context),
+                        fontWeight: FontWeight.w400,
+                        color: PosColors.slate,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: text.kitchenNoteHint,
+                        hintStyle: TfTextStyles.body.copyWith(
+                          fontFamily: tfFontFamily(context),
+                          color: PosColors.muted,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          borderSide: const BorderSide(color: PosColors.lineStrong),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          borderSide: const BorderSide(color: PosColors.primary),
+                        ),
+                        contentPadding: const EdgeInsets.all(14),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  child: TfButton(
+                    label: text.isBn ? 'সেভ করুন' : 'Save',
+                    variant: TfButtonVariant.primary,
+                    size: TfButtonSize.lg,
+                    fullWidth: true,
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDiscountSheet(
+    BuildContext context,
+    TextEditingController controller,
+    VoidCallback onChanged,
+  ) {
+    final text = AppScope.of(context).strings;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: PosColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(PosRadii.xl)),
+              boxShadow: PosShadows.raised,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 9, bottom: 12),
+                  decoration: BoxDecoration(
+                    color: PosColors.lineStrong,
+                    borderRadius: BorderRadius.circular(PosRadii.pill),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                  child: Row(
+                    children: [
+                      Text(
+                        text.isBn ? 'ডিসকাউন্ট (ফ্ল্যাট ৳)' : 'Discount (flat ৳)',
+                        style: TfTextStyles.pushedTitle,
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(ctx),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: PosColors.surface,
+                            border: Border.all(color: PosColors.lineStrong),
+                            borderRadius: BorderRadius.circular(PosRadii.md),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: PosColors.ink2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    autofocus: true,
+                    style: TfTextStyles.rowTitle.copyWith(
+                      fontFamily: tfFontFamily(context),
+                      fontWeight: FontWeight.w400,
+                      color: PosColors.slate,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      hintStyle: TfTextStyles.rowTitle.copyWith(
+                        fontFamily: tfFontFamily(context),
+                        fontWeight: FontWeight.w400,
+                        color: PosColors.muted,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.local_offer_outlined,
+                        size: 18,
+                        color: PosColors.muted,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        borderSide: const BorderSide(color: PosColors.lineStrong),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        borderSide: const BorderSide(color: PosColors.primary),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 12,
+                      ),
+                    ),
+                    onChanged: (_) => onChanged(),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  child: TfButton(
+                    label: text.isBn ? 'সেভ করুন' : 'Save',
+                    variant: TfButtonVariant.primary,
+                    size: TfButtonSize.lg,
+                    fullWidth: true,
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

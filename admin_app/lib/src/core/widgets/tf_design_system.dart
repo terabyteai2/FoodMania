@@ -659,6 +659,7 @@ class TfUnifiedTopNav extends StatelessWidget {
       PosSpacing.sp4,
       PosSpacing.sp2,
     ),
+    this.color,
     super.key,
   });
 
@@ -668,9 +669,11 @@ class TfUnifiedTopNav extends StatelessWidget {
   final List<Widget> trailing;
   final Widget? below;
   final EdgeInsetsGeometry padding;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final isBlue = color != null;
     final titleBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -681,7 +684,7 @@ class TfUnifiedTopNav extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TfTextStyles.appBarTitle.copyWith(
             fontFamily: tfFontFamily(context),
-            color: PosColors.text,
+            color: isBlue ? PosColors.accentInk : PosColors.text,
             letterSpacing: 0,
           ),
         ),
@@ -692,7 +695,7 @@ class TfUnifiedTopNav extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TfTextStyles.label.copyWith(
               fontFamily: tfFontFamily(context),
-              color: PosColors.textSec,
+              color: isBlue ? PosColors.accentInk : PosColors.textSec,
               fontWeight: FontWeight.w500,
               letterSpacing: 0,
             ),
@@ -1962,6 +1965,7 @@ class TfBarButton extends StatelessWidget {
     this.accent = false,
     this.dot = false,
     this.bare = false,
+    this.iconColor,
     super.key,
   });
 
@@ -1972,6 +1976,7 @@ class TfBarButton extends StatelessWidget {
   final bool accent;
   final bool dot;
   final bool bare;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -2004,15 +2009,15 @@ class TfBarButton extends StatelessWidget {
                               color: accent
                                   ? PosColors.primary
                                   : PosColors.lineStrong,
-                      ),
+                            ),
                     ),
                     child: Center(
                       child: TfSourceIcon(
                         name: icon,
                         size: bare ? 22 : 20,
-                        color: accent
+                        color: iconColor ?? (accent
                             ? PosColors.accentInk
-                            : PosColors.primaryDark,
+                            : PosColors.primaryDark),
                       ),
                     ),
                   ),

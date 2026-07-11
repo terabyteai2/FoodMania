@@ -202,7 +202,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(height: compact ? 8 : 32),
-                      const _BrandMark(),
+                      const TfBrandMark(),
                       SizedBox(height: compact ? 16 : 28),
                       TfText(
                         _otpSent ? 'Enter verification code' : 'Welcome',
@@ -334,25 +334,4 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
   }
 }
 
-class _BrandMark extends StatelessWidget {
-  const _BrandMark();
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 72,
-      height: 72,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: PosColors.primary, width: 2),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Image.asset(
-        'assets/brand/splash.jpeg',
-        fit: BoxFit.cover,
-        width: 72,
-        height: 72,
-      ),
-    );
-  }
-}

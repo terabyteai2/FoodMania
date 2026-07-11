@@ -602,6 +602,10 @@ class PosAppController extends ChangeNotifier {
       }
       _ownerViewPreview =
           preferences.getBool(_ownerViewPreviewKey) ?? false;
+      if (accountRole == AccountRole.owner) {
+        _ownerViewPreview = true;
+        accountRole = AccountRole.manager;
+      }
       _settleAndSaveEnabled =
           preferences.getBool(_settleAndSaveKey) ?? false;
       notificationSoundEnabled =
@@ -2486,7 +2490,12 @@ class PosAppController extends ChangeNotifier {
     );
     accountId = result.accountId;
     accountDisplayName = result.displayName ?? '';
-    accountRole = result.role;
+    if (result.role == AccountRole.owner) {
+      _ownerViewPreview = true;
+      accountRole = AccountRole.manager;
+    } else {
+      accountRole = result.role;
+    }
     isLoggedIn = true;
   }
 
@@ -3557,6 +3566,7 @@ class PosAppController extends ChangeNotifier {
       outletName: outletName,
       language: language,
       orderDetailsUrl: _orderDetailsUrl(order),
+      serverRole: accountDisplayName.isNotEmpty ? accountDisplayName : null,
     );
     printerState = printerService.state;
     if (ok && order.status.adminStatus == OrderStatus.accepted) {

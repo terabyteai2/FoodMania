@@ -2486,28 +2486,13 @@ class PrinterService {
 
     var connectStatus = await Permission.bluetoothConnect.status;
     var scanStatus = await Permission.bluetoothScan.status;
-    final connectRationale =
-        await Permission.bluetoothConnect.shouldShowRequestRationale;
-    final scanRationale =
-        await Permission.bluetoothScan.shouldShowRequestRationale;
 
-    log(
-      'initial: connect=$connectStatus scan=$scanStatus '
-      'connectRationale=$connectRationale scanRationale=$scanRationale',
-    );
+    log('initial: connect=$connectStatus scan=$scanStatus');
 
     if (connectStatus.isGranted && scanStatus.isGranted) return;
 
-    // If denied AND the system won't show a rationale dialog, the user
-    // previously checked "Don't ask again" — treat as permanently denied.
-    if (connectStatus.isPermanentlyDenied ||
-        scanStatus.isPermanentlyDenied ||
-        (connectStatus.isDenied && !connectRationale) ||
-        (scanStatus.isDenied && !scanRationale)) {
-      log(
-        'permanently denied or will not show rationale — '
-        'redirecting to app settings',
-      );
+    if (connectStatus.isPermanentlyDenied || scanStatus.isPermanentlyDenied) {
+      log('permanently denied — redirecting to app settings');
       await openAppSettings();
       throw PrinterException(
         'Bluetooth permission was denied permanently. '
@@ -2523,16 +2508,28 @@ class PrinterService {
 
     connectStatus = statuses[Permission.bluetoothConnect] ?? connectStatus;
     scanStatus = statuses[Permission.bluetoothScan] ?? scanStatus;
-    final postRationale =
-        await Permission.bluetoothConnect.shouldShowRequestRationale;
-    log(
-      'result: connect=$connectStatus scan=$scanStatus '
-      'postRationale=$postRationale',
-    );
+    log('result: connect=$connectStatus scan=$scanStatus');
 
-    if (!connectStatus.isGranted || !scanStatus.isGranted) {
-      throw PrinterException('Bluetooth permission is required.');
+    if (connectStatus.isGranted && scanStatus.isGranted) return;
+
+    final connectRationale =
+        await Permission.bluetoothConnect.shouldShowRequestRationale;
+    final scanRationale =
+        await Permission.bluetoothScan.shouldShowRequestRationale;
+
+    if (connectRationale || scanRationale) {
+      throw PrinterException(
+        'Bluetooth permission is needed for printing. '
+        'Please allow it when prompted.',
+      );
     }
+
+    log('permanently denied post-request — redirecting to app settings');
+    await openAppSettings();
+    throw PrinterException(
+      'Bluetooth permission was denied permanently. '
+      'Please enable it in Settings > Apps > QuickBytes > Permissions.',
+    );
   }
 
   Future<void> _ensureAnyPrinterReady({String? diagId}) async {

@@ -150,19 +150,24 @@ class _TopControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
     final hasTitle = title != null;
-    return Padding(
+    return Container(
+      color: PosColors.primary,
       padding: EdgeInsets.fromLTRB(16, hasTitle ? 12 : 6, 16, 8),
       child: Row(
         children: [
           if (onLeading != null) ...[
-            TfIconButton(
-              icon: leadingIsClose ? TfNavIcon.close : TfNavIcon.back,
-              tooltip: leadingIsClose
-                  ? (text.isBn ? 'বাতিল' : 'Close')
-                  : (text.isBn ? 'পেছনে' : 'Back'),
-              onPressed: onLeading,
+            GestureDetector(
+              onTap: onLeading,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(
+                  leadingIsClose ? TfNavIcon.close : TfNavIcon.back,
+                  size: 24,
+                  color: PosColors.accentInk,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
           ],
@@ -173,7 +178,7 @@ class _TopControls extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TfTextStyles.pushedTitle.copyWith(
-                  color: PosColors.slate,
+                  color: PosColors.accentInk,
                 ),
               ),
             )
@@ -185,7 +190,7 @@ class _TopControls extends StatelessWidget {
   }
 }
 
-class _MenuSearchBar extends StatelessWidget {
+class _MenuSearchBar extends StatefulWidget {
   const _MenuSearchBar({
     required this.searchCtrl,
     required this.query,
@@ -203,39 +208,67 @@ class _MenuSearchBar extends StatelessWidget {
   final VoidCallback onToggleCode;
 
   @override
+  State<_MenuSearchBar> createState() => _MenuSearchBarState();
+}
+
+class _MenuSearchBarState extends State<_MenuSearchBar> {
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
+    final borderColor = _focused ? PosColors.primary : PosColors.line;
+    final btnBorderColor = _focused ? PosColors.primary : PosColors.lineStrong;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: PosColors.surface,
-          border: Border.all(color: PosColors.line),
+          border: Border.all(color: borderColor),
           borderRadius: BorderRadius.circular(PosRadii.card),
+          boxShadow: PosShadows.soft,
         ),
         child: Stack(
           children: [
             TextField(
-              controller: searchCtrl,
-              onChanged: onSearchChanged,
+              controller: widget.searchCtrl,
+              onChanged: widget.onSearchChanged,
               autofocus: false,
-              keyboardType: codeMode ? TextInputType.number : TextInputType.text,
-              textInputAction: codeMode ? TextInputAction.go : TextInputAction.search,
-              onSubmitted: codeMode ? onCodeSubmit : null,
+              focusNode: _focusNode,
+              keyboardType: widget.codeMode ? TextInputType.number : TextInputType.text,
+              textInputAction: widget.codeMode ? TextInputAction.go : TextInputAction.search,
+              onSubmitted: widget.codeMode ? widget.onCodeSubmit : null,
               decoration: InputDecoration(
                 border: InputBorder.none,
-                hintText: codeMode ? text.shortCodeSearchHint : text.searchByName,
+                hintText: widget.codeMode ? text.shortCodeSearchHint : text.searchByName,
                 prefixIcon: Icon(
-                  codeMode ? Icons.tag_rounded : Icons.search_rounded,
+                  widget.codeMode ? Icons.tag_rounded : Icons.search_rounded,
                   color: PosColors.muted,
                 ),
-                suffixIcon: query.isEmpty
+                suffixIcon: widget.query.isEmpty
                     ? null
                     : IconButton(
                         onPressed: () {
-                          searchCtrl.clear();
-                          onSearchChanged('');
+                          widget.searchCtrl.clear();
+                          widget.onSearchChanged('');
                         },
                         icon: Icon(Icons.close_rounded, color: PosColors.muted),
                       ),
@@ -247,13 +280,15 @@ class _MenuSearchBar extends StatelessWidget {
               top: 0,
               bottom: 0,
               child: GestureDetector(
-                onTap: onToggleCode,
+                onTap: widget.onToggleCode,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: codeMode ? PosColors.primary : PosColors.surfaceSunk,
-                    border: const Border(
-                      left: BorderSide(color: PosColors.line),
+                    color: widget.codeMode ? PosColors.primary : PosColors.surface,
+                    border: Border(
+                      left: BorderSide(color: btnBorderColor),
+                      top: BorderSide(color: btnBorderColor),
+                      bottom: BorderSide(color: btnBorderColor),
                     ),
                   ),
                   alignment: Alignment.center,
@@ -261,8 +296,8 @@ class _MenuSearchBar extends StatelessWidget {
                     text.quickBill,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: codeMode ? PosColors.accentInk : PosColors.ink2,
+                      fontWeight: widget.codeMode ? FontWeight.w600 : FontWeight.w500,
+                      color: widget.codeMode ? PosColors.accentInk : PosColors.primaryDark,
                       letterSpacing: 0.3,
                     ),
                   ),
@@ -276,7 +311,7 @@ class _MenuSearchBar extends StatelessWidget {
   }
 }
 
-// ── Category chips row ──
+// ── Category segmented bar ──
 
 class CategoryChips extends StatelessWidget {
   const CategoryChips({
@@ -294,37 +329,30 @@ class CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
     return SizedBox(
-      height: 48,
-      child: Row(
-        children: [
-          Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(
-                PosSpacing.sp4,
-                PosSpacing.sp1,
-                PosSpacing.sp2,
-                0,
-              ),
-              itemCount: categories.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
-              itemBuilder: (_, i) {
-                final cat = categories[i];
-                final sel = cat == selected;
-                final text = AppScope.of(context).strings;
-                return TfChip(
-                  label: cat == 'All' ? text.categoryAll : cat,
-                  active: sel,
-                  small: true,
-                  count: counts?[cat],
-                  onTap: () => onSelected(cat),
-                );
-              },
-            ),
-          ),
-
-        ],
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(
+          horizontal: PosSpacing.sp4,
+          vertical: 4,
+        ),
+        itemCount: categories.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          final cat = categories[i];
+          final sel = cat == selected;
+          final label = cat == 'All' ? text.categoryAll : cat;
+          final count = counts?[cat];
+          return TfChip(
+            label: label,
+            count: count,
+            active: sel,
+            small: true,
+            onTap: () => onSelected(cat),
+          );
+        },
       ),
     );
   }
@@ -397,8 +425,8 @@ class _MenuContent extends StatelessWidget {
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisSpacing: PosDensity.gridGap,
-              crossAxisSpacing: PosDensity.gridGap,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
               mainAxisExtent: PosDensity.tileMenu,
             ),
             delegate: SliverChildBuilderDelegate((_, i) {
@@ -526,21 +554,26 @@ class _GridTile extends StatelessWidget {
         opacity: off ? 0.5 : 1.0,
         child: Container(
           clipBehavior: Clip.antiAlias,
-          padding: const EdgeInsets.all(PosSpacing.sp2),
           decoration: BoxDecoration(
             color: PosColors.surface,
             border: Border.all(color: PosColors.line),
             borderRadius: BorderRadius.circular(PosRadii.card),
             boxShadow: PosShadows.soft,
           ),
-          child: Stack(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Centered name, with the inline stepper (or the customizable
-              // hint) pinned to the bottom.
-              Positioned.fill(
-                child: Column(
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    PosSpacing.sp2,
+                    PosSpacing.sp2,
+                    PosSpacing.sp2,
+                    (inCart && !off) ? 0 : PosSpacing.sp2,
+                  ),
+                  child: Stack(
                   children: [
-                    Expanded(
+                    Positioned.fill(
                       child: Center(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(
@@ -562,22 +595,29 @@ class _GridTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (inCart && !off)
-                      _TileStepper(
-                        qty: qty,
-                        onDecrement: onDecrement,
-                        onIncrement: onTap,
-                      )
-
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: inCart
+                          ? _CountBadge(qty: qty)
+                          : _PriceTag(price: item.price),
+                    ),
+                    if (off)
+                      const Positioned(
+                        bottom: 0,
+                        left: 0,
+                        child: _OffBadge(),
+                      ),
                   ],
                 ),
               ),
-              // Top-right: count badge when in cart, price otherwise.
-              Positioned(
-                top: 0, right: 0,
-                child: inCart ? _CountBadge(qty: qty) : _PriceTag(price: item.price),
               ),
-              if (off) const Positioned(bottom: 0, left: 0, child: _OffBadge()),
+              if (inCart && !off)
+                _TileStepper(
+                  qty: qty,
+                  onDecrement: onDecrement,
+                  onIncrement: onTap,
+                ),
             ],
           ),
         ),
@@ -586,7 +626,7 @@ class _GridTile extends StatelessWidget {
   }
 }
 
-// Full-width navy qty stepper, shown on cards that are in the cart.
+// Full-width white qty stepper, flush with card edges.
 class _TileStepper extends StatelessWidget {
   const _TileStepper({
     required this.qty,
@@ -602,17 +642,47 @@ class _TileStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 34,
-      decoration: BoxDecoration(
-        color: PosColors.secondary,
-        borderRadius: BorderRadius.circular(PosRadii.lg),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: PosColors.lineStrong),
+        ),
       ),
       child: Row(
         children: [
           Expanded(
-            child: Center(child: _TileStepBtn(icon: Icons.remove_rounded, onTap: onDecrement)),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onDecrement,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: PosColors.surface,
+                  border: Border(
+                    right: BorderSide(color: PosColors.lineStrong),
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.remove_rounded,
+                  size: 18,
+                  color: PosColors.secondary,
+                ),
+              ),
+            ),
           ),
           Expanded(
-            child: Center(child: _TileStepBtn(icon: Icons.add_rounded, onTap: onIncrement)),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onIncrement,
+              child: Container(
+                color: PosColors.secondary,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.add_rounded,
+                  size: 18,
+                  color: PosColors.onSecondary,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -620,35 +690,18 @@ class _TileStepper extends StatelessWidget {
   }
 }
 
-class _TileStepBtn extends StatelessWidget {
-  const _TileStepBtn({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        height: 34,
-        child: Icon(icon, size: 18, color: PosColors.onSecondary),
-      ),
-    );
-  }
-}
-
 // Running-count badge (top-right of an in-cart card).
 class _CountBadge extends StatelessWidget {
-  const _CountBadge({required this.qty});
+  const _CountBadge({required this.qty, this.compact = true});
   final int qty;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 22),
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      constraints: BoxConstraints(minWidth: compact ? 22 : 32),
+      height: compact ? 22 : 32,
+      padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
       alignment: Alignment.center,
       decoration: const BoxDecoration(
         color: PosColors.secondary,
@@ -657,6 +710,7 @@ class _CountBadge extends StatelessWidget {
       child: TfText(
         tfFormatNumber(context, qty),
         style: TfTextStyles.label.copyWith(
+          fontSize: compact ? null : 13,
           fontWeight: FontWeight.w800,
           color: PosColors.onSecondary,
           fontFeatures: const [FontFeature.tabularFigures()],
@@ -676,6 +730,7 @@ class _PriceTag extends StatelessWidget {
     return TfText(
       tfFormatNumber(context, price),
       style: TfTextStyles.label.copyWith(
+        fontSize: 9,
         fontWeight: FontWeight.w700,
         color: PosColors.ink2,
         fontFeatures: const [FontFeature.tabularFigures()],
@@ -814,8 +869,6 @@ class _ShortCodeList extends StatelessWidget {
                     ),
                   ),
                   if (inCart) ...[
-                    _CountBadge(qty: qty),
-                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => onDecrement(item.id),
                       child: Container(
@@ -833,6 +886,8 @@ class _ShortCodeList extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    _CountBadge(qty: qty, compact: false),
                   ],
                 ],
               ),

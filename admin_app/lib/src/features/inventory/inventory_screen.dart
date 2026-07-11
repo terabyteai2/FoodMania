@@ -1001,6 +1001,7 @@ class _AddItemButton extends StatelessWidget {
 /// Bottom actions: **Stock in** is the primary hero, **Count** the navy
 /// secondary beside it (app-wide sticky-footer pairing = dark + primary).
 /// Scan lives in the drawer's Stock group (stock_scan_flow.dart).
+
 class _StockBottomBar extends StatelessWidget {
   const _StockBottomBar({
     required this.text,

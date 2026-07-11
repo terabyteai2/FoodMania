@@ -972,11 +972,13 @@ class HeaderNotificationBell extends StatelessWidget {
   const HeaderNotificationBell({
     required this.onNavigateToOrders,
     this.onNavigateToTarget,
+    this.color,
     super.key,
   });
 
   final VoidCallback onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -987,6 +989,7 @@ class HeaderNotificationBell extends StatelessWidget {
       tooltip: app.strings.notificationsTitle,
       badge: unread,
       bare: true,
+      iconColor: color,
       onPressed: () => showNotificationCenter(
         context,
         onNavigateToOrders: onNavigateToOrders,

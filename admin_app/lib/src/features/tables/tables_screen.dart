@@ -77,6 +77,7 @@ class _TablesScreenState extends State<TablesScreen> {
         title: text.tables,
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
+        color: PosColors.primary,
       ),
       pinHeader: true,
       fillBody: true,

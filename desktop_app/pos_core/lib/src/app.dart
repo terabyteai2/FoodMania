@@ -1265,8 +1265,8 @@ class _AppNavDrawer extends StatelessWidget {
                   expand: true,
                   role: app.accountRole.isOwner ? 'owner' : 'manager',
                   options: [
+                    (text.managerRole, 'manager'),
                     (text.backofficeLabel, 'owner'),
-                    (text.counterService, 'manager'),
                   ],
                   onChanged: (value) => app.setAccountRoleDemo(
                     value == 'owner'

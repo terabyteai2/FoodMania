@@ -30,6 +30,7 @@ class TfGlobalTopBar extends StatelessWidget {
     this.extraActions = const [],
     this.padding = _defaultPadding,
     this.showTrailing = true,
+    this.color,
     super.key,
   }) : _isLeaf = false,
        _onBack = null;
@@ -49,6 +50,7 @@ class TfGlobalTopBar extends StatelessWidget {
   }) : onNavigateToOrders = null,
        onNavigateToTarget = null,
        showTrailing = false,
+       color = null,
        _isLeaf = true,
        _onBack = onBack;
 
@@ -80,6 +82,9 @@ class TfGlobalTopBar extends StatelessWidget {
   /// surface those controls inline and don't need them duplicated up top.
   final bool showTrailing;
 
+  /// Optional background color. When set, text and icons render white.
+  final Color? color;
+
   /// True for the [TfGlobalTopBar.leaf] variant — renders a back arrow instead
   /// of the hamburger and suppresses the trailing cluster.
   final bool _isLeaf;
@@ -87,8 +92,6 @@ class TfGlobalTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final text = app.strings;
     final isBn = tfIsBn(context);
     final t = isBn && (titleBn?.isNotEmpty ?? false) ? titleBn! : title;
 
@@ -99,40 +102,62 @@ class TfGlobalTopBar extends StatelessWidget {
 
     final shellNav = ShellNavScope.maybeOf(context);
 
+    final isBlue = color != null;
+
     final Widget? leading;
     if (_isLeaf) {
-      leading = TfIconButton(
-        icon: TfNavIcon.back,
-        tooltip: tfPick(context, en: 'Back', bn: 'পিছনে'),
-        onPressed: _onBack ?? () => Navigator.of(context).maybePop(),
-        bare: true,
+      leading = GestureDetector(
+        onTap: _onBack ?? () => Navigator.of(context).maybePop(),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            TfNavIcon.back,
+            size: 24,
+            color: isBlue ? PosColors.accentInk : PosColors.slate,
+          ),
+        ),
       );
     } else if (shellNav != null) {
-      leading = TfIconButton(
-        icon: Icons.menu_rounded,
-        tooltip: text.menu,
-        onPressed: shellNav.openDrawer,
-        bare: true,
+      leading = GestureDetector(
+        onTap: shellNav.openDrawer,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            Icons.menu_rounded,
+            size: 24,
+            color: isBlue ? PosColors.accentInk : PosColors.slate,
+          ),
+        ),
       );
     } else {
       leading = null;
     }
 
-    return TfUnifiedTopNav(
-      leading: leading,
-      title: t,
-      subtitle: s,
-      padding: padding,
-      trailing: [
-        ...extraActions,
-        if (showTrailing) ...[
-          HeaderNotificationBell(
-            onNavigateToOrders: onNavigateToOrders ?? () {},
-            onNavigateToTarget: onNavigateToTarget,
-          ),
-          _AvatarDropdown(onNavigateToTarget: onNavigateToTarget),
+    return Container(
+      color: color,
+      child: TfUnifiedTopNav(
+        leading: leading,
+        title: t,
+        subtitle: s,
+        padding: padding,
+        color: color,
+        trailing: [
+          ...extraActions,
+          if (showTrailing) ...[
+            HeaderNotificationBell(
+              onNavigateToOrders: onNavigateToOrders ?? () {},
+              onNavigateToTarget: onNavigateToTarget,
+              color: isBlue ? PosColors.accentInk : null,
+            ),
+            _AvatarDropdown(
+              onNavigateToTarget: onNavigateToTarget,
+              color: isBlue ? PosColors.accentInk : null,
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -140,9 +165,10 @@ class TfGlobalTopBar extends StatelessWidget {
 enum _TopAction { language, printer, settings, signOut }
 
 class _AvatarDropdown extends StatelessWidget {
-  const _AvatarDropdown({this.onNavigateToTarget});
+  const _AvatarDropdown({this.onNavigateToTarget, this.color});
 
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+  final Color? color;
 
   static String _initials(String name) {
     final trimmed = name.trim();
@@ -266,14 +292,18 @@ class _AvatarDropdown extends StatelessWidget {
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: PosColors.neutralSoft,
+          color: color != null ? PosColors.accentInk : PosColors.neutralSoft,
           shape: BoxShape.circle,
-          border: Border.all(color: PosColors.neutralWash),
+          border: Border.all(
+            color: color != null
+                ? PosColors.accentInk.withValues(alpha: 0.3)
+                : PosColors.neutralWash,
+          ),
         ),
         child: TfText(
           initials,
-          style: const TextStyle(
-            color: PosColors.neutralInk,
+          style: TextStyle(
+            color: color != null ? PosColors.primary : PosColors.neutralInk,
             fontSize: 13.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0,

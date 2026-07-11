@@ -223,20 +223,37 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
     y = _rule(canvas, y + 8);
-    y = _row(canvas, '${data.serialLabel}:', data.serialValue, y, fontSize: 26, gap: 2);
-    y = _row(canvas, '${data.dateLabel}:', data.dateValue, y, fontSize: 26, gap: 2);
-    y = _row(canvas, '${data.timeLabel}:', data.timeValue, y, fontSize: 26, gap: 2);
-    y = _row(canvas, '${data.typeLabel}:', data.typeValue, y, fontSize: 26, gap: 2);
+    // Row 1: Table (left) + Order # (right)
     if (hasTable) {
       y = _row(
         canvas,
-        '${data.tableLabel!.trim()}:',
-        data.tableValue!.trim(),
+        '${data.tableLabel!.trim()}: ${data.tableValue!.trim()}',
+        data.serialValue,
         y,
         fontSize: 26,
         gap: 2,
       );
+    } else {
+      y = _row(canvas, '', data.serialValue, y, fontSize: 26, gap: 2);
     }
+    // Row 2: Date + time as one left-aligned line
+    y = _text(
+      canvas,
+      '${data.dateLabel}: ${data.dateValue} - ${data.timeValue}',
+      y,
+      fontSize: 26,
+      weight: FontWeight.w500,
+      gap: 2,
+    );
+    // Row 3: Type
+    y = _text(
+      canvas,
+      '${data.typeLabel}: ${data.typeValue}',
+      y,
+      fontSize: 26,
+      weight: FontWeight.w500,
+      gap: 2,
+    );
     y = _rule(canvas, y + 8);
     y = _text(
       canvas,
@@ -319,7 +336,7 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
 
-    // 4. Order number (Bold, left)
+    // 4. Order # (row 1)
     y = _text(
       canvas,
       '${data.orderLabel} ${data.orderNumberDisplay}',
@@ -330,7 +347,7 @@ class TicketBitmapRenderer {
       gap: 2,
     );
 
-    // 5. Table line (same typography as Order #)
+    // 5. Table line (row 2)
     if (!isDelivery && data.tableLine.trim().isNotEmpty == true) {
       y = _text(
         canvas,
@@ -368,15 +385,31 @@ class TicketBitmapRenderer {
     }
 
     // 7. Single divider
-    y = _rule(canvas, y + 4);
+    y = _rule(canvas, y + 2);
 
-    // 8. Item rows
+    // 8. Column headers
+    {
+      const maxRightWidth = 98.0;
+      final priceHeader = _painter('PRICE',
+        fontSize: 13, weight: FontWeight.w700, align: TextAlign.right,
+      )..layout(maxWidth: maxRightWidth);
+      final leftWidth = (_width - (_padding * 2)) - priceHeader.width - 12;
+      final leftHeader = _painter('QTY  ITEM',
+        fontSize: 13, weight: FontWeight.w700,
+      )..layout(maxWidth: leftWidth.clamp(72, _width).toDouble());
+      leftHeader.paint(canvas, Offset(_padding, y));
+      priceHeader.paint(canvas, Offset(_width - _padding - priceHeader.width, y));
+      y = y + (leftHeader.height > priceHeader.height
+          ? leftHeader.height : priceHeader.height) + 2;
+    }
+
+    // 9. Item rows
     for (final item in data.items) {
       y = _itemRow(canvas, item, y);
     }
 
     // 10. Single divider
-    y = _rule(canvas, y + 4);
+    y = _rule(canvas, y + 2, gap: 8);
 
     // 11. Summary rows
     if (data.summaryRows.isEmpty) {
@@ -405,7 +438,7 @@ class TicketBitmapRenderer {
 
     // 12. Single divider + payment
     if (data.paymentLine?.trim().isNotEmpty == true) {
-      y = _rule(canvas, y + 4);
+      y = _rule(canvas, y + 2);
       y = _text(
         canvas,
         data.paymentLine!.trim(),
@@ -759,7 +792,7 @@ class TicketBitmapRenderer {
     }
   }
 
-  static double _rule(Canvas canvas, double y) {
+  static double _rule(Canvas canvas, double y, {double gap = 14}) {
     canvas.drawLine(
       Offset(_padding, y),
       Offset(_width - _padding, y),
@@ -767,7 +800,7 @@ class TicketBitmapRenderer {
         ..color = Colors.black
         ..strokeWidth = 1.5,
     );
-    return y + 14;
+    return y + gap;
   }
 
   static double _text(

@@ -200,7 +200,7 @@ class _ReceiptLabels {
       _bn ? '$total ($vatIncluded)' : '$total ($vatIncluded)';
   String get emptyItemName => _bn ? 'আইটেম' : 'Item';
   String get defaultRestaurantName => _bn ? 'রেস্টুরেন্ট' : 'Restaurant';
-  String get kotLabel => _bn ? 'রান্নাঘর অর্ডার' : 'KITCHEN ORDER';
+  String get kotLabel => _bn ? 'কিচেন অর্ডার' : 'KITCHEN ORDER';
   String qrCaption(bool isDelivery) => isDelivery
       ? _bn ? 'ডেলিভারি ট্র্যাক করুন' : 'Track your delivery'
       : _bn ? 'আপনার অর্ডার ট্র্যাক করুন' : 'Scan to track your order';
@@ -2266,7 +2266,7 @@ class PrinterService {
       serialValue: labels.orderNo(order.displaySequence),
       dateLabel: labels.pick('Date', 'তারিখ'),
       dateValue: labels.digits(
-        DateFormat('yyyy-MM-dd').format(order.createdAt.toLocal()),
+        DateFormat('dd MMM yyyy').format(order.createdAt.toLocal()).toUpperCase(),
       ),
       timeLabel: labels.pick('Time', 'সময়'),
       timeValue: labels.digits(_formatKotTime(order.createdAt)),
@@ -2500,28 +2500,13 @@ class PrinterService {
 
     var connectStatus = await Permission.bluetoothConnect.status;
     var scanStatus = await Permission.bluetoothScan.status;
-    final connectRationale =
-        await Permission.bluetoothConnect.shouldShowRequestRationale;
-    final scanRationale =
-        await Permission.bluetoothScan.shouldShowRequestRationale;
 
-    log(
-      'initial: connect=$connectStatus scan=$scanStatus '
-      'connectRationale=$connectRationale scanRationale=$scanRationale',
-    );
+    log('initial: connect=$connectStatus scan=$scanStatus');
 
     if (connectStatus.isGranted && scanStatus.isGranted) return;
 
-    // If denied AND the system won't show a rationale dialog, the user
-    // previously checked "Don't ask again" — treat as permanently denied.
-    if (connectStatus.isPermanentlyDenied ||
-        scanStatus.isPermanentlyDenied ||
-        (connectStatus.isDenied && !connectRationale) ||
-        (scanStatus.isDenied && !scanRationale)) {
-      log(
-        'permanently denied or will not show rationale — '
-        'redirecting to app settings',
-      );
+    if (connectStatus.isPermanentlyDenied || scanStatus.isPermanentlyDenied) {
+      log('permanently denied — redirecting to app settings');
       await openAppSettings();
       throw PrinterException(
         'Bluetooth permission was denied permanently. '
@@ -2537,16 +2522,28 @@ class PrinterService {
 
     connectStatus = statuses[Permission.bluetoothConnect] ?? connectStatus;
     scanStatus = statuses[Permission.bluetoothScan] ?? scanStatus;
-    final postRationale =
-        await Permission.bluetoothConnect.shouldShowRequestRationale;
-    log(
-      'result: connect=$connectStatus scan=$scanStatus '
-      'postRationale=$postRationale',
-    );
+    log('result: connect=$connectStatus scan=$scanStatus');
 
-    if (!connectStatus.isGranted || !scanStatus.isGranted) {
-      throw PrinterException('Bluetooth permission is required.');
+    if (connectStatus.isGranted && scanStatus.isGranted) return;
+
+    final connectRationale =
+        await Permission.bluetoothConnect.shouldShowRequestRationale;
+    final scanRationale =
+        await Permission.bluetoothScan.shouldShowRequestRationale;
+
+    if (connectRationale || scanRationale) {
+      throw PrinterException(
+        'Bluetooth permission is needed for printing. '
+        'Please allow it when prompted.',
+      );
     }
+
+    log('permanently denied post-request — redirecting to app settings');
+    await openAppSettings();
+    throw PrinterException(
+      'Bluetooth permission was denied permanently. '
+      'Please enable it in Settings > Apps > QuickBytes > Permissions.',
+    );
   }
 
   Future<void> _ensureAnyPrinterReady({String? diagId}) async {
