@@ -261,6 +261,17 @@ class PosAppController extends ChangeNotifier {
   // logged-in + has a tenant — otherwise MainShell would mount immediately
   // after signup and the hero-media step would never get a chance to render.
   bool pendingHeroMediaSetup = false;
+  // True while the onboarding "Scan Now" flow provisions the tenant and
+  // prepares to hand off the scan to MainShell. Prevents _home() from
+  // swapping to MainShell the moment saveLocalSetup() mints the device
+  // token — the transition is deferred until the scan screen pops.
+  bool pendingSetupScan = false;
+
+  // When the onboarding "Scan Now" flow captures pages, the uploads are
+  // stashed here. MainShell picks them up on first frame, shows the scan
+  // overlay, runs scanAndImportMenu in the background, and shows the
+  // result snackbar — letting the user switch tabs freely while it runs.
+  List<MenuScanPageUpload>? pendingOnboardingScanUploads;
   String? phoneSignupToken;
   String? verifiedPhoneDisplay;
   StaffInvitePending? pendingStaffInvite;

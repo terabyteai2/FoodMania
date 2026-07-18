@@ -95,15 +95,6 @@ Future<void> openNewOrderForm(
                 mobileNumber: result.mobileNumber,
               );
             }
-            final shouldPrint =
-                app.orderPrinterSideEffectsEnabled &&
-                app.isManager &&
-                !app.printerState.autoPrintEnabled &&
-                app.printerState.hasSelectedPrinter &&
-                !app.printerService.hasPrintedOrder(order.id);
-            if (shouldPrint) {
-              await app.printOrderTicket(order);
-            }
             return order;
           },
         ),
@@ -159,7 +150,6 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
           children: [
             _WizardHeader(
               step: 3,
-              tableLabel: widget.serviceLabel,
               onClose: () => Navigator.pop(context),
               onBack: null,
               counterMode: true,
@@ -221,6 +211,7 @@ class _OrdersScreenState extends State<OrdersScreen>
   // Ongoing cards show a live age with escalation; one screen-level tick
   // keeps every card fresh without per-card timers (tables_screen pattern).
   Timer? _tick;
+  bool _previousIsOwner = false;
 
   @override
   void initState() {
@@ -229,6 +220,14 @@ class _OrdersScreenState extends State<OrdersScreen>
     _tabs.addListener(_onTabChanged);
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final app = AppScope.read(context);
+      _previousIsOwner = app.isOwner;
+      if (app.isOwner) {
+        _tabs.index = 1;
+      }
     });
   }
 
@@ -253,9 +252,20 @@ class _OrdersScreenState extends State<OrdersScreen>
       AppAspect.orders,
       AppAspect.language,
       AppAspect.menu,
+      AppAspect.account,
     ]);
     final rawOrders = app.ordersFor();
     final language = app.language;
+    // Role-change watcher: switch to Completed tab when entering owner mode.
+    final isOwner = app.isOwner;
+    if (isOwner != _previousIsOwner) {
+      _previousIsOwner = isOwner;
+      if (isOwner && _tabs.index != 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tabs.index != 1) _tabs.index = 1;
+        });
+      }
+    }
     final searchQuery = _searchController.text.trim();
     final derived = _deriveOrders(rawOrders, _filters, searchQuery, language);
     final ongoingOrders = derived.ongoingOrders;
@@ -3726,7 +3736,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
             if (_step != 1)
               _WizardHeader(
                 step: displayStep,
-                tableLabel: _tableLabel,
                 onClose: () => Navigator.pop(context),
                 onBack: _step > firstReachableStep && !isSuccess
                     ? () => _goToStep(_step - 1)
@@ -3827,7 +3836,6 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 class _WizardHeader extends StatelessWidget {
   const _WizardHeader({
     required this.step,
-    required this.tableLabel,
     required this.onClose,
     required this.onBack,
     this.counterMode = false,
@@ -3836,7 +3844,6 @@ class _WizardHeader extends StatelessWidget {
   });
 
   final int step;
-  final String tableLabel;
   final VoidCallback onClose;
   final VoidCallback? onBack;
   final bool counterMode;
@@ -3952,16 +3959,6 @@ class _WizardHeader extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ] else if (tableLabel.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            TfText(
-              tableLabel,
-              style: TfTextStyles.label.copyWith(
-                color: isBlue ? PosColors.accentInk : PosColors.muted,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],

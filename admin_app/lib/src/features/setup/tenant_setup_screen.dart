@@ -96,16 +96,47 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
   }
 
   Future<void> _scanNow() async {
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MenuScanScreen()),
-    );
-    if (!mounted) return;
-    if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: TfText('Menu scanned! Items added to your menu.')),
-      );
+    final tableCount = _tableCount;
+    if (_busy || !_restaurantReady || !_ownerReady || tableCount == null) {
+      return;
     }
-    _finish();
+    setState(() => _busy = true);
+    final app = AppScope.of(context);
+    // Prevent _home() from swapping to MainShell the moment saveLocalSetup()
+    // sets isLoggedIn / isTenantReady — we need the scan screen to run on
+    // top of TenantSetupScreen first.
+    app.pendingSetupScan = true;
+    bool provisioned = false;
+    try {
+      // Provision the tenant first so the cloud API has a valid device
+      // token — scanAndImportMenu rejects calls when canSync is false.
+      await app.saveLocalSetup(
+        restaurantName: _restaurantCtrl.text.trim(),
+        managerName: _ownerCtrl.text.trim(),
+        tableCount: tableCount,
+      );
+      provisioned = true;
+      if (!mounted) return;
+      setState(() => _busy = false);
+      // Launch the scan screen with an onScan callback. The screen pops
+      // immediately after the user confirms the pages, stashing the
+      // uploads for MainShell to process in the background with its scan
+      // overlay — the user can switch tabs freely while OCR runs.
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MenuScanScreen(
+            onScan: (uploads) async {
+              app.pendingOnboardingScanUploads = uploads;
+            },
+          ),
+        ),
+      );
+      if (!mounted) return;
+    } finally {
+      app.pendingSetupScan = false;
+      if (mounted) setState(() => _busy = false);
+      if (provisioned && mounted) widget.onProvisioned();
+    }
   }
 
   @override

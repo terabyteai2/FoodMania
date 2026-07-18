@@ -162,6 +162,15 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     if (_showIntro) {
       return ModeIntroScreen(onFinished: _onIntroFinished);
     }
+    if (_controller.pendingSetupScan) {
+      return TenantSetupScreen(
+        onProvisioned: () {
+          setState(() {
+            _initialShellIndex = _defaultShellIndex();
+          });
+        },
+      );
+    }
     if (!_controller.isLoggedIn) {
       final signupToken = _controller.phoneSignupToken?.trim() ?? '';
       if (signupToken.isNotEmpty) {
@@ -236,10 +245,10 @@ const _ownerTabOrder = <_AppTab>[
   _AppTab.reports,
   _AppTab.more,
 ];
-// Manager: Live (Control Tower) · Orders · Menu · Sales Summary · More
+// Manager: Orders · Live (Control Tower) · Menu · Sales Summary · More
 const _managerTabOrder = <_AppTab>[
-  _AppTab.live,
   _AppTab.orders,
+  _AppTab.live,
   _AppTab.menu,
   _AppTab.salesSummary,
   _AppTab.more,
@@ -255,7 +264,7 @@ List<_AppTab> _tabOrderForRole(AccountRole role) {
 
 // Maps a nav tab to its label/icon pair. Shared by the bottom-less phone drawer,
 // the wide NavigationRail, and (historically) the bottom nav.
-_Destination _destinationFor(_AppTab tab, AppStrings text) {
+_Destination _destinationFor(_AppTab tab, AppStrings text, AccountRole role) {
   return switch (tab) {
     _AppTab.analytics => _Destination(
       text.analyticsTab,
@@ -264,8 +273,8 @@ _Destination _destinationFor(_AppTab tab, AppStrings text) {
       Icons.insights,
     ),
     _AppTab.live => _Destination(
-      text.liveTab,
-      text.liveTab,
+      text.liveRestaurantTab,
+      text.liveRestaurantTab,
       Icons.monitor_heart_outlined,
       Icons.monitor_heart_rounded,
     ),
@@ -276,8 +285,8 @@ _Destination _destinationFor(_AppTab tab, AppStrings text) {
       Icons.table_restaurant,
     ),
     _AppTab.orders => _Destination(
-      text.orders,
-      text.orders,
+      role.isOwner ? text.orderHistory : text.orders,
+      role.isOwner ? text.orderHistory : text.orders,
       Icons.receipt_long_outlined,
       Icons.receipt_long,
     ),
@@ -398,6 +407,38 @@ class _MainShellState extends State<MainShell> {
         app.pendingFcmNavigation = null;
         _handleFcmNavigationTap(pending);
       }
+      // Process onboarding scan hand-off: the user captured menu pages
+      // during tenant setup and we stashed them for background processing.
+      // Show the same scanning overlay the menu page uses so the user
+      // can switch tabs freely while OCR + import runs.
+      final pendingScan = app.pendingOnboardingScanUploads;
+      if (pendingScan != null) {
+        app.pendingOnboardingScanUploads = null;
+        final text = app.strings;
+        _showScanOverlay(text.menuScanning);
+        app.scanAndImportMenu(pendingScan).then((result) {
+          _hideScanOverlay();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: TfText(
+                text.menuScanImported(
+                  result.createdCount,
+                  result.skippedDuplicateCount,
+                ),
+              ),
+            ),
+          );
+        }).catchError((error) {
+          _hideScanOverlay();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: TfText('${text.menuScanFailed}: $error'),
+            ),
+          );
+        });
+      }
     });
   }
 
@@ -439,7 +480,7 @@ class _MainShellState extends State<MainShell> {
         .indexOf(_selected)
         .clamp(0, tabOrder.length - 1);
     final destinations = tabOrder
-        .map((t) => _destinationFor(t, text))
+        .map((t) => _destinationFor(t, text, app.accountRole))
         .toList(growable: false);
 
     // Fixed page order matching _AppTab.index ordinals. Builders (not eager
@@ -1138,9 +1179,13 @@ class _AppNavDrawer extends StatelessWidget {
     ]);
     final text = app.strings;
     final isBn = text.isBn;
-    // Reports renders nested under Analytics, not as a flat row.
+    final isOwnerView = app.accountRole.isOwner;
+    // Reports renders nested under Analytics for manager, as its own row
+    // for owner (backoffice).
     final primary = tabOrder
-        .where((t) => t != _AppTab.more && t != _AppTab.reports)
+        .where(
+          (t) => t != _AppTab.more && (t != _AppTab.reports || isOwnerView),
+        )
         .toList(growable: false);
 
     void close() => Navigator.of(context).pop();
@@ -1161,9 +1206,10 @@ class _AppNavDrawer extends StatelessWidget {
 
     Widget rowFor(_AppTab tab) {
       switch (tab) {
-        case _AppTab.analytics when tabOrder.contains(_AppTab.reports):
+        case _AppTab.analytics
+            when tabOrder.contains(_AppTab.reports) && !app.accountRole.isOwner:
           return _DrawerNavGroup(
-            destination: _destinationFor(tab, text),
+            destination: _destinationFor(tab, text, app.accountRole),
             selected: tab == selected,
             isBn: isBn,
             onHeaderTap: () => goTab(tab),
@@ -1181,7 +1227,7 @@ class _AppNavDrawer extends StatelessWidget {
           );
         case _AppTab.stock:
           return _DrawerNavGroup(
-            destination: _destinationFor(tab, text),
+            destination: _destinationFor(tab, text, app.accountRole),
             selected: tab == selected,
             isBn: isBn,
             onHeaderTap: () => goTab(tab),
@@ -1212,7 +1258,7 @@ class _AppNavDrawer extends StatelessWidget {
           );
         case _AppTab.menu when app.accountRole.isManager:
           return _DrawerNavGroup(
-            destination: _destinationFor(tab, text),
+            destination: _destinationFor(tab, text, app.accountRole),
             selected: tab == selected,
             isBn: isBn,
             onHeaderTap: () => goTab(tab),
@@ -1243,7 +1289,7 @@ class _AppNavDrawer extends StatelessWidget {
           );
         default:
           return _DrawerNavRow.destination(
-            destination: _destinationFor(tab, text),
+            destination: _destinationFor(tab, text, app.accountRole),
             selected: tab == selected,
             isBn: isBn,
             onTap: () => goTab(tab),
@@ -1280,7 +1326,7 @@ class _AppNavDrawer extends StatelessWidget {
                   ],
                   const _DrawerDivider(),
                   _DrawerNavRow.destination(
-                    destination: _destinationFor(_AppTab.more, text),
+                    destination: _destinationFor(_AppTab.more, text, app.accountRole),
                     selected: selected == _AppTab.more,
                     isBn: isBn,
                     onTap: () => goTab(_AppTab.more),

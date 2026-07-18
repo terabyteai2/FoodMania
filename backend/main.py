@@ -228,6 +228,22 @@ async def serve_root():
     return RedirectResponse(url="/docs")
 
 
+# ── Static files & SPA fallback (serves frontend_dist root files) ────────────
+@app.get("/{path:path}", include_in_schema=False)
+async def serve_frontend_files(path: str):
+    """Serve static files from frontend_dist root, fall back to SPA index.html."""
+    file = FRONTEND_DIST / path
+    if file.exists() and file.is_file():
+        return FileResponse(str(file))
+    index = FRONTEND_DIST / "index.html"
+    if index.exists():
+        return FileResponse(
+            str(index),
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
+    return JSONResponse(status_code=404, content={"error": "Not found"})
+
+
 if __name__ == "__main__":
     port = settings.PORT
     use_ngrok = bool(

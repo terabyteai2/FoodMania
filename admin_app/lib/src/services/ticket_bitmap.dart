@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -223,20 +224,27 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
     y = _rule(canvas, y + 8);
-    // Row 1: Table (left) + Order # (right)
+    // Row 1: Order #
+    y = _text(
+      canvas,
+      '${data.serialLabel}: ${data.serialValue}',
+      y,
+      fontSize: 26,
+      weight: FontWeight.w500,
+      gap: 2,
+    );
+    // Row 2: Table no
     if (hasTable) {
-      y = _row(
+      y = _text(
         canvas,
         '${data.tableLabel!.trim()}: ${data.tableValue!.trim()}',
-        data.serialValue,
         y,
         fontSize: 26,
+        weight: FontWeight.w500,
         gap: 2,
       );
-    } else {
-      y = _row(canvas, '', data.serialValue, y, fontSize: 26, gap: 2);
     }
-    // Row 2: Date + time as one left-aligned line
+    // Row 3: Date + time as one left-aligned line
     y = _text(
       canvas,
       '${data.dateLabel}: ${data.dateValue} - ${data.timeValue}',
@@ -389,18 +397,28 @@ class TicketBitmapRenderer {
 
     // 8. Column headers
     {
+      const qtyGap = 8.0;
       const maxRightWidth = 98.0;
-      final priceHeader = _painter('PRICE',
+      final qtyPainter = _painter('QTY',
+        fontSize: 13, weight: FontWeight.w700,
+      )..layout();
+      final itemPainter = _painter('ITEM',
+        fontSize: 13, weight: FontWeight.w700,
+      )..layout();
+      final pricePainter = _painter('PRICE',
         fontSize: 13, weight: FontWeight.w700, align: TextAlign.right,
       )..layout(maxWidth: maxRightWidth);
-      final leftWidth = (_width - (_padding * 2)) - priceHeader.width - 12;
-      final leftHeader = _painter('QTY  ITEM',
-        fontSize: 13, weight: FontWeight.w700,
-      )..layout(maxWidth: leftWidth.clamp(72, _width).toDouble());
-      leftHeader.paint(canvas, Offset(_padding, y));
-      priceHeader.paint(canvas, Offset(_width - _padding - priceHeader.width, y));
-      y = y + (leftHeader.height > priceHeader.height
-          ? leftHeader.height : priceHeader.height) + 2;
+
+      qtyPainter.paint(canvas, Offset(_padding, y));
+      itemPainter.paint(canvas, Offset(_padding + qtyPainter.width + qtyGap, y));
+      pricePainter.paint(
+        canvas,
+        Offset(_width - _padding - pricePainter.width, y),
+      );
+
+      y = y + [
+        qtyPainter.height, itemPainter.height, pricePainter.height,
+      ].reduce(max) + 2;
     }
 
     // 9. Item rows

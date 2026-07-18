@@ -153,7 +153,7 @@ class _TopControls extends StatelessWidget {
     final hasTitle = title != null;
     return Container(
       color: PosColors.primary,
-      padding: EdgeInsets.fromLTRB(16, hasTitle ? 12 : 6, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, hasTitle ? 12 : 6, 16, 4),
       child: Row(
         children: [
           if (onLeading != null) ...[
@@ -235,9 +235,8 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
     final borderColor = _focused ? PosColors.primary : PosColors.line;
-    final btnBorderColor = _focused ? PosColors.primary : PosColors.lineStrong;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -283,14 +282,18 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                 onTap: widget.onToggleCode,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: widget.codeMode ? PosColors.primary : PosColors.surface,
-                    border: Border(
-                      left: BorderSide(color: btnBorderColor),
-                      top: BorderSide(color: btnBorderColor),
-                      bottom: BorderSide(color: btnBorderColor),
+                    decoration: BoxDecoration(
+                      color: widget.codeMode ? PosColors.primary : PosColors.surface,
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(PosRadii.card),
+                        bottomRight: Radius.circular(PosRadii.card),
+                      ),
+                      border: const Border(
+                        left: BorderSide(color: PosColors.lineStrong),
+                        top: BorderSide(color: PosColors.lineStrong),
+                        bottom: BorderSide(color: PosColors.lineStrong),
+                      ),
                     ),
-                  ),
                   alignment: Alignment.center,
                   child: Text(
                     text.quickBill,
@@ -425,8 +428,8 @@ class _MenuContent extends StatelessWidget {
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 14,
               mainAxisExtent: PosDensity.tileMenu,
             ),
             delegate: SliverChildBuilderDelegate((_, i) {
@@ -556,8 +559,8 @@ class _GridTile extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: PosColors.surface,
-            border: Border.all(color: PosColors.line),
-            borderRadius: BorderRadius.circular(PosRadii.card),
+            border: Border.all(color: PosColors.lineStrong),
+            borderRadius: BorderRadius.circular(PosRadii.itemcard),
             boxShadow: PosShadows.soft,
           ),
           child: Column(

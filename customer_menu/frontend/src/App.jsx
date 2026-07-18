@@ -842,6 +842,13 @@ function MenuHero({ info }) {
   const gallery = info?.galleryImages || []
   const hasGallery = gallery.length > 0
   const hasVideo = !hasGallery && !!info?.videoUrl
+  const hasPlaceholder = !hasVideo && !hasGallery && !info?.bannerUrl
+  const placeholderVideoUrl = hasPlaceholder ? '/hero_video_placeholder.mp4' : null
+
+  console.log('[MenuHero] info:', info)
+  console.log('[MenuHero] hasVideo:', hasVideo, 'hasGallery:', hasGallery, 'hasPlaceholder:', hasPlaceholder)
+  console.log('[MenuHero] bannerUrl:', info?.bannerUrl, 'videoUrl:', info?.videoUrl)
+  console.log('[MenuHero] placeholderVideoUrl:', placeholderVideoUrl)
 
   useEffect(() => {
     if (!hasGallery || gallery.length < 2) return
@@ -852,6 +859,13 @@ function MenuHero({ info }) {
   useEffect(() => {
     if (videoRef.current) videoRef.current.play().catch(() => {})
   }, [info?.videoUrl])
+
+  useEffect(() => {
+    console.log('[MenuHero] placeholder effect, videoRef.current:', videoRef.current, 'placeholderVideoUrl:', placeholderVideoUrl)
+    if (placeholderVideoUrl && videoRef.current) {
+      videoRef.current.play().catch(e => console.warn('[MenuHero] placeholder play failed:', e))
+    }
+  }, [placeholderVideoUrl])
 
   return (
     <div style={{ position: 'relative', height: 200, flexShrink: 0, background: T.bgWarm, overflow: 'hidden' }}>
@@ -867,6 +881,10 @@ function MenuHero({ info }) {
         ))
       ) : info?.bannerUrl ? (
         <img src={info.bannerUrl} alt="" loading="lazy"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : placeholderVideoUrl ? (
+        <video ref={videoRef} src={placeholderVideoUrl} muted autoPlay loop playsInline preload="metadata"
+          onError={e => console.warn('[MenuHero] placeholder video error:', e.message)}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : null}
 

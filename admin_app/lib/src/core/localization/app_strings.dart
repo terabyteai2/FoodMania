@@ -61,12 +61,14 @@ class AppStrings {
   String get home => isBn ? 'হোম' : 'Home';
   String get menu => isBn ? 'মেনু' : 'Menu';
   String get orders => isBn ? 'অর্ডার' : 'Orders';
+  String get orderHistory => isBn ? 'অর্ডার ইতিহাস' : 'Order History';
   String get reports => isBn ? 'রিপোর্ট' : 'Reports';
   String get sync => isBn ? 'সিঙ্ক' : 'Sync';
 
   // ── QuickBytes navigation + More hub ──────────────────────────────────────
   String get settingsTab => isBn ? 'সেটিংস' : 'Settings';
   String get liveTab => isBn ? 'লাইভ' : 'Live';
+  String get liveRestaurantTab => isBn ? 'রেস্টুরেন্ট লাইভ' : 'Restaurant Live';
   String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
   // ── QS analytics (owner) ──────────────────────────────────────────────
   String get salesBreakdownTab => isBn ? 'সেলস ব্রেকডাউন' : 'Sales Breakdown';
