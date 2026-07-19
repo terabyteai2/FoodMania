@@ -60,7 +60,7 @@ class _SquareImageCropperPageState extends State<SquareImageCropperPage> {
   }
 
   Future<void> _useSquareCrop(double side) async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     setState(() => _busy = true);
     try {
       final decoded = _decoded;
@@ -140,7 +140,7 @@ class _SquareImageCropperPageState extends State<SquareImageCropperPage> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Scaffold(
       backgroundColor: PosColors.background,
       appBar: AppBar(

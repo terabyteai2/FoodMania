@@ -54,7 +54,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onMounted?.call();
-      final app = AppScope.of(context);
+      final app = AppScope.read(context);
       _databaseSubscription = app.database.changes.listen((_) => _reload());
       unawaited(_reload());
     });
@@ -68,7 +68,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
 
   Future<void> _reload() async {
     if (!mounted) return;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (!_bootstrapCloudStarted) {
       _bootstrapCloudStarted = true;
       unawaited(app.refreshDesktopPosFromCloud().then((_) => _reload()));
@@ -93,7 +93,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   }
 
   void _navigate(PcNav nav) {
-    if (nav == PcNav.stock && !AppScope.of(context).isOwner) return;
+    if (nav == PcNav.stock && !AppScope.read(context).isOwner) return;
     setState(() {
       _section = nav;
       _activeOrder = null;
@@ -187,7 +187,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   }
 
   Widget _activeBody() {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.orders, AppAspect.account, AppAspect.sync, AppAspect.printer, AppAspect.language]);
     final chrome = _chrome(app);
     final settings =
         _settings ??
@@ -342,7 +342,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   // ---- controller-backed actions -----------------------------------------
   Future<void> _openShift(double total, Map<String, int> denoms) async {
     try {
-      await AppScope.of(
+      await AppScope.read(
         context,
       ).openDesktopShift(openingCash: total, denominations: denoms);
       await _reload();
@@ -354,7 +354,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   Future<void> _closeShift(double counted, Map<String, int> denoms) async {
     final shift = _shift;
     if (shift == null) return;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       final closed = await app.closeDesktopShift(
         shift: shift,
@@ -384,7 +384,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
     );
     if (result == null || !mounted) return;
     try {
-      await AppScope.of(context).saveDesktopPosSettings(result);
+      await AppScope.read(context).saveDesktopPosSettings(result);
       await _reload();
     } catch (error) {
       _message('$error');
@@ -405,7 +405,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   }
 
   Future<void> _print(OrderModel order) async {
-    final ok = await AppScope.of(context).printCustomerInvoice(order);
+    final ok = await AppScope.read(context).printCustomerInvoice(order);
     if (mounted) {
       _message(
         ok
@@ -416,7 +416,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   }
 
   Future<void> _printPrebill(OrderModel order) async {
-    final ok = await AppScope.of(context).printOrderTicket(order);
+    final ok = await AppScope.read(context).printOrderTicket(order);
     if (mounted) {
       _message(
         ok
@@ -430,7 +430,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   }
 
   Future<void> _sync() async {
-    final ok = await AppScope.of(context).syncNow();
+    final ok = await AppScope.read(context).syncNow();
     await _reload();
     if (mounted) {
       _message(
@@ -442,7 +442,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
   }
 
   void _toggleLang() {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     app.updateLanguage(
       app.language.code == 'en' ? AppLanguage.bn : AppLanguage.en,
     );
@@ -450,7 +450,7 @@ class _DesktopPosShellState extends State<DesktopPosShell> {
 
   // ---- helpers ------------------------------------------------------------
   String _t(String en, String bn) =>
-      AppScope.of(context).strings.isBn ? bn : en;
+      AppScope.read(context).strings.isBn ? bn : en;
 
   bool _printerReady(String label) {
     final lower = label.toLowerCase();
@@ -529,7 +529,7 @@ class _PcGhost extends StatelessWidget {
 // they edit DesktopPosSettings + select the Windows print queue).
 // ============================================================================
 String _dlg(BuildContext context, String en, String bn) =>
-    AppScope.of(context).strings.isBn ? bn : en;
+    AppScope.selectMany(context, const [AppAspect.language]).strings.isBn ? bn : en;
 
 class _FloorSettingsDialog extends StatefulWidget {
   const _FloorSettingsDialog({required this.settings});

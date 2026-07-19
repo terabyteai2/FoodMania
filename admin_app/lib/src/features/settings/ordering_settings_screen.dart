@@ -58,7 +58,7 @@ class _OrderingSettingsScreenState extends State<OrderingSettingsScreen> {
   }
 
   Future<void> _load() async {
-    final settings = await AppScope.of(context).loadDesktopPosSettings();
+    final settings = await AppScope.read(context).loadDesktopPosSettings();
     if (!mounted) return;
     setState(() {
       _loaded = settings;
@@ -114,7 +114,7 @@ class _OrderingSettingsScreenState extends State<OrderingSettingsScreen> {
     final loaded = _loaded;
     if (loaded == null || _saving) return;
     setState(() => _saving = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final presets = <PosDiscountPreset>[];
     for (final p in _presets) {
       final label = p.label.text.trim();
@@ -165,7 +165,10 @@ class _OrderingSettingsScreenState extends State<OrderingSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     return AppScaffold(
       title: text.orderingSettings,
       subtitle: text.orderingSettingsSubtitle,

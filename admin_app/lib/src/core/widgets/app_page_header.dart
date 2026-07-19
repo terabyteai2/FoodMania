@@ -36,7 +36,10 @@ class AppPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.language, AppAspect.settings, AppAspect.account],
+    );
     final text = app.strings;
     final outletName = app.outletName.trim();
     return Padding(

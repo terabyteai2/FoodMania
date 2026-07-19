@@ -25,18 +25,21 @@ class _AuditScreenState extends State<AuditScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= AppScope.of(context).fetchAuditEvents();
+    _future ??= AppScope.read(context).fetchAuditEvents();
   }
 
   void _reload() {
     setState(() {
-      _future = AppScope.of(context).fetchAuditEvents();
+      _future = AppScope.read(context).fetchAuditEvents();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     return AppScaffold(
       title: text.auditTrail,
       showBackButton: true,

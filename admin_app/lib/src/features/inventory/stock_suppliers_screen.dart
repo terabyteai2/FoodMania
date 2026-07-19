@@ -14,7 +14,7 @@ class SuppliersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language, AppAspect.suppliers]);
     final text = app.strings;
     final suppliers = app.inventorySuppliers
         .where((s) => s.isActive)
@@ -136,7 +136,7 @@ class _SupplierCard extends StatelessWidget {
 }
 
 Future<void> _showAddSupplier(BuildContext context) async {
-  final app = AppScope.of(context);
+  final app = AppScope.read(context);
   // saveInventorySupplier refreshes the list + notifies listeners, so the
   // AppScope-subscribed SuppliersScreen rebuilds automatically.
   await showModalBottomSheet<bool>(
@@ -176,7 +176,7 @@ class _AddSupplierSheetState extends State<_AddSupplierSheet> {
     setState(() => _busy = true);
     final now = DateTime.now();
     try {
-      await AppScope.of(context).saveInventorySupplier(
+      await AppScope.read(context).saveInventorySupplier(
         InventorySupplier(
           id: const Uuid().v4(),
           name: name,

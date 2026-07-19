@@ -45,13 +45,21 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   bool _showIntro = false;
   int _initialShellIndex = 0;
 
+  late AppLanguage _language;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _controller = PosAppController();
+    _language = _controller.language;
+    // Narrow listener: only rebuild the shell when language changes
+    // (affects MaterialApp.locale + title). All other state changes are
+    // handled by AppScope/AppModel aspect-scoped rebuilds.
+    _controller.addListener(_onLanguageMaybeChanged);
     _controller.initialize().then((_) {
       if (mounted) {
+        _language = _controller.language;
         setState(() {
           _bootDone = true;
           _showIntro = !_controller.hasSeenIntro;
@@ -61,8 +69,16 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     });
   }
 
+  void _onLanguageMaybeChanged() {
+    if (_controller.language != _language) {
+      _language = _controller.language;
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    _controller.removeListener(_onLanguageMaybeChanged);
     WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
@@ -85,53 +101,59 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AppScope(
-      controller: _controller,
-      child: ListenableBuilder(
-        listenable: _controller,
-        builder: (context, _) {
-          final text = _controller.strings;
-          final tone = _resolveTone(_controller.themePreference);
-          PosColors.setTone(tone);
-          return AppModel(
-            controller: _controller,
-            child: MaterialApp(
-              title: text.appTitle,
-              debugShowCheckedModeBanner: false,
-              locale: _controller.language.locale,
-              supportedLocales: AppLanguage.values
-                  .map((language) => language.locale)
-                  .toList(growable: false),
-              localizationsDelegates: [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              theme: AppTheme.light(),
-              themeMode: ThemeMode.light,
-              builder: (context, child) {
-                final mediaQuery = MediaQuery.of(context);
-                return MediaQuery(
-                  data: mediaQuery.copyWith(
-                    textScaler: mediaQuery.textScaler.clamp(
-                      minScaleFactor: 1.0,
-                      maxScaleFactor: 1.18,
-                    ),
-                  ),
-                  child: child ?? SizedBox.shrink(),
-                );
-              },
-              home: _home(),
-            ),
-          );
-        },
-      ),
-    );
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // setTone is currently a no-op; keep call sites for when dark mode lands.
+    PosColors.setTone(PosThemeTone.light);
   }
 
-  PosThemeTone _resolveTone(AppThemePreference _) {
-    return PosThemeTone.light;
+  @override
+  Widget build(BuildContext context) {
+    final language = _controller.language;
+    final text = _controller.strings;
+    return AppScope(
+      controller: _controller,
+      child: AppModel(
+        controller: _controller,
+        child: MaterialApp(
+          title: text.appTitle,
+          debugShowCheckedModeBanner: false,
+          locale: language.locale,
+          supportedLocales: AppLanguage.values
+              .map((lang) => lang.locale)
+              .toList(growable: false),
+          localizationsDelegates: [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: AppTheme.light(),
+          themeMode: ThemeMode.light,
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            return MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: mediaQuery.textScaler.clamp(
+                  minScaleFactor: 1.0,
+                  maxScaleFactor: 1.18,
+                ),
+              ),
+              child: child ?? SizedBox.shrink(),
+            );
+          },
+          home: _HomeGate(
+            bootDone: _bootDone,
+            showIntro: _showIntro,
+            initialShellIndex: _initialShellIndex,
+            onIntroFinished: _onIntroFinished,
+            onShellIndexChanged: (i) => _initialShellIndex = i,
+            onProvisioned: () => setState(() {
+              _initialShellIndex = _defaultShellIndex();
+            }),
+          ),
+        ),
+      ),
+    );
   }
 
   void _onIntroFinished(String? nextStep) {
@@ -141,79 +163,102 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
     });
   }
 
-  Widget _home() {
-    if (!_bootDone) return const SizedBox.shrink();
-    final blockingNotice = _controller.adminBlockingNotice;
-    if (blockingNotice?.isBlocking == true) {
-      return AdminBlockingNoticeScreen(
-        key: const ValueKey('admin-blocking-notice-screen'),
-        notice: blockingNotice!,
-        refreshing: _controller.adminBlockingNoticeRefreshing,
-        error: _controller.adminBlockingNoticeError,
-        onRetry: _controller.refreshAdminBlockingNotice,
-        onRespond: _controller.respondToBlockingNotice,
-      );
-    }
-    if (_controller.pendingStaffInvite != null) {
-      return StaffInviteScreen(
-        onFinished: () => setState(() => _initialShellIndex = 0),
-      );
-    }
-    if (_showIntro) {
-      return ModeIntroScreen(onFinished: _onIntroFinished);
-    }
-    if (_controller.pendingSetupScan) {
-      return TenantSetupScreen(
-        onProvisioned: () {
-          setState(() {
-            _initialShellIndex = _defaultShellIndex();
-          });
-        },
-      );
-    }
-    if (!_controller.isLoggedIn) {
-      final signupToken = _controller.phoneSignupToken?.trim() ?? '';
-      if (signupToken.isNotEmpty) {
-        return TenantSetupScreen(
-          onProvisioned: () {
-            setState(() => _initialShellIndex = _defaultShellIndex());
-          },
-        );
-      }
-      return ModeIntroScreen(onFinished: _onIntroFinished);
-    }
-    if (!_controller.isTenantReady) {
-      return TenantSetupScreen(
-        onProvisioned: () {
-          setState(() {
-            _initialShellIndex = _defaultShellIndex();
-          });
-        },
-      );
-    }
-    final pending = _controller.pendingOnboardingLanding;
-    final ordersIndex = _defaultShellIndex();
-    if (pending && _initialShellIndex != ordersIndex) {
-      _initialShellIndex = ordersIndex;
-    }
-    void mounted() {
-      if (_controller.pendingOnboardingLanding) {
-        _controller.consumeOnboardingLanding();
-      }
-    }
-
-    if (isNativeDesktop) {
-      return DesktopPosShell(onMounted: mounted);
-    }
-    return MainShell(initialIndex: _initialShellIndex, onMounted: mounted);
-  }
-
   /// Default landing tab: Analytics for owner, Orders for manager/waiter.
   int _defaultShellIndex() {
     final tabs = _tabOrderForRole(_controller.accountRole);
     final target = _controller.accountRole.isOwner
         ? _AppTab.analytics
         : _AppTab.orders;
+    final i = tabs.indexOf(target);
+    return i < 0 ? 0 : i;
+  }
+}
+
+/// Reactive home gate — rebuilds only when account/settings/appUpdate aspects
+/// change, not on every controller notification. Replaces the old root
+/// ListenableBuilder that rebuilt the entire MaterialApp on every notifyListeners().
+class _HomeGate extends StatelessWidget {
+  const _HomeGate({
+    required this.bootDone,
+    required this.showIntro,
+    required this.initialShellIndex,
+    required this.onIntroFinished,
+    required this.onShellIndexChanged,
+    required this.onProvisioned,
+  });
+
+  final bool bootDone;
+  final bool showIntro;
+  final int initialShellIndex;
+  final ValueChanged<String?> onIntroFinished;
+  final ValueChanged<int> onShellIndexChanged;
+  final VoidCallback onProvisioned;
+
+  @override
+  Widget build(BuildContext context) {
+    // Subscribe only to aspects that affect which home screen is shown.
+    final app = AppScope.selectMany(context, const [
+      AppAspect.account,
+      AppAspect.settings,
+      AppAspect.appUpdate,
+    ]);
+
+    if (!bootDone) return const SizedBox.shrink();
+
+    final blockingNotice = app.adminBlockingNotice;
+    if (blockingNotice?.isBlocking == true) {
+      return AdminBlockingNoticeScreen(
+        key: const ValueKey('admin-blocking-notice-screen'),
+        notice: blockingNotice!,
+        refreshing: app.adminBlockingNoticeRefreshing,
+        error: app.adminBlockingNoticeError,
+        onRetry: app.refreshAdminBlockingNotice,
+        onRespond: app.respondToBlockingNotice,
+      );
+    }
+    if (app.pendingStaffInvite != null) {
+      return StaffInviteScreen(
+        onFinished: () => onShellIndexChanged(0),
+      );
+    }
+    if (showIntro) {
+      return ModeIntroScreen(onFinished: onIntroFinished);
+    }
+    if (app.pendingSetupScan) {
+      return TenantSetupScreen(onProvisioned: onProvisioned);
+    }
+    if (!app.isLoggedIn) {
+      final signupToken = app.phoneSignupToken?.trim() ?? '';
+      if (signupToken.isNotEmpty) {
+        return TenantSetupScreen(onProvisioned: onProvisioned);
+      }
+      return ModeIntroScreen(onFinished: onIntroFinished);
+    }
+    if (!app.isTenantReady) {
+      return TenantSetupScreen(onProvisioned: onProvisioned);
+    }
+
+    final pending = app.pendingOnboardingLanding;
+    final ordersIndex = _defaultShellIndexFor(app.accountRole);
+    final effectiveIndex = pending && initialShellIndex != ordersIndex
+        ? ordersIndex
+        : initialShellIndex;
+
+    void mounted() {
+      if (app.pendingOnboardingLanding) {
+        app.consumeOnboardingLanding();
+      }
+    }
+
+    if (isNativeDesktop) {
+      return DesktopPosShell(onMounted: mounted);
+    }
+    return MainShell(initialIndex: effectiveIndex, onMounted: mounted);
+  }
+
+  static int _defaultShellIndexFor(AccountRole role) {
+    final tabs = _tabOrderForRole(role);
+    final target = role.isOwner ? _AppTab.analytics : _AppTab.orders;
     final i = tabs.indexOf(target);
     return i < 0 ? 0 : i;
   }
@@ -887,7 +932,10 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.language, AppAspect.appUpdate],
+    );
     final text = app.strings;
     final releaseNotes = widget.update.releaseNotes.trim();
     final status = app.appUpdateStatus.trim();
@@ -1628,7 +1676,10 @@ class _RailFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     if (!extended) {
       return Container(
         padding: EdgeInsets.all(8),

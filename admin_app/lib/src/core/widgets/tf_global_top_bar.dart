@@ -182,7 +182,10 @@ class _AvatarDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.account, AppAspect.language, AppAspect.printer],
+    );
     final initials = _initials(app.accountDisplayName);
     final canOpenSettings = onNavigateToTarget != null;
 

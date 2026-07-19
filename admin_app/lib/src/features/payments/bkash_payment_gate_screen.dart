@@ -29,7 +29,10 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language, AppAspect.settings],
+    ).strings;
     final controller = _webViewController;
     if (controller != null) {
       return _BkashCheckoutPopup(controller: controller);
@@ -125,7 +128,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
       _error = null;
     });
     try {
-      final app = AppScope.of(context);
+      final app = AppScope.read(context);
       final session = await app.createSubscriptionCheckout(
         amount: plan.amount,
         plan: plan.name,
@@ -151,7 +154,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
             onWebResourceError: (_) {
               if (!mounted) return;
               setState(() {
-                _error = AppScope.of(context).strings.bkashCheckoutLoadFailed;
+                _error = AppScope.read(context).strings.bkashCheckoutLoadFailed;
               });
             },
           ),
@@ -164,7 +167,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = AppScope.of(context).strings.bkashSessionCreateFailed;
+        _error = AppScope.read(context).strings.bkashSessionCreateFailed;
       });
     } finally {
       if (mounted) setState(() => _creatingSession = false);
@@ -182,7 +185,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
       builder: (context) => _DemoBkashPaymentDialog(plan: plan),
     );
     if (completed != true || !mounted) return;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     await app.markTemporaryBkashPaymentVerified(
       plan: plan.name,
       amount: plan.amount,
@@ -240,7 +243,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     if (_isCompletingPayment) return;
     _isCompletingPayment = true;
     final plan = _selectedPlan ?? _Plan.monthly;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final paymentId = _session?.paymentId;
     if (paymentId == null || paymentId.isEmpty) {
       await app.markTemporaryBkashPaymentVerified(
@@ -321,7 +324,10 @@ class _DemoBkashPaymentDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language, AppAspect.settings],
+    ).strings;
     final planTitle = switch (plan) {
       _Plan.monthly => text.monthly,
       _Plan.annual => text.annual,

@@ -23,7 +23,7 @@ class _StockVarianceScreenState extends State<StockVarianceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language, AppAspect.inventory]);
     final text = app.strings;
     if (!_kicked) {
       _kicked = true;

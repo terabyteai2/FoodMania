@@ -81,7 +81,7 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
       return;
     }
     setState(() => _busy = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       await app.saveLocalSetup(
         restaurantName: _restaurantCtrl.text.trim(),
@@ -101,7 +101,7 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
       return;
     }
     setState(() => _busy = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     // Prevent _home() from swapping to MainShell the moment saveLocalSetup()
     // sets isLoggedIn / isTenantReady — we need the scan screen to run on
     // top of TenantSetupScreen first.

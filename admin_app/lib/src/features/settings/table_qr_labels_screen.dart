@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -30,7 +29,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
 
   Future<void> _load() async {
     try {
-      final app = AppScope.of(context);
+      final app = AppScope.read(context);
 
       debugPrint(
         '[TableQrLabels] serverConfig.tableCount=${app.serverConfig.tableCount}',
@@ -100,17 +99,17 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     if (label.isEmpty) return 'Table ?';
     final parsed = int.tryParse(label);
     if (parsed != null) {
-      final app = AppScope.of(context);
+      final app = AppScope.read(context);
       return app.strings.tableLabel(parsed);
     }
     return 'Table $label';
   }
 
   String get _restaurantName =>
-      AppScope.of(context).serverConfig.restaurantName.trim();
+      AppScope.read(context).serverConfig.restaurantName.trim();
 
   Future<void> _printLabel(PosFloorTable table) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     final label = table.label;
     final slug = _slug;
@@ -156,7 +155,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
   }
 
   Future<void> _printRestaurantMenu() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     final slug = _slug;
     if (slug == null) return;
@@ -193,7 +192,10 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.printer, AppAspect.language],
+    );
     final text = app.strings;
     final printerConnected = app.printerState.connected;
 
@@ -443,7 +445,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
             child: _DiagnosticBanner(
               slug: rawSlug,
               tablesCount: tables.length,
-              printerConnected: AppScope.of(context).printerState.connected,
+              printerConnected: AppScope.read(context).printerState.connected,
             ),
           );
         }

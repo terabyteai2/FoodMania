@@ -36,7 +36,7 @@ Future<void> openNewOrderForm(
   bool startAtMenu = false,
   bool startAtReview = false,
 }) async {
-  final app = AppScope.of(context);
+  final app = AppScope.read(context);
   // Full menu, including 86'd items — the grid/code list render them dimmed
   // and untappable instead of silently vanishing (an all-unavailable menu used
   // to show an empty picker with no explanation).
@@ -137,7 +137,7 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(AppScope.of(context).playWizardSuccessSound());
+      unawaited(AppScope.read(context).playWizardSuccessSound());
     });
   }
 
@@ -544,7 +544,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     required bool searchActive,
   }) {
     if (currentFiltered.isNotEmpty) return null;
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     if (searchActive && currentSearchBase.isNotEmpty) {
       return _EmptyShortcut(
         label: text.clearSearch,
@@ -764,7 +764,7 @@ class _OrdersScreenState extends State<OrdersScreen>
 /// Opens the order edit sheet for [order] (manager+ only) and applies the
 /// result. Reused by the Orders list and the Tables/FOH screen.
 Future<void> openEditOrderSheet(BuildContext context, OrderModel order) async {
-  final app = AppScope.of(context);
+  final app = AppScope.read(context);
   if (!app.isManager) return;
   final result = await showModalBottomSheet<_OrderEditResult>(
     context: context,
@@ -1050,7 +1050,7 @@ class _TabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: ListenableBuilder(
@@ -1239,7 +1239,7 @@ class _OrderList extends StatelessWidget {
                   },
                 )
               : () {
-                  final app = AppScope.of(context);
+                  final app = AppScope.selectMany(context, const [AppAspect.language]);
                   final entries = _buildEntries(
                     orders,
                     _showFooter,
@@ -1324,7 +1324,7 @@ class _SmartOrdersEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     final text = app.strings;
 
     final isSearchEmpty = searchQuery.trim().isNotEmpty;
@@ -1518,7 +1518,7 @@ class _OrderCardState extends State<_OrderCard> {
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.account]);
     final canPrint = app.isManager;
     final adminStatus = order.status.adminStatus;
     final isPending = adminStatus == OrderStatus.pending;
@@ -1558,7 +1558,7 @@ class _OrderCardState extends State<_OrderCard> {
     required bool canPrint,
   }) {
     final order = widget.order;
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language, AppAspect.printer]);
     final text = app.strings;
     final createdAt = order.createdAt.toLocal();
     // Live age: the screen-level 30s tick rebuilds cards, so this stays fresh.
@@ -1811,7 +1811,7 @@ class _OrderCardState extends State<_OrderCard> {
   /// muted meta line (payment · type · by role).
   Widget _completedBody(BuildContext context) {
     final order = widget.order;
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     final text = app.strings;
     final items = order.items;
     final rowCap = widget.dense ? _denseRowCap : _completedRowCap;
@@ -1990,7 +1990,7 @@ class _OrderCardState extends State<_OrderCard> {
   // Fixed 30px qty gutter (order-detail-sheet precedent) + per-line amount:
   // the completed card reads like a receipt, not a preview.
   Widget _completedItemRow(BuildContext context, OrderItem item) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2077,7 +2077,7 @@ class _PendingOrderDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language, AppAspect.account]);
     final text = app.strings;
     final isBn = text.isBn;
     final channel = _resolveChannel(order);
@@ -2452,7 +2452,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   }
 
   Future<void> _addItemFlow(BuildContext context) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final available = app.menuItems
         .where((m) => m.isAvailable)
         .toList(growable: false);
@@ -2477,7 +2477,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   ) {
     final cached = _itemMeta[menuItemId];
     if (cached != null) return cached;
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.menu]);
     for (final menu in app.menuItems) {
       if (menu.id == menuItemId) {
         return (name: menu.name, price: menu.price);
@@ -2498,7 +2498,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final isDelivery = _serviceType == OrderServiceType.delivery;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -2789,7 +2789,7 @@ class _MenuItemPickerSheetState extends State<_MenuItemPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final query = _query.trim().toLowerCase();
     final filtered = widget.menuItems
         .where((item) {
@@ -2907,7 +2907,7 @@ class _OrderCreatedSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Container(
       color: PosColors.background,
       child: SafeArea(
@@ -3087,7 +3087,7 @@ class _OrderCreatedSheet extends StatelessWidget {
                                 Expanded(
                                   child: TfText(
                                     item.localizedName(
-                                      AppScope.of(context).language,
+                                      AppScope.selectMany(context, const [AppAspect.language]).language,
                                     ),
                                     style: TfTextStyles.body.copyWith(
                                       fontWeight: FontWeight.w500,
@@ -3578,7 +3578,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     if (match == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: TfText(AppScope.of(context).strings.noItemForCode(raw)),
+          content: TfText(AppScope.read(context).strings.noItemForCode(raw)),
         ),
       );
       return;
@@ -3590,13 +3590,13 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 
   Future<void> _toggleFavorite(MenuItem item) async {
     HapticFeedback.selectionClick();
-    await AppScope.of(context).setMenuItemFavorite(item.id, !item.isFavorite);
+    await AppScope.read(context).setMenuItemFavorite(item.id, !item.isFavorite);
   }
 
   static const String _kClearShortCode = '__clear__';
 
   Future<void> _setShortCode(MenuItem item) async {
-    final scope = AppScope.of(context);
+    final scope = AppScope.read(context);
     final text = scope.strings;
     final controller = TextEditingController(
       text: item.shortCode?.toString() ?? '',
@@ -3682,7 +3682,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
               : null,
           discountAmount: _discount,
           discountLabel: _discount > 0
-              ? (AppScope.of(context).strings.isBn
+              ? (AppScope.read(context).strings.isBn
                     ? 'ম্যানুয়াল ডিসকাউন্ট'
                     : 'Manual discount')
               : null,
@@ -3694,14 +3694,14 @@ class _NewOrderPageState extends State<_NewOrderPage> {
         _creating = false;
       });
       _goToStep(3);
-      unawaited(AppScope.of(context).playWizardSuccessSound());
+      unawaited(AppScope.read(context).playWizardSuccessSound());
     } catch (error) {
       if (!mounted) return;
       setState(() => _creating = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: TfText(
-            AppScope.of(context).strings.couldNotCreateOrder(error),
+            AppScope.read(context).strings.couldNotCreateOrder(error),
           ),
         ),
       );
@@ -3725,7 +3725,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final firstReachableStep = widget.counterMode || skipsSourceStep ? 1 : 0;
     final displayStep = skipsSourceStep ? _step - 1 : _step;
     final cartQtyByItemId = _cartQtyByItemId;
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Scaffold(
       backgroundColor: PosColors.background,
       body: SafeArea(
@@ -3852,7 +3852,7 @@ class _WizardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     final text = app.strings;
     final isBn = text.isBn;
     final stepLabels = skipsSourceStep
@@ -3991,7 +3991,7 @@ class _SourceAndTableStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final isDineIn = source == OrderServiceType.dineIn;
 
     final byTable = <String, OrderModel>{};
@@ -4204,7 +4204,7 @@ class _ReviewStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     final text = app.strings;
     return Column(
       children: [
@@ -4507,7 +4507,7 @@ class _ReviewStep extends StatelessWidget {
     BuildContext context,
     TextEditingController controller,
   ) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -4621,7 +4621,7 @@ class _ReviewStep extends StatelessWidget {
     TextEditingController controller,
     VoidCallback onChanged,
   ) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -4778,7 +4778,7 @@ class _OrderCreatedStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final isBn = text.isBn;
     final source = serviceLabel.isEmpty
         ? (isBn ? 'পার্সেল' : 'Parcel')
@@ -4916,7 +4916,7 @@ class _CreatedOrderBillCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     final text = app.strings;
     final orderNo = order?.displaySequence ?? fallbackOrderNo;
     final items = order?.items ?? const <OrderItem>[];
@@ -5045,7 +5045,7 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final isBn = text.isBn;
     return Dialog(
       backgroundColor: PosColors.surface,

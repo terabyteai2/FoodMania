@@ -28,7 +28,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
 
   void _refresh() {
     setState(() {
-      _future = AppScope.of(context).fetchDailyReport(date: _date);
+      _future = AppScope.read(context).fetchDailyReport(date: _date);
     });
   }
 
@@ -59,7 +59,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final dateFmt = DateFormat('MMM d');
     return Scaffold(
       backgroundColor: PosColors.background,

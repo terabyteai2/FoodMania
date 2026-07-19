@@ -101,7 +101,7 @@ class _DeliveryDetailsSheetState extends State<_DeliveryDetailsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final viewInsets = MediaQuery.viewInsetsOf(context);
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets.bottom),

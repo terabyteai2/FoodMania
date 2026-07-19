@@ -62,7 +62,10 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.orders, AppAspect.sync, AppAspect.language],
+    );
     final text = app.strings;
 
     final orders = app.ordersFor();

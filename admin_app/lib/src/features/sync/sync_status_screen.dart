@@ -19,7 +19,10 @@ class SyncStatusScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.sync, AppAspect.language],
+    );
     final text = app.strings;
     final sync = app.syncState;
     final lastSync = sync.lastSyncAt == null

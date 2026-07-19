@@ -43,7 +43,7 @@ class SubscriptionCheckoutFlow {
     required double amount,
     required String plan,
   }) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final completed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -116,7 +116,7 @@ class _UddoktaCheckoutPageState extends State<_UddoktaCheckoutPage> {
   }
 
   Future<void> _startCheckout() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       app.cloudApiService.configure(
         cloudConfig: app.cloudConfig,
@@ -288,7 +288,7 @@ class _UddoktaCheckoutPageState extends State<_UddoktaCheckoutPage> {
   Future<void> _complete() async {
     if (_completing) return;
     _completing = true;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final paymentId = _session?.paymentId;
     if (paymentId == null || paymentId.isEmpty) {
       if (mounted) Navigator.pop(context, false);

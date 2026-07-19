@@ -74,7 +74,10 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.dashboard, AppAspect.language],
+    );
     final text = app.strings;
     final ranges = <(String, String)>[
       ('today', text.rangeToday),

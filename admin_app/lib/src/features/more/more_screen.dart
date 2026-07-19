@@ -23,7 +23,10 @@ class MoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.account, AppAspect.language, AppAspect.settings],
+    );
     final text = app.strings;
     return AppScaffold(
       title: text.settingsTab,

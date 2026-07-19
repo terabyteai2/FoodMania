@@ -57,7 +57,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _toggleSettleAndSave() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     await app.setSettleAndSaveEnabled(!app.settleAndSaveEnabled);
     setState(() {});
   }
@@ -89,7 +89,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [
+        AppAspect.account,
+        AppAspect.printer,
+        AppAspect.chatbot,
+        AppAspect.settings,
+        AppAspect.language,
+      ],
+    );
     final text = app.strings;
     final query = _settingsSearchController.text.trim().toLowerCase();
     // Staff users get a minimal settings list; managers get the full set.
@@ -302,7 +311,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTableSettings() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -326,7 +335,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openFacebookChatbot() async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => _SettingsSectionPage(
@@ -344,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openReceiptPrinter() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     if (kDebugMode) {
       debugPrint(
@@ -373,7 +382,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _toggleLanguage() {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final next = app.language == AppLanguage.bn
         ? AppLanguage.en
         : AppLanguage.bn;
@@ -381,7 +390,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _confirmLogout() async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     TfConfirmSheet.show(
       context,
       title: text.logOut,
@@ -389,13 +398,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       confirmLabel: text.logOut,
       onConfirm: () async {
         if (!mounted) return;
-        await AppScope.of(context).logOut();
+        await AppScope.read(context).logOut();
       },
     );
   }
 
   Future<void> _openAboutUs() async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => _SettingsSectionPage(
@@ -407,7 +416,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPrivacyPolicy() async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => _SettingsSectionPage(
@@ -419,7 +428,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _scanPrinters() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (kDebugMode) {
       debugPrint(
         '[QB-PRINTER-DIAG] settings scan printers '
@@ -441,7 +450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _connectUsbPrinter() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     if (kDebugMode) {
       debugPrint(
@@ -517,7 +526,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _connectPrinter(BluetoothPrinterDevice printer) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     if (kDebugMode) {
       debugPrint(
@@ -547,7 +556,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _testPrinter() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     if (kDebugMode) {
       debugPrint(
@@ -602,7 +611,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openRestaurantDetails() async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => _SettingsSectionPage(
@@ -673,7 +682,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
       ),
     );
     if (value == null || !mounted) return;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     final messenger = ScaffoldMessenger.of(context);
     final ok = await onSave(value);
@@ -685,7 +694,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _editAccountHolderName() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     return _editSingleField(
       title: text.accountHolderName,
@@ -698,7 +707,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _editRestaurantName() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     return _editSingleField(
       title: text.restaurantName,
@@ -711,7 +720,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _editRestaurantPhone() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     return _editSingleField(
       title: text.restaurantPhoneLabel,
@@ -725,7 +734,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _editWebsiteUrl() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     return _editSingleField(
       title: text.websiteUrlLabel,
@@ -750,7 +759,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _openHeroMedia() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _HeroMediaPage(
@@ -763,7 +772,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _openRestaurantLogoUpload() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     try {
       final dataUrl = await _imageService.pickMenuImageDataUrl();
@@ -776,8 +785,8 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
         '[QB-LOGO] _openRestaurantLogoUpload result logoUrl="$url" logoBitmapUrl="$bitmapUrl"',
       );
       if (mounted) {
-        if (url != null) AppScope.of(context).setLogoUrl(url);
-        if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
+        if (url != null) AppScope.read(context).setLogoUrl(url);
+        if (bitmapUrl != null) AppScope.read(context).setLogoBitmapUrl(bitmapUrl);
       }
       setState(() => _savingLogo = false);
       if (!mounted) return;
@@ -793,7 +802,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
   }
 
   Future<void> _openCustomerMenuTheme() async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => _SettingsSectionPage(
@@ -806,7 +815,10 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.account, AppAspect.settings, AppAspect.language],
+    );
     final text = app.strings;
     final items = <_SettingActionData>[
       _SettingActionData(
@@ -1178,7 +1190,7 @@ class _FacebookChatbotSettingsPageState
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final config = app.facebookChatbotConfig;
     final nextKey = config == null
         ? ''
@@ -1192,7 +1204,7 @@ class _FacebookChatbotSettingsPageState
       _loadRequested = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          unawaited(AppScope.of(context).loadFacebookChatbotConfig());
+          unawaited(AppScope.read(context).loadFacebookChatbotConfig());
         }
       });
     }
@@ -1200,7 +1212,10 @@ class _FacebookChatbotSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.chatbot, AppAspect.language],
+    );
     final text = app.strings;
     final config = app.facebookChatbotConfig;
     final statusLabel = config == null || !config.isConfigured
@@ -1296,7 +1311,7 @@ class _FacebookChatbotSettingsPageState
   }
 
   Future<void> _connectWithFacebook() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     final start = await app.startFacebookChatbotOAuth();
     if (!mounted) return;
@@ -1347,7 +1362,7 @@ class _FacebookChatbotSettingsPageState
   }
 
   Future<void> _save() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     final ok = await app.saveFacebookChatbotConfig(
       pageAccessToken: '',
@@ -1457,7 +1472,7 @@ class _FacebookOAuthWebViewPageState extends State<_FacebookOAuthWebViewPage> {
       setState(() {
         _error =
             params['message'] ??
-            AppScope.of(context).strings.facebookLoginFailed;
+            AppScope.read(context).strings.facebookLoginFailed;
       });
     }
     return false;
@@ -1465,7 +1480,10 @@ class _FacebookOAuthWebViewPageState extends State<_FacebookOAuthWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     final error = _error;
     return AppScaffold(
       title: text.facebookLoginTitle,
@@ -1540,7 +1558,7 @@ class _FacebookPageSelectionPageState
   }
 
   Future<void> _load() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final result = await app.loadFacebookChatbotOAuthPages(widget.sessionId);
     if (!mounted) return;
     final pages = result?.pages ?? const <FacebookChatbotPage>[];
@@ -1555,7 +1573,7 @@ class _FacebookPageSelectionPageState
   }
 
   Future<void> _complete() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final ok = await app.completeFacebookChatbotOAuth(
       sessionId: widget.sessionId,
       pageId: _selectedPageId,
@@ -1573,7 +1591,10 @@ class _FacebookPageSelectionPageState
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    );
     final text = app.strings;
     return AppScaffold(
       title: text.selectFacebookPage,
@@ -1773,7 +1794,10 @@ class _CustomerMenuThemeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.settings, AppAspect.language],
+    );
     final text = app.strings;
     final current = resolveCustomerMenuTheme(
       app.serverConfig.customerMenuTheme,
@@ -1924,7 +1948,7 @@ class _PrinterSettingsCardState extends State<_PrinterSettingsCard> {
     super.didChangeDependencies();
     if (!_autoScanned) {
       _autoScanned = true;
-      final app = AppScope.of(context);
+      final app = AppScope.read(context);
       if (!app.printerState.connected) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           widget.onScan();
@@ -1935,7 +1959,10 @@ class _PrinterSettingsCardState extends State<_PrinterSettingsCard> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.printer, AppAspect.language],
+    );
     final text = app.strings;
     final state = app.printerState;
     final devices = app.pairedPrinters;
@@ -2061,7 +2088,10 @@ class _PrinterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final strings = AppScope.of(context).strings;
+    final strings = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     return Padding(
       padding: EdgeInsets.only(bottom: PosSpacing.sp2),
       child: InkWell(
@@ -2192,7 +2222,10 @@ class _SystemPrinterQueueDialogState extends State<_SystemPrinterQueueDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     return AlertDialog(
       title: TfText(widget.title),
       content: Column(
@@ -2307,12 +2340,10 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _currentLogoUrl = info['logoUrl']?.toString().trim().isEmpty == true
             ? null
             : info['logoUrl']?.toString().trim();
-        if (mounted) AppScope.of(context).setLogoUrl(_currentLogoUrl);
+        if (mounted) AppScope.read(context).setLogoUrl(_currentLogoUrl);
         final bitmapUrl = info['logoBitmapUrl']?.toString().trim();
         if (mounted) {
-          AppScope.of(
-            context,
-          ).setLogoBitmapUrl(bitmapUrl?.isNotEmpty == true ? bitmapUrl : null);
+          AppScope.read(context).setLogoBitmapUrl(bitmapUrl?.isNotEmpty == true ? bitmapUrl : null);
         }
         _currentVideoUrl = info['videoUrl']?.toString().trim().isEmpty == true
             ? null
@@ -2343,10 +2374,10 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _saving = false;
       });
       if (!mounted) return;
-      if (url != null) AppScope.of(context).setLogoUrl(url);
-      if (bitmapUrl != null) AppScope.of(context).setLogoBitmapUrl(bitmapUrl);
+      if (url != null) AppScope.read(context).setLogoUrl(url);
+      if (bitmapUrl != null) AppScope.read(context).setLogoBitmapUrl(bitmapUrl);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppScope.of(context).strings.heroLogoUploaded)),
+        SnackBar(content: Text(AppScope.read(context).strings.heroLogoUploaded)),
       );
     } on MenuImageException catch (e) {
       setState(() => _saving = false);
@@ -2373,8 +2404,8 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
         _saving = false;
       });
       if (mounted) {
-        AppScope.of(context).setLogoUrl(null);
-        AppScope.of(context).setLogoBitmapUrl(null);
+        AppScope.read(context).setLogoUrl(null);
+        AppScope.read(context).setLogoBitmapUrl(null);
       }
     } catch (e) {
       setState(() => _saving = false);
@@ -2387,7 +2418,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
 
   Future<void> _addImage() async {
     if (_gallery.length >= 5) {
-      final text = AppScope.of(context).strings;
+      final text = AppScope.read(context).strings;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(text.heroMaxImages)));
@@ -2420,7 +2451,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
   }
 
   Future<void> _deleteImage(int index) async {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     TfConfirmSheet.show(
       context,
       title: text.heroRemoveImageTitle,
@@ -2460,7 +2491,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
     const maxBytes = 50 * 1024 * 1024;
     if (bytes.length > maxBytes) {
       if (!mounted) return;
-      final text = AppScope.of(context).strings;
+      final text = AppScope.read(context).strings;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(text.heroVideoTooLarge)));
@@ -2478,7 +2509,7 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppScope.of(context).strings.heroVideoUploaded)),
+        SnackBar(content: Text(AppScope.read(context).strings.heroVideoUploaded)),
       );
     } catch (e) {
       setState(() => _saving = false);
@@ -2508,7 +2539,10 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     return Scaffold(
       appBar: AppBar(
         title: TfText(text.websiteImageVideoTitle),

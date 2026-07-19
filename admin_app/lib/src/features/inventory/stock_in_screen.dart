@@ -56,7 +56,7 @@ class _StockInScreenState extends State<StockInScreen> {
   }
 
   void _seedFromItem() {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final item = app.inventoryItems
         .where((i) => i.id == widget.preseedItemId)
         .firstOrNull;
@@ -96,7 +96,7 @@ class _StockInScreenState extends State<StockInScreen> {
 
   Future<void> _pickAndScan({required bool fromCamera}) async {
     if (_scanning) return;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     setState(() {
       _scanning = true;
       _scanError = null;
@@ -160,7 +160,7 @@ class _StockInScreenState extends State<StockInScreen> {
         _existingCtrls.values.every((c) => c.text.trim().isEmpty))
       return;
     setState(() => _saving = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
       for (final line in valid) {
@@ -290,7 +290,7 @@ class _StockInScreenState extends State<StockInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language, AppAspect.inventory]);
     final text = app.strings;
     final scanned = _scanProvider != null;
     final preseedTitle = widget.preseedItemId == null || _lines.isEmpty
@@ -987,7 +987,7 @@ class _ExistingStockInRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TfText(
-                    item.localizedName(AppScope.of(context).language),
+                    item.localizedName(AppScope.selectMany(context, const [AppAspect.language]).language),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

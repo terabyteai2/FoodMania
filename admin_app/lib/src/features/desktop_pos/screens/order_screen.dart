@@ -64,7 +64,7 @@ class _OrderScreenState extends State<OrderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.account, AppAspect.menu]);
     final settled = order.settledAt != null;
     final canEditOrders = app.isManager && !settled;
     return PcShell(
@@ -809,7 +809,7 @@ class _OrderScreenState extends State<OrderScreen> {
   Future<void> _sendKot() async {
     setState(() => _busy = true);
     try {
-      widget.onChanged(await AppScope.of(context).sendDesktopKot(order));
+      widget.onChanged(await AppScope.read(context).sendDesktopKot(order));
     } catch (e) {
       _msg('$e');
     } finally {
@@ -903,7 +903,7 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _audit(String action) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final reason = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -951,7 +951,7 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _moveTable() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final controller = TextEditingController(text: order.tableNo ?? '');
     final table = await showDialog<String>(
       context: context,
@@ -999,7 +999,7 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _split() async {
-    final lang = AppScope.of(context).language;
+    final lang = AppScope.read(context).language;
     final plan = await showDialog<PcSplitPlan>(
       context: context,
       builder: (_) => PcSplitBillDialog(
@@ -1030,7 +1030,7 @@ class _OrderScreenState extends State<OrderScreen> {
       return;
     }
     setState(() => _busy = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       final total = _total;
       final lines = <PosSettlementLine>[];
@@ -1093,7 +1093,7 @@ class _MenuPickerDialogState extends State<_MenuPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = AppScope.of(context).language;
+    final lang = AppScope.selectMany(context, const [AppAspect.language]).language;
     final q = _search.text.trim().toLowerCase();
     final items = widget.items
         .where((m) => q.isEmpty || m.searchText(lang).contains(q))

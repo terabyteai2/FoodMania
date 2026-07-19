@@ -77,7 +77,7 @@ class _CounterScreenState extends State<CounterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.menu, AppAspect.language]);
     final lang = app.language;
     final available = app.menuItems
         .where((item) => item.isAvailable)
@@ -886,7 +886,7 @@ class _CounterScreenState extends State<CounterScreen> {
       return;
     }
     setState(() => _busy = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       final order = await app.createDesktopOrder(
         requestedItems: [for (final line in selected) line.toRequestItem()],

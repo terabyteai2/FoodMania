@@ -12,7 +12,10 @@ class ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.language],
+    ).strings;
     return TfCard(
       padding: const EdgeInsets.all(PosSpacing.sp4),
       child: Row(

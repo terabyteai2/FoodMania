@@ -191,7 +191,7 @@ class _StockScanScreenState extends State<StockScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
 
     return Scaffold(
       backgroundColor:
@@ -225,7 +225,7 @@ class _StockScanScreenState extends State<StockScanScreen> {
   Widget _captureBody() {
     final padTop = MediaQuery.of(context).padding.top;
     final padBottom = MediaQuery.of(context).padding.bottom;
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
 
     return Stack(
       children: [

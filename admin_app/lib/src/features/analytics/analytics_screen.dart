@@ -118,7 +118,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.dashboard, AppAspect.account, AppAspect.language],
+    );
     final text = app.strings;
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -1174,7 +1177,10 @@ class _ItemDrillDownScreenState extends State<ItemDrillDownScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.dashboard, AppAspect.account, AppAspect.language],
+    );
     final text = app.strings;
     return Scaffold(
       backgroundColor: PosColors.background,

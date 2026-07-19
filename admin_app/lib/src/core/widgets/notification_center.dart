@@ -20,7 +20,7 @@ void showNotificationCenter(
   required VoidCallback onNavigateToOrders,
   ValueChanged<PosNotificationTarget>? onNavigateToTarget,
 }) {
-  final app = AppScope.of(context);
+  final app = AppScope.read(context);
   final text = app.strings;
   showGeneralDialog<void>(
     context: context,
@@ -103,7 +103,10 @@ class _NotificationShadeState extends State<_NotificationShade> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.language, AppAspect.notifications],
+    );
     final text = app.strings;
     final items = app.notifications;
     final mediaHeight = MediaQuery.sizeOf(context).height;
@@ -982,7 +985,10 @@ class HeaderNotificationBell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.notifications, AppAspect.language],
+    );
     final unread = app.unreadNotificationCount;
     return TfBarButton(
       icon: TfSourceIconName.bell,

@@ -30,14 +30,14 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(
         () =>
-            _history = AppScope.of(context).getStockAdjustments(widget.item.id),
+            _history = AppScope.read(context).getStockAdjustments(widget.item.id),
       );
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.inventory, AppAspect.language, AppAspect.account]);
     final item =
         app.inventoryItems
             .where((row) => row.id == widget.item.id)

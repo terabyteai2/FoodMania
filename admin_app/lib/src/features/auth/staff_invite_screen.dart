@@ -19,7 +19,7 @@ class _StaffInviteScreenState extends State<StaffInviteScreen> {
   String? _error;
 
   Future<void> _respond({required bool accept}) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     setState(() {
       _busy = true;
       _error = null;
@@ -43,7 +43,10 @@ class _StaffInviteScreenState extends State<StaffInviteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.account, AppAspect.language],
+    );
     final invite = app.pendingStaffInvite;
     if (invite == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));

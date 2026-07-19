@@ -47,7 +47,7 @@ class _UsedStockScreenState extends State<UsedStockScreen> {
     if (quantities.isEmpty) return;
     setState(() => _saving = true);
     try {
-      await AppScope.of(
+      await AppScope.read(
         context,
       ).recordInventoryUsageBatch(quantities, reason: _reason);
       if (mounted) Navigator.pop(context);
@@ -64,7 +64,7 @@ class _UsedStockScreenState extends State<UsedStockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.inventory]);
     final items = app.inventoryItems;
     return Scaffold(
       backgroundColor: PosColors.background,
@@ -167,7 +167,7 @@ class _UsedLine extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           TfText(
-                            item.localizedName(AppScope.of(context).language),
+                            item.localizedName(AppScope.selectMany(context, const [AppAspect.language]).language),
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,

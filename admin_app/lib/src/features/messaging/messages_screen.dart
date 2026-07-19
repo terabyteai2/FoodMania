@@ -32,7 +32,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (!identical(_app, app)) {
       unawaited(_chatEvents?.cancel());
       _app = app;
@@ -49,7 +49,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   Future<void> _reload({bool silent = false}) async {
     if (_refreshInFlight) return;
-    final app = _app ?? AppScope.of(context);
+    final app = _app ?? AppScope.read(context);
     _refreshInFlight = true;
     if (!silent && mounted) {
       setState(() {
@@ -80,7 +80,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.chatbot, AppAspect.account, AppAspect.language],
+    ).strings;
     return AppScaffold(
       title: text.messages,
       subtitle: text.botLive,
@@ -410,7 +413,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     if (!identical(_app, app)) {
       unawaited(_chatEvents?.cancel());
       _app = app;
@@ -464,7 +467,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       _refreshAgainAfterCurrent = true;
       return;
     }
-    final app = _app ?? AppScope.of(context);
+    final app = _app ?? AppScope.read(context);
     _refreshing = true;
     try {
       final chats = await app.fetchChats();
@@ -520,7 +523,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final trimmed = text.trim();
     if (trimmed.isEmpty || _sending) return;
     setState(() => _sending = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       final updated = await app.replyToChat(_chat.id, trimmed);
       if (!mounted) return;
@@ -548,7 +551,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(
+      context,
+      const [AppAspect.chatbot, AppAspect.account, AppAspect.language],
+    ).strings;
     return AppScaffold(
       title: _chat.name,
       subtitle: text.viaMessenger,

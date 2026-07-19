@@ -233,7 +233,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final borderColor = _focused ? PosColors.primary : PosColors.line;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
@@ -332,7 +332,7 @@ class CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return SizedBox(
       height: 44,
       child: ListView.separated(
@@ -386,7 +386,7 @@ class _MenuContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      final text = AppScope.of(context).strings;
+      final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
       return CustomScrollView(
         slivers: [
           SliverFillRemaining(
@@ -541,7 +541,7 @@ class _GridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     debugPrint('[QB-WIZARD] _GridTile: building ${item.id} ${item.name} cat=${item.category}');
     final inCart = qty > 0;
     final off = !item.isAvailable;
@@ -768,7 +768,7 @@ Future<void> _showItemActions(
   required VoidCallback onToggleFavorite,
   required VoidCallback onSetShortCode,
 }) {
-  final text = AppScope.of(context).strings;
+  final text = AppScope.read(context).strings;
   return showModalBottomSheet<void>(
     context: context,
     builder: (sheetContext) {
@@ -828,7 +828,7 @@ class _ShortCodeList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     if (items.isEmpty) {
       return Center(
         child: TfText(
@@ -991,7 +991,7 @@ class CartFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return TfStickyCTA(
       child: TfButton(
         label: text.reviewOrder,
@@ -1087,7 +1087,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language]);
     final isBn = app.strings.isBn;
     final extras = widget.item.extras;
     final iconKey = resolveMenuIconKey(

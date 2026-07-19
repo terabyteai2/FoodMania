@@ -75,7 +75,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
 
   Future<void> _pickAndScan() async {
     if (_scanning) return;
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _scanning = true);
     try {
@@ -113,7 +113,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       for (final item in app.inventoryItems) {
         final value = double.tryParse(_controller(item).text.trim());
@@ -133,7 +133,7 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(context, const [AppAspect.language, AppAspect.inventory]);
     final text = app.strings;
     final items = app.inventoryItems;
     final total = items.length;
@@ -380,7 +380,7 @@ class _CountLineState extends State<_CountLine> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TfText(
-                    item.localizedName(AppScope.of(context).language),
+                    item.localizedName(AppScope.selectMany(context, const [AppAspect.language]).language),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

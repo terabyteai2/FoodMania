@@ -496,7 +496,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
 
   Future<void> _scanMenu(BuildContext context) async {
     if (_scanBusy) return;
-    final text = AppScope.of(context).strings;
+    final text = AppScope.read(context).strings;
     setState(() => _scanBusy = true);
     final shellNav = ShellNavScope.maybeOf(context);
     await Navigator.push<MenuScanImportResult>(
@@ -1028,7 +1028,7 @@ class _DesktopMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final extras = item.extras;
     final hasImage = (item.imageUrl ?? '').trim().isNotEmpty;
     final iconKey = resolveMenuIconKey(
@@ -1265,7 +1265,7 @@ class _MenuSettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final hasSelected = selectedCount > 0;
     void close(_MenuSettingsTarget target, bool clearOnly) {
       Navigator.of(
@@ -1450,7 +1450,7 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
@@ -1518,7 +1518,7 @@ class _DeliveryChargeSheetState extends State<_DeliveryChargeSheet> {
     final value = double.tryParse(_controller.text.trim());
     if (value == null || value < 0 || value > 100000) {
       setState(
-        () => _error = AppScope.of(context).strings.menuDeliveryChargeInvalid,
+        () => _error = AppScope.read(context).strings.menuDeliveryChargeInvalid,
       );
       return;
     }
@@ -1541,7 +1541,7 @@ class _BulkMenuToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return TfCard(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -1608,7 +1608,7 @@ class _BulkDiscountSheetState extends State<_BulkDiscountSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
@@ -1768,7 +1768,7 @@ class _MenuListHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final style = TfTextStyles.eyebrow.copyWith(color: PosColors.muted);
     return Container(
       color: PosColors.surfaceSunk,
@@ -1917,7 +1917,7 @@ class _MarkAsToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final on = value;
     final label = Text(
       on ? text.menuMarkOn : text.menuMarkOff,
@@ -2036,7 +2036,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final theme = Theme.of(context);
     final placeholderIconKey = _placeholderIconKey();
@@ -2289,7 +2289,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
   }
 
   Future<void> _pickImage() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final text = app.strings;
     setState(() => _imageBusy = true);
     try {
@@ -2701,7 +2701,7 @@ class _OptionRowWidget extends StatelessWidget {
   final VoidCallback onRemove;
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Row(
       children: [
         Expanded(
@@ -2742,7 +2742,7 @@ class _IncludeRowWidget extends StatelessWidget {
   final VoidCallback onRemove;
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Row(
       children: [
         Expanded(
@@ -2772,7 +2772,7 @@ class _AddOnRowWidget extends StatelessWidget {
   final VoidCallback onRemove;
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final text = AppScope.selectMany(context, const [AppAspect.language]).strings;
     return Row(
       children: [
         Expanded(

@@ -37,7 +37,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppScope.of(context).refreshCloudCapabilities();
+      AppScope.read(context).refreshCloudCapabilities();
     });
   }
 
@@ -95,7 +95,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
   }
 
   Future<void> _sendOtp() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     setState(() {
       _busy = true;
       _error = null;
@@ -132,7 +132,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
   }
 
   Future<void> _verifyOtp() async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     final code = _otpCode.trim();
     if (code.length < 6) {
       if (mounted) {
@@ -181,7 +181,10 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.account, AppAspect.language],
+    );
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final compact = bottomInset > 0 || _otpSent;
 

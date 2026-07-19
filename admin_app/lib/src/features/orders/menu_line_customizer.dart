@@ -277,7 +277,7 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = AppScope.of(context).language;
+    final lang = AppScope.selectMany(context, const [AppAspect.language]).language;
     final addOns = widget.item.extras.addOns;
     final selectedAddOns = [
       for (var i = 0; i < addOns.length; i++)

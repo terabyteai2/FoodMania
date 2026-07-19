@@ -25,15 +25,15 @@ class _StaffScreenState extends State<StaffScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= AppScope.of(context).fetchStaff();
+    _future ??= AppScope.read(context).fetchStaff();
   }
 
   void _reload() {
-    setState(() => _future = AppScope.of(context).fetchStaff());
+    setState(() => _future = AppScope.read(context).fetchStaff());
   }
 
   Future<void> _toggleActive(StaffMember m, bool value) async {
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       await app.setStaffActive(m.id, value);
       _reload();
@@ -48,7 +48,10 @@ class _StaffScreenState extends State<StaffScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
+    final app = AppScope.selectMany(
+      context,
+      const [AppAspect.account, AppAspect.language],
+    );
     final text = app.strings;
     return AppScaffold(
       title: text.staff,
@@ -299,7 +302,7 @@ class _InviteSheetState extends State<_InviteSheet> {
     final phone = _phoneCtrl.text.trim();
     if (phone.isEmpty || _busy) return;
     setState(() => _busy = true);
-    final app = AppScope.of(context);
+    final app = AppScope.read(context);
     try {
       await app.inviteStaff(
         phone: phone,
