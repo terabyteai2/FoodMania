@@ -1768,7 +1768,7 @@ class _OrderCardState extends State<_OrderCard> {
               TfButton(
                 label: text.printBillAction,
                 icon: Icons.receipt_long_outlined,
-                variant: TfButtonVariant.success,
+                variant: TfButtonVariant.primary,
                 size: TfButtonSize.sm,
                 fullWidth: false,
                 onPressed: widget.onPrintBill,
@@ -2304,7 +2304,7 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                         child: TfButton(
                           label: text.acceptAndSendToKitchen,
                           icon: TfNavIcon.check,
-                          variant: TfButtonVariant.success,
+                variant: TfButtonVariant.primary,
                           size: TfButtonSize.lg,
                           onPressed: onAccept,
                         ),
