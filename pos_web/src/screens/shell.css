@@ -59,6 +59,23 @@
   font-size: var(--fs-13); font-weight: 600; padding: 6px;
 }
 
+/* ---------- install toast (PWA) ---------- */
+.install-toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--secondary); color: #fff;
+  padding: 10px 16px; border-radius: var(--r-md);
+  font-size: var(--fs-13); font-weight: 600; box-shadow: var(--shadow-pop);
+  z-index: 200;
+}
+.install-toast-text { white-space: nowrap; }
+.install-toast-btn { background: #fff; color: var(--secondary); border: none; font-weight: 700; flex: none; }
+.install-toast-btn:hover { background: var(--bg); }
+.install-toast-close {
+  background: none; border: none; color: rgba(255,255,255,0.6); font-size: var(--fs-14);
+  padding: 2px 4px; line-height: 1;
+}
+
 /* ---------- body ---------- */
 .shell-body { flex: 1; min-height: 0; display: flex; }
 .shell-placeholder {

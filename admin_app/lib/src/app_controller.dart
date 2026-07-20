@@ -45,6 +45,7 @@ import 'models/server_config.dart';
 import 'models/stock_adjustment.dart';
 import 'models/sync_event.dart';
 import 'services/app_update_installer_service.dart';
+import 'services/background_service.dart';
 import 'services/cloud_api_service.dart';
 import 'services/cloud_realtime_service.dart';
 import 'services/connectivity_service.dart';
@@ -225,6 +226,12 @@ class PosAppController extends ChangeNotifier {
   bool? _lastInternetOnline;
   bool _lastIsSyncing = false;
   bool _coalesceNextOrderAlertBatch = false;
+
+  /// Set to true when the app transitions from background to foreground. While
+  /// true, [addNotification] shows an OS notification even though the app is
+  /// technically in the resumed state — this lets the user see alerts for
+  /// events that arrived via sync while the Dart isolate was frozen.
+  bool _justResumedFromBackground = false;
 
   /// Pending FCM notification tap data — set by the push notification service
   /// when a remote notification is tapped. The shell picks this up on its next
@@ -473,6 +480,9 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> onResumed() async {
     isAppForeground = true;
+    // Stop the foreground WebSocket service started by onPaused if FCM is
+    // unavailable — the main isolate's WebSocket + periodic sync take over.
+    unawaited(stopBackgroundWebSocket());
     // Resume the auto-sync cadence that onPaused() stopped; the immediate
     // catch-up sync below handles the gap while backgrounded.
     syncService.setForeground(true);
@@ -480,6 +490,12 @@ class PosAppController extends ChangeNotifier {
     // Resuming clears any stale OS notifications that the user has obviously
     // seen by virtue of opening the app.
     unawaited(systemNotifications.cancelAll());
+    // Flag so the catch-up sync shows OS notifications for events that were
+    // missed while the Dart isolate was frozen in background.
+    _justResumedFromBackground = true;
+    Future.delayed(const Duration(seconds: 5), () {
+      _justResumedFromBackground = false;
+    });
     // Re-check notification permission in case the user just granted it from
     // system settings while the app was backgrounded.
     unawaited(systemNotifications.ensurePermissionGranted());
@@ -506,6 +522,30 @@ class PosAppController extends ChangeNotifier {
     // next onResumed() restarts the cadence and triggers a catch-up sync.
     syncService.setForeground(false);
     debugPrint('[QB-NOTIF] lifecycle=background');
+    // Start foreground WebSocket service if FCM is unavailable (e.g. no Google
+    // Play Services on Huawei).  This keeps the Dart isolate alive so the
+    // WebSocket connection stays open and order events arrive in real time.
+    if (!pushNotificationService.isFcmAvailable && cloudConfig.canSync) {
+      _startForegroundWebSocket();
+    }
+  }
+
+  void _startForegroundWebSocket() {
+    final baseUrl = cloudConfig.baseUrl.trim();
+    if (baseUrl.isEmpty) return;
+    final wsUrl = baseUrl.startsWith('https://')
+        ? 'wss://${baseUrl.substring(8)}'
+        : baseUrl.startsWith('http://')
+            ? 'ws://${baseUrl.substring(7)}'
+            : baseUrl;
+    unawaited(
+      startBackgroundWebSocket(
+        wsUrl: wsUrl,
+        outletId: serverConfig.outletId.trim(),
+        deviceToken: cloudConfig.deviceToken.trim(),
+      ),
+    );
+    debugPrint('[QB-BG] started foreground WebSocket service wsUrl=$wsUrl');
   }
 
   Future<void> initialize() async {
@@ -1088,24 +1128,43 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> reloadData() async {
     menuItems = await database.getMenuItems();
-    final loadedOrders = await database.getOrders(limit: kOrdersInitialPage);
+    // Load a generous slice so open orders (pending/accepted) with low
+    // sequence numbers are not cut off by kOrdersInitialPage.  The slice is
+    // a single contiguous sort from the DB, so offset-based loadMoreOrders
+    // still works correctly.
+    final loadedOrders = await database.getOrders(limit: kOrdersMaxInMemory);
     orders = loadedOrders;
-    _hasMoreOrders = loadedOrders.length >= kOrdersInitialPage;
+    _hasMoreOrders = loadedOrders.length >= kOrdersMaxInMemory;
+    {
+      final fbOrders = loadedOrders.where((o) => o.source.name == 'facebookMessenger').toList();
+      if (fbOrders.isNotEmpty) {
+        print(
+          '[QB-ALWAYS] reloadData HAS ${fbOrders.length} facebookMessenger order(s): '
+          '${fbOrders.map((o) => '${o.id}#${o.sequenceNo}:${o.status.name}').join(' | ')}',
+        );
+      } else {
+        print(
+          '[QB-ALWAYS] reloadData ZERO facebookMessenger orders in loaded list '
+          '(total=${loadedOrders.length})',
+        );
+      }
+    }
     if (kDebugMode) {
-      final open = loadedOrders.where((o) => o.status.isOpen).length;
-      final pending = loadedOrders
+      final open = orders.where((o) => o.status.isOpen).length;
+      final pending = orders
           .where((o) => o.status.adminStatus == OrderStatus.pending)
           .length;
-      final accepted = loadedOrders
+      final accepted = orders
           .where((o) => o.status.adminStatus == OrderStatus.accepted)
           .length;
-      final completed = loadedOrders.where((o) => o.status.isCompleted).length;
-      final rejected = loadedOrders.where((o) => o.status.isRejected).length;
+      final completed = orders.where((o) => o.status.isCompleted).length;
+      final rejected = orders.where((o) => o.status.isRejected).length;
       debugPrint(
-        '[QB-ORDERS-DIAG] reloadData loaded=${loadedOrders.length} '
-        'open=$open pending=$pending acceptedAdmin=$accepted '
-        'completed=$completed rejected=$rejected hasMore=$_hasMoreOrders '
-        '${_ordersDiagSummary(loadedOrders)}',
+        '[QB-ORDERS-DIAG] reloadData orders=${orders.length} '
+        'loaded=${loadedOrders.length} open=$open pending=$pending '
+        'acceptedAdmin=$accepted completed=$completed rejected=$rejected '
+        'hasMore=$_hasMoreOrders '
+        '${_ordersDiagSummary(orders)}',
       );
     }
     syncEvents = await database.getSyncEvents(statuses: null, limit: 100);
@@ -1485,6 +1544,7 @@ class PosAppController extends ChangeNotifier {
       return;
     }
     _handlingDatabaseChange = true;
+    print('[QB-ALWAYS] dbChanged fired (preOrders=${orders.length})');
     try {
       do {
         _databaseChangePending = false;
@@ -3665,16 +3725,21 @@ class PosAppController extends ChangeNotifier {
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     final inForeground =
         lifecycle == AppLifecycleState.resumed && isAppForeground;
+    final showOsNotification =
+        // True background: always show OS notification.
+        !inForeground ||
+        // Just resumed from background: show OS notification for alerts that
+        // arrived via the catch-up sync while the Dart isolate was frozen.
+        (inForeground && _justResumedFromBackground);
     final soundOn = playSound && notificationSoundEnabled;
     debugPrint(
       '[QB-NOTIF] add type=${type.name} foreground=$inForeground '
+      'showOs=$showOsNotification justResumed=$_justResumedFromBackground '
       'sound=$soundOn order=${orderId ?? ''} title=$displayTitle',
     );
 
-    if (inForeground) {
-      // Foreground: in-app toast (see MainShell) + asset sound.
-      if (soundOn) unawaited(playNotificationSound(type: type));
-    } else {
+    if (showOsNotification) {
+      _justResumedFromBackground = false;
       // Background / screen off: OS notification + channel sound.
       // Stable id per order+type replaces the previous alert instead of stacking.
       final notificationId = orderId != null
@@ -3691,6 +3756,9 @@ class PosAppController extends ChangeNotifier {
           actionTarget: actionTarget,
         ),
       );
+    } else if (soundOn) {
+      // Foreground normal: in-app toast + asset sound (no system notification).
+      unawaited(playNotificationSound(type: type));
     }
     notifyListeners();
   }

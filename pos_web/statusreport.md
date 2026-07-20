@@ -283,7 +283,18 @@ old `/pos/` alias pointed at an empty `pos_admin/` dir and shadowed it) and has 
   `#download` (the native-app download cards further down the page are untouched/still valid).
 - Tests unchanged at 67/67 green; `tsc --noEmit` + `npm run build` clean.
 
-**Core POS (Phases 0–4) + back-office B1/B2/B3 + Phase C (root launch/signup) complete.**
+**Core POS (Phases 0–4) + back-office B1/B2/B3 + Phase C (root launch/signup) + Phase D (PWA offline) complete.**
+
+### ✅ Phase D — PWA offline app (2026-07-21)
+Turned `pos_web` into a fully offline-capable Progressive Web App. Visit once online, then use without internet.
+- **`vite-plugin-pwa`** (Workbox): precaches all static assets (JS, CSS, HTML, 9 font files = 23 entries, 1.86 MB) on first visit. `sw.js` served alongside the app; `registerSW.js` auto-injects into `index.html` at build time.
+- **`vite.config.ts`**: `VitePWA` plugin with `registerType: 'autoUpdate'`, `navigateFallback: '/index.html'` (offline SPA routing), and PWA manifest (`display: standalone`, brand theme color). Fonts included via `includeAssets`.
+- **iOS PWA**: `apple-mobile-web-app-capable` + `status-bar-style` meta tags for "Add to Home Screen" support on iOS Safari.
+- **Offline no-session guard** (`App.tsx`): when offline and no session exists, shows a static message ("You need internet to sign in") instead of redirecting to `/landing/` (which would fail without network).
+- **Offline banner** (`Shell.tsx`): text changed to "Offline mode — queued writes will sync when reconnected" (was "No internet — reconnecting…").
+- **Existing offline data layer untouched**: IDB cache, mutation outbox, session/localStorage, WebSocket reconnect — all continue to work unchanged. The service worker only caches static assets; API calls are still managed by the app's own network-first-with-IDB-fallback pattern.
+- **Tests**: 67/67 green; `tsc --noEmit` clean; build green produces `sw.js` + `workbox-*.js` + `manifest.webmanifest` in `backend/pos_dist/`.
+- **Icons**: PWA icons (192×192 + 512×512) extracted from `admin_app` iOS app icon (white bolt on `#2F4FE0` blue) → `public/pwa-{192,512}x512.png`; `favicon.png` symlinked to the 32×32 variant. Manifest `icons` array populated.
 
 ## Dev workflow
 ```bash

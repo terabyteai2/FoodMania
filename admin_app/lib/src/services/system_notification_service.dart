@@ -27,6 +27,7 @@ class SystemNotificationService {
   static const String _acceptedChannelId = 'pos_accepted_orders_v2';
   static const String _defaultChannelId = 'pos_orders_default_v2';
   static const String _chatChannelId = 'pos_chat_alerts_v2';
+  static const String _bgServiceChannelId = 'pos_background_service';
 
   /// Legacy channel IDs — deleted on upgrade so sound settings reset cleanly.
   static const _legacyChannelIds = <String>[
@@ -199,6 +200,15 @@ class SystemNotificationService {
       description: 'General order notifications with sound.',
       sound: defaultSound,
     );
+
+    await _createChannel(
+      android,
+      id: _bgServiceChannelId,
+      name: 'QuickBites sync',
+      description: 'Shows when QuickBites is syncing in the background.',
+      sound: null,
+      importance: Importance.low,
+    );
   }
 
   Future<void> _createChannel(
@@ -207,6 +217,7 @@ class SystemNotificationService {
     required String name,
     required String description,
     AndroidNotificationSound? sound,
+    Importance importance = Importance.max,
   }) async {
     try {
       await android.createNotificationChannel(
@@ -214,10 +225,10 @@ class SystemNotificationService {
           id,
           name,
           description: description,
-          importance: Importance.max,
-          playSound: true,
+          importance: importance,
+          playSound: sound != null,
           sound: sound,
-          enableVibration: true,
+          enableVibration: importance >= Importance.high,
         ),
       );
     } catch (e) {
@@ -275,6 +286,7 @@ class SystemNotificationService {
       playSound: playSound,
       sound: androidSound,
       enableVibration: true,
+      fullScreenIntent: true,
       category: AndroidNotificationCategory.message,
       visibility: NotificationVisibility.public,
     );

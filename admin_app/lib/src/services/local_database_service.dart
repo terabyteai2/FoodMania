@@ -631,13 +631,11 @@ class LocalDatabaseService {
           await txn.insert('order_items', item.toMap());
         }
         applied = next;
-        if (kDebugMode) {
-          debugPrint(
-            '[QB-ORDERS-DIAG] applyRemoteOrder INSERT id=${next.id} '
-            'serial=${next.sequenceNo} status=${next.status.name}/'
-            '${next.status.adminStatus.name} source=${next.source.name} '
-            'items=${next.items.length} version=${next.version} '
-            'updated=${next.updatedAt.toIso8601String()}',
+        if (next.source.name == 'facebookMessenger') {
+          print(
+            '[QB-ALWAYS] DB INSERT fb_messenger id=${next.id} '
+            'serial=${next.sequenceNo} status=${next.status.name} '
+            'version=${next.version}',
           );
         }
         return;
@@ -654,15 +652,12 @@ class LocalDatabaseService {
           (!statusCanAdvance || current.status == remote.status)) {
         // SKIP: remote looks stale and status can't advance — the in-memory
         // list keeps the old row. Prime suspect for "order not showing".
-        if (kDebugMode) {
-          debugPrint(
-            '[QB-ORDERS-DIAG] applyRemoteOrder SKIP id=${order.id} '
+        if (order.source.name == 'facebookMessenger') {
+          print(
+            '[QB-ALWAYS] DB SKIP fb_messenger id=${order.id} '
             'remoteNewer=$remoteNewer statusCanAdvance=$statusCanAdvance '
-            'current=${current.status.name}/${current.status.adminStatus.name}'
-            '@${current.updatedAt.toIso8601String()}v${current.version} '
-            'remote=${remote.status.name}/${remote.status.adminStatus.name}'
-            '@${remote.updatedAt.toIso8601String()}v${remote.version} '
-            'currentItems=${current.items.length} remoteItems=${remote.items.length}',
+            'current=${current.status.name}@${current.updatedAt.toIso8601String()} '
+            'remote=${remote.status.name}@${remote.updatedAt.toIso8601String()}',
           );
         }
         return;

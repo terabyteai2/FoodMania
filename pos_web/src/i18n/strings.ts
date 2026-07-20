@@ -22,7 +22,11 @@ const dict = {
   newOrder: { en: 'New Order', bn: 'নতুন অর্ডার' },
   billNo: { en: 'Bill No', bn: 'বিল নং' },
   comingSoon: { en: 'Coming in the next build phase', bn: 'পরবর্তী ধাপে আসছে' },
-  offline: { en: 'No internet — reconnecting…', bn: 'ইন্টারনেট নেই — পুনরায় সংযোগ হচ্ছে…' },
+  installApp: { en: 'Install QuickBytes on your desktop', bn: 'আপনার ডেস্কটপে QuickBytes ইন্সটল করুন' },
+  installBtn: { en: 'Install', bn: 'ইন্সটল' },
+  offlineBanner: { en: 'Offline mode — queued writes will sync when reconnected', bn: 'অফলাইন মোড — সংযোগ পুনরুদ্ধারে লেখাগুলি সিঙ্ক হবে' },
+  offlineNoSession: { en: 'You need internet to sign in. Once signed in, the POS works offline.', bn: 'সাইন ইন করতে ইন্টারনেট প্রয়োজন। সাইন ইন করার পর, POS অফলাইনে কাজ করে।' },
+  offlineRetry: { en: 'Connect to internet to sign in', bn: 'সাইন ইন করতে ইন্টারনেটে সংযোগ করুন' },
   subscriptionBlocked: {
     en: 'This outlet does not have an active subscription. Complete payment from the QuickBytes phone app.',
     bn: 'এই আউটলেটের সাবস্ক্রিপশন সক্রিয় নেই। QuickBytes ফোন অ্যাপ থেকে পেমেন্ট সম্পন্ন করুন।',

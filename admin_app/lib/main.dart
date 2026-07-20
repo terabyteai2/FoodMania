@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'src/app.dart';
+import 'src/services/background_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,10 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('[QB-FCM] Firebase init skipped: $e');
   }
+
+  // Register the background isolate callback used by the foreground-service
+  // WebSocket fallback on devices without Google Play Services (e.g. Huawei).
+  await configureBackgroundService();
 
   runApp(LocalPosApp());
 }

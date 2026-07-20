@@ -489,9 +489,17 @@ class SyncService {
         // the whole pulled batch in memory.
         if (kDebugMode) parsedOrders.add(order);
         final applied = await _database.applyRemoteOrder(order);
+        final orderSource = payload['source']?.toString() ?? 'unknown';
         if (applied != null) {
           imported++;
           ordersApplied++;
+          if (orderSource == 'facebook_messenger') {
+            print(
+              '[QB-ALWAYS] PULL APPLIED fb_messenger id=${order.id} '
+              'serial=${order.sequenceNo} status=${order.status.name} '
+              'items=${order.items.length}',
+            );
+          }
           _onRemoteEvent?.call({
             'type': applied.status == OrderStatus.pending
                 ? 'order_created'
@@ -502,6 +510,13 @@ class SyncService {
           // applyRemoteOrder returned null = the remote row was NOT applied
           // (stale vs local, or no-op). Prime suspect for "order not showing".
           ordersSkipped++;
+          if (orderSource == 'facebook_messenger') {
+            print(
+              '[QB-ALWAYS] PULL SKIPPED fb_messenger id=${order.id} '
+              'serial=${order.sequenceNo} status=${order.status.name} '
+              'items=${order.items.length}',
+            );
+          }
           if (kDebugMode) {
             debugPrint(
               '[QB-ORDERS-DIAG] sync order NOT applied id=${order.id} '
@@ -681,11 +696,10 @@ class SyncService {
           sourceFallback: OrderSource.cloud,
         );
         final applied = await _database.applyRemoteOrder(order);
-        if (kDebugMode) {
-          debugPrint(
-            '[QB-ORDERS-DIAG] realtime $type id=${order.id} '
-            'status=${order.status.name}/${order.status.adminStatus.name} '
-            'source=${order.source.name} updated=${order.updatedAt.toIso8601String()} '
+        if (order.source.name == 'facebookMessenger') {
+          print(
+            '[QB-ALWAYS] REALTIME $type fb_messenger id=${order.id} '
+            'serial=${order.sequenceNo} status=${order.status.name} '
             'applied=${applied != null}',
           );
         }

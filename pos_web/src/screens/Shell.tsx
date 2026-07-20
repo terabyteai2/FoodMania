@@ -11,6 +11,7 @@ import { Billing } from './Billing';
 import { Tables } from './Tables';
 import { Orders } from './Orders';
 import { Ops } from './Ops';
+import { InstallToast } from '../components/InstallToast';
 import './shell.css';
 
 const NAV: { id: NavSection; icon: string; labelEn: string; labelBn: string }[] = [
@@ -132,7 +133,8 @@ export function Shell() {
         </div>
       </header>
 
-      {!online && <div className="offline-banner">{t('offline', lang)}</div>}
+      {!online && <div className="offline-banner">{t('offlineBanner', lang)}</div>}
+      <InstallToast />
 
       <main className="shell-body">
         {section === 'billing' && <Billing />}
