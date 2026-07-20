@@ -543,7 +543,11 @@ class LocalDatabaseService {
       final model = OrderModel(
         id: orderId,
         orderNo: _buildOrderNumber(now),
-        sequenceNo: await _nextOrderSequence(txn),
+        sequenceNo: await _nextOrderSequence(
+          txn,
+          source: source,
+          createdByRole: createdByRole,
+        ),
         orderDate: DateTime.now(),
         customerName: _cleanNullable(customerName),
         tableNo: _cleanNullable(tableNo),
@@ -616,7 +620,11 @@ class LocalDatabaseService {
         final next = remote.copyWith(
           sequenceNo: remote.sequenceNo > 0
               ? remote.sequenceNo
-              : await _nextOrderSequence(txn),
+              : await _nextOrderSequence(
+                  txn,
+                  source: remote.source,
+                  createdByRole: remote.createdByRole,
+                ),
         );
         await txn.insert('orders', next.toMap());
         for (final item in next.items) {
@@ -1916,10 +1924,38 @@ class LocalDatabaseService {
     }
   }
 
-  Future<int> _nextOrderSequence(DatabaseExecutor db) async {
+  Future<int> _nextOrderSequence(
+    DatabaseExecutor db, {
+    OrderSource source = OrderSource.manual,
+    String? createdByRole,
+  }) async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
+    // Source-aware serial grouping: each group (W/M/S/default) keeps its own
+    // per-day counter. Must match backend `serial_group_filter` logic.
+    // Local DB stores source as the OrderSource enum value, so online sources
+    // are 'cloud' (website) and 'facebook_messenger' (messenger).
+    const onlineSources = "'cloud','facebook_messenger'";
+    String groupFilter;
+    switch (source) {
+      case OrderSource.cloud:
+        groupFilter = "AND source = 'cloud'";
+      case OrderSource.facebookMessenger:
+        groupFilter = "AND source = 'facebook_messenger'";
+      case OrderSource.manual:
+      case OrderSource.desktopPos:
+      case OrderSource.localLan:
+        final role = (createdByRole ?? '').trim().toLowerCase();
+        if (role == 'waiter' || role == 'staff') {
+          groupFilter =
+              "AND source NOT IN ($onlineSources) AND (createdByRole = 'waiter' OR createdByRole = 'staff')";
+        } else {
+          groupFilter =
+              "AND source NOT IN ($onlineSources) AND (createdByRole IS NULL OR (createdByRole != 'waiter' AND createdByRole != 'staff'))";
+        }
+    }
     final rows = await db.rawQuery(
-      'SELECT COALESCE(MAX(sequenceNo), 0) + 1 AS nextSequence FROM orders WHERE date(orderDate) = ?',
+      'SELECT COALESCE(MAX(sequenceNo), 0) + 1 AS nextSequence '
+      'FROM orders WHERE date(orderDate) = ? $groupFilter',
       [today],
     );
     final value = rows.first['nextSequence'];

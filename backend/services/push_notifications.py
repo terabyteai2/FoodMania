@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from models import Device, Order
+from services.order_serial import format_serial
 
 logger = logging.getLogger("quickbytes.push")
 
@@ -155,7 +156,11 @@ async def send_fcm_to_tokens(
 
 
 def _push_copy(event_type: str, order: Order) -> tuple[str, str]:
-    serial = f"#{order.serial_number}" if order.serial_number else "New order"
+    serial = (
+        format_serial(order.serial_number, order.source, order.created_by_role)
+        if order.serial_number
+        else "New order"
+    )
     status = _text(order.status).lower()
     if event_type == "order_created":
         if status == "accepted":

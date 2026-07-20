@@ -12,6 +12,7 @@ from database import get_db
 from models import AdminAccount, InventoryItem, MenuItem, Order, Outlet, StockAdjustment
 from routers.menu import _ensure_outlet
 from schemas import ok
+from services.order_serial import format_serial
 
 router = APIRouter()
 logger = logging.getLogger("quickbytes.analytics")
@@ -762,7 +763,11 @@ async def dashboard_summary(
                 first = lines[0]
                 tail = f" +{len(lines) - 1}" if len(lines) > 1 else ""
                 items_brief = f" · {first.get('name', '')}{tail}"
-            title = f"Table {table} · #{order.serial_number}" if table else f"Order #{order.serial_number}"
+            title = (
+                f"Table {table} \u00b7 {format_serial(order.serial_number, order.source, order.created_by_role)}"
+                if table
+                else f"Order {format_serial(order.serial_number, order.source, order.created_by_role)}"
+            )
             needs_attention.append(
                 {
                     "kind": "late",

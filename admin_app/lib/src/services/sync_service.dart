@@ -742,6 +742,12 @@ class SyncService {
       (t, item) => t + item.lineTotal,
     );
     normalized['note'] ??= normalized['notes']; // backend sends notes
+    // Parse source first so orderNo can include the source prefix (#W/#M/#S).
+    final parsedSource = OrderSource.parse(
+      normalized['source']?.toString(),
+      fallback: sourceFallback,
+    );
+    normalized['source'] = parsedSource.value;
     // Map serialNumber → sequenceNo and build a human-readable orderNo
     final serial = normalized['serialNumber'];
     final serialNumber = serial is num
@@ -750,16 +756,31 @@ class SyncService {
     normalized['sequenceNo'] ??= serial;
     if (normalized['orderNo'] == null) {
       if (serialNumber != null && serialNumber > 0) {
-        normalized['orderNo'] = '#$serialNumber';
+        final role = (normalized['createdByRole']?.toString() ?? '')
+            .trim()
+            .toLowerCase();
+        String prefix;
+        switch (parsedSource) {
+          case OrderSource.cloud:
+            prefix = 'W';
+            break;
+          case OrderSource.facebookMessenger:
+            prefix = 'M';
+            break;
+          case OrderSource.manual:
+          case OrderSource.desktopPos:
+            prefix = (role == 'waiter' || role == 'staff') ? 'S' : '';
+            break;
+          case OrderSource.localLan:
+            prefix = '';
+            break;
+        }
+        normalized['orderNo'] = '#$prefix$serialNumber';
       } else {
         normalized['orderNo'] =
             'WEB-${orderId.length > 8 ? orderId.substring(0, 8) : orderId}';
       }
     }
-    normalized['source'] = OrderSource.parse(
-      normalized['source']?.toString(),
-      fallback: sourceFallback,
-    ).value;
     normalized['status'] ??= OrderStatus.pending.value;
     normalized['syncStatus'] = SyncStatus.synced.value;
     normalized['version'] ??= 1;

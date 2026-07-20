@@ -112,7 +112,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Header: serial + Completed pill + time-of-day from createdAt.
-    expect(find.text('#7'), findsOneWidget);
+    // Waiter-created orders show the #S prefix (separate waiter counter).
+    expect(find.text('#S7'), findsOneWidget);
     expect(find.text('6:35 PM'), findsOneWidget);
     // Per-line amounts + qty gutter.
     expect(find.text('2×'), findsOneWidget);

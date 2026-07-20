@@ -23,6 +23,7 @@ from services.customer_orders import (
     create_delivery_order,
     delivery_order_totals,
 )
+from services.order_serial import format_serial
 
 logger = logging.getLogger(__name__)
 
@@ -972,7 +973,9 @@ async def _apply_order_action(
             )
             return _empty_state(), {
                 "type": "order_created",
-                "orderNumber": order.serial_number,
+                "orderNumber": format_serial(
+                    order.serial_number, order.source, order.created_by_role
+                ),
                 "totalAmount": float(order.total_amount),
             }
         state["awaitingConfirmation"] = True

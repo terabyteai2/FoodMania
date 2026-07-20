@@ -96,16 +96,67 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
   }
 
   Future<void> _scanNow() async {
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MenuScanScreen()),
-    );
-    if (!mounted) return;
-    if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: TfText('Menu scanned! Items added to your menu.')),
+    final app = AppScope.of(context);
+
+    // Logged-in users already have a cloud token — scan directly.
+    if (app.cloudConfig.canSync) {
+      final result = await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const MenuScanScreen()),
       );
+      if (!mounted) return;
+      if (result != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: TfText('Menu scanned! Items added to your menu.')),
+        );
+      }
+      _finish();
+      return;
     }
-    _finish();
+
+    // New tenant — no cloud token yet. Provision the tenant first, then let
+    // MainShell pick up the pending flag and navigate to the scan screen.
+    final restaurantName = _restaurantCtrl.text.trim();
+    final managerName = _ownerCtrl.text.trim();
+    final tableCount = _tableCount ?? 0;
+
+    if (_busy || !_restaurantReady || tableCount <= 0) return;
+    setState(() => _busy = true);
+
+    app.pendingOnboardingMenuScan = true;
+
+    try {
+      final ok = await app.completeManagerPhoneSignup(
+        restaurantName: restaurantName,
+        managerName: managerName,
+        tableCount: tableCount,
+        outletName: restaurantName,
+      );
+      if (!ok) {
+        app.pendingOnboardingMenuScan = false;
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: TfText(
+              app.lastError ?? 'Could not create restaurant.',
+            ),
+          ),
+        );
+        setState(() => _busy = false);
+        return;
+      }
+    } catch (error) {
+      app.pendingOnboardingMenuScan = false;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText('$error')),
+      );
+      setState(() => _busy = false);
+      return;
+    }
+
+    // Notify parent — TenantSetupScreen is replaced by MainShell,
+    // which will pick up the pending flag and navigate to MenuScanScreen.
+    widget.onProvisioned();
   }
 
   @override

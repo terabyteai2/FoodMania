@@ -18,6 +18,7 @@ from schemas import (
 from routers.menu import _require_manager_scan_access
 from services.customer_orders import order_to_dict
 from services.order_history_import import OrderHistoryCsvError, parse_order_history_csv
+from services.order_serial import serial_group_filter
 from services.push_notifications import send_order_push
 
 router = APIRouter()
@@ -196,9 +197,16 @@ async def push_order(
 
     now = datetime.now(timezone.utc)
     today = now.date()
+    # Effective role is the desktop account's role when present (desktop POS),
+    # otherwise the client-supplied role. Used for source-aware serial grouping.
+    effective_role = desktop_account.role if desktop_account else created_by_role
     max_serial = await db.execute(
         select(func.coalesce(func.max(Order.serial_number), 0))
-        .where(Order.outlet_id == outlet_id, Order.order_date == today)
+        .where(
+            Order.outlet_id == outlet_id,
+            Order.order_date == today,
+            serial_group_filter(body.source, effective_role),
+        )
     )
     next_serial = (max_serial.scalar() or 0) + 1
 

@@ -83,7 +83,24 @@ class OrderModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  String get displaySequence => sequenceNo > 0 ? '#$sequenceNo' : '#-';
+  String get _serialPrefix {
+    switch (source) {
+      case OrderSource.cloud:
+        return 'W';
+      case OrderSource.facebookMessenger:
+        return 'M';
+      case OrderSource.manual:
+      case OrderSource.desktopPos:
+        final role = (createdByRole ?? '').trim().toLowerCase();
+        if (role == 'waiter' || role == 'staff') return 'S';
+        return '';
+      case OrderSource.localLan:
+        return '';
+    }
+  }
+
+  String get displaySequence =>
+      sequenceNo > 0 ? '#$_serialPrefix$sequenceNo' : '#-';
 
   OrderModel copyWith({
     String? id,

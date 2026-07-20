@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Order, Outlet
 from routers.ws import manager
+from services.order_serial import serial_group_filter
 from services.push_notifications import send_order_push
 
 
@@ -162,7 +163,11 @@ async def create_delivery_order(
     today = now.date()
     max_serial = await db.execute(
         select(func.coalesce(func.max(Order.serial_number), 0))
-        .where(Order.outlet_id == outlet.id, Order.order_date == today)
+        .where(
+            Order.outlet_id == outlet.id,
+            Order.order_date == today,
+            serial_group_filter(source, created_by_role),
+        )
     )
     next_serial = (max_serial.scalar() or 0) + 1
 

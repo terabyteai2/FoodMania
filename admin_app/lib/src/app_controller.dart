@@ -261,6 +261,9 @@ class PosAppController extends ChangeNotifier {
   // logged-in + has a tenant — otherwise MainShell would mount immediately
   // after signup and the hero-media step would never get a chance to render.
   bool pendingHeroMediaSetup = false;
+  /// Set by [TenantSetupScreen] before tenant provision so [MainShell] can
+  /// navigate to [MenuScanScreen] immediately after mount.
+  bool pendingOnboardingMenuScan = false;
   String? phoneSignupToken;
   String? verifiedPhoneDisplay;
   StaffInvitePending? pendingStaffInvite;

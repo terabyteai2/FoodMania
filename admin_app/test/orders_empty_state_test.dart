@@ -146,7 +146,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Clear filters'), findsNothing);
-    expect(find.text('#1'), findsOneWidget);
+    expect(find.text('#W1'), findsOneWidget);
 
     controller.dispose();
   });
@@ -216,19 +216,19 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, 'burger');
     await tester.pumpAndSettle();
-    expect(find.text('#42'), findsOneWidget);
-    expect(find.text('#43'), findsNothing);
+    expect(find.text('#W42'), findsOneWidget);
+    expect(find.text('#W43'), findsNothing);
 
     await tester.enterText(find.byType(TextField).first, '৪২');
     await tester.pumpAndSettle();
-    expect(find.text('#42'), findsOneWidget);
+    expect(find.text('#W42'), findsOneWidget);
 
-    // Both pending (#42) and accepted (#43) now share the Ongoing tab, so the
+    // Both pending (#W42) and accepted (#W43) now share the Ongoing tab, so the
     // search filters within it — no tab switch needed.
     await tester.enterText(find.byType(TextField).first, 'fish');
     await tester.pumpAndSettle();
-    expect(find.text('#43'), findsOneWidget);
-    expect(find.text('#42'), findsNothing);
+    expect(find.text('#W43'), findsOneWidget);
+    expect(find.text('#W42'), findsNothing);
 
     controller.dispose();
   });

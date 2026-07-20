@@ -20,6 +20,7 @@ from services.customer_orders import (
     public_order_response,
 )
 from services.menu_placeholders import infer_icon_key, resolve_placeholder_url
+from services.order_serial import format_serial
 
 router = APIRouter(prefix="/customer", tags=["customer"])
 logger = logging.getLogger("quickbytes.customer")
@@ -164,7 +165,7 @@ def _order_details_html(order: Order, outlet: Outlet) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{restaurant_name} Order {order.serial_number}</title>
+  <title>{restaurant_name} Order {format_serial(order.serial_number, order.source, order.created_by_role)}</title>
   <style>
     body {{ margin: 0; font-family: Inter, system-ui, sans-serif; background: #f7f2e8; color: #201812; }}
     main {{ max-width: 720px; margin: 0 auto; padding: 28px 18px 48px; }}
@@ -181,7 +182,7 @@ def _order_details_html(order: Order, outlet: Outlet) -> str:
   <main>
     <h1>{restaurant_name}</h1>
     <div class="meta">
-      <p><strong>Order:</strong> #{order.serial_number or "-"}</p>
+      <p><strong>Order:</strong> {format_serial(order.serial_number, order.source, order.created_by_role)}</p>
       <p><strong>Type:</strong> {service}</p>
       <p><strong>Status:</strong> {html.escape(order.status.title())}</p>
     </div>

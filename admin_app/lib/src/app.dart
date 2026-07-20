@@ -21,6 +21,7 @@ import 'features/inventory/inventory_screen.dart';
 import 'features/inventory/stock_in_screen.dart';
 import 'features/inventory/stock_scan_flow.dart';
 import 'features/menu/menu_management_screen.dart';
+import 'features/menu/menu_scan_screen.dart';
 import 'features/messaging/messages_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
@@ -383,6 +384,41 @@ class _MainShellState extends State<MainShell> {
     _scanOverlay = null;
   }
 
+  void _navigateOnboardingMenuScan(BuildContext context, PosAppController app) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MenuScanScreen(
+          onScan: (uploads) async {
+            _showScanOverlay(app.strings.menuScanning);
+            try {
+              final result = await app.scanAndImportMenu(uploads);
+              if (!mounted) return;
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: TfText(
+                    app.strings.menuScanImported(
+                      result.createdCount,
+                      result.skippedDuplicateCount,
+                    ),
+                  ),
+                ),
+              );
+            } catch (error) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: TfText('${app.strings.menuScanFailed}: $error'),
+                ),
+              );
+            } finally {
+              _hideScanOverlay();
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -397,6 +433,11 @@ class _MainShellState extends State<MainShell> {
       if (pending != null) {
         app.pendingFcmNavigation = null;
         _handleFcmNavigationTap(pending);
+      }
+      // Onboarding menu scan: provisioned tenant, now navigate to scan screen.
+      if (app.pendingOnboardingMenuScan) {
+        app.pendingOnboardingMenuScan = false;
+        _navigateOnboardingMenuScan(context, app);
       }
     });
   }
