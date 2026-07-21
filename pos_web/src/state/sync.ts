@@ -11,8 +11,6 @@ import {
 } from '../offline/outbox';
 import { useOrders } from './orders';
 
-function dbg(...args: unknown[]) { console.log('[sync]', ...args); }
-
 const outboxApi: OutboxApi = api;
 
 interface SyncState {
@@ -39,28 +37,21 @@ export const useSync = create<SyncState>((set, get) => ({
   },
 
   enqueue: async (op, key) => {
-    dbg('enqueue', op.kind, key);
     await enqueueOp(idbOutbox, op, key);
     await get().refreshCounts();
   },
 
   flush: async (outletId) => {
-    if (get().replaying) { dbg('flush skipped — already replaying'); return; }
-    dbg('flush start, outletId:', outletId);
+    if (get().replaying) return;
     set({ replaying: true });
     try {
-      const result = await replayOutbox(idbOutbox, outboxApi);
-      dbg('flush replay result — done:', result.done, 'dead:', result.dead, 'pending:', result.pending);
+      await replayOutbox(idbOutbox, outboxApi);
       await get().refreshCounts();
-      if (result.done > 0 && outletId) {
-        dbg('flush → orders.refresh()');
+      if (outletId) {
         await useOrders.getState().refresh(outletId);
-      } else {
-        dbg('flush skipped refresh (no ops drained or no outletId)');
       }
     } finally {
       set({ replaying: false });
-      dbg('flush done');
     }
   },
 

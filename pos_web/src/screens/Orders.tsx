@@ -12,8 +12,6 @@ import type { OrderWire, ServiceType } from '../api/types';
 import { Modal } from '../components/Modal';
 import './orders.css';
 
-function dbg(...args: unknown[]) { console.log('[Orders.tsx]', ...args); }
-
 function serviceBadge(s?: ServiceType | null): string {
   if (s === 'delivery') return 'Delivery';
   if (s === 'takeaway') return 'Pick Up';
@@ -38,16 +36,8 @@ export function Orders() {
   const [toast, setToast] = useState<string | null>(null);
 
   const isManager = session.role === 'owner' || session.role === 'manager';
-  const ongoing = useMemo(() => {
-    const r = ongoingOrders(orders.orders);
-    dbg('render — orders.orders:', orders.orders.length, 'ongoing:', r.length, 'ids:', r.map((o) => o.id));
-    return r;
-  }, [orders.orders]);
-  const done = useMemo(() => {
-    const r = completedOrders(orders.orders);
-    dbg('render — completed:', r.length, 'ids:', r.map((o) => o.id));
-    return r;
-  }, [orders.orders]);
+  const ongoing = useMemo(() => ongoingOrders(orders.orders), [orders.orders]);
+  const done = useMemo(() => completedOrders(orders.orders), [orders.orders]);
 
   const ticketCtx: TicketContext = {
     restaurantName: session.restaurantName,

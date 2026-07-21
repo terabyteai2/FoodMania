@@ -55,19 +55,15 @@ export interface ReplayResult {
   pending: number;
 }
 
-function dbg(...args: unknown[]) { console.log('[outbox]', ...args); }
-
 /** Add an op unless one with the same idempotency key is already queued. */
 export async function enqueue(store: OutboxStore, op: OutboxOp, key: string): Promise<boolean> {
   const existing = await store.all();
-  if (existing.some((r) => r.key === key)) { dbg('enqueue skip (dup key)', key, op.kind); return false; }
+  if (existing.some((r) => r.key === key)) return false;
   await store.add(op, key);
-  dbg('enqueued', key, op.kind);
   return true;
 }
 
 export function dispatch(api: OutboxApi, op: OutboxOp): Promise<unknown> {
-  dbg('dispatch', op.kind, 'orderId' in op ? op.orderId : '(no orderId)');
   switch (op.kind) {
     case 'createOrder':
       return api.createOrder(op.outletId, op.body);
@@ -106,25 +102,19 @@ export async function replayOutbox(store: OutboxStore, api: OutboxApi): Promise<
     .filter((r) => !r.deadLetter)
     .sort((a, b) => a.seq - b.seq);
 
-  dbg('replay start —', records.length, 'pending');
   let done = 0;
   let dead = 0;
   for (const r of records) {
-    dbg('replay op', r.seq, r.op.kind, '(attempt', r.attempts + 1, ')');
     try {
       await dispatch(api, r.op);
       await store.remove(r.seq);
       done++;
-      dbg('replay ok — removed seq', r.seq);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      dbg('replay fail —', msg);
       if (classifyError(err) === 'permanent') {
-        dbg('dead-lettering seq', r.seq);
         await store.update(r.seq, { deadLetter: true, lastError: msg, attempts: r.attempts + 1 });
         dead++;
       } else {
-        dbg('transient — stopping');
         await store.update(r.seq, { attempts: r.attempts + 1, lastError: msg });
         break;
       }
@@ -132,6 +122,5 @@ export async function replayOutbox(store: OutboxStore, api: OutboxApi): Promise<
   }
 
   const pending = (await store.all()).filter((r) => !r.deadLetter).length;
-  dbg('replay done — done:', done, 'dead:', dead, 'pending:', pending);
   return { done, dead, pending };
 }

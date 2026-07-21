@@ -2,7 +2,13 @@
 // online-order accept/reject. State is refetched on any WS order event (server wins);
 // mutations optimistically replace the affected order in the list.
 
-function dbg(...args: unknown[]) { console.log('[orders]', ...args); }
+/** Merge helper: keep local orders whose IDs don't appear in the server list.
+ *  These are orders created offline that haven't been synced yet. */
+function mergeOrders(server: OrderWire[], local: OrderWire[]): OrderWire[] {
+  const serverIds = new Set(server.map((o) => o.id));
+  const extras = local.filter((o) => !serverIds.has(o.id));
+  return extras.length > 0 ? [...server, ...extras] : server;
+}
 
 import { create } from 'zustand';
 import { api, wsUrl } from '../api/client';
@@ -70,22 +76,20 @@ export const useOrders = create<OrdersState>((set, get) => ({
   handle: null,
 
   load: async (outletId) => {
-    dbg('load start, outletId:', outletId);
     set({ loading: true, error: null });
     try {
       const orders = await api.fetchOrders(outletId);
-      dbg('load fetched', orders.length, 'orders');
-      await cacheSet(`orders:${outletId}`, orders);
+      const cached = await cacheGet<OrderWire[]>(`orders:${outletId}`);
+      const merged = cached ? mergeOrders(orders, cached) : orders;
+      await cacheSet(`orders:${outletId}`, merged);
       set({
-        orders,
+        orders: merged,
         loading: false,
-        knownPendingIds: orders.filter((o) => o.status === 'pending').map((o) => o.id),
+        knownPendingIds: merged.filter((o) => o.status === 'pending').map((o) => o.id),
       });
     } catch (e) {
-      dbg('load failed', e);
       const cached = await cacheGet<OrderWire[]>(`orders:${outletId}`);
       if (cached) {
-        dbg('load fallback — using cached', cached.length, 'orders');
         set({
           orders: cached,
           loading: false,
@@ -98,22 +102,21 @@ export const useOrders = create<OrdersState>((set, get) => ({
   },
 
   refresh: async (outletId) => {
-    dbg('refresh start');
     try {
       const orders = await api.fetchOrders(outletId);
-      dbg('refresh fetched', orders.length, 'orders');
-      void cacheSet(`orders:${outletId}`, orders);
+      const local = get().orders;
+      const merged = mergeOrders(orders, local);
+      void cacheSet(`orders:${outletId}`, merged);
       const prev = new Set(get().knownPendingIds);
-      const pending = orders.filter((o) => o.status === 'pending');
+      const pending = merged.filter((o) => o.status === 'pending');
       const fresh = pending.filter((o) => !prev.has(o.id));
       if (fresh.length > 0) playChime();
-      set((s) => ({
-        orders,
-        unseen: s.unseen + fresh.length,
+      set({
+        orders: merged,
+        unseen: get().unseen + fresh.length,
         knownPendingIds: pending.map((o) => o.id),
-      }));
-    } catch (e) {
-      dbg('refresh failed', e);
+      });
+    } catch {
       /* keep last-known orders on a failed refresh */
     }
   },
@@ -138,7 +141,6 @@ export const useOrders = create<OrdersState>((set, get) => ({
   markSeen: () => set({ unseen: 0 }),
 
   replace: (order) => {
-    dbg('replace', order.id, 'serial#', order.serialNumber, 'status:', order.status);
     set((s) => ({
       orders: s.orders.some((o) => o.id === order.id)
         ? s.orders.map((o) => (o.id === order.id ? order : o))
