@@ -12,6 +12,8 @@ import type { OrderWire, ServiceType } from '../api/types';
 import { Modal } from '../components/Modal';
 import './orders.css';
 
+function dbg(...args: unknown[]) { console.log('[Orders.tsx]', ...args); }
+
 function serviceBadge(s?: ServiceType | null): string {
   if (s === 'delivery') return 'Delivery';
   if (s === 'takeaway') return 'Pick Up';
@@ -36,8 +38,16 @@ export function Orders() {
   const [toast, setToast] = useState<string | null>(null);
 
   const isManager = session.role === 'owner' || session.role === 'manager';
-  const ongoing = useMemo(() => ongoingOrders(orders.orders), [orders.orders]);
-  const done = useMemo(() => completedOrders(orders.orders), [orders.orders]);
+  const ongoing = useMemo(() => {
+    const r = ongoingOrders(orders.orders);
+    dbg('render — orders.orders:', orders.orders.length, 'ongoing:', r.length, 'ids:', r.map((o) => o.id));
+    return r;
+  }, [orders.orders]);
+  const done = useMemo(() => {
+    const r = completedOrders(orders.orders);
+    dbg('render — completed:', r.length, 'ids:', r.map((o) => o.id));
+    return r;
+  }, [orders.orders]);
 
   const ticketCtx: TicketContext = {
     restaurantName: session.restaurantName,
@@ -57,11 +67,11 @@ export function Orders() {
 
   const reprint = async (order: OrderWire, paid: boolean) => {
     try {
-      const canvas = renderReceipt(printers.paperDots('bill'), ticketCtx, order, {
+      const canvas = renderReceipt(printers.paperDots(), ticketCtx, order, {
         paid,
         paymentLabel: order.paymentMethod,
       });
-      await printers.print('bill', canvas);
+      await printers.print(canvas);
       flash(`Reprinted #${order.serialNumber}`);
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));

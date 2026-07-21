@@ -2,6 +2,8 @@
 // online-order accept/reject. State is refetched on any WS order event (server wins);
 // mutations optimistically replace the affected order in the list.
 
+function dbg(...args: unknown[]) { console.log('[orders]', ...args); }
+
 import { create } from 'zustand';
 import { api, wsUrl } from '../api/client';
 import { connectRealtime, type RealtimeHandle, type WsEvent } from '../api/ws';
@@ -68,9 +70,11 @@ export const useOrders = create<OrdersState>((set, get) => ({
   handle: null,
 
   load: async (outletId) => {
+    dbg('load start, outletId:', outletId);
     set({ loading: true, error: null });
     try {
       const orders = await api.fetchOrders(outletId);
+      dbg('load fetched', orders.length, 'orders');
       await cacheSet(`orders:${outletId}`, orders);
       set({
         orders,
@@ -78,8 +82,10 @@ export const useOrders = create<OrdersState>((set, get) => ({
         knownPendingIds: orders.filter((o) => o.status === 'pending').map((o) => o.id),
       });
     } catch (e) {
+      dbg('load failed', e);
       const cached = await cacheGet<OrderWire[]>(`orders:${outletId}`);
       if (cached) {
+        dbg('load fallback — using cached', cached.length, 'orders');
         set({
           orders: cached,
           loading: false,
@@ -92,8 +98,10 @@ export const useOrders = create<OrdersState>((set, get) => ({
   },
 
   refresh: async (outletId) => {
+    dbg('refresh start');
     try {
       const orders = await api.fetchOrders(outletId);
+      dbg('refresh fetched', orders.length, 'orders');
       void cacheSet(`orders:${outletId}`, orders);
       const prev = new Set(get().knownPendingIds);
       const pending = orders.filter((o) => o.status === 'pending');
@@ -104,7 +112,8 @@ export const useOrders = create<OrdersState>((set, get) => ({
         unseen: s.unseen + fresh.length,
         knownPendingIds: pending.map((o) => o.id),
       }));
-    } catch {
+    } catch (e) {
+      dbg('refresh failed', e);
       /* keep last-known orders on a failed refresh */
     }
   },
@@ -128,12 +137,14 @@ export const useOrders = create<OrdersState>((set, get) => ({
 
   markSeen: () => set({ unseen: 0 }),
 
-  replace: (order) =>
+  replace: (order) => {
+    dbg('replace', order.id, 'serial#', order.serialNumber, 'status:', order.status);
     set((s) => ({
       orders: s.orders.some((o) => o.id === order.id)
         ? s.orders.map((o) => (o.id === order.id ? order : o))
         : [order, ...s.orders],
-    })),
+    }));
+  },
 
   accept: async (outletId, order, prepMinutes) => {
     if (prepMinutes != null) {
@@ -176,7 +187,8 @@ export const useOrders = create<OrdersState>((set, get) => ({
 // ---------- derivations (pure) ----------
 
 export function isSettled(o: OrderWire): boolean {
-  return !!o.settledAt || o.status === 'completed' || o.status === 'served';
+  const r = !!o.settledAt || o.status === 'completed' || o.status === 'served';
+  return r;
 }
 export function isDead(o: OrderWire): boolean {
   return o.status === 'rejected' || o.status === 'cancelled';

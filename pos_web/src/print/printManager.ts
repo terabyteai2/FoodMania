@@ -1,6 +1,3 @@
-// Printer orchestration: per-role (bill / KOT) device assignment, persisted prefs,
-// ticket dispatch with system-print fallback.
-
 import { create } from 'zustand';
 import { dotsForPaper, ticketBytes } from './escpos';
 import {
@@ -10,78 +7,82 @@ import {
   bleRef, bleSupported, findPairedBlePrinter, requestBlePrinter, writeBle, type BlePrinterRef,
 } from './webbluetooth';
 
-export type PrinterRole = 'bill' | 'kot';
 export type PrinterTransport = 'usb' | 'ble' | 'system' | 'none';
 
-export interface RoleConfig {
+export interface PrinterConfig {
   transport: PrinterTransport;
   paperWidthMm: 58 | 80;
   usb?: UsbPrinterRef | null;
   ble?: BlePrinterRef | null;
-  kickDrawer?: boolean; // bill printer usually drives the cash drawer
+  kickDrawer?: boolean;
   label?: string | null;
 }
 
-interface PrinterPrefs {
-  bill: RoleConfig;
-  kot: RoleConfig;
+interface OldPrefs {
+  bill?: PrinterConfig;
+  kot?: PrinterConfig;
 }
 
 const PREFS_KEY = 'qbpos.printers';
 
-const defaultRole = (role: PrinterRole): RoleConfig => ({
+const defaultConfig: PrinterConfig = {
   transport: 'system',
   paperWidthMm: 80,
   usb: null,
   ble: null,
-  kickDrawer: role === 'bill',
+  kickDrawer: true,
   label: null,
-});
+};
 
-function loadPrefs(): PrinterPrefs {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<PrinterPrefs>;
-      return {
-        bill: { ...defaultRole('bill'), ...parsed.bill },
-        kot: { ...defaultRole('kot'), ...parsed.kot },
-      };
-    }
-  } catch {
-    /* fresh prefs */
-  }
-  return { bill: defaultRole('bill'), kot: defaultRole('kot') };
+function isOldPrefs(v: unknown): v is OldPrefs {
+  return typeof v === 'object' && v !== null && ('bill' in v || 'kot' in v);
 }
 
-// live device handles (not serializable — kept outside the store's persisted data)
-const liveUsb: Partial<Record<PrinterRole, USBDevice>> = {};
-const liveBle: Partial<Record<PrinterRole, BluetoothDevice>> = {};
+function loadPrefs(): PrinterConfig {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return { ...defaultConfig };
+    const parsed = JSON.parse(raw);
+    if (isOldPrefs(parsed)) {
+      const bill = parsed.bill;
+      const kot = parsed.kot;
+      const pick = bill && bill.transport !== 'none' ? bill : kot && kot.transport !== 'none' ? kot : defaultConfig;
+      localStorage.setItem(PREFS_KEY, JSON.stringify(pick));
+      return { ...defaultConfig, ...pick };
+    }
+    return { ...defaultConfig, ...parsed };
+  } catch {
+    return { ...defaultConfig };
+  }
+}
+
+let liveUsb: USBDevice | null = null;
+let liveBle: BluetoothDevice | null = null;
 
 interface PrinterState {
-  prefs: PrinterPrefs;
+  config: PrinterConfig;
   lastError: string | null;
-  setRoleConfig: (role: PrinterRole, cfg: Partial<RoleConfig>) => void;
-  pairUsb: (role: PrinterRole) => Promise<void>;
-  pairBle: (role: PrinterRole) => Promise<void>;
-  print: (role: PrinterRole, canvas: HTMLCanvasElement, opts?: { kickDrawer?: boolean }) => Promise<void>;
-  paperDots: (role: PrinterRole) => number;
+  setConfig: (cfg: Partial<PrinterConfig>) => void;
+  pairUsb: () => Promise<void>;
+  pairBle: () => Promise<void>;
+  print: (canvas: HTMLCanvasElement, opts?: { kickDrawer?: boolean }) => Promise<void>;
+  paperDots: () => number;
 }
 
 export const usePrinters = create<PrinterState>((set, get) => ({
-  prefs: loadPrefs(),
+  config: loadPrefs(),
   lastError: null,
 
-  setRoleConfig: (role, cfg) => {
-    const prefs = { ...get().prefs, [role]: { ...get().prefs[role], ...cfg } };
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-    set({ prefs });
+  setConfig: (cfg) => {
+    const config = { ...get().config, ...cfg };
+    localStorage.setItem(PREFS_KEY, JSON.stringify(config));
+    set({ config });
   },
 
-  pairUsb: async (role) => {
+  pairUsb: async () => {
     const device = await requestUsbPrinter();
-    liveUsb[role] = device;
-    get().setRoleConfig(role, {
+    liveUsb = device;
+    get().setConfig({
       transport: 'usb',
       usb: usbRef(device),
       ble: null,
@@ -89,10 +90,10 @@ export const usePrinters = create<PrinterState>((set, get) => ({
     });
   },
 
-  pairBle: async (role) => {
+  pairBle: async () => {
     const device = await requestBlePrinter();
-    liveBle[role] = device;
-    get().setRoleConfig(role, {
+    liveBle = device;
+    get().setConfig({
       transport: 'ble',
       ble: bleRef(device),
       usb: null,
@@ -100,24 +101,24 @@ export const usePrinters = create<PrinterState>((set, get) => ({
     });
   },
 
-  print: async (role, canvas, opts = {}) => {
-    const cfg = get().prefs[role];
+  print: async (canvas, opts = {}) => {
+    const cfg = get().config;
     set({ lastError: null });
     try {
       if (cfg.transport === 'usb') {
-        let device = liveUsb[role] ?? null;
+        let device = liveUsb;
         if (!device && cfg.usb) device = await findPairedUsbPrinter(cfg.usb);
         if (!device) throw new Error('USB printer not connected — re-pair in printer settings');
-        liveUsb[role] = device;
+        liveUsb = device;
         const image = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
         await writeUsb(device, ticketBytes(image, { kickDrawer: opts.kickDrawer && cfg.kickDrawer }));
         return;
       }
       if (cfg.transport === 'ble') {
-        let device = liveBle[role] ?? null;
+        let device = liveBle;
         if (!device && cfg.ble) device = await findPairedBlePrinter(cfg.ble);
         if (!device) throw new Error('Bluetooth printer not connected — re-pair in printer settings');
-        liveBle[role] = device;
+        liveBle = device;
         const image = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
         await writeBle(device, ticketBytes(image, { kickDrawer: opts.kickDrawer && cfg.kickDrawer }));
         return;
@@ -126,7 +127,7 @@ export const usePrinters = create<PrinterState>((set, get) => ({
         systemPrint(canvas);
         return;
       }
-      throw new Error('No printer configured for this role');
+      throw new Error('No printer configured');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       set({ lastError: msg });
@@ -134,10 +135,9 @@ export const usePrinters = create<PrinterState>((set, get) => ({
     }
   },
 
-  paperDots: (role) => dotsForPaper(get().prefs[role].paperWidthMm),
+  paperDots: () => dotsForPaper(get().config.paperWidthMm),
 }));
 
-/** Browser print-dialog fallback: ticket bitmap in a hidden iframe. */
 function systemPrint(canvas: HTMLCanvasElement): void {
   const dataUrl = canvas.toDataURL('image/png');
   const frame = document.createElement('iframe');

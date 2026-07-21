@@ -199,6 +199,22 @@ export const api = {
     request<DailyStockCountResult>(`/outlets/${outletId}/inventory/daily-counts`, { method: 'POST', body }),
   saveInventorySupplier: (outletId: string, body: InventorySupplierPayload) =>
     request<InventorySupplierWire>(`/outlets/${outletId}/inventory/suppliers`, { method: 'POST', body }),
+
+  // ---------- account / outlet profile ----------
+  updateDisplayName: (displayName: string) =>
+    request<{ displayName: string }>('/admin/me', {
+      method: 'PATCH', body: { displayName },
+    }),
+
+  updateOutletProfile: (body: { restaurantName?: string; phone?: string }) =>
+    request<{ restaurantName: string; outletPhone: string | null }>('/admin/outlet-profile', {
+      method: 'PATCH', body,
+    }),
+
+  updatePublicUrl: (publicSlug: string) =>
+    request<{ publicSlug: string; customerMenuUrl: string }>('/admin/public-url', {
+      method: 'PATCH', body: { publicSlug },
+    }),
 };
 
 export function wsUrl(outletId: string, token: string): string {

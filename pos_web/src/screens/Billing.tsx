@@ -119,8 +119,8 @@ export function Billing() {
       const order = await cart.saveOrder();
       notify(`Order #${order.serialNumber} saved`);
       if (print) {
-        const canvas = renderReceipt(printers.paperDots('bill'), ticketCtx, order);
-        await printers.print('bill', canvas);
+        const canvas = renderReceipt(printers.paperDots(), ticketCtx, order);
+        await printers.print(canvas);
       }
       cart.clear();
     })();
@@ -131,7 +131,7 @@ export function Billing() {
       notify(`KOT sent for #${order.serialNumber}`);
       if (print) {
         const canvas = renderKot(
-          printers.paperDots('kot'), ticketCtx, order,
+          printers.paperDots(), ticketCtx, order,
           batchLines.map((l: CartLine) => ({
             qty: l.qty,
             name: l.suffix ? `${l.nameEn} ${l.suffix}` : l.nameEn,
@@ -139,7 +139,7 @@ export function Billing() {
           })),
           cart.note,
         );
-        await printers.print('kot', canvas);
+        await printers.print(canvas);
       }
     })();
 
@@ -153,11 +153,11 @@ export function Billing() {
         lines ?? [{ eventId: crypto.randomUUID(), paymentMethod: cart.paymentMethod, amount: totals.total, payerLabel: null }];
       const settled = await cart.settle(settlements);
       notify(`Bill #${settled.serialNumber} settled — ${formatTk(settled.totalAmount)}`);
-      const canvas = renderReceipt(printers.paperDots('bill'), ticketCtx, settled, {
+      const canvas = renderReceipt(printers.paperDots(), ticketCtx, settled, {
         paid: true,
         paymentLabel: settlements.length === 1 ? settlements[0].paymentMethod : 'split',
       });
-      await printers.print('bill', canvas, { kickDrawer: settlements.some((s) => s.paymentMethod === 'cash') });
+      await printers.print(canvas, { kickDrawer: settlements.some((s) => s.paymentMethod === 'cash') });
       cart.clear();
     })();
   };

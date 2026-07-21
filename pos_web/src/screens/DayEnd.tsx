@@ -64,7 +64,7 @@ export function DayEnd() {
 
   const printDayEnd = async () => {
     try {
-      await printers.print('bill', renderDayEnd(printers.paperDots('bill'), ticketCtx, summary));
+      await printers.print(renderDayEnd(printers.paperDots(), ticketCtx, summary));
       flash('Day-end printed');
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));

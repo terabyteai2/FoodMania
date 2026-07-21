@@ -12,6 +12,17 @@ import { round2 } from '../core/tags';
 import { useSession } from './session';
 import { usePos } from './pos';
 import { useSync } from './sync';
+import { useOrders } from './orders';
+import { cacheSet } from '../offline/db';
+import { nextSerial } from '../offline/serial';
+
+function dbg(...args: unknown[]) { console.log('[cart]', ...args); }
+
+function replaceOrderInStore(order: OrderWire, outletId: string) {
+  dbg('replaceOrderInStore', order.id, 'serial#', order.serialNumber, 'status:', order.status);
+  useOrders.getState().replace(order);
+  void cacheSet(`orders:${outletId}`, useOrders.getState().orders);
+}
 
 /** Should this failed write be queued for offline replay (vs. surfaced as an error)? */
 function shouldQueue(e: unknown): boolean {
@@ -258,14 +269,17 @@ export const useCart = create<CartState>((set, get) => ({
         };
         try {
           order = await api.updateOrderItems(session.outletId, s.order.id, itemsBody);
+          dbg('saveOrder update online OK — id:', order.id);
         } catch (e) {
           if (!shouldQueue(e)) throw e;
+          dbg('saveOrder update offline fallback — enqueuing');
           await useSync.getState().enqueue(
             { kind: 'updateOrderItems', outletId: session.outletId, orderId: s.order.id, body: itemsBody },
             `items:${s.order.id}:${nowIso}`,
           );
           order = { ...s.order, ...common, id: s.order.id, serialNumber: s.order.serialNumber, updatedAt: nowIso } as OrderWire;
         }
+        replaceOrderInStore(order, session.outletId);
       } else {
         const id = crypto.randomUUID();
         const createBody = {
@@ -280,14 +294,18 @@ export const useCart = create<CartState>((set, get) => ({
         };
         try {
           order = await api.createOrder(session.outletId, createBody);
+          dbg('saveOrder create online OK — id:', order.id, 'serial:', order.serialNumber);
         } catch (e) {
           if (!shouldQueue(e)) throw e;
+          dbg('saveOrder create offline fallback — enqueuing');
+          createBody.serialNumber = await nextSerial(session.outletId, 'desktop_pos', session.role);
           await useSync.getState().enqueue(
             { kind: 'createOrder', outletId: session.outletId, body: createBody },
             `create:${id}`,
           );
           order = createBody as unknown as OrderWire;
         }
+        replaceOrderInStore(order, session.outletId);
       }
       set({ order });
       return order;
@@ -312,11 +330,14 @@ export const useCart = create<CartState>((set, get) => ({
         set((prev) => ({ lines: prev.lines.map((l) => (l.kotSentAt ? l : { ...l, kotSentAt: sentAt })) }));
       try {
         const updated = await api.sendKot(session.outletId, order.id, body);
+        dbg('sendKot online OK — order id:', updated.id, 'batchId:', batchId);
         set({ order: updated });
+        replaceOrderInStore(updated, session.outletId);
         markSent();
         return { order: updated, batchLines: pending, batchId };
       } catch (e) {
         if (!shouldQueue(e)) throw e;
+        dbg('sendKot offline fallback — enqueuing, batchId:', batchId);
         await useSync.getState().enqueue(
           { kind: 'sendKot', outletId: session.outletId, orderId: order.id, body },
           `kot:${batchId}`,
@@ -349,15 +370,18 @@ export const useCart = create<CartState>((set, get) => ({
     };
     set({ busy: true });
     try {
-      return await api.settleOrder(session.outletId, order.id, body);
+      const settled = await api.settleOrder(session.outletId, order.id, body);
+      dbg('settle online OK — id:', settled.id, 'status:', settled.status);
+      replaceOrderInStore(settled, session.outletId);
+      return settled;
     } catch (e) {
       if (!shouldQueue(e)) throw e;
-      // Queue the settlement (server dedupes by settlement eventId) and complete locally.
+      dbg('settle offline fallback — enqueuing');
       await useSync.getState().enqueue(
         { kind: 'settleOrder', outletId: session.outletId, orderId: order.id, body },
         `settle:${order.id}`,
       );
-      return {
+      const localSettled = {
         ...order,
         status: 'completed',
         settledAt: new Date().toISOString(),
@@ -366,6 +390,9 @@ export const useCart = create<CartState>((set, get) => ({
         serviceChargeAmount: totals.serviceChargeAmount,
         discountAmount: totals.discountAmount,
       } as OrderWire;
+      dbg('settle local completed — id:', localSettled.id, 'serial:', localSettled.serialNumber);
+      replaceOrderInStore(localSettled, session.outletId);
+      return localSettled;
     } finally {
       set({ busy: false });
     }

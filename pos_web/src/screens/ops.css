@@ -49,3 +49,58 @@ button.ops-tile:hover { border-color: var(--primary); color: var(--primary); }
 }
 .ops-dead-kind { font-weight: 700; font-size: var(--fs-13); margin-right: 8px; }
 .ops-dead-err { font-size: var(--fs-12); color: var(--ink-2); }
+
+/* ── Settings panes ───────────────────────────────────────────────────── */
+
+.settings-root {
+  display: flex; flex-direction: column; gap: 16px; max-width: 640px;
+}
+.settings-card {
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
+}
+.settings-card h3 { font-size: var(--fs-16); font-weight: 700; }
+.settings-subtitle { font-size: var(--fs-13); color: var(--muted); }
+
+.settings-field {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.settings-field-head { display: flex; flex-direction: column; gap: 1px; }
+.settings-field-label { font-size: var(--fs-13); font-weight: 700; color: var(--ink); }
+.settings-field-sub { font-size: var(--fs-12); color: var(--muted); }
+.settings-field-value {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-14); color: var(--primary); cursor: pointer;
+  background: none; border: none; padding: 4px 0; text-align: left;
+}
+.settings-field-value:hover { text-decoration: underline; }
+.settings-field-empty { color: var(--muted); }
+.settings-field-suffix { font-size: var(--fs-12); color: var(--muted); }
+.settings-field-edit { display: flex; flex-direction: column; gap: 6px; }
+.settings-field-input-row { display: flex; align-items: center; gap: 4px; }
+.settings-field-input-row .input { flex: 1; height: 36px; }
+.settings-field-actions { display: flex; gap: 8px; }
+.settings-field-msg { font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); }
+.settings-hero-note { font-size: var(--fs-13); color: var(--ink-2); line-height: 1.5; }
+.settings-open-app { color: var(--primary); text-decoration: underline; }
+
+/* ── Table settings ───────────────────────────────────────────────────── */
+
+.table-settings-card { align-items: center; text-align: center; }
+.table-settings-stepper {
+  display: flex; align-items: center; gap: 24px; margin: 8px 0;
+}
+.table-settings-btn {
+  width: 48px; height: 48px; font-size: 24px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-md);
+}
+.table-settings-count { display: flex; flex-direction: column; align-items: center; min-width: 100px; }
+.table-settings-num { font-size: 48px; font-weight: 500; line-height: 1; }
+.table-settings-unit { font-size: var(--fs-14); color: var(--muted); margin-top: 4px; }
+.table-settings-presets {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+}
+.table-settings-presets .btn.active {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}

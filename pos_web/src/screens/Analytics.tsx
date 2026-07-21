@@ -73,7 +73,7 @@ export function Analytics() {
   const printTax = async () => {
     if (!data) return;
     try {
-      await printers.print('bill', renderTaxSummary(printers.paperDots('bill'), ticketCtx, {
+      await printers.print(renderTaxSummary(printers.paperDots(), ticketCtx, {
         periodLabel: periodLabel(period),
         taxableBdt: data.salesSummary.netSales,
         vatRatePercent: vatRate,

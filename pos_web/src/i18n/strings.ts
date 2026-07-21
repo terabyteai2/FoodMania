@@ -59,6 +59,23 @@ const dict = {
   accept: { en: 'Accept', bn: 'গ্রহণ করুন' },
   accepting: { en: 'Accepting…', bn: 'গ্রহণ করা হচ্ছে…' },
   decline: { en: 'Decline', bn: 'প্রত্যাখ্যান করুন' },
+  settingsRestaurantDetails: { en: 'Restaurant Details', bn: 'রেস্টুরেন্টের বিবরণ' },
+  settingsTables: { en: 'Tables', bn: 'টেবিল' },
+  settingsTablesSubtitle: { en: 'Set the number of dine-in tables', bn: 'ডাইন-ইন টেবিলের সংখ্যা নির্ধারণ করুন' },
+  accountHolderName: { en: 'Account Holder Name', bn: 'অ্যাকাউন্ট হোল্ডারের নাম' },
+  accountHolderNameSubtitle: { en: 'Display name on your account', bn: 'আপনার অ্যাকাউন্টের প্রদর্শনের নাম' },
+  restaurantNameSubtitle: { en: 'Public name of your restaurant', bn: 'আপনার রেস্টুরেন্টের প্রকাশ্য নাম' },
+  restaurantPhoneLabel: { en: 'Restaurant Phone', bn: 'রেস্টুরেন্টের ফোন' },
+  restaurantPhoneSubtitle: { en: 'Customer contact number', bn: 'গ্রাহকের যোগাযোগের নম্বর' },
+  websiteUrlLabel: { en: 'Website URL', bn: 'ওয়েবসাইট URL' },
+  websiteUrlSubtitle: { en: 'Your public ordering page', bn: 'আপনার পাবলিক অর্ডারিং পৃষ্ঠা' },
+  heroMediaLabel: { en: 'Hero Media', bn: 'হিরো মিডিয়া' },
+  heroMediaSubtitle: { en: 'Gallery images & video on your customer menu', bn: 'আপনার গ্রাহক মেনুতে গ্যালারি ছবি ও ভিডিও' },
+  openInApp: { en: 'Open in phone app', bn: 'ফোন অ্যাপে খুলুন' },
+  save: { en: 'Save', bn: 'সংরক্ষণ করুন' },
+  cancel: { en: 'Cancel', bn: 'বাতিল' },
+  settingsSaved: { en: 'Settings saved', bn: 'সেটিংস সংরক্ষিত হয়েছে' },
+  tablesLabel: { en: 'Tables', bn: 'টেবিল' },
 } as const;
 
 export type StringKey = keyof typeof dict;

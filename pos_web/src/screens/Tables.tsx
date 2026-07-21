@@ -183,10 +183,10 @@ export function Tables() {
               const updated = await orders.accept(session.outletId, accepting, prepMinutes);
               if (printKot) {
                 const canvas = renderKot(
-                  printers.paperDots('kot'), ticketCtx, updated,
+                  printers.paperDots(), ticketCtx, updated,
                   updated.items.map((it) => ({ qty: it.qty, name: it.name, note: it.note })),
                 );
-                await printers.print('kot', canvas);
+                await printers.print(canvas);
               }
               setAccepting(null);
             } catch (e) {

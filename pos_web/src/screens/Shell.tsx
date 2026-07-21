@@ -12,6 +12,7 @@ import { Tables } from './Tables';
 import { Orders } from './Orders';
 import { Ops } from './Ops';
 import { InstallToast } from '../components/InstallToast';
+import { Sidebar } from '../components/Sidebar';
 import './shell.css';
 
 const NAV: { id: NavSection; icon: string; labelEn: string; labelBn: string }[] = [
@@ -136,12 +137,15 @@ export function Shell() {
       {!online && <div className="offline-banner">{t('offlineBanner', lang)}</div>}
       <InstallToast />
 
-      <main className="shell-body">
-        {section === 'billing' && <Billing />}
-        {section === 'tables' && <Tables />}
-        {section === 'orders' && <Orders />}
-        {section === 'ops' && <Ops />}
-      </main>
+      <div className="shell-body-row">
+        <Sidebar />
+        <main className="shell-body">
+          {section === 'billing' && <Billing />}
+          {section === 'tables' && <Tables />}
+          {section === 'orders' && <Orders />}
+          {section === 'ops' && <Ops />}
+        </main>
+      </div>
     </div>
   );
 }

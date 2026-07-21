@@ -1,34 +1,40 @@
-// Operations section — petpooja16 icon-hub style, v1 subset: printers, shift + day-end.
-// Sync/notifications arrive in Phase 4.
-
-import { useState } from 'react';
 import { PrinterSettings } from '../components/PrinterSettings';
+import { RestaurantSettings } from '../components/RestaurantSettings';
+import { TableSettings } from '../components/TableSettings';
 import { DayEnd } from './DayEnd';
 import { Dashboard } from './Dashboard';
 import { Analytics } from './Analytics';
 import { Reports } from './Reports';
 import { MenuManage } from './MenuManage';
 import { Inventory } from './Inventory';
+import { useNav } from '../state/nav';
 import { usePos } from '../state/pos';
 import { useSession } from '../state/session';
 import { useSync } from '../state/sync';
+import { t } from '../i18n/strings';
 import { formatTk } from '../core/money';
 import './ops.css';
 
-type OpsPane = 'home' | 'printers' | 'dayend' | 'dashboard' | 'analytics' | 'reports' | 'menu' | 'inventory';
-
 export function Ops() {
-  const [pane, setPane] = useState<OpsPane>('home');
+  const pane = useNav((s) => s.opsPane);
+  const goOps = useNav((s) => s.goOps);
   const pos = usePos();
   const session = useSession((s) => s.session)!;
+  const lang = useSession((s) => s.lang);
   const sync = useSync();
   const isManager = session.role === 'owner' || session.role === 'manager';
-  const isOwner = session.role === 'owner'; // inventory is owner-only on the backend
+  const isOwner = session.role === 'owner';
 
-  const back = <button className="btn btn-outline btn-sm ops-back" onClick={() => setPane('home')}>← Operations</button>;
+  const back = <button className="btn btn-outline btn-sm ops-back" onClick={() => goOps('home')}>← Operations</button>;
 
   if (pane === 'printers') {
     return <div className="ops-root">{back}<PrinterSettings /></div>;
+  }
+  if (pane === 'restaurant') {
+    return <div className="ops-root">{back}<RestaurantSettings /></div>;
+  }
+  if (pane === 'tablesettings') {
+    return <div className="ops-root">{back}<TableSettings /></div>;
   }
   if (pane === 'dayend') {
     return <div className="ops-root ops-root-flush">{back}<DayEnd /></div>;
@@ -58,39 +64,47 @@ export function Ops() {
       <div className="ops-grid">
         {isManager && (
           <>
-            <button className="ops-tile card" onClick={() => setPane('dashboard')}>
+            <button className="ops-tile card" onClick={() => goOps('dashboard')}>
               <span className="ops-tile-icon">📊</span>
               <span>Dashboard</span>
             </button>
-            <button className="ops-tile card" onClick={() => setPane('analytics')}>
+            <button className="ops-tile card" onClick={() => goOps('analytics')}>
               <span className="ops-tile-icon">📈</span>
               <span>Analytics &amp; Tax</span>
             </button>
-            <button className="ops-tile card" onClick={() => setPane('reports')}>
+            <button className="ops-tile card" onClick={() => goOps('reports')}>
               <span className="ops-tile-icon">🧮</span>
               <span>Reports</span>
             </button>
-            <button className="ops-tile card" onClick={() => setPane('menu')}>
+            <button className="ops-tile card" onClick={() => goOps('menu')}>
               <span className="ops-tile-icon">🍽️</span>
               <span>Menu</span>
             </button>
+            <button className="ops-tile card" onClick={() => goOps('restaurant')}>
+              <span className="ops-tile-icon">🏪</span>
+              <span>{t('settingsRestaurantDetails', lang)}</span>
+            </button>
+            <button className="ops-tile card" onClick={() => goOps('tablesettings')}>
+              <span className="ops-tile-icon">🍽️</span>
+              <span>{t('settingsTables', lang)}</span>
+            </button>
             {isOwner && (
-              <button className="ops-tile card" onClick={() => setPane('inventory')}>
+              <button className="ops-tile card" onClick={() => goOps('inventory')}>
                 <span className="ops-tile-icon">📦</span>
                 <span>Inventory</span>
               </button>
             )}
           </>
         )}
-        <button className="ops-tile card" onClick={() => setPane('printers')}>
+        <button className="ops-tile card" onClick={() => goOps('printers')}>
           <span className="ops-tile-icon">🖨️</span>
           <span>Printers</span>
         </button>
-        <button className="ops-tile card" onClick={() => setPane('dayend')}>
+        <button className="ops-tile card" onClick={() => goOps('dayend')}>
           <span className="ops-tile-icon">🌙</span>
           <span>Day End</span>
         </button>
-        <button className="ops-tile card" onClick={() => setPane('dayend')}>
+        <button className="ops-tile card" onClick={() => goOps('dayend')}>
           <span className="ops-tile-icon">💵</span>
           <span>{pos.shift ? `Shift open · ${formatTk(pos.shift.openingCash)} float` : 'Open shift'}</span>
         </button>
