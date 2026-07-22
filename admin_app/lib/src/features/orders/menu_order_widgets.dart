@@ -573,7 +573,7 @@ class _GridTile extends StatelessWidget {
                   children: [
                     if (inCart && !off)
                       Positioned(
-                        top: 0,
+                        top: 5,
                         left: 0,
                         right: 36,
                         child: TfText(
