@@ -1,3 +1,5 @@
+enum BlockingNoticeType { adminNotice, announcement, subscription, paymentLink }
+
 class AdminBlockingNotice {
   const AdminBlockingNotice({
     required this.enabled,
@@ -7,6 +9,10 @@ class AdminBlockingNotice {
     this.inputField = false,
     this.inputLabel,
     required this.updatedAt,
+    this.type = BlockingNoticeType.adminNotice,
+    this.ctaLabel,
+    this.ctaUrl,
+    this.dismissible = false,
   });
 
   final bool enabled;
@@ -16,6 +22,10 @@ class AdminBlockingNotice {
   final bool inputField;
   final String? inputLabel;
   final DateTime? updatedAt;
+  final BlockingNoticeType type;
+  final String? ctaLabel;
+  final String? ctaUrl;
+  final bool dismissible;
 
   bool get isBlocking => enabled && message.trim().isNotEmpty;
 
@@ -49,6 +59,21 @@ class AdminBlockingNotice {
       updatedAt: rawUpdatedAt == null || rawUpdatedAt.isEmpty
           ? null
           : DateTime.tryParse(rawUpdatedAt),
+      type: switch (data['type']?.toString().trim()) {
+        'announcement' => BlockingNoticeType.announcement,
+        'subscription' => BlockingNoticeType.subscription,
+        'paymentLink' => BlockingNoticeType.paymentLink,
+        _ => BlockingNoticeType.adminNotice,
+      },
+      ctaLabel: () {
+        final v = data['ctaLabel']?.toString().trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      }(),
+      ctaUrl: () {
+        final v = data['ctaUrl']?.toString().trim();
+        return (v != null && v.isNotEmpty) ? v : null;
+      }(),
+      dismissible: data['dismissible'] == true,
     );
   }
 
@@ -61,6 +86,10 @@ class AdminBlockingNotice {
       if (inputField) 'inputField': inputField,
       if (inputLabel != null) 'inputLabel': inputLabel,
       'updatedAt': updatedAt?.toIso8601String(),
+      'type': type.name,
+      if (ctaLabel != null) 'ctaLabel': ctaLabel,
+      if (ctaUrl != null) 'ctaUrl': ctaUrl,
+      'dismissible': dismissible,
     };
   }
 }

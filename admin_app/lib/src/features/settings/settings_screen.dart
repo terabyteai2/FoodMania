@@ -13,6 +13,7 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../core/widgets/subscription_gate_card.dart';
 import '../../models/facebook_chatbot_config.dart';
 import '../../models/pos_notification.dart';
 import 'package:image_picker/image_picker.dart';
@@ -870,7 +871,14 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
         onTap: _openCustomerMenuTheme,
       ),
     ];
-    return _SettingsGroupCard(items: items);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SubscriptionGateCard(),
+        SizedBox(height: PosSpacing.sp2),
+        _SettingsGroupCard(items: items),
+      ],
+    );
   }
 }
 
@@ -1220,6 +1228,8 @@ class _FacebookChatbotSettingsPageState
       subtitle: text.facebookMessengerBotSubtitle,
       icon: Icons.chat_bubble_outline_rounded,
       children: [
+        const SubscriptionGateCard(),
+        SizedBox(height: PosSpacing.sp2),
         Row(
           children: [
             TfStatusBadge(label: statusLabel, kind: statusKind, upper: false),

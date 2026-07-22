@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
@@ -12,6 +13,7 @@ class AdminBlockingNoticeScreen extends StatefulWidget {
     required this.refreshing,
     required this.onRetry,
     this.onRespond,
+    this.onDismiss,
     this.error,
     super.key,
   });
@@ -20,6 +22,7 @@ class AdminBlockingNoticeScreen extends StatefulWidget {
   final bool refreshing;
   final VoidCallback onRetry;
   final Future<void> Function(String response)? onRespond;
+  final VoidCallback? onDismiss;
   final String? error;
 
   @override
@@ -36,8 +39,18 @@ class _AdminBlockingNoticeScreenState extends State<AdminBlockingNoticeScreen> {
     super.dispose();
   }
 
-  Future<void> _handleRetry() async {
-    if (widget.notice.inputField &&
+  Future<void> _handlePrimaryAction() async {
+    final notice = widget.notice;
+
+    if (notice.ctaUrl != null && notice.ctaUrl!.trim().isNotEmpty) {
+      final uri = Uri.tryParse(notice.ctaUrl!);
+      if (uri != null) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return;
+    }
+
+    if (notice.inputField &&
         _inputController.text.trim().isNotEmpty &&
         widget.onRespond != null) {
       await widget.onRespond!(_inputController.text.trim());
@@ -52,56 +65,57 @@ class _AdminBlockingNoticeScreenState extends State<AdminBlockingNoticeScreen> {
           ? AppLanguage.bn
           : AppLanguage.en,
     );
-    final title = widget.notice.title.trim().isEmpty
-        ? text.adminBlockingNoticeDefaultTitle
-        : widget.notice.title;
+
+    final notice = widget.notice;
+    final title =
+        notice.title.trim().isEmpty ? text.adminBlockingNoticeDefaultTitle : notice.title;
+
+    final (leadingIcon, leadingColor) = switch (notice.type) {
+      BlockingNoticeType.announcement => (Icons.campaign_outlined, PosColors.warning),
+      BlockingNoticeType.subscription => (Icons.card_membership_outlined, PosColors.warning),
+      BlockingNoticeType.paymentLink => (Icons.payment_outlined, PosColors.warning),
+      BlockingNoticeType.adminNotice => (Icons.lock_outline_rounded, PosColors.danger),
+    };
+
+    final eyebrow = switch (notice.type) {
+      BlockingNoticeType.announcement =>
+        text.adminBlockingNoticeEyebrow, // reuse, or could add dedicated strings
+      BlockingNoticeType.subscription => text.adminBlockingNoticeEyebrow,
+      BlockingNoticeType.paymentLink => text.adminBlockingNoticeEyebrow,
+      BlockingNoticeType.adminNotice => text.adminBlockingNoticeEyebrow,
+    };
 
     return ScreenBlocker(
+      dismissible: notice.dismissible,
+      onDismiss: widget.onDismiss,
       leading: Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: PosColors.dangerSoft,
+          color: leadingColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(PosRadii.sm),
         ),
-        child: const Icon(
-          Icons.lock_outline_rounded,
-          color: PosColors.danger,
-          size: 24,
-        ),
+        child: Icon(leadingIcon, color: leadingColor, size: 24),
       ),
+      imageUrl: notice.imageUrl,
+      inputLabel: notice.inputField ? notice.inputLabel : null,
+      inputController: notice.inputField ? _inputController : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TfText(
-            text.adminBlockingNoticeEyebrow,
-            style: const TextStyle(
-              color: PosColors.danger,
+            eyebrow,
+            style: TextStyle(
+              color: leadingColor,
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.77,
             ),
           ),
-          if (widget.notice.imageUrl != null) ...[
-            const SizedBox(height: PosSpacing.sp4),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(PosRadii.md),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: Image.network(
-                  widget.notice.imageUrl!,
-                  fit: BoxFit.contain,
-                  width: double.infinity,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const SizedBox.shrink(),
-                ),
-              ),
-            ),
-          ],
-          if (widget.notice.message.trim().isNotEmpty) ...[
+          if (notice.message.trim().isNotEmpty) ...[
             const SizedBox(height: PosSpacing.sp3),
             TfText(
-              widget.notice.message,
+              notice.message,
               style: const TextStyle(
                 color: PosColors.inkSoft,
                 fontSize: 15,
@@ -130,48 +144,28 @@ class _AdminBlockingNoticeScreenState extends State<AdminBlockingNoticeScreen> {
               height: 1.45,
             ),
           ),
-          if (widget.notice.inputField) ...[
-            const SizedBox(height: PosSpacing.sp4),
-            Container(
-              height: 44,
-              decoration: BoxDecoration(
-                border: Border.all(color: PosColors.lineStrong),
-                borderRadius: BorderRadius.circular(PosRadii.md),
-                color: PosColors.surface,
-              ),
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: TextField(
-                controller: _inputController,
-                style: TextStyle(
-                  fontFamily: tfFontFamily(context),
-                  fontSize: 15,
-                  color: PosColors.primaryDark,
-                ),
-                decoration: InputDecoration(
-                  hintText: widget.notice.inputLabel,
-                  hintStyle: TextStyle(
-                    color: PosColors.mutedSoft,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
       error: widget.error,
       actions: [
         ScreenBlockerAction(
-          label: text.adminBlockingNoticeCheckAgain,
-          icon: Icons.refresh_rounded,
+          label: notice.ctaLabel ?? text.adminBlockingNoticeCheckAgain,
+          icon: notice.ctaUrl != null
+              ? Icons.open_in_new_rounded
+              : notice.dismissible
+                  ? Icons.close_rounded
+                  : Icons.refresh_rounded,
           busy: widget.refreshing,
-          onPressed: widget.refreshing ? null : _handleRetry,
+          onPressed: widget.refreshing ? null : _handlePrimaryAction,
         ),
+        if (notice.dismissible)
+          ScreenBlockerAction(
+            label: text.adminBlockingNoticeCheckAgain,
+            icon: Icons.refresh_rounded,
+            variant: TfButtonVariant.paper,
+            busy: widget.refreshing,
+            onPressed: widget.refreshing ? null : widget.onRetry,
+          ),
       ],
     );
   }

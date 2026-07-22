@@ -153,6 +153,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
         error: _controller.adminBlockingNoticeError,
         onRetry: _controller.refreshAdminBlockingNotice,
         onRespond: _controller.respondToBlockingNotice,
+        onDismiss: _controller.dismissAdminBlockingNotice,
       );
     }
     if (_controller.pendingStaffInvite != null) {

@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/subscription_gate_card.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/desktop_pos.dart';
 
@@ -240,7 +241,13 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
           ),
         ],
       ),
-      body: _buildBody(text),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SubscriptionGateCard(),
+          Expanded(child: _buildBody(text)),
+        ],
+      ),
     );
   }
 

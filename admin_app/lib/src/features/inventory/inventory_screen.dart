@@ -7,6 +7,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/subscription_gate_card.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../core/widgets/tf_timeframe_selector.dart';
@@ -313,36 +314,35 @@ class _InventoryScreenState extends State<InventoryScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SizeTransition(
+            sizeFactor: _tfAnimation,
+            alignment: Alignment.topCenter,
+            child: TfPeriodWithCalendar(
+              options: [
+                ('today', text.rangeToday),
+                ('week', text.range7Days),
+                ('month', text.range30Days),
+              ],
+              value: _timeframe.name,
+              start: _rangeStart,
+              end: _rangeEnd,
+              onChanged: (value, start, end) {
+                if (value == TfPeriodWithCalendar.customValue) {
+                  _onRangeChanged(start, end);
+                } else {
+                  _updateTimeframe(TfTimeframe.values.byName(value));
+                }
+              },
+            ),
+          ),
+          const SubscriptionGateCard(),
+          const SizedBox(height: PosSpacing.sp3),
           _SummaryStrip(
             text: text,
             stockValue: stockValue,
             lowCount: lowCount,
             lowActive: _sort == _StockSort.status,
             onTapLow: _surfaceBelowPar,
-          ),
-          SizeTransition(
-            sizeFactor: _tfAnimation,
-            alignment: Alignment.topCenter,
-            child: Padding(
-            padding: const EdgeInsets.only(top: PosSpacing.sp3),
-              child: TfPeriodWithCalendar(
-                options: [
-                  ('today', text.rangeToday),
-                  ('week', text.range7Days),
-                  ('month', text.range30Days),
-                ],
-                value: _timeframe.name,
-                start: _rangeStart,
-                end: _rangeEnd,
-                onChanged: (value, start, end) {
-                  if (value == TfPeriodWithCalendar.customValue) {
-                    _onRangeChanged(start, end);
-                  } else {
-                    _updateTimeframe(TfTimeframe.values.byName(value));
-                  }
-                },
-              ),
-            ),
           ),
           SizedBox(height: PosSpacing.sp2),
           Expanded(

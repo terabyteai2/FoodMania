@@ -26,6 +26,11 @@ class ScreenBlocker extends StatelessWidget {
     this.error,
     this.floatingActionButton,
     this.floatingActionButtonLocation,
+    this.imageUrl,
+    this.inputLabel,
+    this.inputController,
+    this.dismissible = false,
+    this.onDismiss,
     super.key,
   });
 
@@ -35,11 +40,16 @@ class ScreenBlocker extends StatelessWidget {
   final List<ScreenBlockerAction> actions;
   final Widget? floatingActionButton;
   final FloatingActionButtonLocation? floatingActionButtonLocation;
+  final String? imageUrl;
+  final String? inputLabel;
+  final TextEditingController? inputController;
+  final bool dismissible;
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: dismissible,
       child: Scaffold(
         backgroundColor: PosColors.background,
         floatingActionButton: floatingActionButton,
@@ -59,7 +69,58 @@ class ScreenBlocker extends StatelessWidget {
                         Align(alignment: Alignment.centerLeft, child: leading!),
                         const SizedBox(height: PosSpacing.sp5),
                       ],
-                      ?body,
+                      if (imageUrl != null && imageUrl!.trim().isNotEmpty) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(PosRadii.md),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 220),
+                            child: Image.network(
+                              imageUrl!,
+                              fit: BoxFit.contain,
+                              width: double.infinity,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: PosSpacing.sp4),
+                      ],
+                      if (body != null) ...[
+                        body!,
+                        const SizedBox(height: PosSpacing.sp3),
+                      ],
+                      if (inputLabel != null && inputController != null) ...[
+                        Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: PosColors.lineStrong),
+                            borderRadius: BorderRadius.circular(PosRadii.md),
+                            color: PosColors.surface,
+                          ),
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: TextField(
+                            controller: inputController,
+                            style: TextStyle(
+                              fontFamily: tfFontFamily(context),
+                              fontSize: 15,
+                              color: PosColors.primaryDark,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: inputLabel,
+                              hintStyle: TextStyle(
+                                color: PosColors.mutedSoft,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: PosSpacing.sp4),
+                      ],
                       if (error != null && error!.trim().isNotEmpty) ...[
                         const SizedBox(height: PosSpacing.sp3),
                         TfCard(

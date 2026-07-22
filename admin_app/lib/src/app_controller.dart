@@ -915,6 +915,12 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Placeholder — requests subscription/pricing info from backend (not yet wired).
+  Future<void> requestSubscriptionUpgrade() async {
+    debugPrint('[Sub] requestSubscriptionUpgrade — backend not yet implemented');
+    // TODO: hit subscription/info API when backend is ready
+  }
+
   /// Saves the manager's plan choice; app unlocks when platform admin activates access.
   Future<void> confirmSubscriptionPlan({required String plan}) async {
     final clean = plan.trim().toLowerCase();
@@ -2314,6 +2320,12 @@ class PosAppController extends ChangeNotifier {
     } catch (e) {
       debugPrint('[QB-BLOCKING-NOTICE] respond failed: $e');
     }
+  }
+
+  void dismissAdminBlockingNotice() {
+    adminBlockingNotice = null;
+    adminBlockingNoticeError = null;
+    notifyListeners();
   }
 
   void _startAdminBlockingNoticePolling() {
