@@ -136,7 +136,7 @@ async def admin_blocking_notice(
                         )
                     )
                 ).scalar_one_or_none()
-                notice = blocking_notice_for_subscription(sub)
+                notice = await blocking_notice_for_subscription(db, sub)
                 if notice.get("enabled"):
                     return ok(notice)
         return ok(await get_blocking_notice(db))

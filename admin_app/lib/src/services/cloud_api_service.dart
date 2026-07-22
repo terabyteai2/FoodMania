@@ -645,20 +645,38 @@ class AppAccessResult {
     required this.hasAppAccess,
     this.subscriptionStatus,
     this.subscriptionPlan,
+    this.addons = const [],
+    this.subscriptionPrices = const {},
+    this.addonPrices = const {},
   });
 
   final bool hasAppAccess;
   final String? subscriptionStatus;
   final String? subscriptionPlan;
+  final List<String> addons;
+  final Map<String, int> subscriptionPrices;
+  final Map<String, int> addonPrices;
+
+  static Map<String, int> _parseStringIntMap(Object? raw) {
+    if (raw is! Map) return {};
+    return raw.map((k, v) => MapEntry(k.toString(), int.tryParse(v.toString()) ?? 0));
+  }
 
   static AppAccessResult fromJson(Map<String, Object?> json) {
     final data = json['data'] is Map
         ? Map<String, Object?>.from(json['data'] as Map)
         : json;
+    final rawAddons = data['addons'];
+    final addons = rawAddons is List
+        ? rawAddons.cast<String>()
+        : <String>[];
     return AppAccessResult(
       hasAppAccess: data['hasAppAccess'] == true,
       subscriptionStatus: data['subscriptionStatus']?.toString(),
       subscriptionPlan: data['subscriptionPlan']?.toString(),
+      addons: addons,
+      subscriptionPrices: _parseStringIntMap(data['subscriptionPrices']),
+      addonPrices: _parseStringIntMap(data['addonPrices']),
     );
   }
 }

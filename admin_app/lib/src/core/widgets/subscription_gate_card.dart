@@ -4,12 +4,18 @@ import '../theme/app_theme.dart';
 import 'tf_design_system.dart';
 
 class SubscriptionGateCard extends StatelessWidget {
-  const SubscriptionGateCard({super.key});
+  const SubscriptionGateCard({super.key, this.feature});
+
+  final String? feature;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    if (app.subscriptionState == 'paid') return const SizedBox.shrink();
+    if (feature != null) {
+      if (app.hasFeature(feature!)) return const SizedBox.shrink();
+    } else {
+      if (app.subscriptionState == 'paid') return const SizedBox.shrink();
+    }
 
     return Container(
       width: double.infinity,

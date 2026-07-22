@@ -494,6 +494,10 @@ class PlatformBlockingNoticeRequest(BaseModel):
     inputField: bool = False
     inputLabel: str | None = None
     outletIds: list[str] | None = None
+    type: str = "adminNotice"
+    ctaLabel: str | None = None
+    ctaUrl: str | None = None
+    dismissible: bool = False
 
 
 class BlockingNoticeRespondRequest(BaseModel):
@@ -517,6 +521,8 @@ class SystemConfigPatchRequest(BaseModel):
     bkashEnabled: bool | None = None
     maintenanceMode: bool | None = None
     supportEmail: str | None = None
+    subscriptionPrices: dict[str, int] | None = None
+    addonPrices: dict[str, int] | None = None
 
 
 class OutletCreateRequest(BaseModel):

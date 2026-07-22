@@ -280,6 +280,23 @@ class PosAppController extends ChangeNotifier {
   String selectedSubscriptionPlan = '';
   String? lastBkashPaymentId;
   String? lastBkashTransactionId;
+
+  List<String> _addons = [];
+  List<String> get purchasedAddons => List.unmodifiable(_addons);
+
+  Map<String, int> _subscriptionPrices = {};
+  Map<String, int> get subscriptionPrices => _subscriptionPrices;
+  Map<String, int> _addonPrices = {};
+  Map<String, int> get addonPrices => _addonPrices;
+
+  bool hasFeature(String feature) {
+    if (subscriptionState == 'trial') return true;
+    if (subscriptionState != 'paid') return false;
+    const baseFeatures = {
+      'billing_foh', 'menu_management', 'analytics', 'sales_summary', 'live',
+    };
+    return baseFeatures.contains(feature) || _addons.contains(feature);
+  }
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
   String? lastError;
@@ -566,6 +583,8 @@ class PosAppController extends ChangeNotifier {
           : DateTime.fromMillisecondsSinceEpoch(trialEndsMillis);
       lastBkashPaymentId = preferences.getString(_bkashPaymentIdKey);
       lastBkashTransactionId = preferences.getString(_bkashTransactionIdKey);
+      final addonsRaw = preferences.getStringList(_addonsKey);
+      if (addonsRaw != null) _addons = addonsRaw;
       final deviceLanguage = AppLanguage.fromLocale(
         ui.PlatformDispatcher.instance.locale,
       );
@@ -916,9 +935,9 @@ class PosAppController extends ChangeNotifier {
   }
 
   /// Placeholder — requests subscription/pricing info from backend (not yet wired).
-  Future<void> requestSubscriptionUpgrade() async {
-    debugPrint('[Sub] requestSubscriptionUpgrade — backend not yet implemented');
-    // TODO: hit subscription/info API when backend is ready
+  Future<void> requestSubscriptionUpgrade({String? feature}) async {
+    debugPrint('[Sub] requestSubscriptionUpgrade — feature=$feature (backend not yet implemented)');
+    // TODO: hit subscription/addon API when backend is ready
   }
 
   /// Saves the manager's plan choice; app unlocks when platform admin activates access.
@@ -2483,21 +2502,35 @@ class PosAppController extends ChangeNotifier {
         serverConfig: serverConfig,
       );
       final access = await cloudApiService.fetchAppAccess();
-      await _applyServerAppAccess(access.hasAppAccess);
+      await _applyServerAppAccess(
+        access.hasAppAccess,
+        addons: access.addons,
+        subscriptionPrices: access.subscriptionPrices,
+        addonPrices: access.addonPrices,
+      );
     } catch (error) {
       if (!quiet) rethrow;
       debugPrint('[QB-ACCESS] sync failed: $error');
     }
   }
 
-  Future<void> _applyServerAppAccess(bool hasAccess) async {
+  Future<void> _applyServerAppAccess(
+    bool hasAccess, {
+    List<String> addons = const [],
+    Map<String, int> subscriptionPrices = const {},
+    Map<String, int> addonPrices = const {},
+  }) async {
     if (!hasAccess) return;
     subscriptionState = 'paid';
     needsOnboardingPayment = false;
     pendingOnboardingLanding = true;
+    _addons = addons;
+    _subscriptionPrices = subscriptionPrices;
+    _addonPrices = addonPrices;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_subscriptionStateKey, 'paid');
     await preferences.setBool(_needsOnboardingPaymentKey, false);
+    await preferences.setStringList(_addonsKey, addons);
     notifyListeners();
   }
 
@@ -2522,6 +2555,15 @@ class PosAppController extends ChangeNotifier {
         serverConfig: serverConfig,
       );
       final access = await cloudApiService.fetchAppAccess();
+      if (access.hasAppAccess) {
+        await _applyServerAppAccess(
+          true,
+          addons: access.addons,
+          subscriptionPrices: access.subscriptionPrices,
+          addonPrices: access.addonPrices,
+        );
+        return null;
+      }
       final status = access.subscriptionStatus?.trim();
       if (status == null || status.isEmpty) {
         return 'Waiting for activation. In platform admin, open Activations and tap '
@@ -2610,6 +2652,8 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_restaurantNameKey);
     await preferences.remove(_outletNameKey);
     await preferences.remove(_selectedPlanKey);
+    await preferences.remove(_addonsKey);
+    _addons = [];
     // Drop any owner "view as manager" preview so the next session's switch
     // visibility is derived solely from the freshly authenticated role.
     _ownerViewPreview = false;
@@ -4541,6 +4585,7 @@ class PosAppController extends ChangeNotifier {
   static final String _logoUrlKey = 'local_pos_logo_url';
   static final String _logoBitmapUrlKey = 'local_pos_logo_bitmap_url';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';
+  static final String _addonsKey = 'local_pos_subscription_addons';
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';
   static final String _selectedPlanKey = 'local_pos_selected_subscription_plan';

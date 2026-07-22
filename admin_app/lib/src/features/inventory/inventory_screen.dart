@@ -335,7 +335,7 @@ class _InventoryScreenState extends State<InventoryScreen>
               },
             ),
           ),
-          const SubscriptionGateCard(),
+          const SubscriptionGateCard(feature: 'inventory'),
           const SizedBox(height: PosSpacing.sp3),
           _SummaryStrip(
             text: text,

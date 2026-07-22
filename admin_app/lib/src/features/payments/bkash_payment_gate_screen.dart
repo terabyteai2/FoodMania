@@ -29,7 +29,9 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
+    final app = AppScope.of(context);
+    final text = app.strings;
+    final prices = app.subscriptionPrices;
     final controller = _webViewController;
     if (controller != null) {
       return _BkashCheckoutPopup(controller: controller);
@@ -87,7 +89,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
                   SizedBox(height: 20),
                   _PlanButton(
                     title: text.monthly,
-                    amount: '৳800',
+                    amount: _Plan.monthly.displayAmountFor(prices),
                     busy: _creatingSession && _selectedPlan == _Plan.monthly,
                     disabled: _creatingSession,
                     onTap: () => _openCheckout(_Plan.monthly),
@@ -95,7 +97,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
                   SizedBox(height: 12),
                   _PlanButton(
                     title: text.annual,
-                    amount: '৳9600',
+                    amount: _Plan.annual.displayAmountFor(prices),
                     busy: _creatingSession && _selectedPlan == _Plan.annual,
                     disabled: _creatingSession,
                     onTap: () => _openCheckout(_Plan.annual),
@@ -127,7 +129,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     try {
       final app = AppScope.of(context);
       final session = await app.createSubscriptionCheckout(
-        amount: plan.amount,
+        amount: plan.amountFor(app.subscriptionPrices),
         plan: plan.name,
       );
       if (!mounted) return;
@@ -185,7 +187,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     final app = AppScope.of(context);
     await app.markTemporaryBkashPaymentVerified(
       plan: plan.name,
-      amount: plan.amount,
+      amount: plan.amountFor(app.subscriptionPrices),
     );
     if (!mounted) return;
     widget.onVerified();
@@ -245,7 +247,7 @@ class _BkashPaymentGateScreenState extends State<BkashPaymentGateScreen> {
     if (paymentId == null || paymentId.isEmpty) {
       await app.markTemporaryBkashPaymentVerified(
         plan: plan.name,
-        amount: plan.amount,
+        amount: plan.amountFor(app.subscriptionPrices),
       );
     } else {
       await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -305,13 +307,21 @@ class _BkashCheckoutPopup extends StatelessWidget {
 }
 
 enum _Plan {
-  monthly(PaymentDefaults.monthlyPlanAmount),
-  annual(PaymentDefaults.annualPlanAmount);
+  monthly,
+  annual;
 
-  const _Plan(this.amount);
-  final double amount;
+  double amountFor(Map<String, int> prices) {
+    const defaultMonthly = 800;
+    switch (this) {
+      case _Plan.monthly:
+        return (prices['standard'] ?? defaultMonthly).toDouble();
+      case _Plan.annual:
+        return ((prices['standard'] ?? defaultMonthly) * 12).toDouble();
+    }
+  }
 
-  String get displayAmount => '৳${amount.toStringAsFixed(0)}';
+  String displayAmountFor(Map<String, int> prices) =>
+      '৳${amountFor(prices).toStringAsFixed(0)}';
 }
 
 class _DemoBkashPaymentDialog extends StatelessWidget {
@@ -354,7 +364,7 @@ class _DemoBkashPaymentDialog extends StatelessWidget {
                 ),
                 SizedBox(height: 6),
                 TfText(
-                  text.planLine(planTitle, plan.displayAmount),
+                  text.planLine(planTitle, plan.displayAmountFor(AppScope.of(context).subscriptionPrices)),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFFE2136E),

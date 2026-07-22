@@ -21,6 +21,10 @@ def disabled_blocking_notice() -> dict:
         "inputField": False,
         "inputLabel": None,
         "updatedAt": None,
+        "type": "adminNotice",
+        "ctaLabel": None,
+        "ctaUrl": None,
+        "dismissible": False,
     }
 
 
@@ -38,6 +42,8 @@ def blocking_notice_from_json(raw: str | None) -> dict:
     message = str(parsed.get("message") or "").strip()
     if parsed.get("enabled") is not True or not message:
         return disabled_blocking_notice()
+    valid_types = {"adminNotice", "announcement", "subscription", "paymentLink"}
+    raw_type = str(parsed.get("type") or "adminNotice").strip()
     return {
         "enabled": True,
         "title": title,
@@ -46,6 +52,10 @@ def blocking_notice_from_json(raw: str | None) -> dict:
         "inputField": bool(parsed.get("inputField")),
         "inputLabel": parsed.get("inputLabel") or None,
         "updatedAt": parsed.get("updatedAt"),
+        "type": raw_type if raw_type in valid_types else "adminNotice",
+        "ctaLabel": parsed.get("ctaLabel") or None,
+        "ctaUrl": parsed.get("ctaUrl") or None,
+        "dismissible": bool(parsed.get("dismissible")),
     }
 
 
@@ -68,6 +78,8 @@ async def set_blocking_notice(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="message is required",
         )
+    valid_types = {"adminNotice", "announcement", "subscription", "paymentLink"}
+    raw_type = (body.type or "adminNotice").strip()
     payload = {
         "enabled": True,
         "title": (body.title or "").strip() or DEFAULT_BLOCKING_NOTICE_TITLE,
@@ -76,6 +88,10 @@ async def set_blocking_notice(
         "inputField": bool(body.inputField),
         "inputLabel": body.inputLabel or None,
         "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "type": raw_type if raw_type in valid_types else "adminNotice",
+        "ctaLabel": body.ctaLabel or None,
+        "ctaUrl": body.ctaUrl or None,
+        "dismissible": bool(body.dismissible),
     }
     await _store_blocking_notice(db, payload)
     return payload

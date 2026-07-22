@@ -263,6 +263,7 @@ class OutletSubscription(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_payment_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    addons: Mapped[str] = mapped_column(String, default="[]")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     outlet: Mapped[Outlet] = relationship(back_populates="subscription")

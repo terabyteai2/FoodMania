@@ -251,6 +251,18 @@ async def admin_app_access(
     return ok(await resolve_subscription_access_for_outlet(db, outlet_id))
 
 
+@router.post("/admin/subscription/addon")
+async def admin_request_addon(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stub — platform admin will implement addon purchase logic later."""
+    outlet_id = payload.get("sub") or payload.get("outlet_id")
+    if not outlet_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+    return ok({"message": "Addon purchase endpoint — not yet implemented."})
+
+
 @router.get("/admin/app-update")
 async def admin_app_update(
     app: str = Query("admin"),

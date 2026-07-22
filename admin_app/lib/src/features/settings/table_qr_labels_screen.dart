@@ -244,7 +244,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SubscriptionGateCard(),
+          const SubscriptionGateCard(feature: 'website_qr'),
           Expanded(child: _buildBody(text)),
         ],
       ),

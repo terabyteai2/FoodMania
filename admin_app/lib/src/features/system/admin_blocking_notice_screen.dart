@@ -78,10 +78,9 @@ class _AdminBlockingNoticeScreenState extends State<AdminBlockingNoticeScreen> {
     };
 
     final eyebrow = switch (notice.type) {
-      BlockingNoticeType.announcement =>
-        text.adminBlockingNoticeEyebrow, // reuse, or could add dedicated strings
+      BlockingNoticeType.announcement => text.adminBlockingNoticeEyebrowAnnouncement,
       BlockingNoticeType.subscription => text.adminBlockingNoticeEyebrow,
-      BlockingNoticeType.paymentLink => text.adminBlockingNoticeEyebrow,
+      BlockingNoticeType.paymentLink => text.adminBlockingNoticeEyebrowPaymentLink,
       BlockingNoticeType.adminNotice => text.adminBlockingNoticeEyebrow,
     };
 

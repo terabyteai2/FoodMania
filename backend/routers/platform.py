@@ -1,5 +1,6 @@
 """Company platform admin API — manage all restaurants, outlets, subscriptions."""
 
+import json
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -1451,6 +1452,17 @@ async def system_config(
 ):
     _ = admin
     cfg = await _get_system_config(db)
+    sub_prices_raw = cfg.get("subscription_prices")
+    addon_prices_raw = cfg.get("addon_prices")
+    subscription_prices = (
+        json.loads(sub_prices_raw) if sub_prices_raw
+        else {"standard": 500, "pro": 700, "premium": 1000}
+    )
+    addon_prices = (
+        json.loads(addon_prices_raw) if addon_prices_raw
+        else {"inventory": 199, "website_qr": 199, "messenger_bot": 199}
+    )
+
     return ok(
         {
             "baseUrl": cfg.get("base_url") or settings.BASE_URL,
@@ -1459,6 +1471,8 @@ async def system_config(
             "bkashEnabled": cfg.get("bkash_enabled", "false") == "true",
             "maintenanceMode": cfg.get("maintenance_mode", "false") == "true",
             "supportEmail": cfg.get("support_email", ""),
+            "subscriptionPrices": subscription_prices,
+            "addonPrices": addon_prices,
         }
     )
 
@@ -1478,9 +1492,27 @@ async def update_system_config(
         await _set_system_config(db, "maintenance_mode", "true" if body.maintenanceMode else "false")
     if body.supportEmail is not None:
         await _set_system_config(db, "support_email", body.supportEmail.strip())
+    if body.subscriptionPrices is not None:
+        await _set_system_config(
+            db, "subscription_prices", json.dumps(body.subscriptionPrices)
+        )
+    if body.addonPrices is not None:
+        await _set_system_config(
+            db, "addon_prices", json.dumps(body.addonPrices)
+        )
     await db.commit()
 
     cfg = await _get_system_config(db)
+    sub_prices_raw = cfg.get("subscription_prices")
+    addon_prices_raw = cfg.get("addon_prices")
+    subscription_prices = (
+        json.loads(sub_prices_raw) if sub_prices_raw
+        else {"standard": 500, "pro": 700, "premium": 1000}
+    )
+    addon_prices = (
+        json.loads(addon_prices_raw) if addon_prices_raw
+        else {"inventory": 199, "website_qr": 199, "messenger_bot": 199}
+    )
     return ok(
         {
             "baseUrl": cfg.get("base_url") or settings.BASE_URL,
@@ -1489,6 +1521,8 @@ async def update_system_config(
             "bkashEnabled": cfg.get("bkash_enabled", "false") == "true",
             "maintenanceMode": cfg.get("maintenance_mode", "false") == "true",
             "supportEmail": cfg.get("support_email", ""),
+            "subscriptionPrices": subscription_prices,
+            "addonPrices": addon_prices,
         }
     )
 

@@ -2,7 +2,8 @@
 // Prod: same origin (app is served at the site root). Dev: set VITE_API_BASE.
 
 import type {
-  AnalyticsRange, AnalyticsSummaryWire, ApiEnvelope, AuthPayload,
+  AdminAccessResult, AnalyticsRange, AnalyticsSummaryWire, ApiEnvelope, AuthPayload,
+  BlockingNotice, BlockingNoticeRespondRequest,
   DailyStockCountPayload, DailyStockCountResult, DashboardSummaryWire,
   InventoryDailyReportWire, InventoryItemPayload,
   InventoryItemWire, InventoryPullWire, InventorySummaryWire, InventorySupplierPayload,
@@ -103,7 +104,10 @@ export const api = {
       method: 'POST', auth: false, body,
     }),
 
-  adminAccess: () => request<{ hasAppAccess: boolean; subscriptionStatus?: string }>('/admin/access'),
+  adminAccess: () => request<AdminAccessResult>('/admin/access'),
+  fetchBlockingNotice: () => request<BlockingNotice>('/admin/blocking-notice'),
+  respondBlockingNotice: (body: BlockingNoticeRespondRequest) =>
+    request<{ ok: boolean }>('/admin/blocking-notice/respond', { method: 'POST', body }),
 
   // ---------- data pulls ----------
   fetchMenu: (outletId: string) => request<MenuItemWire[]>(`/outlets/${outletId}/menu`),

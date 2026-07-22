@@ -495,6 +495,22 @@ async def _ensure_subscription_columns(conn) -> None:
         )
     )
 
+    # Add addons column
+    if dialect == "sqlite":
+        try:
+            await conn.execute(
+                text("ALTER TABLE outlet_subscriptions ADD COLUMN addons VARCHAR DEFAULT '[]'")
+            )
+        except Exception:
+            pass
+    else:
+        await conn.execute(
+            text(
+                "ALTER TABLE outlet_subscriptions ADD COLUMN IF NOT EXISTS addons VARCHAR "
+                "DEFAULT '[]'"
+            )
+        )
+
 
 async def seed_system_config() -> None:
     """Seed default system configuration values if not already present."""
@@ -508,6 +524,8 @@ async def seed_system_config() -> None:
         "admin_app_update": "",
         "terminal_app_update": "",
         "admin_blocking_notice": "",
+        "subscription_prices": '{"standard":500,"pro":700,"premium":1000}',
+        "addon_prices": '{"inventory":199,"website_qr":199,"messenger_bot":199}',
     }
     async with AsyncSessionLocal() as db:
         for key, value in defaults.items():

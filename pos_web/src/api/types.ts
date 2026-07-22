@@ -35,6 +35,39 @@ export interface AuthPayload {
   subscriptionStatus?: string | null;
   subscriptionPlan?: string | null;
   subscriptionExpiresAt?: string | null;
+  addons?: string[];
+  subscriptionPrices?: Record<string, number>;
+  addonPrices?: Record<string, number>;
+}
+
+export interface BlockingNotice {
+  enabled: boolean;
+  title: string | null;
+  message: string | null;
+  imageUrl: string | null;
+  inputField: boolean;
+  inputLabel: string | null;
+  updatedAt: string | null;
+  type: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  dismissible: boolean;
+}
+
+export interface BlockingNoticeRespondRequest {
+  phone: string;
+  transactionId?: string | null;
+}
+
+export interface AdminAccessResult {
+  hasAppAccess: boolean;
+  subscriptionStatus?: string | null;
+  subscriptionPlan?: string | null;
+  subscriptionPackage?: string | null;
+  subscriptionExpiresAt?: string | null;
+  addons?: string[];
+  subscriptionPrices?: Record<string, number>;
+  addonPrices?: Record<string, number>;
 }
 
 export interface PhoneOtpSendResult {

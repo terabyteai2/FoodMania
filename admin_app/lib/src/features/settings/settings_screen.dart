@@ -874,7 +874,7 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SubscriptionGateCard(),
+        const SubscriptionGateCard(feature: 'inventory'),
         SizedBox(height: PosSpacing.sp2),
         _SettingsGroupCard(items: items),
       ],
@@ -1228,7 +1228,7 @@ class _FacebookChatbotSettingsPageState
       subtitle: text.facebookMessengerBotSubtitle,
       icon: Icons.chat_bubble_outline_rounded,
       children: [
-        const SubscriptionGateCard(),
+        const SubscriptionGateCard(feature: 'messenger_bot'),
         SizedBox(height: PosSpacing.sp2),
         Row(
           children: [

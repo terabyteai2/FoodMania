@@ -540,6 +540,10 @@ class AppStrings {
       : 'Android requires final confirmation in the system installer.';
   String get adminBlockingNoticeEyebrow =>
       isBn ? 'অ্যাপ সাময়িকভাবে বন্ধ' : 'APP TEMPORARILY LOCKED';
+  String get adminBlockingNoticeEyebrowAnnouncement =>
+      isBn ? 'ঘোষণা' : 'ANNOUNCEMENT';
+  String get adminBlockingNoticeEyebrowPaymentLink =>
+      isBn ? 'পেমেন্ট লিংক' : 'PAYMENT LINK';
   String get adminBlockingNoticeDefaultTitle =>
       isBn ? 'টেরাফুডস থেকে জরুরি বার্তা' : 'Important message from Terafoods';
   String get adminBlockingNoticeHelper => isBn
