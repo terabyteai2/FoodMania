@@ -27,7 +27,7 @@ describe('order derivations', () => {
     expect(pendingOnline(list).map((o) => o.status)).toEqual(['pending']);
   });
 
-  it('ongoingOrders excludes pending, settled and dead; newest first', () => {
+  it('ongoingOrders includes pending + accepted, excludes settled and dead; newest first', () => {
     const list = [
       order({ status: 'accepted', createdAt: '2026-07-05T10:00:00Z' }),
       order({ status: 'accepted', createdAt: '2026-07-05T12:00:00Z' }),
@@ -36,7 +36,7 @@ describe('order derivations', () => {
       order({ status: 'cancelled' }),
     ];
     const ids = ongoingOrders(list);
-    expect(ids).toHaveLength(2);
+    expect(ids).toHaveLength(3); // two accepted + pending
     expect(ids[0].createdAt).toBe('2026-07-05T12:00:00Z'); // newest first
   });
 

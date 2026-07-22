@@ -58,7 +58,7 @@ export function InstallToast() {
       <button className="btn btn-sm install-toast-btn" onClick={install} disabled={busy}>
         {busy ? '…' : t('installBtn', lang)}
       </button>
-      <button className="install-toast-close" onClick={() => setDismissed(true)} aria-label="Dismiss">
+      <button className="install-toast-close" onClick={() => setDismissed(true)} aria-label={t('installDismiss', lang)}>
         ✕
       </button>
     </div>

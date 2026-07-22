@@ -65,6 +65,7 @@ interface CartState {
   order: OrderWire | null;
   held: HeldDraft[];
   busy: boolean;
+  autoPrint: boolean;
 
   addLine: (line: Omit<CartLine, 'lineId' | 'qty' | 'kotSentAt'>, qty?: number) => void;
   setQty: (lineId: string, qty: number) => void;
@@ -87,6 +88,7 @@ interface CartState {
   hold: () => void;
   resumeHeld: (id: string) => void;
   discardHeld: (id: string) => void;
+  toggleAutoPrint: () => void;
 }
 
 function loadHeld(): HeldDraft[] {
@@ -133,6 +135,7 @@ export const useCart = create<CartState>((set, get) => ({
   ...emptyState,
   held: loadHeld(),
   busy: false,
+  autoPrint: true,
 
   addLine: (line, qty = 1) => {
     const { lines } = get();
@@ -425,4 +428,5 @@ export const useCart = create<CartState>((set, get) => ({
     persistHeld(held);
     set({ held });
   },
+  toggleAutoPrint: () => set((s) => ({ autoPrint: !s.autoPrint })),
 }));

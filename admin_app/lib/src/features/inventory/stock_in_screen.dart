@@ -157,8 +157,9 @@ class _StockInScreenState extends State<StockInScreen> {
     if (_saving) return;
     final valid = _lines.where((l) => l.canSave).toList(growable: false);
     if (valid.isEmpty &&
-        _existingCtrls.values.every((c) => c.text.trim().isEmpty))
+        _existingCtrls.values.every((c) => c.text.trim().isEmpty)) {
       return;
+    }
     setState(() => _saving = true);
     final app = AppScope.of(context);
     final messenger = ScaffoldMessenger.of(context);

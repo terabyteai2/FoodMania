@@ -203,7 +203,7 @@ class PosDensity {
   static const double rowMin = 48;
 
   /// Menu/order-build grid tile mainAxisExtent (≥8 tiles per phone screen).
-  static const double tileMenu = 104;
+  static const double tileMenu = 112;
 
   /// FOH table tile childAspectRatio (square, packed with state data).
   static const double tileTableAspect = 1.0;

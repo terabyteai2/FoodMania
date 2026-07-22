@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -38,9 +37,9 @@ Future<void> startBackgroundWebSocket({
   required String deviceToken,
 }) async {
   final service = FlutterBackgroundService();
-  final running = await service.isServiceRunning();
+  final running = await service.isRunning();
   if (!running) {
-    await service.start();
+    await service.startService();
     await Future.delayed(const Duration(milliseconds: 500));
   }
   service.invoke('connectWs', {
@@ -53,7 +52,7 @@ Future<void> startBackgroundWebSocket({
 /// Call from the controller when the app comes to foreground.
 Future<void> stopBackgroundWebSocket() async {
   final service = FlutterBackgroundService();
-  if (await service.isServiceRunning()) {
+  if (await service.isRunning()) {
     service.invoke('stopService');
   }
 }
@@ -97,10 +96,12 @@ void onStart(ServiceInstance service) async {
 
     WebSocket.connect(uri).timeout(const Duration(seconds: 10)).then((ws) {
       socket = ws;
-      service.setForegroundNotificationInfo(
-        title: 'QuickBites',
-        content: 'Connected for real-time updates',
-      );
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: 'QuickBites',
+          content: 'Connected for real-time updates',
+        );
+      }
       debugPrint('[QB-BG] connected');
 
       keepAliveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -158,10 +159,12 @@ void onStart(ServiceInstance service) async {
         },
         onDone: () {
           debugPrint('[QB-BG] disconnected, reconnecting in 5s');
-          service.setForegroundNotificationInfo(
-            title: 'QuickBites',
-            content: 'Reconnecting...',
-          );
+          if (service is AndroidServiceInstance) {
+            service.setForegroundNotificationInfo(
+              title: 'QuickBites',
+              content: 'Reconnecting...',
+            );
+          }
           disconnect();
           Future.delayed(const Duration(seconds: 5), () {
             connect(data);
@@ -169,10 +172,12 @@ void onStart(ServiceInstance service) async {
         },
         onError: (e) {
           debugPrint('[QB-BG] error: $e, reconnecting in 10s');
-          service.setForegroundNotificationInfo(
-            title: 'QuickBites',
-            content: 'Reconnecting...',
-          );
+          if (service is AndroidServiceInstance) {
+            service.setForegroundNotificationInfo(
+              title: 'QuickBites',
+              content: 'Reconnecting...',
+            );
+          }
           disconnect();
           Future.delayed(const Duration(seconds: 10), () {
             connect(data);
@@ -181,10 +186,12 @@ void onStart(ServiceInstance service) async {
       );
     }).catchError((e) {
       debugPrint('[QB-BG] connect failed: $e, retrying in 10s');
-      service.setForegroundNotificationInfo(
-        title: 'QuickBites',
-        content: 'Reconnecting...',
-      );
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: 'QuickBites',
+          content: 'Reconnecting...',
+        );
+      }
       Future.delayed(const Duration(seconds: 10), () {
         connect(data);
       });

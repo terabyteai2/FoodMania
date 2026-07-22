@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import { usePos } from '../state/pos';
 import { usePrinters } from '../print/printManager';
 import { renderTaxSummary, type TicketContext } from '../print/ticketRenderer';
@@ -22,15 +23,9 @@ const SERVICE_COLORS: Record<string, string> = {
 };
 const PALETTE = ['var(--primary)', 'var(--warning)', 'var(--success)', 'var(--secondary)', 'var(--favorite)', 'var(--line-strong)'];
 
-function periodLabel(p: Period): string {
-  if (p.range === 'week') return 'Last 7 days';
-  if (p.range === 'month') return 'Last 30 days';
-  if (p.range === 'custom') return `${p.start ?? '?'} – ${p.end ?? '?'}`;
-  return 'Today';
-}
-
 export function Analytics() {
   const session = useSession((s) => s.session)!;
+  const lang = useSession((s) => s.lang);
   const pos = usePos();
   const printers = usePrinters();
 
@@ -51,6 +46,12 @@ export function Analytics() {
   };
   useEffect(load, [session.outletId, period.range, period.start, period.end]);
 
+  const periodLabel = (p: Period): string => {
+    if (p.range === 'week') return t('an.periodLabel7', lang);
+    if (p.range === 'month') return t('an.periodLabel30', lang);
+    if (p.range === 'custom') return `${p.start ?? '?'} – ${p.end ?? '?'}`;
+    return t('an.periodLabel', lang);
+  };
   const flash = (m: string) => { setToast(m); window.setTimeout(() => setToast(null), 2600); };
 
   const vatRate = pos.settings?.vatRatePercent ?? 0;
@@ -82,7 +83,7 @@ export function Analytics() {
         grossSalesBdt: data.salesSummary.grossSales,
         totalCollectionBdt: data.totalCollection,
       }));
-      flash('Tax summary printed');
+      flash(t('an.taxPrinted', lang));
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));
     }
@@ -91,20 +92,20 @@ export function Analytics() {
   const downloadTaxCsv = () => {
     if (!data) return;
     downloadCsv(`tax_summary_${period.range}.csv`, [
-      ['Metric', 'Value'],
-      ['Period', periodLabel(period)],
-      ['Orders completed', data.salesSummary.ordersCompleted],
-      ['Gross sales', data.salesSummary.grossSales],
-      ['Taxable amount (net sales)', data.salesSummary.netSales],
-      ['VAT rate (%)', vatRate],
-      ['Tax collected', data.taxAndDuty],
-      ['Total collection', data.totalCollection],
+        [t('an.csvMetric', lang), t('an.csvValue', lang)],
+        [t('an.csvPeriod', lang), periodLabel(period)],
+        [t('an.csvOrdersCompleted', lang), data.salesSummary.ordersCompleted],
+        [t('an.csvGrossSales', lang), data.salesSummary.grossSales],
+        [t('an.csvTaxableAmount', lang), data.salesSummary.netSales],
+        [t('an.csvVatRate', lang), vatRate],
+        [t('an.csvTaxCollected', lang), data.taxAndDuty],
+        [t('an.csvTotalCollection', lang), data.totalCollection],
     ]);
   };
 
   const downloadItemsCsv = () => {
     if (!data) return;
-    const rows: (string | number)[][] = [['Category', 'Item', 'Units', 'Avg Unit Price', 'Total']];
+    const rows: (string | number)[][] = [[t('an.csvCat', lang), t('an.csvItem', lang), t('an.csvUnits', lang), t('an.csvAvgPrice', lang), t('an.csvTotal', lang)]];
     for (const cat of data.itemWise) {
       for (const it of cat.items) rows.push([cat.category, it.name, it.units, it.avgUnitPrice, it.totalPrice]);
     }
@@ -115,7 +116,7 @@ export function Analytics() {
     <div className="bo-root">
       <div className="bo-head">
         <div>
-          <h2>Analytics</h2>
+          <h2>{t('an.title', lang)}</h2>
           <span className="bo-sub">{session.outletName} · {periodLabel(period)}</span>
         </div>
         <div className="bo-head-actions">
@@ -126,34 +127,34 @@ export function Analytics() {
       </div>
 
       {err && <div className="bo-err">{err}</div>}
-      {loading && !data && <div className="bo-loading">Loading…</div>}
+      {loading && !data && <div className="bo-loading">{t('an.loading', lang)}</div>}
 
       <div className="bo-tabs">
-        <button className={`bo-tab ${tab === 'sales' ? 'active' : ''}`} onClick={() => setTab('sales')}>Sales Breakdown</button>
-        <button className={`bo-tab ${tab === 'items' ? 'active' : ''}`} onClick={() => setTab('items')}>Item-wise</button>
+        <button className={`bo-tab ${tab === 'sales' ? 'active' : ''}`} onClick={() => setTab('sales')}>{t('an.salesBreakdown', lang)}</button>
+        <button className={`bo-tab ${tab === 'items' ? 'active' : ''}`} onClick={() => setTab('items')}>{t('an.itemWise', lang)}</button>
       </div>
 
       {data && tab === 'sales' && (
         <>
           <div className="bo-grid">
-            <StatCard title="Orders Completed" value={String(data.salesSummary.ordersCompleted)} sub="in period" />
-            <StatCard title="Gross Sales" value={formatTk(data.salesSummary.grossSales)} sub="before discount" />
-            <StatCard title="Net Sales" value={formatTk(data.salesSummary.netSales)} sub="after discount" />
-            <StatCard title="Discount & Commission" value={formatTk(data.discountAndCommission)} sub="given" />
-            <StatCard title="Other Income" value={formatTk(data.otherIncome)} sub="service + delivery" />
-            <StatCard title="Tax & Duty" value={formatTk(data.taxAndDuty)} sub="VAT collected" />
-            <StatCard title="Total Collection" value={formatTk(data.totalCollection)} accent sub="all payments" />
+            <StatCard title={t('an.ordersCompleted', lang)} value={String(data.salesSummary.ordersCompleted)} sub={t('an.inPeriod', lang)} />
+            <StatCard title={t('an.grossSales', lang)} value={formatTk(data.salesSummary.grossSales)} sub={t('an.beforeDiscount', lang)} />
+            <StatCard title={t('an.netSales', lang)} value={formatTk(data.salesSummary.netSales)} sub={t('an.afterDiscount', lang)} />
+            <StatCard title={t('an.discountAndCommission', lang)} value={formatTk(data.discountAndCommission)} sub={t('an.given', lang)} />
+            <StatCard title={t('an.otherIncome', lang)} value={formatTk(data.otherIncome)} sub={t('an.servicePlusDelivery', lang)} />
+            <StatCard title={t('an.taxAndDuty', lang)} value={formatTk(data.taxAndDuty)} sub={t('an.vatCollected', lang)} />
+            <StatCard title={t('an.totalCollection', lang)} value={formatTk(data.totalCollection)} accent sub={t('an.allPayments', lang)} />
             {data.dueReceivable != null && (
-              <StatCard title="Due Receivable" value={formatTk(data.dueReceivable)} sub="pay later" />
+              <StatCard title={t('an.dueReceivable', lang)} value={formatTk(data.dueReceivable)} sub={t('an.payLater', lang)} />
             )}
           </div>
 
           <section className="card bo-panel">
             <div className="bo-chart-head">
-              <h3>Revenue trend</h3>
+              <h3>{t('an.revenueTrend', lang)}</h3>
               <div className="bo-toggle">
-                <button className={trendMode === 'revenue' ? 'active' : ''} onClick={() => setTrendMode('revenue')}>Revenue</button>
-                <button className={trendMode === 'orders' ? 'active' : ''} onClick={() => setTrendMode('orders')}>Orders</button>
+                <button className={trendMode === 'revenue' ? 'active' : ''} onClick={() => setTrendMode('revenue')}>{t('an.revenue', lang)}</button>
+                <button className={trendMode === 'orders' ? 'active' : ''} onClick={() => setTrendMode('orders')}>{t('an.ordersCompleted', lang)}</button>
               </div>
             </div>
             <AreaTrend values={trendVals} labels={trendLabels} height={170} />
@@ -161,37 +162,37 @@ export function Analytics() {
 
           <div className="bo-cols">
             <section className="card bo-panel">
-              <h3>Service-wise sales</h3>
+              <h3>{t('an.serviceWiseSales', lang)}</h3>
               <BarChart data={serviceBars} format={formatTk} />
             </section>
 
             <section className="card bo-panel">
-              <h3>Collection summary</h3>
+              <h3>{t('an.collectionSummary', lang)}</h3>
               {collectionDonut.length > 0
-                ? <Donut data={collectionDonut} format={formatTk} centerValue={formatTk(data.totalCollection)} centerLabel="collected" />
-                : <p className="bo-muted">No collections in this period.</p>}
+                ? <Donut data={collectionDonut} format={formatTk} centerValue={formatTk(data.totalCollection)} centerLabel={t('an.collected', lang)} />
+                : <p className="bo-muted">{t('an.noCollections', lang)}</p>}
             </section>
 
             <section className="card bo-panel">
-              <h3>Profit estimation</h3>
-              <div className="bo-line"><span>Net sales</span><span>{formatTk(data.profit.netSales)}</span></div>
-              <div className="bo-line pos"><span>+ Service charge</span><span>{formatTk(data.profit.serviceCharge)}</span></div>
-              <div className="bo-line pos"><span>+ Delivery charge</span><span>{formatTk(data.profit.deliveryCharge)}</span></div>
-              <div className="bo-line neg"><span>− Preparation cost</span><span>{formatTk(data.profit.preparationCost)}</span></div>
-              <div className="bo-line neg"><span>− Wastage</span><span>{formatTk(data.profit.wastage)}</span></div>
-              <div className="bo-line neg"><span>− Payment fee</span><span>{formatTk(data.profit.paymentFee)}</span></div>
-              <div className="bo-line neg"><span>− Taxes</span><span>{formatTk(data.profit.taxes)}</span></div>
-              <div className="bo-line strong"><span>Gross profit</span><span>{formatTk(data.profit.grossProfit)}</span></div>
+              <h3>{t('an.profitEstimation', lang)}</h3>
+              <div className="bo-line"><span>{t('an.netSalesLine', lang)}</span><span>{formatTk(data.profit.netSales)}</span></div>
+              <div className="bo-line pos"><span>{t('an.plusService', lang)}</span><span>{formatTk(data.profit.serviceCharge)}</span></div>
+              <div className="bo-line pos"><span>{t('an.plusDelivery', lang)}</span><span>{formatTk(data.profit.deliveryCharge)}</span></div>
+              <div className="bo-line neg"><span>{t('an.minusPrep', lang)}</span><span>{formatTk(data.profit.preparationCost)}</span></div>
+              <div className="bo-line neg"><span>{t('an.minusWastage', lang)}</span><span>{formatTk(data.profit.wastage)}</span></div>
+              <div className="bo-line neg"><span>{t('an.minusPaymentFee', lang)}</span><span>{formatTk(data.profit.paymentFee)}</span></div>
+              <div className="bo-line neg"><span>{t('an.minusTaxes', lang)}</span><span>{formatTk(data.profit.taxes)}</span></div>
+              <div className="bo-line strong"><span>{t('an.grossProfit', lang)}</span><span>{formatTk(data.profit.grossProfit)}</span></div>
             </section>
 
             <section className="card bo-panel">
-              <h3>Popular dishes</h3>
+              <h3>{t('an.popularDishes', lang)}</h3>
               <div className="bo-rank">
-                {data.popularDishes.length === 0 && <p className="bo-muted">No items sold.</p>}
+                {data.popularDishes.length === 0 && <p className="bo-muted">{t('an.noItemsSold', lang)}</p>}
                 {data.popularDishes.map((d, i) => (
                   <div className="bo-rank-row" key={i}>
                     <span className="bo-rank-name">{d.name}</span>
-                    <span className="bo-rank-qty">{d.qty} sold</span>
+                    <span className="bo-rank-qty">{t('dash.sold', lang).replace('{n}', String(d.qty))}</span>
                     <span className="bo-rank-val">{formatTk(d.salesBdt)}</span>
                   </div>
                 ))}
@@ -200,15 +201,15 @@ export function Analytics() {
 
             <section className="card bo-panel">
               <div className="bo-chart-head">
-                <h3>Tax summary</h3>
+                <h3>{t('an.taxSummary', lang)}</h3>
                 <div className="bo-head-actions">
-                  <button className="btn btn-outline btn-sm" onClick={() => void printTax()}>🖨 Print</button>
-                  <button className="btn btn-outline btn-sm" onClick={downloadTaxCsv}>⬇ CSV</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => void printTax()}>🖨 {t('an.print', lang)}</button>
+                  <button className="btn btn-outline btn-sm" onClick={downloadTaxCsv}>⬇ {t('an.csv', lang)}</button>
                 </div>
               </div>
-              <div className="bo-line"><span>Taxable amount (net sales)</span><span>{formatTk(data.salesSummary.netSales)}</span></div>
-              <div className="bo-line"><span>VAT rate</span><span>{vatRate}%</span></div>
-              <div className="bo-line strong"><span>Tax collected</span><span>{formatTk(data.taxAndDuty)}</span></div>
+              <div className="bo-line"><span>{t('an.taxableAmount', lang)}</span><span>{formatTk(data.salesSummary.netSales)}</span></div>
+              <div className="bo-line"><span>{t('an.vatRate', lang)}</span><span>{vatRate}%</span></div>
+              <div className="bo-line strong"><span>{t('an.taxCollected', lang)}</span><span>{formatTk(data.taxAndDuty)}</span></div>
             </section>
           </div>
         </>
@@ -216,12 +217,12 @@ export function Analytics() {
 
       {data && tab === 'items' && (
         <div className="bo-cols">
-          {data.itemWise.length === 0 && <p className="bo-muted">No items sold in this period.</p>}
+          {data.itemWise.length === 0 && <p className="bo-muted">{t('an.noItemsPeriod', lang)}</p>}
           {data.itemWise.map((cat) => (
             <section className="card bo-panel" key={cat.category}>
               <div className="bo-cat-head">
                 <h3>{cat.category}</h3>
-                <span className="bo-cat-meta">{cat.units} units · {formatTk(cat.totalPrice)}</span>
+                <span className="bo-cat-meta">{cat.units} {t('an.units', lang)} · {formatTk(cat.totalPrice)}</span>
               </div>
               <div className="bo-rank">
                 {cat.items.map((it) => (

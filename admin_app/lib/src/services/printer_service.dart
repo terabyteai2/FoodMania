@@ -1992,7 +1992,7 @@ class PrinterService {
     buffer.writeln('${labels.indexHeader} ${labels.qtyHeader} ${labels.descriptionHeader}                      ${labels.priceHeader}');
     for (var i = 0; i < order.items.length; i++) {
       final item = order.items[i];
-      final index = labels.digits('${(i + 1).toString().padLeft(3, '0')}');
+      final index = labels.digits((i + 1).toString().padLeft(3, '0'));
       final qty = labels.qtyText(item.qty);
       final desc = _shortText(labels.itemName(item), 20);
       final amount = labels.money(_lineTotalFor(item));

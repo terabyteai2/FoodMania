@@ -30,17 +30,18 @@ export async function nextSerial(outletId: string, source: string, role?: string
   const group = serialGroup(source, role);
   const key = serialKey(outletId, group);
   const raw = localStorage.getItem(key);
-  if (raw) return Number(raw) + 1;
-  const seeded = await seedFromCache(outletId, group);
-  localStorage.setItem(key, String(seeded));
-  return seeded;
+  const next = raw ? Number(raw) + 1 : await seedFromCache(outletId, group);
+  localStorage.setItem(key, String(next));
+  return next;
 }
 
 async function seedFromCache(outletId: string, group: string): Promise<number> {
   const cached = await cacheGet<OrderWire[]>(`orders:${outletId}`);
   if (!cached || cached.length === 0) return 1;
+  const today = new Date().toISOString().substring(0, 10);
   let max = 0;
   for (const o of cached) {
+    if (!o.createdAt || !o.createdAt.startsWith(today)) continue;
     if (serialGroup(o.source, o.createdByRole) !== group) continue;
     if (o.serialNumber > max) max = o.serialNumber;
   }
@@ -49,12 +50,13 @@ async function seedFromCache(outletId: string, group: string): Promise<number> {
 
 /** Call after an outbox-replayed createOrder succeeds so the local counter
  *  stays in sync with the authoritative server value. */
-export async function syncSerial(outletId: string, source: string, role: string | null | undefined, serverSerial: number): Promise<void> {
-  const group = serialGroup(source, role);
-  const key = serialKey(outletId, group);
-  const raw = localStorage.getItem(key);
-  const current = raw ? Number(raw) : (await seedFromCache(outletId, group)) - 1;
-  if (serverSerial > current) {
-    localStorage.setItem(key, String(serverSerial));
-  }
+export function syncSerial(outletId: string, source: string, role: string | null | undefined, serverSerial: number): void {
+  const key = serialKey(outletId, serialGroup(source, role));
+  localStorage.setItem(key, String(serverSerial));
+}
+
+/** Remove today's serial counter so the next call to nextSerial reseeds from cache. */
+export function resetSerial(outletId: string, source: string, role?: string | null): void {
+  const key = serialKey(outletId, serialGroup(source, role));
+  localStorage.removeItem(key);
 }

@@ -1,8 +1,16 @@
-import { type OpsPane, useNav } from '../state/nav';
+import { type NavSection, type OpsPane, useNav } from '../state/nav';
 import { useSession } from '../state/session';
+import { t, type StringKey } from '../i18n/strings';
 import './sidebar.css';
 
+type MainItem = { id: NavSection; label: string; icon: string };
 type SItem = { pane: OpsPane; label: string; icon: JSX.Element; role?: 'manager' | 'owner' };
+
+const MAIN: MainItem[] = [
+  { id: 'tables', label: '', icon: '🍽️' },
+  { id: 'billing', label: '', icon: '🧾' },
+  { id: 'orders', label: '', icon: '📋' },
+];
 
 const DashboardIcon = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
@@ -57,6 +65,9 @@ const ITEMS: SItem[] = [
 ];
 
 export function Sidebar() {
+  const lang = useSession((s) => s.lang);
+  const section = useNav((s) => s.section);
+  const go = useNav((s) => s.go);
   const opsPane = useNav((s) => s.opsPane);
   const goOps = useNav((s) => s.goOps);
   const session = useSession((s) => s.session);
@@ -67,15 +78,31 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <nav className="sidebar-nav">
+        {MAIN.map((it) => (
+          <button
+            key={it.id}
+            className={`sidebar-btn${section === it.id ? ' active' : ''}`}
+            onClick={() => go(it.id)}
+            title={t(('sidebar.' + it.id) as StringKey, lang)}
+          >
+            <span className="sidebar-icon">{it.icon}</span>
+            <span className="sidebar-label">{t(('sidebar.' + it.id) as StringKey, lang)}</span>
+            {section === it.id && (
+              <svg className="sidebar-chevron" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M9.29 6.71c-.39.39-.39 1.02 0 1.41L13.17 12l-3.88 3.88c-.39.39-.39 1.02 0 1.41s1.02.39 1.41 0l4.59-4.59c.39-.39.39-1.02 0-1.41L10.7 6.7c-.38-.38-1.02-.38-1.41.01z"/>
+              </svg>
+            )}
+          </button>
+        ))}
         {visible.map((it) => (
           <button
             key={it.pane}
             className={`sidebar-btn${opsPane === it.pane ? ' active' : ''}`}
             onClick={() => goOps(it.pane)}
-            title={it.label}
+            title={t(('sidebar.' + it.pane) as StringKey, lang)}
           >
             <span className="sidebar-icon">{it.icon}</span>
-            <span className="sidebar-label">{it.label}</span>
+            <span className="sidebar-label">{t(('sidebar.' + it.pane) as StringKey, lang)}</span>
             {opsPane === it.pane && (
               <svg className="sidebar-chevron" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
                 <path d="M9.29 6.71c-.39.39-.39 1.02 0 1.41L13.17 12l-3.88 3.88c-.39.39-.39 1.02 0 1.41s1.02.39 1.41 0l4.59-4.59c.39-.39.39-1.02 0-1.41L10.7 6.7c-.38-.38-1.02-.38-1.41.01z"/>

@@ -12,7 +12,7 @@
 .topbar-brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .topbar-logo { font-size: var(--fs-18); font-weight: 800; color: var(--primary); }
 .topbar-outlet {
-  font-size: var(--fs-12); color: var(--ink-2); font-weight: 600;
+  font-size: var(--fs-12); color: var(--heading); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
 }
 .topbar-new-order { height: 38px; }
@@ -24,7 +24,7 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 1px; width: 74px; height: 50px;
   background: none; border: none; border-radius: var(--r-sm);
-  color: var(--ink-2); cursor: pointer;
+  color: var(--heading); cursor: pointer;
 }
 .topbar-nav-btn:hover { background: var(--surface-sunk); }
 .topbar-nav-btn.active { color: var(--primary); background: var(--primary-soft); }
@@ -49,9 +49,9 @@
 .topbar-lang {
   border: 1px solid var(--line-strong); background: var(--surface);
   border-radius: var(--r-sm); padding: 5px 10px; font-size: var(--fs-12); font-weight: 700;
-  color: var(--ink-2);
+  color: var(--heading);
 }
-.topbar-user { font-size: var(--fs-13); font-weight: 600; color: var(--ink-2); }
+.topbar-user { font-size: var(--fs-13); font-weight: 600; color: var(--heading); }
 
 /* ---------- offline banner ---------- */
 .offline-banner {

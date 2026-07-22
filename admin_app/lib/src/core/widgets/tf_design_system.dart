@@ -286,6 +286,43 @@ class TfTextStyles {
     fontWeight: FontWeight.w700,
     height: 1.2,
   );
+
+  /// Display / Hero — 24/700 tabular for main totals, order IDs, dashboard metrics.
+  static const TextStyle display = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Heading — 18/600 for screen titles, item names, table numbers.
+  static const TextStyle heading = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+
+  /// Body primary — 16/500 for quantities, prices, button text.
+  static const TextStyle bodyPrimary = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w500,
+    height: 1.4,
+  );
+
+  /// Meta — 13/400 muted for status labels, timestamps, staff names.
+  static const TextStyle meta = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.4,
+    color: PosColors.muted,
+  );
+
+  /// Badge text — 11/700 for inside status pills, notification counts.
+  static const TextStyle badgeText = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
+  );
 }
 
 // ---------------------------------------------------------------------------

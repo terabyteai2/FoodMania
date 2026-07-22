@@ -11,7 +11,7 @@ interface NavState {
 }
 
 export const useNav = create<NavState>((set) => ({
-  section: 'billing',
+  section: 'tables',
   opsPane: 'home',
   go: (section) => set({ section, opsPane: 'home' }),
   goOps: (pane) => set({ section: 'ops', opsPane: pane }),

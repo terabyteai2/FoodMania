@@ -8,7 +8,7 @@ function OfflineNoSession() {
   return (
     <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
       <div className="card" style={{ maxWidth: 400, padding: 32, textAlign: 'center' }}>
-        <h2 style={{ marginBottom: 10 }}>QuickBytes POS</h2>
+        <h2 style={{ marginBottom: 10 }}>{t('appName', lang)}</h2>
         <p style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
           {t('offlineNoSession', lang)}
         </p>

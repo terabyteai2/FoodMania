@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import { usePos } from '../state/pos';
 import { usePrinters } from '../print/printManager';
 import { renderDayEnd, type DayEndSummary, type TicketContext } from '../print/ticketRenderer';
@@ -15,6 +16,7 @@ import './dayend.css';
 
 export function DayEnd() {
   const session = useSession((s) => s.session)!;
+  const lang = useSession((s) => s.lang);
   const pos = usePos();
   const printers = usePrinters();
 
@@ -65,7 +67,7 @@ export function DayEnd() {
   const printDayEnd = async () => {
     try {
       await printers.print(renderDayEnd(printers.paperDots(), ticketCtx, summary));
-      flash('Day-end printed');
+      flash(t('de.printed', lang));
     } catch (e) {
       flash(e instanceof Error ? e.message : String(e));
     }
@@ -77,16 +79,16 @@ export function DayEnd() {
     <div className="dayend-root">
       <div className="dayend-head">
         <div>
-          <h2>Day End</h2>
+          <h2>{t('de.title', lang)}</h2>
           <span className="dayend-date">{summary.date}</span>
         </div>
         <div className="dayend-head-actions">
-          <button className="btn btn-outline btn-sm" onClick={load} disabled={loading}>↻ Refresh</button>
-          <button className="btn btn-outline btn-sm" onClick={() => void printDayEnd()}>🖨 Print day-end</button>
+          <button className="btn btn-outline btn-sm" onClick={load} disabled={loading}>↻ {t('de.refresh', lang)}</button>
+          <button className="btn btn-outline btn-sm" onClick={() => void printDayEnd()}>🖨 {t('de.printDayEnd', lang)}</button>
           {pos.shift ? (
-            <button className="btn btn-primary btn-sm" onClick={() => setShiftModal('close')}>Close shift</button>
+            <button className="btn btn-primary btn-sm" onClick={() => setShiftModal('close')}>{t('de.closeShift', lang)}</button>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={() => setShiftModal('open')}>Open shift</button>
+            <button className="btn btn-primary btn-sm" onClick={() => setShiftModal('open')}>{t('de.openShift', lang)}</button>
           )}
         </div>
       </div>
@@ -94,23 +96,23 @@ export function DayEnd() {
       {err && <div className="dayend-err">{err}</div>}
 
       <div className="dayend-grid">
-        <Card title="Success Orders" value={formatTk(summary.sales)} sub={`${summary.orders} orders`} accent />
-        <Card title="Covers" value={String(summary.covers)} sub="guests served" />
-        <Card title="Voided Orders" value={String(summary.voids)} sub="cancelled" />
-        <Card title="Complimentary" value={String(summary.comps)} sub="comp orders" />
-        <Card title="Sales Returns" value={String(summary.refunds)} sub="refunds" />
+        <Card title={t('de.successOrders', lang)} value={formatTk(summary.sales)} sub={t('de.orders', lang).replace('{n}', String(summary.orders))} accent />
+        <Card title={t('de.covers', lang)} value={String(summary.covers)} sub={t('de.guestsServed', lang)} />
+        <Card title={t('de.voidedOrders', lang)} value={String(summary.voids)} sub={t('de.cancelled', lang)} />
+        <Card title={t('de.complimentary', lang)} value={String(summary.comps)} sub={t('de.compOrders', lang)} />
+        <Card title={t('de.salesReturns', lang)} value={String(summary.refunds)} sub={t('de.refunds', lang)} />
         <Card
-          title="Expected Drawer"
+          title={t('de.expectedDrawer', lang)}
           value={expectedCash != null ? formatTk(expectedCash) : '—'}
-          sub={openingCash != null ? `opening ${formatTk(openingCash)}` : 'no open shift'}
+          sub={openingCash != null ? t('de.opening', lang).replace('{t}', formatTk(openingCash)) : t('de.noOpenShift', lang)}
         />
       </div>
 
       <div className="dayend-cols">
         <section className="card dayend-panel">
-          <h3>Payment split</h3>
+          <h3>{t('de.paymentSplit', lang)}</h3>
           {paySplit.length === 0 ? (
-            <p className="dayend-muted">No settlements yet.</p>
+            <p className="dayend-muted">{t('de.noSettlements', lang)}</p>
           ) : (
             paySplit.map(([m, amt]) => (
               <div className="dayend-line" key={m}>
@@ -122,37 +124,37 @@ export function DayEnd() {
         </section>
 
         <section className="card dayend-panel">
-          <h3>Cash drawer</h3>
+          <h3>{t('de.cashDrawer', lang)}</h3>
           {shift ? (
             <>
-              <div className="dayend-line"><span>Opening float</span><span>{formatTk(openingCash ?? 0)}</span></div>
-              <div className="dayend-line"><span>Cash taken</span><span>{formatTk(cashTaken)}</span></div>
-              <div className="dayend-line strong"><span>Expected</span><span>{formatTk(expectedCash ?? 0)}</span></div>
+              <div className="dayend-line"><span>{t('de.openingFloat', lang)}</span><span>{formatTk(openingCash ?? 0)}</span></div>
+              <div className="dayend-line"><span>{t('de.cashTaken', lang)}</span><span>{formatTk(cashTaken)}</span></div>
+              <div className="dayend-line strong"><span>{t('de.expected', lang)}</span><span>{formatTk(expectedCash ?? 0)}</span></div>
               {closedShift?.countedCash != null && (
-                <div className="dayend-line"><span>Counted</span><span>{formatTk(closedShift.countedCash)}</span></div>
+                <div className="dayend-line"><span>{t('de.counted', lang)}</span><span>{formatTk(closedShift.countedCash)}</span></div>
               )}
               {closedShift?.varianceCash != null && (
                 <div className={`dayend-line strong ${closedShift.varianceCash === 0 ? 'ok' : 'warn'}`}>
-                  <span>Variance</span>
+                  <span>{t('de.variance', lang)}</span>
                   <span>{closedShift.varianceCash > 0 ? '+' : ''}{formatTk(closedShift.varianceCash)}</span>
                 </div>
               )}
-              {closedShift && <p className="dayend-muted">Shift closed.</p>}
+              {closedShift && <p className="dayend-muted">{t('de.shiftClosed', lang)}</p>}
             </>
           ) : (
-            <p className="dayend-muted">No open shift. Open one to track the drawer.</p>
+            <p className="dayend-muted">{t('de.noShift', lang)}</p>
           )}
         </section>
 
         <section className="card dayend-panel">
-          <h3>Top items</h3>
+          <h3>{t('de.topItems', lang)}</h3>
           {(report?.items ?? []).slice(0, 6).map((it, i) => (
             <div className="dayend-line" key={i}>
               <span>{it.qty} × {it.name}</span>
               <span>{formatTk(it.sales)}</span>
             </div>
           ))}
-          {(report?.items?.length ?? 0) === 0 && <p className="dayend-muted">No items sold yet.</p>}
+          {(report?.items?.length ?? 0) === 0 && <p className="dayend-muted">{t('de.noItemsSold', lang)}</p>}
         </section>
       </div>
 

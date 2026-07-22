@@ -1063,7 +1063,7 @@ class CloudApiService {
       'PATCH',
       uri,
       body: {
-        if (isActive != null) 'isActive': isActive,
+        '?isActive': isActive,
         if (displayName?.trim().isNotEmpty == true)
           'displayName': displayName!.trim(),
       },

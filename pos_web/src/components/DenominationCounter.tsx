@@ -2,13 +2,15 @@
 // and the per-denomination counts (persisted with the shift for the day-end drawer).
 
 import { useState } from 'react';
+import { t, type Lang } from '../i18n/strings';
 import { formatTk } from '../core/money';
 
 const DENOMS = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
 
 export function DenominationCounter({
-  onChange,
+  lang, onChange,
 }: {
+  lang: Lang;
   onChange: (total: number, counts: Record<string, number>) => void;
 }) {
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -36,7 +38,7 @@ export function DenominationCounter({
         </div>
       ))}
       <div className="denom-total">
-        <span>Total counted</span>
+        <span>{t('dc.totalCounted', lang)}</span>
         <span>{formatTk(total)}</span>
       </div>
     </div>

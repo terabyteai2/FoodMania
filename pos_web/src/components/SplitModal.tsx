@@ -2,18 +2,13 @@
 // (server 422s otherwise, so we validate the same rule here).
 
 import { useMemo, useState } from 'react';
+import { t, type Lang, type StringKey } from '../i18n/strings';
 import { Modal } from './Modal';
 import type { PaymentMethod, PosSettlementLineWire } from '../api/types';
 import { formatTk } from '../core/money';
 import { round2 } from '../core/tags';
 
-const METHODS: { id: PaymentMethod; label: string }[] = [
-  { id: 'cash', label: 'Cash' },
-  { id: 'card', label: 'Card' },
-  { id: 'bkash', label: 'bKash' },
-  { id: 'nagad', label: 'Nagad' },
-  { id: 'pay_later', label: 'Due' },
-];
+const METHOD_IDS: PaymentMethod[] = ['cash', 'card', 'bkash', 'nagad', 'pay_later'];
 
 interface SplitRow {
   method: PaymentMethod;
@@ -22,6 +17,7 @@ interface SplitRow {
 }
 
 export function SplitModal(props: {
+  lang: Lang;
   total: number;
   onConfirm: (lines: PosSettlementLineWire[]) => void;
   onClose: () => void;
@@ -57,16 +53,16 @@ export function SplitModal(props: {
 
   return (
     <Modal
-      title="Split payment"
+      title={t('sm.splitPayment', props.lang)}
       onClose={props.onClose}
       width={560}
       footer={
         <>
           <span className={`split-remaining ${remaining === 0 ? 'ok' : 'bad'}`}>
-            {remaining === 0 ? `Total ${formatTk(props.total)} ✓` : `Remaining ${formatTk(remaining)}`}
+            {remaining === 0 ? `${t('foh.total', props.lang)} ${formatTk(props.total)} ✓` : `${t('sm.remaining', props.lang)} ${formatTk(remaining)}`}
           </span>
           <button className="btn btn-primary" disabled={remaining !== 0 || sum <= 0} onClick={confirm}>
-            Settle {formatTk(props.total)}
+            {t('sm.settle', props.lang)} {formatTk(props.total)}
           </button>
         </>
       }
@@ -79,8 +75,8 @@ export function SplitModal(props: {
               value={row.method}
               onChange={(e) => update(i, { method: e.target.value as PaymentMethod })}
             >
-              {METHODS.map((m) => (
-                <option key={m.id} value={m.id}>{m.label}</option>
+              {METHOD_IDS.map((id) => (
+                <option key={id} value={id}>{t('foh.' + id as StringKey, props.lang)}</option>
               ))}
             </select>
             <input
@@ -89,7 +85,7 @@ export function SplitModal(props: {
               onChange={(e) => update(i, { amount: e.target.value })}
             />
             <input
-              className="input split-payer" placeholder="Payer (optional)"
+              className="input split-payer" placeholder={t('sm.payerOptional', props.lang)}
               value={row.payerLabel}
               onChange={(e) => update(i, { payerLabel: e.target.value })}
             />
@@ -100,7 +96,7 @@ export function SplitModal(props: {
           </div>
         ))}
       </div>
-      <button className="btn btn-outline btn-sm" onClick={addRow}>+ Add payment</button>
+      <button className="btn btn-outline btn-sm" onClick={addRow}>{t('sm.addPayment', props.lang)}</button>
     </Modal>
   );
 }

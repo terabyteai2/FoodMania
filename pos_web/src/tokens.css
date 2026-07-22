@@ -6,11 +6,11 @@
    ============================================================ */
 
 /* ---------- fonts (self-hosted) ---------- */
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-Regular.ttf'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-Medium.ttf'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-SemiBold.ttf'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-Bold.ttf'); font-weight: 700; font-display: swap; }
-@font-face { font-family: 'Plus Jakarta Sans'; src: url('/fonts/PlusJakartaSans-ExtraBold.ttf'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/Inter-Regular.ttf'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/Inter-Medium.ttf'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/Inter-SemiBold.ttf'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/Inter-Bold.ttf'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/Inter-ExtraBold.ttf'); font-weight: 800; font-display: swap; }
 @font-face { font-family: 'Hind Siliguri'; src: url('/fonts/HindSiliguri-Regular.ttf'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Hind Siliguri'; src: url('/fonts/HindSiliguri-Medium.ttf'); font-weight: 500 700; font-display: swap; }
 
@@ -27,9 +27,10 @@
   --surface-sunk: #F1F3F6;
   --line: #E3E6EA;
   --line-strong: #C9CFD8;
-  --ink: #23262B;
-  --ink-2: #5A6475;
-  --muted: #8A93A3;
+  --ink: #2F2F2F;
+  --ink-2: #555555;
+  --muted: #888888;
+  --heading: #1F1F1F;
 
   /* dark chrome (billing left rail + payment strip, petpooja13) */
   --rail-bg: #3A4048;
@@ -56,7 +57,7 @@
   /* ---------- geometry (measured at 1920w) ---------- */
   --topbar-h: 60px;
   --rail-w: 190px;
-  --cart-w: 400px;
+  --cart-w: 520px;
   --tab-h: 44px;
   --input-h: 40px;
   --btn-h: 42px;
@@ -67,7 +68,7 @@
   --r-lg: 8px;
 
   /* ---------- type ---------- */
-  --font: 'Plus Jakarta Sans', 'Hind Siliguri', system-ui, sans-serif;
+  --font: 'Inter', 'Hind Siliguri', system-ui, sans-serif;
   --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px;
   --fs-15: 15px; --fs-16: 16px; --fs-18: 18px; --fs-20: 20px;
   --fs-24: 24px; --fs-28: 28px;

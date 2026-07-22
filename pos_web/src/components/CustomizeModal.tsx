@@ -2,6 +2,7 @@
 // customizable* items). Result = one cart line with a name suffix + adjusted price.
 
 import { useMemo, useState } from 'react';
+import { t, type Lang } from '../i18n/strings';
 import { Modal } from './Modal';
 import type { PosMenuItem } from '../state/menu';
 import { itemDisplayName } from '../state/menu';
@@ -16,6 +17,7 @@ export interface CustomizeResult {
 
 export function CustomizeModal(props: {
   item: PosMenuItem;
+  lang: Lang;
   bn: boolean;
   onConfirm: (result: CustomizeResult) => void;
   onClose: () => void;
@@ -59,13 +61,13 @@ export function CustomizeModal(props: {
       footer={
         <>
           <span className="customize-price">{formatTk(unitPrice)}</span>
-          <button className="btn btn-primary" onClick={confirm}>Add to order</button>
+          <button className="btn btn-primary" onClick={confirm}>{t('cm.addToOrder', props.lang)}</button>
         </>
       }
     >
       {extras.sizes.length > 0 && (
         <div className="customize-group">
-          <div className="customize-group-title">Size</div>
+          <div className="customize-group-title">{t('cm.size', props.lang)}</div>
           <div className="customize-choices">
             {extras.sizes.map((s, i) => (
               <button
@@ -81,7 +83,7 @@ export function CustomizeModal(props: {
       )}
       {extras.options.length > 0 && (
         <div className="customize-group">
-          <div className="customize-group-title">Options</div>
+          <div className="customize-group-title">{t('cm.options', props.lang)}</div>
           <div className="customize-choices">
             {extras.options.map((o, i) => (
               <button
@@ -100,7 +102,7 @@ export function CustomizeModal(props: {
       )}
       {extras.addOns.length > 0 && (
         <div className="customize-group">
-          <div className="customize-group-title">Add-ons</div>
+          <div className="customize-group-title">{t('cm.addOns', props.lang)}</div>
           <div className="customize-choices">
             {extras.addOns.map((a, i) => (
               <button
@@ -115,10 +117,10 @@ export function CustomizeModal(props: {
         </div>
       )}
       <div className="customize-group">
-        <div className="customize-group-title">Note (optional)</div>
+        <div className="customize-group-title">{t('cm.noteOptional', props.lang)}</div>
         <input
           className="input" value={note} onChange={(e) => setNote(e.target.value)}
-          placeholder="e.g. extra spicy"
+          placeholder={t('cm.extraSpicy', props.lang)}
         />
       </div>
     </Modal>

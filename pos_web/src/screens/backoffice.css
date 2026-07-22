@@ -6,7 +6,7 @@
   padding: 16px 18px 40px; display: flex; flex-direction: column; gap: 16px;
 }
 .bo-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.bo-head h2 { font-size: var(--fs-20); font-weight: 800; }
+.bo-head h2 { font-size: var(--fs-20); font-weight: 800; color: var(--heading); }
 .bo-sub { font-size: var(--fs-13); color: var(--muted); }
 .bo-head-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .bo-err { color: var(--danger); font-size: var(--fs-13); font-weight: 600; }
@@ -42,7 +42,7 @@
 /* panels + key/value rows */
 .bo-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; align-items: start; }
 .bo-panel { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-.bo-panel h3 { font-size: var(--fs-14); font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.3px; }
+.bo-panel h3 { font-size: var(--fs-14); font-weight: 800; color: var(--heading); text-transform: uppercase; letter-spacing: 0.3px; }
 .bo-panel-wide { grid-column: 1 / -1; }
 .bo-line { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-14); }
 .bo-line.strong { font-weight: 800; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }

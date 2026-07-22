@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { usePos } from '../state/pos';
 import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import type { PosShiftWire } from '../api/types';
 import { Modal } from './Modal';
 import { DenominationCounter } from './DenominationCounter';
@@ -16,6 +17,7 @@ export function ShiftModal({
   onClose: () => void;
   onDone: (shift?: PosShiftWire) => void;
 }) {
+  const lang = useSession((s) => s.lang);
   const session = useSession((s) => s.session)!;
   const pos = usePos();
   const [total, setTotal] = useState(0);
@@ -37,19 +39,17 @@ export function ShiftModal({
 
   return (
     <Modal
-      title={mode === 'open' ? 'Open shift' : 'Close shift'} onClose={onClose} width={420}
+      title={mode === 'open' ? t('shift.open', lang) : t('shift.close', lang)} onClose={onClose} width={420}
       footer={
         <button className="btn btn-primary" disabled={busy} onClick={submit}>
-          {busy ? 'Working…' : mode === 'open' ? 'Open shift' : 'Close & count drawer'}
+          {busy ? t('shift.working', lang) : mode === 'open' ? t('shift.open', lang) : t('shift.closeDrawer', lang)}
         </button>
       }
     >
       <p className="shift-hint">
-        {mode === 'open'
-          ? 'Count the opening float placed in the cash drawer.'
-          : 'Count the cash currently in the drawer to close the shift.'}
+        {mode === 'open' ? t('shift.openingHint', lang) : t('shift.closingHint', lang)}
       </p>
-      <DenominationCounter onChange={(t, c) => { setTotal(t); setCounts(c); }} />
+      <DenominationCounter lang={lang} onChange={(t, c) => { setTotal(t); setCounts(c); }} />
       {err && <div className="error-text">{err}</div>}
     </Modal>
   );

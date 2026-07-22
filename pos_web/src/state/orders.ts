@@ -202,7 +202,7 @@ export function pendingOnline(orders: OrderWire[]): OrderWire[] {
 /** Accepted work in progress (dine-in / takeaway / accepted delivery), not yet settled. */
 export function ongoingOrders(orders: OrderWire[]): OrderWire[] {
   return orders
-    .filter((o) => !isSettled(o) && !isDead(o) && o.status !== 'pending')
+    .filter((o) => !isSettled(o) && !isDead(o))
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }
 export function completedOrders(orders: OrderWire[]): OrderWire[] {

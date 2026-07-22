@@ -10,6 +10,8 @@ import {
   type OutboxApi, type OutboxOp, type OutboxRecord,
 } from '../offline/outbox';
 import { useOrders } from './orders';
+import { resetSerial } from '../offline/serial';
+import { useSession } from './session';
 
 const outboxApi: OutboxApi = api;
 
@@ -49,6 +51,8 @@ export const useSync = create<SyncState>((set, get) => ({
       await get().refreshCounts();
       if (outletId) {
         await useOrders.getState().refresh(outletId);
+        const role = useSession.getState().session?.role;
+        resetSerial(outletId, 'desktop_pos', role);
       }
     } finally {
       set({ replaying: false });

@@ -13,6 +13,7 @@ import { usePrinters } from '../print/printManager';
 import { renderKot, type TicketContext } from '../print/ticketRenderer';
 import { formatTk } from '../core/money';
 import type { OrderWire, PosFloorZoneWire, ServiceType } from '../api/types';
+import { t, type Lang } from '../i18n/strings';
 import { Modal } from '../components/Modal';
 import './tables.css';
 
@@ -23,13 +24,14 @@ function elapsed(iso?: string | null): string {
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
 }
 
-function serviceBadge(s?: ServiceType | null): string {
-  if (s === 'delivery') return 'Delivery';
-  if (s === 'takeaway') return 'Pick Up';
-  return 'Dine In';
+function serviceBadge(s: ServiceType | null | undefined, lang: Lang): string {
+  if (s === 'delivery') return t('foh.delivery', lang);
+  if (s === 'takeaway') return t('foh.pickUp', lang);
+  return t('foh.dineIn', lang);
 }
 
 export function Tables() {
+  const lang = useSession((s) => s.lang);
   const session = useSession((s) => s.session)!;
   const pos = usePos();
   const cart = useCart();
@@ -90,7 +92,7 @@ export function Tables() {
             <div className="online-card card" key={o.id}>
               <div className="online-card-head">
                 <span className="online-src">🌐 {o.source.replace(/_/g, ' ')}</span>
-                <span className="badge online-badge">{serviceBadge(o.serviceType)}</span>
+                <span className="badge online-badge">{serviceBadge(o.serviceType, lang)}</span>
               </div>
               <div className="online-card-meta">
                 <span>#{o.serialNumber}</span>
@@ -101,17 +103,17 @@ export function Tables() {
                 {o.items.slice(0, 5).map((it, i) => (
                   <div className="online-line" key={i}>{it.qty} × {it.name}</div>
                 ))}
-                {o.items.length > 5 && <div className="online-line more">+{o.items.length - 5} more…</div>}
+                {o.items.length > 5 && <div className="online-line more">+{o.items.length - 5}{t('tables.more', lang)}…</div>}
               </div>
               <div className="online-actions">
                 <button
                   className="btn btn-danger-outline btn-sm" disabled={busyId === o.id}
                   onClick={() => void reject(o)}
-                >Reject</button>
+                >{t('orders.reject', lang)}</button>
                 <button
                   className="btn btn-primary btn-sm" disabled={busyId === o.id}
                   onClick={() => setAccepting(o)}
-                >Accept</button>
+                >{t('orders.accept', lang)}</button>
               </div>
             </div>
           ))}
@@ -119,27 +121,27 @@ export function Tables() {
       )}
 
       <div className="tables-bar">
-        <h2>Table View</h2>
-        <button className="tables-refresh" title="Refresh" onClick={() => void orders.refresh(session.outletId)}>⟳</button>
+        <h2>{t('tables.tableView', lang)}</h2>
+        <button className="tables-refresh" title={t('tables.refresh', lang)} onClick={() => void orders.refresh(session.outletId)}>⟳</button>
         <div className="tables-bar-spacer" />
-        <button className="btn btn-outline btn-sm" onClick={() => quickStart('delivery')}>Delivery</button>
-        <button className="btn btn-outline btn-sm" onClick={() => quickStart('takeaway')}>Pick Up</button>
-        <button className="btn btn-primary btn-sm" onClick={() => setEditor(true)}>+ Add Table</button>
+        <button className="btn btn-outline btn-sm" onClick={() => quickStart('delivery')}>{t('tables.delivery', lang)}</button>
+        <button className="btn btn-outline btn-sm" onClick={() => quickStart('takeaway')}>{t('tables.pickUp', lang)}</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setEditor(true)}>{t('tables.addTable', lang)}</button>
       </div>
 
       <div className="tables-legend">
-        <span><i className="dot dot-vacant" /> Vacant</span>
-        <span><i className="dot dot-running" /> Running</span>
-        <span><i className="dot dot-kot" /> Running KOT</span>
-        <span><i className="dot dot-paid" /> Paid</span>
+        <span><i className="dot dot-vacant" /> {t('tables.vacant', lang)}</span>
+        <span><i className="dot dot-running" /> {t('tables.running', lang)}</span>
+        <span><i className="dot dot-kot" /> {t('tables.runningKOT', lang)}</span>
+        <span><i className="dot dot-paid" /> {t('tables.paid', lang)}</span>
       </div>
 
       {err && <div className="tables-err">{err}</div>}
 
       {zones.length === 0 ? (
         <div className="tables-empty card">
-          <p>No tables set up yet.</p>
-          <button className="btn btn-primary btn-sm" onClick={() => setEditor(true)}>+ Add Table</button>
+          <p>{t('tables.noTables', lang)}</p>
+          <button className="btn btn-primary btn-sm" onClick={() => setEditor(true)}>{t('tables.addTable', lang)}</button>
         </div>
       ) : (
         zones.map((zone) => (
@@ -162,7 +164,7 @@ export function Tables() {
                         <span className="table-elapsed">{elapsed(order.createdAt)}</span>
                       </>
                     ) : (
-                      <span className="table-seats">{tbl.seats} seats</span>
+                      <span className="table-seats">{tbl.seats}{t('tables.seats', lang)}</span>
                     )}
                   </button>
                 );
@@ -174,6 +176,7 @@ export function Tables() {
 
       {accepting && (
         <AcceptModal
+          lang={lang}
           order={accepting}
           onClose={() => setAccepting(null)}
           onAccept={async (prepMinutes, printKot) => {
@@ -200,6 +203,7 @@ export function Tables() {
 
       {editor && (
         <FloorEditor
+          lang={lang}
           initial={zones}
           onClose={() => setEditor(false)}
           onSave={async (next) => {
@@ -215,8 +219,9 @@ export function Tables() {
 
 // ---------------------------------------------------------------- Accept -----
 function AcceptModal({
-  order, onClose, onAccept,
+  lang, order, onClose, onAccept,
 }: {
+  lang: Lang;
   order: OrderWire;
   onClose: () => void;
   onAccept: (prepMinutes: number, printKot: boolean) => Promise<void>;
@@ -230,10 +235,10 @@ function AcceptModal({
   };
 
   return (
-    <Modal title={`Accept order #${order.serialNumber}`} onClose={onClose} width={440}>
+    <Modal title={t('tables.acceptOrder', lang) + order.serialNumber} onClose={onClose} width={440}>
       <div className="accept-body">
         <label className="accept-row">
-          Preparation time (minutes)
+          {t('tables.prepTime', lang)}
           <span className="stepper">
             <button onClick={() => setPrep((v) => Math.max(0, v - 5))}>−</button>
             <input className="input" value={prep} inputMode="numeric"
@@ -242,8 +247,8 @@ function AcceptModal({
           </span>
         </label>
         <div className="accept-actions">
-          <button className="btn btn-outline" disabled={busy} onClick={() => run(false)}>Accept</button>
-          <button className="btn btn-primary" disabled={busy} onClick={() => run(true)}>Accept &amp; Print KOT</button>
+          <button className="btn btn-outline" disabled={busy} onClick={() => run(false)}>{t('orders.accept', lang)}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={() => run(true)}>{t('tables.acceptPrint', lang)}</button>
         </div>
       </div>
     </Modal>
@@ -254,8 +259,9 @@ function AcceptModal({
 type DraftZone = PosFloorZoneWire;
 
 function FloorEditor({
-  initial, onClose, onSave,
+  lang, initial, onClose, onSave,
 }: {
+  lang: Lang;
   initial: PosFloorZoneWire[];
   onClose: () => void;
   onSave: (zones: PosFloorZoneWire[]) => Promise<void>;
@@ -269,7 +275,7 @@ function FloorEditor({
   const addZone = () =>
     setZones((zs) => [
       ...zs,
-      { id: crypto.randomUUID(), name: `Zone ${zs.length + 1}`, sortOrder: zs.length, tables: [] },
+      { id: crypto.randomUUID(), name: t('tables.zone', lang).replace('{n}', String(zs.length + 1)), sortOrder: zs.length, tables: [] },
     ]);
 
   const renameZone = (id: string, name: string) =>
@@ -304,7 +310,7 @@ function FloorEditor({
     const cleaned = zones
       .map((z, i) => ({
         ...z,
-        name: z.name.trim() || `Zone ${i + 1}`,
+        name: z.name.trim() || t('tables.zone', lang).replace('{n}', String(i + 1)),
         sortOrder: i,
         tables: z.tables
           .map((t, j) => ({ ...t, label: t.label.trim(), sortOrder: j }))
@@ -319,14 +325,14 @@ function FloorEditor({
   };
 
   return (
-    <Modal title="Table setup" onClose={onClose} width={620}>
+    <Modal title={t('tables.tableSetup', lang)} onClose={onClose} width={620}>
       <div className="floor-editor">
         {zones.map((z) => (
           <div className="floor-zone" key={z.id}>
             <div className="floor-zone-head">
               <input className="input floor-zone-name" value={z.name}
                 onChange={(e) => renameZone(z.id, e.target.value)} />
-              <button className="btn btn-danger-outline btn-sm" onClick={() => removeZone(z.id)}>Remove zone</button>
+              <button className="btn btn-danger-outline btn-sm" onClick={() => removeZone(z.id)}>{t('tables.removeZone', lang)}</button>
             </div>
             <div className="floor-tables">
               {z.tables.map((t) => (
@@ -336,15 +342,15 @@ function FloorEditor({
                   <button className="floor-table-x" onClick={() => removeTable(z.id, t.id)}>×</button>
                 </span>
               ))}
-              <button className="btn btn-outline btn-sm" onClick={() => addTable(z.id)}>+ Table</button>
+              <button className="btn btn-outline btn-sm" onClick={() => addTable(z.id)}>{t('tables.addTableBtn', lang)}</button>
             </div>
           </div>
         ))}
-        <button className="btn btn-outline btn-sm" onClick={addZone}>+ Add zone</button>
+        <button className="btn btn-outline btn-sm" onClick={addZone}>{t('tables.addZone', lang)}</button>
         {err && <div className="tables-err">{err}</div>}
         <div className="floor-actions">
-          <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save layout'}</button>
+          <button className="btn btn-outline" onClick={onClose}>{t('cancel', lang)}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? t('tables.saving', lang) : t('tables.saveLayout', lang)}</button>
         </div>
       </div>
     </Modal>

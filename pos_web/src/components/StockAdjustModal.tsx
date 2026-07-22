@@ -2,6 +2,8 @@
 // end-of-day Count. Restock/usage/waste post an adjustment (signed delta); Count posts
 // a daily stock count (absolute quantity) on the Bangladesh business date.
 import { useState } from 'react';
+import { useSession } from '../state/session';
+import { t, type StringKey } from '../i18n/strings';
 import { Modal } from './Modal';
 import { adjustmentDelta, todayBdtDate } from '../core/inventory';
 import type {
@@ -19,14 +21,10 @@ interface Props {
   onCount: (payload: DailyStockCountPayload) => Promise<void>;
 }
 
-const MODES: { key: AdjustMode; label: string }[] = [
-  { key: 'restock', label: 'Stock-in' },
-  { key: 'usage', label: 'Usage' },
-  { key: 'waste', label: 'Waste' },
-  { key: 'count', label: 'Count' },
-];
+const MODE_KEYS: AdjustMode[] = ['restock', 'usage', 'waste', 'count'];
 
 export function StockAdjustModal({ item, mode: initialMode, suppliers, onClose, onAdjust, onCount }: Props) {
+  const lang = useSession((s) => s.lang);
   const [mode, setMode] = useState<AdjustMode>(initialMode);
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
@@ -48,7 +46,7 @@ export function StockAdjustModal({ item, mode: initialMode, suppliers, onClose, 
         : Math.max(0, item.onHand - qtyNum);
 
   const submit = async () => {
-    if (!qtyValid) { setErr(mode === 'count' ? 'Enter the counted quantity.' : 'Enter a quantity greater than zero.'); return; }
+    if (!qtyValid) { setErr(mode === 'count' ? t('sam.enterCounted', lang) : t('sam.enterGreaterThanZero', lang)); return; }
     setBusy(true); setErr(null);
     try {
       if (mode === 'count') {
@@ -78,28 +76,28 @@ export function StockAdjustModal({ item, mode: initialMode, suppliers, onClose, 
 
   return (
     <Modal
-      title={`${item.name}`}
+      title={item.name}
       onClose={onClose}
       width={480}
       footer={
         <>
-          <button className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-outline" onClick={onClose} disabled={busy}>{t('cancel', lang)}</button>
           <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !qtyValid}>
-            {busy ? 'Saving…' : 'Confirm'}
+            {busy ? t('save', lang) + '…' : t('sam.confirm', lang)}
           </button>
         </>
       }
     >
       <div className="mm-form">
         <div className="inv-mode-seg">
-          {MODES.map((m) => (
-            <button key={m.key} className={`inv-mode-btn ${mode === m.key ? 'active' : ''}`}
-              onClick={() => setMode(m.key)}>{m.label}</button>
+          {MODE_KEYS.map((k) => (
+            <button key={k} className={`inv-mode-btn ${mode === k ? 'active' : ''}`}
+              onClick={() => setMode(k)}>{t(('sam.' + k) as StringKey, lang)}</button>
           ))}
         </div>
 
         <label className="field">
-          <span>{mode === 'count' ? `Counted on hand (${item.unit})` : mode === 'restock' ? `Quantity added (${item.unit})` : `Quantity used (${item.unit})`}</span>
+          <span>{mode === 'count' ? t('sam.countedOnHand', lang) : mode === 'restock' ? t('sam.qtyAdded', lang) : t('sam.qtyUsed', lang)} ({item.unit})</span>
           <input className="input" type="number" inputMode="decimal" value={qty}
             onChange={(e) => setQty(e.target.value)} autoFocus />
         </label>
@@ -107,17 +105,17 @@ export function StockAdjustModal({ item, mode: initialMode, suppliers, onClose, 
         {mode === 'restock' && (
           <>
             <div className="mm-form-row">
-              <label className="field"><span>Total cost (৳)</span>
+              <label className="field"><span>{t('sam.totalCost', lang)}</span>
                 <input className="input" type="number" inputMode="decimal" value={cost}
-                  onChange={(e) => setCost(e.target.value)} placeholder="bill amount" />
+                  onChange={(e) => setCost(e.target.value)} placeholder={t('sam.billPlaceholder', lang)} />
               </label>
-              <label className="field"><span>Bill / invoice ref</span>
+              <label className="field"><span>{t('sam.billRef', lang)}</span>
                 <input className="input" value={billRef} onChange={(e) => setBillRef(e.target.value)} />
               </label>
             </div>
-            <label className="field"><span>Supplier</span>
+            <label className="field"><span>{t('sam.supplier', lang)}</span>
               <select className="input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                <option value="">— none —</option>
+                <option value="">{t('im.none', lang)}</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
@@ -125,19 +123,19 @@ export function StockAdjustModal({ item, mode: initialMode, suppliers, onClose, 
         )}
 
         {mode !== 'count' && (
-          <label className="field"><span>{mode === 'restock' ? 'Note' : 'Reason'}</span>
+          <label className="field"><span>{mode === 'restock' ? t('sam.note', lang) : t('sam.reason', lang)}</span>
             <input className="input" value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder={mode === 'waste' ? 'e.g. spoilage' : undefined} />
+              placeholder={mode === 'waste' ? t('sam.spoilagePlaceholder', lang) : undefined} />
           </label>
         )}
 
         <div className="inv-projected">
-          <span>On hand</span>
+          <span>{t('sam.onHand', lang)}</span>
           <span><b>{item.onHand}</b> → <b>{Math.round(projected * 1000) / 1000}</b> {item.unit}</span>
         </div>
         {mode === 'restock' && Number(cost) > 0 && qtyValid && (
           <div className="inv-projected sub">
-            <span>New cost / {item.unit}</span>
+            <span>{t('sam.newCost', lang)}{item.unit}</span>
             <span>৳{Math.round((Number(cost) / qtyNum) * 100) / 100}</span>
           </div>
         )}

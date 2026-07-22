@@ -228,7 +228,7 @@ class SystemNotificationService {
           importance: importance,
           playSound: sound != null,
           sound: sound,
-          enableVibration: importance >= Importance.high,
+          enableVibration: importance.index >= Importance.high.index,
         ),
       );
     } catch (e) {

@@ -52,7 +52,7 @@ export function Login() {
     run(async () => {
       const res = await api.sendPhoneOtp(phone.trim());
       setStep('code');
-      setOtpInfo(res.devOtpCode ? `Dev code: ${res.devOtpCode}` : res.message ?? null);
+      setOtpInfo(res.devOtpCode ? t('login.devCode', lang).replace('{code}', res.devOtpCode) : res.message ?? null);
     });
 
   const verifyOtp = () =>
@@ -136,7 +136,7 @@ export function Login() {
     <div className="login-root">
       <div className="login-brand">
         <div className="login-brand-inner">
-          <div className="login-logo">QuickBytes</div>
+          <div className="login-logo">{t('appName', lang)}</div>
           <div className="login-tagline">{t('tagline', lang)}</div>
         </div>
       </div>

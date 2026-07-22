@@ -1,6 +1,8 @@
 // Add / edit a menu item. Core fields inline + a collapsible Advanced block that
 // round-trips the tag grammar (includes / options / add-ons / discount) via core/tags.
 import { useState } from 'react';
+import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import { Modal } from './Modal';
 import { parseExtras, buildTags, type MenuExtras } from '../core/tags';
 import { mergeMenuPayload } from '../core/menuPayload';
@@ -47,8 +49,9 @@ export function MenuItemModal({ existing, categories, onClose, onSave }: Props) 
   const priceNum = Number(price);
   const valid = name.trim().length > 0 && Number.isFinite(priceNum) && priceNum >= 0;
 
+  const lang = useSession((s) => s.lang);
   const submit = async () => {
-    if (!valid) { setErr('Enter a name and a valid price.'); return; }
+    if (!valid) { setErr(t('mm.enterNamePrice', lang)); return; }
     setBusy(true); setErr(null);
     const dVal = Number(discountValue);
     const extras: MenuExtras = {
@@ -87,73 +90,73 @@ export function MenuItemModal({ existing, categories, onClose, onSave }: Props) 
 
   return (
     <Modal
-      title={existing ? 'Edit item' : 'Add item'}
+      title={existing ? t('mm.editItem', lang) : t('mm.addItem', lang)}
       onClose={onClose}
       width={520}
       footer={
         <>
-          <button className="btn btn-outline" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-outline" onClick={onClose} disabled={busy}>{t('cancel', lang)}</button>
           <button className="btn btn-primary" onClick={() => void submit()} disabled={busy || !valid}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('save', lang) + '…' : t('save', lang)}
           </button>
         </>
       }
     >
       <div className="mm-form">
-        <label className="field"><span>Item name</span>
+        <label className="field"><span>{t('mm.itemName', lang)}</span>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </label>
         <div className="mm-form-row">
-          <label className="field"><span>Price (৳)</span>
+          <label className="field"><span>{t('mm.price', lang)}</span>
             <input className="input" type="number" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
           </label>
-          <label className="field"><span>Cost price (৳)</span>
+          <label className="field"><span>{t('mm.costPrice', lang)}</span>
             <input className="input" type="number" inputMode="decimal" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} />
           </label>
         </div>
         <div className="mm-form-row">
-          <label className="field"><span>Short code</span>
+          <label className="field"><span>{t('mm.shortCode', lang)}</span>
             <input className="input" type="number" inputMode="numeric" value={shortCode} onChange={(e) => setShortCode(e.target.value)} />
           </label>
-          <label className="field"><span>Category</span>
+          <label className="field"><span>{t('mm.category', lang)}</span>
             <input className="input" list="mm-categories" value={category} onChange={(e) => setCategory(e.target.value)} />
             <datalist id="mm-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
           </label>
         </div>
         <label className="mm-check">
           <input type="checkbox" checked={available} onChange={(e) => setAvailable(e.target.checked)} />
-          <span>Available for sale</span>
+          <span>{t('mm.availableForSale', lang)}</span>
         </label>
         <div className="mm-form-row">
-          <label className="field"><span>Discount</span>
+          <label className="field"><span>{t('mm.discount', lang)}</span>
             <select className="input" value={discountKind} onChange={(e) => setDiscountKind(e.target.value as 'none' | 'percent' | 'flat')}>
-              <option value="none">None</option>
-              <option value="percent">Percent %</option>
-              <option value="flat">Flat ৳</option>
+              <option value="none">{t('mm.none', lang)}</option>
+              <option value="percent">{t('mm.percentPercent', lang)}</option>
+              <option value="flat">{t('mm.flatTk', lang)}</option>
             </select>
           </label>
-          <label className="field"><span>Amount</span>
+          <label className="field"><span>{t('mm.amount', lang)}</span>
             <input className="input" type="number" inputMode="decimal" value={discountValue}
               disabled={discountKind === 'none'} onChange={(e) => setDiscountValue(e.target.value)} />
           </label>
         </div>
 
         <button className="mm-advanced-toggle" onClick={() => setAdvanced((v) => !v)}>
-          {advanced ? '▾' : '▸'} Advanced (description, includes, options, add-ons)
+          {advanced ? '▾' : '▸'} {t('mm.advanced', lang)}
         </button>
         {advanced && (
           <div className="mm-advanced">
-            <label className="field"><span>Description</span>
+            <label className="field"><span>{t('mm.description', lang)}</span>
               <textarea className="input mm-area" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             </label>
-            <label className="field"><span>Includes (one per line)</span>
+            <label className="field"><span>{t('mm.includes', lang)}</span>
               <textarea className="input mm-area" value={includes} onChange={(e) => setIncludes(e.target.value)} rows={2} />
             </label>
-            <label className="field"><span>Options — name:priceDelta (one per line)</span>
-              <textarea className="input mm-area" value={options} onChange={(e) => setOptions(e.target.value)} rows={2} placeholder="Large:50" />
+            <label className="field"><span>{t('mm.optionsFormat', lang)}</span>
+              <textarea className="input mm-area" value={options} onChange={(e) => setOptions(e.target.value)} rows={2} placeholder={t('mm.optionsPlaceholder', lang)} />
             </label>
-            <label className="field"><span>Add-ons — name:price (one per line)</span>
-              <textarea className="input mm-area" value={addons} onChange={(e) => setAddons(e.target.value)} rows={2} placeholder="Extra cheese:30" />
+            <label className="field"><span>{t('mm.addOnsFormat', lang)}</span>
+              <textarea className="input mm-area" value={addons} onChange={(e) => setAddons(e.target.value)} rows={2} placeholder={t('mm.addOnsPlaceholder', lang)} />
             </label>
           </div>
         )}

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import { formatTk } from '../core/money';
 import { StatCard } from '../components/StatCard';
 import { Sparkline } from '../components/charts/Sparkline';
@@ -17,6 +18,7 @@ const MIX_COLORS: Record<string, string> = {
 
 export function Dashboard() {
   const session = useSession((s) => s.session)!;
+  const lang = useSession((s) => s.lang);
   const [data, setData] = useState<DashboardSummaryWire | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -41,53 +43,53 @@ export function Dashboard() {
     <div className="bo-root">
       <div className="bo-head">
         <div>
-          <h2>Dashboard</h2>
-          <span className="bo-sub">{session.outletName} · today</span>
+          <h2>{t('dash.title', lang)}</h2>
+          <span className="bo-sub">{session.outletName} · {t('dash.today', lang)}</span>
         </div>
         <div className="bo-head-actions">
-          <button className="btn btn-outline btn-sm" onClick={load} disabled={loading}>↻ Refresh</button>
+          <button className="btn btn-outline btn-sm" onClick={load} disabled={loading}>↻ {t('dash.refresh', lang)}</button>
         </div>
       </div>
 
       {err && <div className="bo-err">{err}</div>}
-      {loading && !data && <div className="bo-loading">Loading…</div>}
+      {loading && !data && <div className="bo-loading">{t('dash.loading', lang)}</div>}
 
       {mf && (
         <>
           <div className="bo-grid">
             <StatCard
-              title="Earned Today" accent value={formatTk(mf.earnedToday)}
-              sub={`${deltaUp ? '▲' : '▼'} ${Math.abs(mf.deltaPct)}% vs yesterday`}
+              title={t('dash.earnedToday', lang)} accent value={formatTk(mf.earnedToday)}
+              sub={`${deltaUp ? '▲' : '▼'} ${Math.abs(mf.deltaPct)}% ${t('dash.vsYesterday', lang)}`}
               subTone={deltaUp ? 'up' : 'down'}
             />
-            <StatCard title="Orders" value={String(mf.kpis.orders)} sub={`${mf.kpis.openOrders} open`} />
-            <StatCard title="Avg Ticket" value={formatTk(mf.kpis.avgTicket)} sub="per order" />
+            <StatCard title={t('dash.orders', lang)} value={String(mf.kpis.orders)} sub={t('dash.openOrders', lang).replace('{n}', String(mf.kpis.openOrders))} />
+            <StatCard title={t('dash.avgTicket', lang)} value={formatTk(mf.kpis.avgTicket)} sub={t('dash.perOrder', lang)} />
             <StatCard
-              title="Profit" value={mf.kpis.profitPct != null ? `${mf.kpis.profitPct}%` : '—'}
-              sub="est. margin"
+              title={t('dash.profit', lang)} value={mf.kpis.profitPct != null ? `${mf.kpis.profitPct}%` : '—'}
+              sub={t('dash.estMargin', lang)}
             />
           </div>
 
           <div className="bo-cols">
             <section className="card bo-panel">
-              <h3>Last 7 days</h3>
+              <h3>{t('dash.last7days', lang)}</h3>
               <Sparkline values={mf.sparkline} width={260} height={64} />
-              <span className="bo-muted">Earned yesterday {formatTk(mf.earnedYesterday)} · {mf.deltaNote}</span>
+              <span className="bo-muted">{t('dash.earnedYesterday', lang)} {formatTk(mf.earnedYesterday)} · {mf.deltaNote}</span>
             </section>
 
             <section className="card bo-panel">
-              <h3>Service mix</h3>
-              <Donut data={mixData} format={formatTk} centerValue={formatTk(mf.earnedToday)} centerLabel="today" />
+              <h3>{t('dash.serviceMix', lang)}</h3>
+              <Donut data={mixData} format={formatTk} centerValue={formatTk(mf.earnedToday)} centerLabel={t('dash.today', lang)} />
             </section>
 
             <section className="card bo-panel">
-              <h3>Top movers</h3>
+              <h3>{t('dash.topMovers', lang)}</h3>
               <div className="bo-rank">
-                {mf.topMovers.length === 0 && <p className="bo-muted">No sales yet.</p>}
+                {mf.topMovers.length === 0 && <p className="bo-muted">{t('dash.noSalesYet', lang)}</p>}
                 {mf.topMovers.map((m) => (
                   <div className="bo-rank-row" key={m.menuItemId}>
-                    <span className="bo-rank-name">{m.nameEn || m.nameBn || 'Item'}</span>
-                    <span className="bo-rank-qty">{m.qty} sold</span>
+                    <span className="bo-rank-name">{m.nameEn || m.nameBn || t('dash.item', lang)}</span>
+                    <span className="bo-rank-qty">{t('dash.sold', lang).replace('{n}', String(m.qty))}</span>
                     <span className="bo-rank-val">{formatTk(m.salesBdt)}</span>
                   </div>
                 ))}
@@ -100,19 +102,19 @@ export function Dashboard() {
       {rn && (
         <div className="bo-cols">
           <section className="card bo-panel">
-            <h3>Right now</h3>
-            <div className="bo-line"><span>Tables seated</span><span>{rn.tablesSeated}{rn.tablesTotal ? ` / ${rn.tablesTotal}` : ''}</span></div>
-            <div className="bo-line"><span>Orders in kitchen</span><span>{rn.ordersInKitchen}</span></div>
+            <h3>{t('dash.rightNow', lang)}</h3>
+            <div className="bo-line"><span>{t('dash.tablesSeated', lang)}</span><span>{rn.tablesSeated}{rn.tablesTotal ? ` / ${rn.tablesTotal}` : ''}</span></div>
+            <div className="bo-line"><span>{t('dash.ordersInKitchen', lang)}</span><span>{rn.ordersInKitchen}</span></div>
             <div className={`bo-line ${rn.lateOrders > 0 ? 'neg' : ''}`}>
-              <span>Late orders</span><span>{rn.lateOrders} <span className="bo-line-sub">(&gt;{rn.lateMinThreshold}m)</span></span>
+              <span>{t('dash.lateOrders', lang)}</span><span>{rn.lateOrders} <span className="bo-line-sub">({t('dash.lateMinThreshold', lang).replace('{n}', String(rn.lateMinThreshold))})</span></span>
             </div>
-            <div className="bo-line strong"><span>Collected so far</span><span>{formatTk(rn.todaySoFarBdt)}</span></div>
+            <div className="bo-line strong"><span>{t('dash.collectedSoFar', lang)}</span><span>{formatTk(rn.todaySoFarBdt)}</span></div>
           </section>
 
           <section className="card bo-panel bo-panel-wide">
-            <h3>Needs attention</h3>
+            <h3>{t('dash.needsAttention', lang)}</h3>
             <div className="bo-attn">
-              {rn.needsAttention.length === 0 && <p className="bo-muted">All clear — nothing needs attention.</p>}
+              {rn.needsAttention.length === 0 && <p className="bo-muted">{t('dash.allClear', lang)}</p>}
               {rn.needsAttention.map((a, i) => (
                 <div className={`bo-attn-row ${a.kind}`} key={a.refId ?? i}>
                   <span className="bo-attn-title">{a.title}</span>

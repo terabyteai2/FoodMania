@@ -25,7 +25,7 @@ export function Ops() {
   const isManager = session.role === 'owner' || session.role === 'manager';
   const isOwner = session.role === 'owner';
 
-  const back = <button className="btn btn-outline btn-sm ops-back" onClick={() => goOps('home')}>← Operations</button>;
+  const back = <button className="btn btn-outline btn-sm ops-back" onClick={() => goOps('home')}>← {t('ops.back', lang)}</button>;
 
   if (pane === 'printers') {
     return <div className="ops-root">{back}<PrinterSettings /></div>;
@@ -58,27 +58,27 @@ export function Ops() {
   return (
     <div className="ops-root">
       <div className="ops-header">
-        <h2>Operations</h2>
-        <span className="ops-outlet">{session.outletName} · Master Billing Station</span>
+        <h2>{t('ops.title', lang)}</h2>
+        <span className="ops-outlet">{session.outletName} · {t('ops.masterBilling', lang)}</span>
       </div>
       <div className="ops-grid">
         {isManager && (
           <>
             <button className="ops-tile card" onClick={() => goOps('dashboard')}>
               <span className="ops-tile-icon">📊</span>
-              <span>Dashboard</span>
+              <span>{t('ops.dashboard', lang)}</span>
             </button>
             <button className="ops-tile card" onClick={() => goOps('analytics')}>
               <span className="ops-tile-icon">📈</span>
-              <span>Analytics &amp; Tax</span>
+              <span>{t('ops.analytics', lang)}</span>
             </button>
             <button className="ops-tile card" onClick={() => goOps('reports')}>
               <span className="ops-tile-icon">🧮</span>
-              <span>Reports</span>
+              <span>{t('ops.reports', lang)}</span>
             </button>
             <button className="ops-tile card" onClick={() => goOps('menu')}>
               <span className="ops-tile-icon">🍽️</span>
-              <span>Menu</span>
+              <span>{t('ops.menu', lang)}</span>
             </button>
             <button className="ops-tile card" onClick={() => goOps('restaurant')}>
               <span className="ops-tile-icon">🏪</span>
@@ -91,22 +91,22 @@ export function Ops() {
             {isOwner && (
               <button className="ops-tile card" onClick={() => goOps('inventory')}>
                 <span className="ops-tile-icon">📦</span>
-                <span>Inventory</span>
+                <span>{t('ops.inventory', lang)}</span>
               </button>
             )}
           </>
         )}
         <button className="ops-tile card" onClick={() => goOps('printers')}>
           <span className="ops-tile-icon">🖨️</span>
-          <span>Printers</span>
+          <span>{t('ops.printers', lang)}</span>
         </button>
         <button className="ops-tile card" onClick={() => goOps('dayend')}>
           <span className="ops-tile-icon">🌙</span>
-          <span>Day End</span>
+          <span>{t('ops.dayEnd', lang)}</span>
         </button>
         <button className="ops-tile card" onClick={() => goOps('dayend')}>
           <span className="ops-tile-icon">💵</span>
-          <span>{pos.shift ? `Shift open · ${formatTk(pos.shift.openingCash)} float` : 'Open shift'}</span>
+          <span>{pos.shift ? t('ops.shiftOpen', lang).replace('{t}', formatTk(pos.shift.openingCash)) : t('ops.openShift', lang)}</span>
         </button>
         <button
           className="ops-tile card"
@@ -115,26 +115,26 @@ export function Ops() {
         >
           <span className="ops-tile-icon">🔄</span>
           <span>
-            {sync.replaying ? 'Syncing…' : sync.queued > 0 ? `Sync now · ${sync.queued} queued` : 'All synced'}
+            {sync.replaying ? t('ops.syncing', lang) : sync.queued > 0 ? t('ops.syncNow', lang).replace('{n}', String(sync.queued)) : t('ops.allSynced', lang)}
           </span>
         </button>
       </div>
 
       {(sync.queued > 0 || sync.dead.length > 0) && (
         <section className="card ops-sync">
-          <h3>Offline sync</h3>
+          <h3>{t('ops.offlineSync', lang)}</h3>
           <p className="ops-sync-line">
-            {sync.queued} queued · {sync.dead.length} failed
+            {t('ops.queuedFailed', lang).replace('{q}', String(sync.queued)).replace('{d}', String(sync.dead.length))}
             <button className="btn btn-outline btn-sm" disabled={sync.replaying}
-              onClick={() => sync.flush(session.outletId)}>Retry now</button>
+              onClick={() => sync.flush(session.outletId)}>{t('ops.retryNow', lang)}</button>
           </p>
           {sync.dead.map((r) => (
             <div className="ops-dead" key={r.seq}>
               <div>
                 <span className="ops-dead-kind">{r.op.kind}</span>
-                <span className="ops-dead-err">{r.lastError ?? 'rejected by server'}</span>
+                <span className="ops-dead-err">{r.lastError ?? t('ops.rejectedByServer', lang)}</span>
               </div>
-              <button className="btn btn-danger-outline btn-sm" onClick={() => sync.discardDead(r.seq)}>Discard</button>
+              <button className="btn btn-danger-outline btn-sm" onClick={() => sync.discardDead(r.seq)}>{t('ops.discard', lang)}</button>
             </div>
           ))}
         </section>

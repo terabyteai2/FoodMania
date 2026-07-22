@@ -11,19 +11,20 @@ import { renderKot, renderReceipt, type TicketContext } from '../print/ticketRen
 import { formatTk } from '../core/money';
 import { needsCustomization } from '../core/tags';
 import type { PaymentMethod, PosSettlementLineWire } from '../api/types';
+import { t, type Lang, type StringKey } from '../i18n/strings';
 import { Modal } from '../components/Modal';
 import { CustomizeModal, type CustomizeResult } from '../components/CustomizeModal';
 import { SplitModal } from '../components/SplitModal';
 import { ShiftModal } from '../components/ShiftModal';
 import './billing.css';
 
-const PAYMENTS: { id: PaymentMethod; label: string }[] = [
-  { id: 'cash', label: 'Cash' },
-  { id: 'card', label: 'Card' },
-  { id: 'bkash', label: 'bKash' },
-  { id: 'nagad', label: 'Nagad' },
-  { id: 'pay_later', label: 'Due' },
-];
+function catHue(cat: string): number {
+  let h = 0;
+  for (let i = 0; i < cat.length; i++) h = cat.charCodeAt(i) + ((h << 5) - h);
+  return ((h % 360) + 360) % 360;
+}
+
+const PAYMENT_IDS: PaymentMethod[] = ['cash', 'card', 'bkash', 'nagad', 'pay_later'];
 
 type ModalKind =
   | { kind: 'customize'; item: PosMenuItem }
@@ -37,7 +38,8 @@ type ModalKind =
 
 export function Billing() {
   const session = useSession((s) => s.session)!;
-  const bn = useSession((s) => s.lang) === 'bn';
+  const lang = useSession((s) => s.lang);
+  const bn = lang === 'bn';
   const menu = useMenu();
   const cart = useCart();
   const pos = usePos();
@@ -102,7 +104,7 @@ export function Billing() {
     if (trimmed === '') return;
     const item = matchShortCode(menu.items, trimmed);
     if (!item) {
-      notify(`No item with short code ${trimmed}`, true);
+      notify(t('foh.noShortCode', lang) + trimmed, true);
       return;
     }
     tapItem(item);
@@ -117,7 +119,7 @@ export function Billing() {
   const doSave = (print: boolean) =>
     guard(async () => {
       const order = await cart.saveOrder();
-      notify(`Order #${order.serialNumber} saved`);
+      notify(t('foh.orderSaved', lang) + order.serialNumber + t('foh.saved', lang));
       if (print) {
         const canvas = renderReceipt(printers.paperDots(), ticketCtx, order);
         await printers.print(canvas);
@@ -128,7 +130,7 @@ export function Billing() {
   const doKot = (print: boolean) =>
     guard(async () => {
       const { order, batchLines } = await cart.sendKot(cart.note ?? undefined);
-      notify(`KOT sent for #${order.serialNumber}`);
+      notify(t('foh.kotSent', lang) + order.serialNumber);
       if (print) {
         const canvas = renderKot(
           printers.paperDots(), ticketCtx, order,
@@ -152,20 +154,22 @@ export function Billing() {
       const settlements: PosSettlementLineWire[] =
         lines ?? [{ eventId: crypto.randomUUID(), paymentMethod: cart.paymentMethod, amount: totals.total, payerLabel: null }];
       const settled = await cart.settle(settlements);
-      notify(`Bill #${settled.serialNumber} settled — ${formatTk(settled.totalAmount)}`);
-      const canvas = renderReceipt(printers.paperDots(), ticketCtx, settled, {
-        paid: true,
-        paymentLabel: settlements.length === 1 ? settlements[0].paymentMethod : 'split',
-      });
-      await printers.print(canvas, { kickDrawer: settlements.some((s) => s.paymentMethod === 'cash') });
+      notify(t('foh.billSettled', lang) + settled.serialNumber + t('foh.settled', lang) + formatTk(settled.totalAmount));
+      if (cart.autoPrint) {
+        const canvas = renderReceipt(printers.paperDots(), ticketCtx, settled, {
+          paid: true,
+          paymentLabel: settlements.length === 1 ? settlements[0].paymentMethod : 'split',
+        });
+        await printers.print(canvas, { kickDrawer: settlements.some((s) => s.paymentMethod === 'cash') });
+      }
       cart.clear();
     })();
   };
 
   const serviceTabs: { id: typeof cart.serviceType; label: string }[] = [
-    { id: 'dine_in', label: 'Dine In' },
-    { id: 'delivery', label: 'Delivery' },
-    { id: 'takeaway', label: 'Pick Up' },
+    { id: 'dine_in', label: t('foh.dineIn', lang) },
+    { id: 'delivery', label: t('foh.delivery', lang) },
+    { id: 'takeaway', label: t('foh.pickUp', lang) },
   ];
 
   return (
@@ -175,11 +179,11 @@ export function Billing() {
         <button
           className={`cat-item cat-fav ${category === '__fav' && !search ? 'active' : ''}`}
           onClick={() => { setCategory('__fav'); setSearch(''); }}
-        >Favorite Items</button>
+        >{t('foh.favItems', lang)}</button>
         <button
           className={`cat-item ${category === '__all' && !search ? 'active' : ''}`}
           onClick={() => { setCategory('__all'); setSearch(''); }}
-        >All Items</button>
+        >{t('foh.allItems', lang)}</button>
         {menu.categories.map((c) => (
           <button
             key={c}
@@ -193,23 +197,23 @@ export function Billing() {
       <section className="item-pane">
         <div className="item-search-row">
           <input
-            className="input item-search" placeholder="Search item"
+            className="input item-search" placeholder={t('foh.searchItem', lang)}
             value={search} onChange={(e) => setSearch(e.target.value)}
           />
           <input
-            className="input item-shortcode" placeholder="Short Code"
+            className="input item-shortcode" placeholder={t('foh.shortCode', lang)}
             value={shortCode} inputMode="numeric"
             onChange={(e) => setShortCode(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submitShortCode(); }}
           />
         </div>
         {menu.loading ? (
-          <div className="item-empty">Loading menu…</div>
+          <div className="item-empty">{t('foh.loadingMenu', lang)}</div>
         ) : visibleItems.length === 0 ? (
           <div className="item-empty">
             {category === '__fav' && !search
-              ? 'No favorites yet — right-click any item to pin it here.'
-              : 'No items found.'}
+              ? t('foh.noFav', lang)
+              : t('foh.noItems', lang)}
           </div>
         ) : (
           <div className="item-grid">
@@ -217,19 +221,13 @@ export function Billing() {
               <button
                 key={item.raw.id}
                 className={`item-tile ${inCartIds.has(item.raw.id) ? 'in-cart' : ''} ${!item.raw.isAvailable ? 'unavailable' : ''}`}
+                style={{ '--cat-hue': catHue(item.category) } as React.CSSProperties}
                 onClick={() => item.raw.isAvailable && tapItem(item)}
                 onContextMenu={(e) => { e.preventDefault(); menu.toggleFavorite(item.raw.id); }}
-                title={`${itemDisplayName(item, bn)}${item.raw.shortCode != null ? ` · code ${item.raw.shortCode}` : ''}`}
+                title={`${itemDisplayName(item, bn)}${item.raw.shortCode != null ? ` · ${t('foh.code', lang)} ${item.raw.shortCode}` : ''}`}
               >
                 {menu.favorites.has(item.raw.id) && <span className="item-fav-dot">♥</span>}
                 <span className="item-name">{itemDisplayName(item, bn)}</span>
-                <span className="item-meta">
-                  <span className="item-price">{formatTk(item.price)}</span>
-                  {item.price < item.raw.price && (
-                    <span className="item-price-was">{formatTk(item.raw.price)}</span>
-                  )}
-                  {needsCustomization(item.extras) && <span className="item-custom">customizable*</span>}
-                </span>
               </button>
             ))}
           </div>
@@ -255,32 +253,32 @@ export function Billing() {
         <div className="cart-context">
           {cart.serviceType === 'dine_in' && (
             <button className="ctx-chip" onClick={() => setModal({ kind: 'table' })}>
-              {cart.tableNo ? `Table ${cart.tableNo}` : 'Select table'}
+              {cart.tableNo ? t('foh.table', lang) + cart.tableNo : t('foh.selectTable', lang)}
             </button>
           )}
           {cart.serviceType === 'delivery' && (
             <button className="ctx-chip" onClick={() => setModal({ kind: 'delivery' })}>
-              {cart.customerName || cart.mobileNumber ? `${cart.customerName ?? ''} ${cart.mobileNumber ?? ''}`.trim() : 'Delivery details'}
+              {cart.customerName || cart.mobileNumber ? `${cart.customerName ?? ''} ${cart.mobileNumber ?? ''}`.trim() : t('foh.deliveryDetails', lang)}
             </button>
           )}
           {cart.order && <span className="ctx-serial">#{cart.order.serialNumber}</span>}
           <span className="ctx-spacer" />
           {cart.held.length > 0 && (
             <button className="ctx-chip ctx-held" onClick={() => setModal({ kind: 'held' })}>
-              Held: {cart.held.length}
+              {t('foh.held', lang)}{cart.held.length}
             </button>
           )}
         </div>
 
         <div className="cart-header">
-          <span className="ch-items">ITEMS</span>
-          <span className="ch-qty">QTY.</span>
-          <span className="ch-price">PRICE</span>
+          <span className="ch-items">{t('foh.cartItems', lang)}</span>
+          <span className="ch-qty">{t('foh.cartQty', lang)}</span>
+          <span className="ch-price">{t('foh.cartPrice', lang)}</span>
         </div>
 
         <div className="cart-lines">
           {cart.lines.length === 0 ? (
-            <div className="cart-empty">Tap items to build the order</div>
+            <div className="cart-empty">{t('foh.emptyCart', lang)}</div>
           ) : (
             cart.lines.map((line) => (
               <div className={`cart-line ${line.kotSentAt ? 'kot-sent' : ''}`} key={line.lineId}>
@@ -289,7 +287,7 @@ export function Billing() {
                   {bn && line.nameBn ? line.nameBn : line.nameEn}
                   {line.suffix && <span className="cl-suffix"> {line.suffix}</span>}
                   {line.note && <div className="cl-note">{line.note}</div>}
-                  {line.kotSentAt && <span className="cl-kot" title="Sent to kitchen">KOT ✓</span>}
+                  {line.kotSentAt && <span className="cl-kot" title={t('foh.sentToKitchen', lang)}>KOT ✓</span>}
                 </div>
                 <div className="cl-qty">
                   <button onClick={() => cart.setQty(line.lineId, line.qty - 1)}>−</button>
@@ -303,61 +301,58 @@ export function Billing() {
         </div>
 
         <div className="cart-totals">
-          <div className="ct-row"><span>Subtotal</span><span>{formatTk(totals.subtotal)}</span></div>
+          <div className="ct-row"><span>{t('foh.subtotal', lang)}</span><span>{formatTk(totals.subtotal)}</span></div>
           {totals.vatAmount > 0 && (
-            <div className="ct-row"><span>VAT ({pos.settings?.vatRatePercent ?? 0}%)</span><span>{formatTk(totals.vatAmount)}</span></div>
+            <div className="ct-row"><span>{t('foh.vat', lang)} ({pos.settings?.vatRatePercent ?? 0}%)</span><span>{formatTk(totals.vatAmount)}</span></div>
           )}
           {totals.serviceChargeAmount > 0 && (
-            <div className="ct-row"><span>Service ({pos.settings?.serviceChargePercent ?? 0}%)</span><span>{formatTk(totals.serviceChargeAmount)}</span></div>
+            <div className="ct-row"><span>{t('foh.service', lang)} ({pos.settings?.serviceChargePercent ?? 0}%)</span><span>{formatTk(totals.serviceChargeAmount)}</span></div>
           )}
           <div className="ct-row">
             <button className="ct-discount-btn" onClick={() => setModal({ kind: 'discount' })}>
-              {cart.discount ? `Discount (${cart.discount.label ?? 'custom'})` : '+ Discount'}
+              {cart.discount ? t('foh.discountLabel', lang) + ' (' + (cart.discount.label ?? t('foh.custom', lang)) + ')' : t('foh.addDiscount', lang)}
             </button>
             <span>{totals.discountAmount > 0 ? `−${formatTk(totals.discountAmount)}` : ''}</span>
           </div>
+          <div className="ct-total"><span>{t('foh.total', lang)}</span><span>{formatTk(totals.total)}</span></div>
         </div>
 
         <div className="pay-strip">
-          {PAYMENTS.map((pm) => (
-            <label key={pm.id} className={`pay-radio ${cart.paymentMethod === pm.id ? 'active' : ''}`}>
+          {PAYMENT_IDS.map((id) => (
+            <label key={id} className={`pay-radio ${cart.paymentMethod === id ? 'active' : ''}`}>
               <input
-                type="radio" name="pm" checked={cart.paymentMethod === pm.id}
-                onChange={() => cart.setPaymentMethod(pm.id)}
+                type="radio" name="pm" checked={cart.paymentMethod === id}
+                onChange={() => cart.setPaymentMethod(id)}
               />
-              {pm.label}
+              {t(('foh.' + id) as StringKey, lang)}
             </label>
           ))}
-          <button className="pay-split" onClick={() => cart.lines.length && setModal({ kind: 'split' })}>Split</button>
-          <span className="pay-total">Total <b>{formatTk(totals.total)}</b></span>
+          <button className="pay-split" onClick={() => cart.lines.length && setModal({ kind: 'split' })}>{t('foh.split', lang)}</button>
+          <span className="pay-total">{t('foh.total', lang)} <b>{formatTk(totals.total)}</b></span>
         </div>
 
         <div className="cart-actions">
-          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSave(false)}>Save</button>
-          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSave(true)}>Save & Print</button>
-          <button className="btn btn-dark" disabled={cart.busy || cart.lines.every((l) => l.kotSentAt !== null)} onClick={() => doKot(false)}>KOT</button>
-          <button className="btn btn-outline" disabled={cart.busy || cart.lines.every((l) => l.kotSentAt !== null)} onClick={() => doKot(true)}>KOT & Print</button>
-          <button className="btn btn-outline" disabled={cart.busy || cart.lines.length === 0 || !!cart.order} onClick={() => cart.hold()}>Hold</button>
-          <button className="btn btn-primary settle-btn" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSettle()}>
-            Settle & Save
-          </button>
+          <button className="btn btn-dark" disabled={cart.busy || cart.lines.every((l) => l.kotSentAt !== null)} onClick={() => doKot(cart.autoPrint)}>{t('foh.kot', lang)}</button>
+          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSave(cart.autoPrint)}>{t('foh.printBill', lang)}</button>
+          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSettle()}>{t('foh.settleBill', lang)}</button>
         </div>
       </aside>
 
       {/* ---------- modals ---------- */}
       {modal?.kind === 'customize' && (
         <CustomizeModal
-          item={modal.item} bn={bn}
+          lang={lang} item={modal.item} bn={bn}
           onClose={() => setModal(null)}
           onConfirm={(r) => { addItem(modal.item, r); setModal(null); }}
         />
       )}
-      {modal?.kind === 'table' && <TableModal onClose={() => setModal(null)} />}
-      {modal?.kind === 'delivery' && <DeliveryModal onClose={() => setModal(null)} />}
-      {modal?.kind === 'discount' && <DiscountModal onClose={() => setModal(null)} />}
-      {modal?.kind === 'held' && <HeldModal onClose={() => setModal(null)} />}
+      {modal?.kind === 'table' && <TableModal lang={lang} onClose={() => setModal(null)} />}
+      {modal?.kind === 'delivery' && <DeliveryModal lang={lang} onClose={() => setModal(null)} />}
+      {modal?.kind === 'discount' && <DiscountModal lang={lang} onClose={() => setModal(null)} />}
+      {modal?.kind === 'held' && <HeldModal lang={lang} onClose={() => setModal(null)} />}
       {modal?.kind === 'split' && (
         <SplitModal
+          lang={lang}
           total={totals.total}
           onClose={() => setModal(null)}
           onConfirm={(lines) => { setModal(null); doSettle(lines); }}
@@ -378,13 +373,13 @@ export function Billing() {
 
 // ================= small modals =================
 
-function TableModal({ onClose }: { onClose: () => void }) {
+function TableModal({ lang, onClose }: { lang: Lang; onClose: () => void }) {
   const settings = usePos((s) => s.settings);
   const cart = useCart();
   const zones = settings?.floorLayout ?? [];
   return (
-    <Modal title="Select table" onClose={onClose} width={640}>
-      {zones.length === 0 && <div className="cart-empty">No floor layout configured.</div>}
+    <Modal title={t('foh.selectTable', lang)} onClose={onClose} width={640}>
+      {zones.length === 0 && <div className="cart-empty">{t('foh.noFloorLayout', lang)}</div>}
       {zones.map((zone) => (
         <div key={zone.id} className="tablepick-zone">
           <div className="tablepick-zone-name">{zone.name}</div>
@@ -403,14 +398,14 @@ function TableModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DeliveryModal({ onClose }: { onClose: () => void }) {
+function DeliveryModal({ lang, onClose }: { lang: Lang; onClose: () => void }) {
   const cart = useCart();
   const [name, setName] = useState(cart.customerName ?? '');
   const [phone, setPhone] = useState(cart.mobileNumber ?? '');
   const [address, setAddress] = useState(cart.deliveryAddress ?? '');
   return (
     <Modal
-      title="Delivery details" onClose={onClose}
+      title={t('foh.deliveryDetails', lang)} onClose={onClose}
       footer={
         <button
           className="btn btn-primary"
@@ -422,20 +417,20 @@ function DeliveryModal({ onClose }: { onClose: () => void }) {
             });
             onClose();
           }}
-        >Done</button>
+        >{t('foh.done', lang)}</button>
       }
     >
-      <div className="field"><label>Customer name</label>
+      <div className="field"><label>{t('foh.customerName', lang)}</label>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <div className="field"><label>Mobile number</label>
+      <div className="field"><label>{t('foh.mobileNumber', lang)}</label>
         <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" /></div>
-      <div className="field"><label>Address</label>
+      <div className="field"><label>{t('foh.address', lang)}</label>
         <textarea className="input delivery-address" value={address} onChange={(e) => setAddress(e.target.value)} /></div>
     </Modal>
   );
 }
 
-function DiscountModal({ onClose }: { onClose: () => void }) {
+function DiscountModal({ lang, onClose }: { lang: Lang; onClose: () => void }) {
   const settings = usePos((s) => s.settings);
   const cart = useCart();
   const [customValue, setCustomValue] = useState('');
@@ -443,10 +438,10 @@ function DiscountModal({ onClose }: { onClose: () => void }) {
   const [customLabel, setCustomLabel] = useState('');
   const presets = settings?.discountPresets ?? [];
   return (
-    <Modal title="Discount" onClose={onClose}>
+    <Modal title={t('foh.discountTitle', lang)} onClose={onClose}>
       {presets.length > 0 && (
         <div className="customize-group">
-          <div className="customize-group-title">Presets</div>
+          <div className="customize-group-title">{t('foh.presets', lang)}</div>
           <div className="customize-choices">
             {presets.map((p) => (
               <button
@@ -464,27 +459,27 @@ function DiscountModal({ onClose }: { onClose: () => void }) {
         </div>
       )}
       <div className="customize-group">
-        <div className="customize-group-title">Custom (manager)</div>
+        <div className="customize-group-title">{t('foh.customManager', lang)}</div>
         <div className="discount-custom">
           <select className="input" value={customKind} onChange={(e) => setCustomKind(e.target.value as 'percent' | 'flat')}>
-            <option value="percent">%</option>
-            <option value="flat">৳ flat</option>
+            <option value="percent">{t('foh.percent', lang)}</option>
+            <option value="flat">{t('foh.flat', lang)}</option>
           </select>
-          <input className="input" type="number" min="0" placeholder="Value" value={customValue} onChange={(e) => setCustomValue(e.target.value)} />
-          <input className="input" placeholder="Label" value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} />
+          <input className="input" type="number" min="0" placeholder={t('foh.value', lang)} value={customValue} onChange={(e) => setCustomValue(e.target.value)} />
+          <input className="input" placeholder={t('foh.label', lang)} value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} />
         </div>
         <div className="discount-actions">
           <button
             className="btn btn-primary btn-sm"
             disabled={!Number(customValue)}
             onClick={() => {
-              cart.setDiscount({ kind: customKind, value: Number(customValue), label: customLabel.trim() || 'Custom', presetId: null });
+              cart.setDiscount({ kind: customKind, value: Number(customValue), label: customLabel.trim() || t('foh.custom', lang), presetId: null });
               onClose();
             }}
-          >Apply</button>
+          >{t('foh.apply', lang)}</button>
           {cart.discount && (
             <button className="btn btn-outline btn-sm" onClick={() => { cart.setDiscount(null); onClose(); }}>
-              Remove discount
+              {t('foh.removeDiscount', lang)}
             </button>
           )}
         </div>
@@ -493,21 +488,21 @@ function DiscountModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function HeldModal({ onClose }: { onClose: () => void }) {
+function HeldModal({ lang, onClose }: { lang: Lang; onClose: () => void }) {
   const cart = useCart();
   return (
-    <Modal title="Held orders" onClose={onClose}>
+    <Modal title={t('foh.heldOrders', lang)} onClose={onClose}>
       {cart.held.map((h) => (
         <div className="held-row" key={h.id}>
           <div className="held-info">
-            <b>{h.serviceType === 'dine_in' ? `Table ${h.tableNo ?? '—'}` : h.serviceType === 'delivery' ? 'Delivery' : 'Pick Up'}</b>
-            <span>{h.lines.reduce((n, l) => n + l.qty, 0)} items · {new Date(h.heldAt).toLocaleTimeString()}</span>
+            <b>{h.serviceType === 'dine_in' ? t('foh.table', lang) + (h.tableNo ?? '—') : h.serviceType === 'delivery' ? t('foh.delivery', lang) : t('foh.pickUp', lang)}</b>
+            <span>{h.lines.reduce((n, l) => n + l.qty, 0)}{t('foh.items', lang)} · {new Date(h.heldAt).toLocaleTimeString()}</span>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => { cart.resumeHeld(h.id); onClose(); }}>Resume</button>
-          <button className="btn btn-danger-outline btn-sm" onClick={() => cart.discardHeld(h.id)}>Discard</button>
+          <button className="btn btn-primary btn-sm" onClick={() => { cart.resumeHeld(h.id); onClose(); }}>{t('foh.resume', lang)}</button>
+          <button className="btn btn-danger-outline btn-sm" onClick={() => cart.discardHeld(h.id)}>{t('foh.discard', lang)}</button>
         </div>
       ))}
-      {cart.held.length === 0 && <div className="cart-empty">Nothing on hold.</div>}
+      {cart.held.length === 0 && <div className="cart-empty">{t('foh.nothingHeld', lang)}</div>}
     </Modal>
   );
 }

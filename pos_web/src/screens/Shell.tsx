@@ -6,7 +6,7 @@ import { useCart } from '../state/cart';
 import { useNav, type NavSection } from '../state/nav';
 import { useOrders } from '../state/orders';
 import { useSync } from '../state/sync';
-import { t } from '../i18n/strings';
+import { t, type StringKey } from '../i18n/strings';
 import { Billing } from './Billing';
 import { Tables } from './Tables';
 import { Orders } from './Orders';
@@ -15,11 +15,11 @@ import { InstallToast } from '../components/InstallToast';
 import { Sidebar } from '../components/Sidebar';
 import './shell.css';
 
-const NAV: { id: NavSection; icon: string; labelEn: string; labelBn: string }[] = [
-  { id: 'billing', icon: '🧾', labelEn: 'Billing', labelBn: 'বিলিং' },
-  { id: 'tables', icon: '🍽️', labelEn: 'Tables', labelBn: 'টেবিল' },
-  { id: 'orders', icon: '📋', labelEn: 'Orders', labelBn: 'অর্ডার' },
-  { id: 'ops', icon: '⚙️', labelEn: 'Operations', labelBn: 'অপারেশনস' },
+const NAV: { id: NavSection; icon: string; labelKey: string }[] = [
+  { id: 'tables', icon: '🍽️', labelKey: 'shell.tables' },
+  { id: 'billing', icon: '🧾', labelKey: 'shell.billing' },
+  { id: 'orders', icon: '📋', labelKey: 'shell.orders' },
+  { id: 'ops', icon: '⚙️', labelKey: 'shell.operations' },
 ];
 
 export function Shell() {
@@ -32,6 +32,9 @@ export function Shell() {
   const clearCart = useCart((s) => s.clear);
   const orders = useOrders();
   const sync = useSync();
+  const settings = usePos((s) => s.settings);
+  const autoPrint = useCart((s) => s.autoPrint);
+  const isCounter = settings?.tableCount === 0;
 
   useEffect(() => {
     const up = () => {
@@ -68,6 +71,11 @@ export function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders.connected]);
 
+  // redirect to billing in counter mode
+  useEffect(() => {
+    if (isCounter && section === 'tables') go('billing');
+  }, [isCounter, section, go]);
+
   // viewing Tables clears the "new online order" badge
   useEffect(() => {
     if (section === 'tables') orders.markSeen();
@@ -85,7 +93,7 @@ export function Shell() {
     <div className="shell-root">
       <header className="topbar">
         <div className="topbar-brand">
-          <span className="topbar-logo">QuickBytes</span>
+          <span className="topbar-logo">{t('shell.quickbytes', lang)}</span>
           <span className="topbar-outlet">{session.outletName}</span>
         </div>
 
@@ -96,15 +104,15 @@ export function Shell() {
         <input className="input topbar-billno" placeholder={t('billNo', lang)} />
 
         <nav className="topbar-nav">
-          {NAV.map((n) => (
+          {NAV.filter((n) => !(n.id === 'tables' && isCounter)).map((n) => (
             <button
               key={n.id}
               className={`topbar-nav-btn ${section === n.id ? 'active' : ''}`}
-              title={lang === 'bn' ? n.labelBn : n.labelEn}
+              title={t(n.labelKey as StringKey, lang)}
               onClick={() => go(n.id)}
             >
               <span className="topbar-nav-icon">{n.icon}</span>
-              <span className="topbar-nav-label">{lang === 'bn' ? n.labelBn : n.labelEn}</span>
+              <span className="topbar-nav-label">{t(n.labelKey as StringKey, lang)}</span>
               {n.id === 'tables' && orders.unseen > 0 && (
                 <span className="topbar-nav-badge">{orders.unseen}</span>
               )}
@@ -114,17 +122,20 @@ export function Shell() {
 
         <div className="topbar-right">
           {sync.queued > 0 && (
-            <span className="topbar-sync" title="Writes queued offline — will sync when back online">
+            <span className="topbar-sync" title={t('shell.writesQueued', lang)}>
               ⇅ {sync.queued}{sync.replaying ? '…' : ''}
             </span>
           )}
+          <button className="topbar-autoprint" onClick={() => useCart.getState().toggleAutoPrint()}>
+            🖨️ {autoPrint ? t('shell.autoPrintOn', lang) : t('shell.autoPrintOff', lang)}
+          </button>
           {sync.dead.length > 0 && (
             <button
-              className="topbar-sync bad" title="Failed writes — open Operations"
+              className="topbar-sync bad" title={t('shell.failedWrites', lang)}
               onClick={() => go('ops')}
             >⚠ {sync.dead.length}</button>
           )}
-          <span className={`topbar-conn ${orders.connected ? 'up' : 'down'}`} title={orders.connected ? 'Live' : 'Reconnecting'} />
+          <span className={`topbar-conn ${orders.connected ? 'up' : 'down'}`} title={orders.connected ? t('shell.live', lang) : t('shell.reconnecting', lang)} />
           <button
             className="topbar-lang"
             onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
@@ -141,7 +152,7 @@ export function Shell() {
         <Sidebar />
         <main className="shell-body">
           {section === 'billing' && <Billing />}
-          {section === 'tables' && <Tables />}
+          {section === 'tables' && !isCounter && <Tables />}
           {section === 'orders' && <Orders />}
           {section === 'ops' && <Ops />}
         </main>

@@ -4,6 +4,8 @@
 // server-side. The engine is decoupled from IndexedDB (OutboxStore) and the HTTP
 // client (OutboxApi) so it can be unit-tested with in-memory fakes.
 
+import { syncSerial } from './serial';
+
 export type SettleBody = {
   shiftId: string;
   discountPresetId?: string | null;
@@ -106,7 +108,18 @@ export async function replayOutbox(store: OutboxStore, api: OutboxApi): Promise<
   let dead = 0;
   for (const r of records) {
     try {
-      await dispatch(api, r.op);
+      const res = await dispatch(api, r.op);
+      if (r.op.kind === 'createOrder') {
+        const serverOrder = res as { serialNumber?: number; source?: string; createdByRole?: string } | undefined;
+        if (serverOrder?.serialNumber && serverOrder.serialNumber > 0) {
+          syncSerial(
+            r.op.outletId,
+            String(r.op.body.source ?? 'desktop_pos'),
+            String(r.op.body.createdByRole ?? ''),
+            serverOrder.serialNumber,
+          );
+        }
+      }
       await store.remove(r.seq);
       done++;
     } catch (err) {

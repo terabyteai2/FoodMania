@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import { formatTk } from '../core/money';
 import { downloadCsv } from '../core/csv';
 import { StatCard } from '../components/StatCard';
@@ -15,6 +16,7 @@ const WINDOWS = [7, 30, 90];
 
 export function Reports() {
   const session = useSession((s) => s.session)!;
+  const lang = useSession((s) => s.lang);
 
   const [period, setPeriod] = useState<Period>({ range: 'today' });
   const [buckets, setBuckets] = useState<OrderBucketsWire | null>(null);
@@ -39,7 +41,7 @@ export function Reports() {
 
   const downloadPerfCsv = () => {
     if (!perf) return;
-    const rows: (string | number)[][] = [['Item', 'Category', 'Qty', 'Sales', 'Avg Unit Price']];
+    const rows: (string | number)[][] = [[t('an.csvItem', lang), t('an.csvCat', lang), t('rpt.csvQty', lang), t('rpt.csvSales', lang), t('an.csvAvgPrice', lang)]];
     for (const it of perf.items) rows.push([it.name, it.category, it.qty, it.salesBdt, it.avgUnitPrice]);
     downloadCsv(`performance_${days}d.csv`, rows);
   };
@@ -48,7 +50,7 @@ export function Reports() {
     <div className="bo-root">
       <div className="bo-head">
         <div>
-          <h2>Reports</h2>
+          <h2>{t('rpt.title', lang)}</h2>
           <span className="bo-sub">{session.outletName}</span>
         </div>
         <div className="bo-head-actions">
@@ -69,13 +71,13 @@ export function Reports() {
               accent={b.key === 'success'}
             />
           ))}
-          <StatCard title="Payments" value={formatTk(paymentsTotal)} sub={`${buckets.payments.length} methods`} />
+          <StatCard title={t('rpt.payments', lang)} value={formatTk(paymentsTotal)} sub={t('rpt.methods', lang).replace('{n}', String(buckets.payments.length))} />
         </div>
       )}
 
       {buckets && buckets.payments.length > 0 && (
         <section className="card bo-panel">
-          <h3>Payment information</h3>
+          <h3>{t('rpt.paymentInfo', lang)}</h3>
           {buckets.payments.map((p) => (
             <div className="bo-line" key={p.key}><span>{p.label}</span><span>{formatTk(p.totalBdt)}</span></div>
           ))}
@@ -84,22 +86,22 @@ export function Reports() {
 
       <section className="card bo-panel">
         <div className="bo-chart-head">
-          <h3>Performance report</h3>
+          <h3>{t('rpt.performanceReport', lang)}</h3>
           <div className="bo-head-actions">
             <div className="bo-toggle">
               {WINDOWS.map((w) => (
-                <button key={w} className={days === w ? 'active' : ''} onClick={() => setDays(w)}>{w}d</button>
+                <button key={w} className={days === w ? 'active' : ''} onClick={() => setDays(w)}>{w}{t('rpt.daySuffix', lang)}</button>
               ))}
             </div>
-            <button className="btn btn-outline btn-sm" onClick={downloadPerfCsv} disabled={!perf}>⬇ CSV</button>
+            <button className="btn btn-outline btn-sm" onClick={downloadPerfCsv} disabled={!perf}>⬇ {t('an.csv', lang)}</button>
           </div>
         </div>
         <div className="bo-rank">
-          {perf && perf.items.length === 0 && <p className="bo-muted">No sales in the last {days} days.</p>}
+          {perf && perf.items.length === 0 && <p className="bo-muted">{t('rpt.noSalesInDays', lang).replace('{n}', String(days))}</p>}
           {(perf?.items ?? []).slice(0, 50).map((it) => (
             <div className="bo-rank-row" key={it.menuItemId}>
               <span className="bo-rank-name">{it.name}<span className="bo-line-sub"> · {it.category}</span></span>
-              <span className="bo-rank-qty">{it.qty} sold</span>
+              <span className="bo-rank-qty">{t('dash.sold', lang).replace('{n}', String(it.qty))}</span>
               <span className="bo-rank-val">{formatTk(it.salesBdt)}</span>
             </div>
           ))}

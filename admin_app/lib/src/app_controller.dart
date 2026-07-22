@@ -1138,12 +1138,12 @@ class PosAppController extends ChangeNotifier {
     {
       final fbOrders = loadedOrders.where((o) => o.source.name == 'facebookMessenger').toList();
       if (fbOrders.isNotEmpty) {
-        print(
+        debugPrint(
           '[QB-ALWAYS] reloadData HAS ${fbOrders.length} facebookMessenger order(s): '
           '${fbOrders.map((o) => '${o.id}#${o.sequenceNo}:${o.status.name}').join(' | ')}',
         );
       } else {
-        print(
+        debugPrint(
           '[QB-ALWAYS] reloadData ZERO facebookMessenger orders in loaded list '
           '(total=${loadedOrders.length})',
         );
@@ -1544,7 +1544,7 @@ class PosAppController extends ChangeNotifier {
       return;
     }
     _handlingDatabaseChange = true;
-    print('[QB-ALWAYS] dbChanged fired (preOrders=${orders.length})');
+    debugPrint('[QB-ALWAYS] dbChanged fired (preOrders=${orders.length})');
     try {
       do {
         _databaseChangePending = false;

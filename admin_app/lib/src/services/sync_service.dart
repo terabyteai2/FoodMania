@@ -494,7 +494,7 @@ class SyncService {
           imported++;
           ordersApplied++;
           if (orderSource == 'facebook_messenger') {
-            print(
+            debugPrint(
               '[QB-ALWAYS] PULL APPLIED fb_messenger id=${order.id} '
               'serial=${order.sequenceNo} status=${order.status.name} '
               'items=${order.items.length}',
@@ -511,7 +511,7 @@ class SyncService {
           // (stale vs local, or no-op). Prime suspect for "order not showing".
           ordersSkipped++;
           if (orderSource == 'facebook_messenger') {
-            print(
+            debugPrint(
               '[QB-ALWAYS] PULL SKIPPED fb_messenger id=${order.id} '
               'serial=${order.sequenceNo} status=${order.status.name} '
               'items=${order.items.length}',
@@ -697,7 +697,7 @@ class SyncService {
         );
         final applied = await _database.applyRemoteOrder(order);
         if (order.source.name == 'facebookMessenger') {
-          print(
+          debugPrint(
             '[QB-ALWAYS] REALTIME $type fb_messenger id=${order.id} '
             'serial=${order.sequenceNo} status=${order.status.name} '
             'applied=${applied != null}',

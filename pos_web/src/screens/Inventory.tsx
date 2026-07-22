@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../state/session';
+import { t } from '../i18n/strings';
 import { useInventory } from '../state/inventory';
 import { InventoryItemModal } from '../components/InventoryItemModal';
 import { StockAdjustModal, type AdjustMode } from '../components/StockAdjustModal';
@@ -23,7 +24,8 @@ const SPLIT_COLORS: Record<string, string> = {
 
 export function Inventory() {
   const session = useSession((s) => s.session)!;
-  const bn = useSession((s) => s.lang) === 'bn';
+  const lang = useSession((s) => s.lang);
+  const bn = lang === 'bn';
   const inv = useInventory();
 
   const [tab, setTab] = useState<'stock' | 'report'>('stock');
@@ -57,7 +59,7 @@ export function Inventory() {
 
   const editItem = (s: InventorySummaryItemWire) => {
     const raw = inv.itemsById[s.id];
-    if (!raw) { flash('Item detail not loaded — refresh.'); return; }
+    if (!raw) { flash(t('inv.notLoaded', lang)); return; }
     setEditing(s);
   };
 
@@ -67,13 +69,13 @@ export function Inventory() {
     <div className="bo-root">
       <div className="bo-head">
         <div>
-          <h2>Inventory</h2>
-          <span className="bo-sub">{session.outletName} · raw materials & stock</span>
+          <h2>{t('inv.title', lang)}</h2>
+          <span className="bo-sub">{session.outletName} · {t('inv.subtitle', lang)}</span>
         </div>
         <div className="bo-head-actions">
           <div className="bo-tabs">
-            <button className={`bo-tab ${tab === 'stock' ? 'active' : ''}`} onClick={() => setTab('stock')}>Stock</button>
-            <button className={`bo-tab ${tab === 'report' ? 'active' : ''}`} onClick={() => setTab('report')}>Daily report</button>
+            <button className={`bo-tab ${tab === 'stock' ? 'active' : ''}`} onClick={() => setTab('stock')}>{t('inv.stockTab', lang)}</button>
+            <button className={`bo-tab ${tab === 'report' ? 'active' : ''}`} onClick={() => setTab('report')}>{t('inv.reportTab', lang)}</button>
           </div>
         </div>
       </div>
@@ -86,30 +88,30 @@ export function Inventory() {
             <PeriodPicker value={period} onChange={setPeriod} />
             <div className="inv-toolbar-right">
               <button className="btn btn-outline btn-sm" onClick={() => void inv.loadStock(session.outletId, period)} disabled={inv.loading}>↻</button>
-              <button className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>+ Add material</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>+ {t('inv.addMaterial', lang)}</button>
             </div>
           </div>
 
           <div className="bo-grid">
             <div className="card bo-card accent">
-              <span className="bo-card-title">Stock value</span>
+              <span className="bo-card-title">{t('inv.stockValue', lang)}</span>
               <span className="bo-card-value">{formatTk(summary?.stockValueBdt ?? 0)}</span>
-              <span className="bo-card-sub">on hand at cost</span>
+              <span className="bo-card-sub">{t('inv.onHandAtCost', lang)}</span>
             </div>
             <div className="card bo-card">
-              <span className="bo-card-title">Alerts</span>
+              <span className="bo-card-title">{t('inv.alerts', lang)}</span>
               <span className="bo-card-value">{summary?.alerts ?? 0}</span>
-              <span className="bo-card-sub">low / out / variance</span>
+              <span className="bo-card-sub">{t('inv.lowOutVariance', lang)}</span>
             </div>
             <div className="card bo-card">
-              <span className="bo-card-title">Variance today</span>
+              <span className="bo-card-title">{t('inv.varianceToday', lang)}</span>
               <span className="bo-card-value">{formatTk(summary?.varianceTodayBdt ?? 0)}</span>
-              <span className="bo-card-sub">{summary?.varianceItemCount ?? 0} item(s) counted off</span>
+              <span className="bo-card-sub">{t('inv.itemsCountedOff', lang).replace('{n}', String(summary?.varianceItemCount ?? 0))}</span>
             </div>
             <div className="card bo-card">
-              <span className="bo-card-title">Materials</span>
+              <span className="bo-card-title">{t('inv.materials', lang)}</span>
               <span className="bo-card-value">{summary?.items.length ?? 0}</span>
-              <span className="bo-card-sub">tracked</span>
+              <span className="bo-card-sub">{t('inv.tracked', lang)}</span>
             </div>
           </div>
 
@@ -126,17 +128,17 @@ export function Inventory() {
 
           <div className="card inv-table">
             <div className="inv-row inv-row-head">
-              <span>Material</span>
-              <span className="inv-r">In</span>
-              <span className="inv-r">Out</span>
-              <span className="inv-r">Net</span>
-              <span className="inv-r">On hand</span>
-              <span className="inv-r">Spend</span>
-              <span className="inv-actions-h">Actions</span>
+              <span>{t('inv.material', lang)}</span>
+              <span className="inv-r">{t('inv.in', lang)}</span>
+              <span className="inv-r">{t('inv.out', lang)}</span>
+              <span className="inv-r">{t('inv.net', lang)}</span>
+              <span className="inv-r">{t('inv.onHand', lang)}</span>
+              <span className="inv-r">{t('inv.spend', lang)}</span>
+              <span className="inv-actions-h">{t('inv.actions', lang)}</span>
             </div>
-            {inv.loading && !summary && <div className="bo-loading">Loading inventory…</div>}
+            {inv.loading && !summary && <div className="bo-loading">{t('inv.loading', lang)}</div>}
             {summary && filtered.length === 0 && (
-              <div className="bo-muted inv-empty">No raw materials yet. Add your first one to start tracking stock.</div>
+              <div className="bo-muted inv-empty">{t('inv.noMaterials', lang)}</div>
             )}
             {filtered.map((it) => {
               const low = it.varianceStatus === 'low' || it.varianceStatus === 'out';
@@ -152,17 +154,17 @@ export function Inventory() {
                   <span className="inv-r">{netToday(it) || '—'}</span>
                   <span className={`inv-r inv-onhand ${low ? 'low' : ''}`}>
                     {it.onHand}
-                    {it.minThreshold > 0 && <span className="inv-min">min {it.minThreshold}</span>}
+                    {it.minThreshold > 0 && <span className="inv-min">{t('inv.min', lang).replace('{n}', String(it.minThreshold))}</span>}
                   </span>
                   <span className="inv-r">{it.todaySpendBdt ? formatTk(it.todaySpendBdt) : '—'}</span>
                   <div className="inv-actions">
-                    <button className="inv-icon" title="Stock-in" disabled={busy}
+                    <button className="inv-icon" title={t('inv.stockIn', lang)} disabled={busy}
                       onClick={() => setAdjust({ item: it, mode: 'restock' })}>↑</button>
-                    <button className="inv-icon" title="Count" disabled={busy}
+                    <button className="inv-icon" title={t('inv.count', lang)} disabled={busy}
                       onClick={() => setAdjust({ item: it, mode: 'count' })}>▣</button>
-                    <button className="inv-icon" title="Edit" onClick={() => editItem(it)}>✎</button>
-                    <button className="inv-icon danger" title="Delete" disabled={busy}
-                      onClick={() => { if (window.confirm(`Delete "${inventoryDisplayName(it, bn)}"?`)) void run(() => inv.deleteItem(session.outletId, it.id), 'Deleted'); }}>🗑</button>
+                    <button className="inv-icon" title={t('mmg.edit', lang)} onClick={() => editItem(it)}>✎</button>
+                    <button className="inv-icon danger" title={t('mmg.delete', lang)} disabled={busy}
+                      onClick={() => { if (window.confirm(t('inv.confirmDelete', lang).replace('{name}', inventoryDisplayName(it, bn)))) void run(() => inv.deleteItem(session.outletId, it.id), t('inv.deleted', lang)); }}>🗑</button>
                   </div>
                 </div>
               );
@@ -212,6 +214,7 @@ function ReportTab({
   report: InventoryDailyReportWire | null;
   reload: () => void;
 }) {
+  const lang = useSession((s) => s.lang);
   const split: DonutDatum[] = (report?.revenueSplit ?? []).map((r) => ({
     label: r.label, value: r.valueBdt, color: SPLIT_COLORS[r.key] ?? 'var(--muted)',
   }));
@@ -220,13 +223,13 @@ function ReportTab({
   return (
     <>
       <div className="bo-head-actions inv-toolbar">
-        <label className="field inv-date"><span>Business date</span>
+        <label className="field inv-date"><span>{t('inv.businessDate', lang)}</span>
           <input className="input" type="date" value={date} max={todayBdtDate()} onChange={(e) => onDate(e.target.value)} />
         </label>
         <button className="btn btn-outline btn-sm" onClick={reload} disabled={loading}>↻</button>
       </div>
 
-      {loading && !report && <div className="bo-loading">Loading daily report…</div>}
+      {loading && !report && <div className="bo-loading">{t('inv.loadingReport', lang)}</div>}
 
       {report && (
         <>
@@ -234,36 +237,36 @@ function ReportTab({
 
           <div className="bo-grid">
             <div className="card bo-card accent">
-              <span className="bo-card-title">Unexplained variance</span>
+              <span className="bo-card-title">{t('inv.unexplainedVariance', lang)}</span>
               <span className="bo-card-value">{formatTk(report.unexplainedVarianceBdt)}</span>
-              <span className="bo-card-sub">{report.varianceItemCount} item(s)</span>
+              <span className="bo-card-sub">{t('inv.varianceItems', lang).replace('{n}', String(report.varianceItemCount))}</span>
             </div>
             <div className="card bo-card">
-              <span className="bo-card-title">Stock in</span>
+              <span className="bo-card-title">{t('inv.stockInCard', lang)}</span>
               <span className="bo-card-value">{report.stockFlow.inQty}</span>
-              <span className="bo-card-sub">units received</span>
+              <span className="bo-card-sub">{t('inv.unitsReceived', lang)}</span>
             </div>
             <div className="card bo-card">
-              <span className="bo-card-title">Stock out</span>
+              <span className="bo-card-title">{t('inv.stockOut', lang)}</span>
               <span className="bo-card-value">{report.stockFlow.outQty}</span>
-              <span className="bo-card-sub">used / wasted</span>
+              <span className="bo-card-sub">{t('inv.usedWasted', lang)}</span>
             </div>
             <div className="card bo-card">
-              <span className="bo-card-title">Purchase spend</span>
+              <span className="bo-card-title">{t('inv.purchaseSpend', lang)}</span>
               <span className="bo-card-value">{formatTk(report.stockFlow.spendBdt)}</span>
-              <span className="bo-card-sub">on stock-in</span>
+              <span className="bo-card-sub">{t('inv.onStockIn', lang)}</span>
             </div>
           </div>
 
           <div className="bo-cols">
             <section className="card bo-panel">
-              <h3>Revenue split</h3>
-              <Donut data={split} format={formatTk} centerValue={formatTk(revenueTotal)} centerLabel="sales"
-                emptyLabel="No sales this day" />
+              <h3>{t('inv.revenueSplit', lang)}</h3>
+              <Donut data={split} format={formatTk} centerValue={formatTk(revenueTotal)} centerLabel={t('inv.sales', lang)}
+                emptyLabel={t('inv.noSalesDay', lang)} />
             </section>
 
             <section className="card bo-panel">
-              <h3>Top sellers</h3>
+              <h3>{t('inv.topSellers', lang)}</h3>
               <div className="bo-rank">
                 {(report.topSellers ?? []).map((t, i) => (
                   <div className="bo-rank-row" key={i}>
@@ -272,18 +275,18 @@ function ReportTab({
                     <span className="bo-rank-val">{formatTk(t.salesBdt)}</span>
                   </div>
                 ))}
-                {(report.topSellers?.length ?? 0) === 0 && <p className="bo-muted">No sales recorded.</p>}
+                {(report.topSellers?.length ?? 0) === 0 && <p className="bo-muted">{t('inv.noSalesRecorded', lang)}</p>}
               </div>
             </section>
 
             {report.reorderSuggestions.length > 0 && (
               <section className="card bo-panel">
-                <h3>Reorder before noon</h3>
+                <h3>{t('inv.reorderBeforeNoon', lang)}</h3>
                 <div className="inv-reorder">
                   {report.reorderSuggestions.map((r) => (
                     <div className="inv-reorder-row" key={r.itemId}>
                       <span className="inv-reorder-name">{r.nameEn}</span>
-                      <span className="inv-reorder-qty">order ~{r.qtyToOrder} {r.unit}</span>
+                      <span className="inv-reorder-qty">{t('inv.orderQty', lang).replace('{n}', String(r.qtyToOrder)).replace('{u}', r.unit)}</span>
                     </div>
                   ))}
                 </div>
@@ -292,18 +295,18 @@ function ReportTab({
           </div>
 
           <section className="card bo-panel bo-panel-wide">
-            <h3>Variance breakdown</h3>
+            <h3>{t('inv.varianceBreakdown', lang)}</h3>
             {report.breakdown.length === 0 ? (
-              <p className="bo-muted">No counted variance — expected and actual match.</p>
+              <p className="bo-muted">{t('inv.noVariance', lang)}</p>
             ) : (
               <div className="inv-var-table">
                 <div className="inv-var-row inv-var-head">
-                  <span>Material</span>
-                  <span className="inv-r">Expected</span>
-                  <span className="inv-r">Actual</span>
-                  <span className="inv-r">Variance</span>
+                  <span>{t('inv.material', lang)}</span>
+                  <span className="inv-r">{t('inv.expected', lang)}</span>
+                  <span className="inv-r">{t('inv.actual', lang)}</span>
+                  <span className="inv-r">{t('inv.varianceCol', lang)}</span>
                   <span className="inv-r">৳</span>
-                  <span>Note</span>
+                  <span>{t('inv.noteCol', lang)}</span>
                 </div>
                 {report.breakdown.map((b) => (
                   <div className="inv-var-row" key={b.itemId}>
@@ -312,7 +315,7 @@ function ReportTab({
                     <span className="inv-r">{b.actualQty} {b.unit}</span>
                     <span className={`inv-r ${b.varianceQty < 0 ? 'neg' : 'pos'}`}>{b.varianceQty > 0 ? '+' : ''}{b.varianceQty} {b.unit}</span>
                     <span className={`inv-r ${b.varianceBdt < 0 ? 'neg' : 'pos'}`}>{formatTk(b.varianceBdt)}</span>
-                    <span className="inv-var-note">{b.recurringWeeks >= 2 ? `⚠ ${b.recurringWeeks}w recurring` : b.noteEn}</span>
+                    <span className="inv-var-note">{b.recurringWeeks >= 2 ? `⚠ ${t('inv.recurringWeeks', lang).replace('{n}', String(b.recurringWeeks))}` : b.noteEn}</span>
                   </div>
                 ))}
               </div>

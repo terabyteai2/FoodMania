@@ -632,7 +632,7 @@ class LocalDatabaseService {
         }
         applied = next;
         if (next.source.name == 'facebookMessenger') {
-          print(
+          debugPrint(
             '[QB-ALWAYS] DB INSERT fb_messenger id=${next.id} '
             'serial=${next.sequenceNo} status=${next.status.name} '
             'version=${next.version}',
@@ -653,7 +653,7 @@ class LocalDatabaseService {
         // SKIP: remote looks stale and status can't advance — the in-memory
         // list keeps the old row. Prime suspect for "order not showing".
         if (order.source.name == 'facebookMessenger') {
-          print(
+          debugPrint(
             '[QB-ALWAYS] DB SKIP fb_messenger id=${order.id} '
             'remoteNewer=$remoteNewer statusCanAdvance=$statusCanAdvance '
             'current=${current.status.name}@${current.updatedAt.toIso8601String()} '
