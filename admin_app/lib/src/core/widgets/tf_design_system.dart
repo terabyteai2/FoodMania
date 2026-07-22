@@ -1456,7 +1456,7 @@ class TfItemRow extends StatelessWidget {
                         ),
                       ),
                       if (discountLabel != null) ...[
-                        const SizedBox(width: 6),
+                const SizedBox(width: PosSpacing.sp1),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 5,
@@ -1582,10 +1582,10 @@ class TfChip extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          constraints: BoxConstraints(minHeight: small ? 36 : 44),
+          constraints: const BoxConstraints(minHeight: 44),
           padding: EdgeInsets.symmetric(
-            horizontal: small ? 12 : 14,
-            vertical: small ? 7 : 10,
+            horizontal: PosSpacing.sp3,
+            vertical: small ? PosSpacing.sp2 : PosDensity.cardPad,
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(PosRadii.md),
