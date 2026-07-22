@@ -571,29 +571,47 @@ class _GridTile extends StatelessWidget {
                   ),
                   child: Stack(
                   children: [
-                    Positioned.fill(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            PosSpacing.sp1,
-                            PosSpacing.sp4,
-                            PosSpacing.sp1,
-                            (inCart && !off) ? 2 : PosSpacing.sp4,
+                    if (inCart && !off)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 36,
+                        child: TfText(
+                          item.localizedName(app.language),
+                          textAlign: TextAlign.start,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TfTextStyles.badgeText.copyWith(
+                            color: PosColors.primaryDark,
+                            fontWeight: FontWeight.w500,
+                            height: 1.2,
                           ),
-                          child: TfText(
-                            item.localizedName(app.language),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TfTextStyles.meta.copyWith(
-                              color: PosColors.primaryDark,
-                              fontWeight: FontWeight.w500,
-                              height: 1.2,
+                        ),
+                      )
+                    else
+                      Positioned.fill(
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              PosSpacing.sp1,
+                              PosSpacing.sp4,
+                              PosSpacing.sp1,
+                              PosSpacing.sp4,
+                            ),
+                            child: TfText(
+                              item.localizedName(app.language),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.meta.copyWith(
+                                color: PosColors.primaryDark,
+                                fontWeight: FontWeight.w500,
+                                height: 1.2,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     Positioned(
                       top: 0,
                       right: 0,
