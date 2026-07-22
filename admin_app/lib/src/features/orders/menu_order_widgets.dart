@@ -153,7 +153,7 @@ class _TopControls extends StatelessWidget {
     final hasTitle = title != null;
     return Container(
       color: PosColors.primary,
-      padding: EdgeInsets.fromLTRB(16, hasTitle ? 12 : 6, 16, 8),
+      padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp2, PosSpacing.sp4, PosSpacing.sp2),
       child: Row(
         children: [
           if (onLeading != null) ...[
@@ -177,7 +177,7 @@ class _TopControls extends StatelessWidget {
                 title!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TfTextStyles.heading.copyWith(
+                style: TfTextStyles.appBarTitle.copyWith(
                   color: PosColors.accentInk,
                 ),
               ),
@@ -272,7 +272,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                         },
                         icon: Icon(Icons.close_rounded, color: PosColors.muted),
                       ),
-                contentPadding: const EdgeInsets.only(top: 10, bottom: 10, left: 12, right: 90),
+                contentPadding: const EdgeInsets.only(top: PosDensity.cardPad, bottom: PosDensity.cardPad, left: PosSpacing.sp3, right: 90),
               ),
             ),
             Positioned(
@@ -282,7 +282,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
               child: GestureDetector(
                 onTap: widget.onToggleCode,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3),
                   decoration: BoxDecoration(
                     color: widget.codeMode ? PosColors.primary : PosColors.surface,
                     border: Border(
@@ -294,7 +294,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                   alignment: Alignment.center,
                   child: TfText(
                     text.quickBill,
-                    style: TfTextStyles.meta.copyWith(
+                    style: TfTextStyles.bodyMuted.copyWith(
                       fontWeight: widget.codeMode ? FontWeight.w600 : FontWeight.w500,
                       color: widget.codeMode ? PosColors.accentInk : PosColors.primaryDark,
                     ),
@@ -334,10 +334,10 @@ class CategoryChips extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(
           horizontal: PosSpacing.sp4,
-          vertical: 4,
+          vertical: PosSpacing.sp1,
         ),
         itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: PosSpacing.sp2),
         itemBuilder: (_, i) {
           final cat = categories[i];
           final sel = cat == selected;
@@ -391,7 +391,7 @@ class _MenuContent extends StatelessWidget {
                 children: [
                   TfText(
                     text.noItemsInCategory,
-                    style: TfTextStyles.meta,
+                    style: TfTextStyles.bodyMuted,
                   ),
                   if (onResetFilters != null) ...[
                     const SizedBox(height: PosSpacing.sp3),
@@ -423,8 +423,8 @@ class _MenuContent extends StatelessWidget {
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
+              mainAxisSpacing: PosDensity.gridGap,
+              crossAxisSpacing: PosDensity.gridGap,
               mainAxisExtent: PosDensity.tileMenu,
             ),
             delegate: SliverChildBuilderDelegate((_, i) {
@@ -555,7 +555,7 @@ class _GridTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: PosColors.surface,
             border: Border.all(color: PosColors.line),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(PosRadii.xl),
             boxShadow: PosShadows.soft,
           ),
           child: Column(
@@ -573,7 +573,7 @@ class _GridTile extends StatelessWidget {
                   children: [
                     if (inCart && !off)
                       Positioned(
-                        top: 5,
+                        top: PosSpacing.sp1,
                         left: 0,
                         right: 36,
                         child: TfText(
@@ -583,7 +583,7 @@ class _GridTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TfTextStyles.badgeText.copyWith(
                             color: PosColors.primaryDark,
-                            fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
                             height: 1.2,
                           ),
                         ),
@@ -603,9 +603,8 @@ class _GridTile extends StatelessWidget {
                               textAlign: TextAlign.center,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: TfTextStyles.meta.copyWith(
+                              style: TfTextStyles.rowTitle.copyWith(
                                 color: PosColors.primaryDark,
-                                fontWeight: FontWeight.w500,
                                 height: 1.2,
                               ),
                             ),
@@ -747,8 +746,7 @@ class _PriceTag extends StatelessWidget {
     return TfText(
       tfFormatNumber(context, price),
       style: TfTextStyles.badgeText.copyWith(
-        fontSize: 9,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
         color: PosColors.ink2,
         fontFeatures: const [FontFeature.tabularFigures()],
       ),
@@ -847,12 +845,12 @@ class _ShortCodeList extends StatelessWidget {
       return Center(
         child: TfText(
           app.strings.noItemsInCategory,
-          style: const TextStyle(color: PosColors.muted),
+          style: TfTextStyles.bodyMuted,
         ),
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp1, PosSpacing.sp4, PosSpacing.sp4),
       itemCount: items.length,
       separatorBuilder: (_, _) =>
           const Divider(height: 1, color: PosColors.line),
@@ -866,7 +864,7 @@ class _ShortCodeList extends StatelessWidget {
           child: Opacity(
             opacity: off ? 0.5 : 1.0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp2, vertical: PosSpacing.sp3),
               decoration: BoxDecoration(
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(PosRadii.sm),
@@ -874,7 +872,7 @@ class _ShortCodeList extends StatelessWidget {
               child: Row(
                 children: [
                   _CodeBadge(shortCode: item.shortCode),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: PosSpacing.sp3),
                   Expanded(
                     child: TfText(
                       item.localizedName(app.language),
@@ -1110,7 +1108,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
       category: widget.item.category,
     );
 
-    final eyebrowStyle = TfTextStyles.badgeText.copyWith(color: PosColors.muted);
+    final eyebrowStyle = TfTextStyles.eyebrow.copyWith(color: PosColors.muted);
 
     return Container(
       constraints: BoxConstraints(
@@ -1160,9 +1158,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                         widget.item.localizedName(app.language),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TfTextStyles.heading.copyWith(
-                          letterSpacing: -0.18,
-                        ),
+                        style: TfTextStyles.appBarTitle,
                       ),
                       if (widget.item.description.isNotEmpty) ...[
                         const SizedBox(height: 1),
@@ -1170,7 +1166,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                           widget.item.description,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TfTextStyles.meta,
+                          style: TfTextStyles.bodyMuted,
                         ),
                       ],
                     ],
@@ -1301,7 +1297,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                               isBn
                                   ? 'রান্নাঘরের নোট যোগ করুন'
                                   : 'Add a kitchen note',
-                              style: TfTextStyles.bodyPrimary.copyWith(
+                              style: TfTextStyles.body.copyWith(
                                 color: PosColors.accentStrong,
                               ),
                             ),
@@ -1369,15 +1365,14 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                               Expanded(
                                 child: TfText(
                                   isBn ? 'অর্ডারে যোগ করুন' : 'Add to order',
-                                  style: TfTextStyles.bodyPrimary.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                  style: TfTextStyles.ctaLabel.copyWith(
                                     color: PosColors.accentInk,
                                   ),
                                 ),
                               ),
                               TfText(
                                 tfFormatCurrency(context, _lineTotal),
-                                style: TfTextStyles.bodyPrimary.copyWith(
+                                style: TfTextStyles.rowMoney.copyWith(
                                   color: PosColors.accentInk,
                                 ),
                               ),
@@ -1459,7 +1454,7 @@ class _OptionBtn extends StatelessWidget {
             Expanded(
               child: TfText(
                 label,
-                style: TfTextStyles.bodyPrimary.copyWith(
+                style: TfTextStyles.rowTitle.copyWith(
                   fontWeight: FontWeight.w500,
                   color: PosColors.primaryDark,
                 ),
@@ -1469,7 +1464,7 @@ class _OptionBtn extends StatelessWidget {
               const SizedBox(width: 8),
               TfText(
                 '+${tfFormatCurrency(context, priceDelta)}',
-                style: TfTextStyles.bodyPrimary.copyWith(
+                style: TfTextStyles.rowMoney.copyWith(
                   color: PosColors.accentStrong,
                 ),
               ),

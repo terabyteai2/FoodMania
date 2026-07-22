@@ -1603,18 +1603,22 @@ class TfChip extends StatelessWidget {
               ],
               TfText(
                 text,
-                style: TextStyle(
+                style: (small
+                    ? TfTextStyles.sectionStrip
+                    : TfTextStyles.rowTitle
+                ).copyWith(
                   color: textColor,
-                  fontSize: small ? 13 : 14,
                   fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
               if (count != null) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: PosSpacing.sp1),
                 Text(
                   tfFormatNumber(context, count!),
-                  style: TextStyle(
-                    fontSize: small ? 11 : 13,
+                  style: (small
+                      ? TfTextStyles.label
+                      : TfTextStyles.body
+                  ).copyWith(
                     fontWeight: FontWeight.w500,
                     color: active
                         ? textColor.withValues(alpha: 0.7)
