@@ -20,7 +20,6 @@ import 'models/admin_blocking_notice.dart';
 import 'models/app_update_info.dart';
 import 'models/audit_entry.dart';
 import 'models/bkash_payment_session.dart';
-import 'models/chat_thread.dart';
 import 'models/staff_member.dart';
 import 'models/daily_report.dart';
 import 'models/dashboard_metrics.dart';
@@ -175,20 +174,11 @@ class PosAppController extends ChangeNotifier {
 
   final Uuid _uuid = Uuid();
   final List<StreamSubscription<Object?>> _subscriptions = [];
-  final StreamController<Map<String, Object?>> _chatEventController =
-      StreamController<Map<String, Object?>>.broadcast();
   final BoundedStringSet _knownOrderIds = BoundedStringSet(cap: kAlertSetCap);
   final Set<String> _autoPrintInFlight = <String>{};
 
   /// Coalesces concurrent print requests for the same order (auto + manual).
   final Map<String, Future<bool>> _orderPrintFutures = <String, Future<bool>>{};
-
-  Stream<Map<String, Object?>> get chatEvents => _chatEventController.stream;
-
-  @visibleForTesting
-  void debugEmitChatEvent(Map<String, Object?> event) {
-    _chatEventController.add(event);
-  }
 
   /// Orders we already fired a pending alert for (prevents sync/DB replay loops).
   final BoundedStringSet _alertedPendingOrderIds = BoundedStringSet(
@@ -238,10 +228,6 @@ class PosAppController extends ChangeNotifier {
   /// build and navigates accordingly.
   Map<String, String>? pendingFcmNavigation;
 
-  /// Chat conversations already surfaced while in manager-help state.
-  final BoundedStringSet _alertedNeedsHelpChatIds = BoundedStringSet(
-    cap: kAlertSetCap,
-  );
   Timer? _databaseChangeDebounce;
   Timer? _adminBlockingNoticePollTimer;
   bool _handlingDatabaseChange = false;
@@ -288,6 +274,22 @@ class PosAppController extends ChangeNotifier {
   Map<String, int> get subscriptionPrices => _subscriptionPrices;
   Map<String, int> _addonPrices = {};
   Map<String, int> get addonPrices => _addonPrices;
+
+  String? subscriptionStatus;
+  String? subscriptionPackage;
+  String? subscriptionExpiresAt;
+
+  bool get isOffline => _lastInternetOnline == false;
+
+  bool get isSubscriptionExpiredLocally {
+    if (subscriptionState == 'none') return true;
+    if (subscriptionState == 'trial') {
+      return trialEndsAt != null && trialEndsAt!.isBefore(DateTime.now());
+    }
+    if (subscriptionExpiresAt == null || subscriptionExpiresAt!.isEmpty) return false;
+    final parsed = DateTime.tryParse(subscriptionExpiresAt!);
+    return parsed != null && parsed.isBefore(DateTime.now());
+  }
 
   bool hasFeature(String feature) {
     if (subscriptionState == 'trial') return true;
@@ -408,9 +410,6 @@ class PosAppController extends ChangeNotifier {
 
   /// Settings is owner-only (spec §RBAC).
   bool get canManageSettings => isOwner;
-
-  /// Messenger chat takeover — owner & manager.
-  bool get canMessages => isManager;
 
   /// Stock & inventory — owner only (managers & waiters blocked entirely).
   bool get canManageStock => isOwner;
@@ -585,6 +584,9 @@ class PosAppController extends ChangeNotifier {
       lastBkashTransactionId = preferences.getString(_bkashTransactionIdKey);
       final addonsRaw = preferences.getStringList(_addonsKey);
       if (addonsRaw != null) _addons = addonsRaw;
+      subscriptionStatus = preferences.getString(_subscriptionStatusKey);
+      subscriptionPackage = preferences.getString(_subscriptionPackageKey);
+      subscriptionExpiresAt = preferences.getString(_subscriptionExpiresAtKey);
       final deviceLanguage = AppLanguage.fromLocale(
         ui.PlatformDispatcher.instance.locale,
       );
@@ -768,7 +770,6 @@ class PosAppController extends ChangeNotifier {
             notifyListeners();
           }
           if (syncFinished) {
-            unawaited(_syncChatEscalationNotifications({}));
           }
         }),
       );
@@ -1372,13 +1373,6 @@ class PosAppController extends ChangeNotifier {
     return cloudApiService.fetchPosAuditEvents(days: days);
   }
 
-  Future<List<ChatThread>> fetchChats() {
-    if (!isCloudReady || !cloudConfig.canSync) {
-      return Future.error(CloudApiException('Cloud sync not configured.'));
-    }
-    return cloudApiService.fetchChats();
-  }
-
   Future<Map<String, Object?>> fetchAnalytics({
     String range = 'today',
     String? start,
@@ -1486,20 +1480,6 @@ class PosAppController extends ChangeNotifier {
       end: end,
       channel: channel,
     );
-  }
-
-  Future<ChatThread> replyToChat(String conversationId, String text) {
-    if (!isCloudReady || !cloudConfig.canSync) {
-      return Future.error(CloudApiException('Cloud sync not configured.'));
-    }
-    return cloudApiService.replyToChat(conversationId, text);
-  }
-
-  Future<ChatThread> handBackChat(String conversationId) {
-    if (!isCloudReady || !cloudConfig.canSync) {
-      return Future.error(CloudApiException('Cloud sync not configured.'));
-    }
-    return cloudApiService.handBackChat(conversationId);
   }
 
   Future<List<StaffMember>> fetchStaff() {
@@ -2156,11 +2136,6 @@ class PosAppController extends ChangeNotifier {
       unawaited(_applyOutletConfigUpdate(data.cast<String, Object?>()));
       return;
     }
-    if (type == 'chat_updated') {
-      _chatEventController.add(event);
-      unawaited(_syncChatEscalationNotifications(event));
-      return;
-    }
     if (type == 'admin_blocking_notice_changed' && data is Map) {
       unawaited(
         _applyAdminBlockingNotice(
@@ -2182,102 +2157,6 @@ class PosAppController extends ChangeNotifier {
         AppUpdateInfo.fromJson(Map<String, Object?>.from(data)),
       ),
     );
-  }
-
-  String? _chatConversationIdFromEvent(Map<String, Object?> event) {
-    final data = event['data'];
-    if (data is! Map) return null;
-    final value =
-        data['conversationId'] ??
-        data['conversation_id'] ??
-        data['chatId'] ??
-        data['id'];
-    final id = value?.toString().trim() ?? '';
-    return id.isEmpty ? null : id;
-  }
-
-  Future<void> _syncChatEscalationNotifications(
-    Map<String, Object?> event,
-  ) async {
-    if (!canMessages || !isCloudReady || !cloudConfig.canSync) return;
-    final changedConversationId = _chatConversationIdFromEvent(event);
-
-    // Fast path: extract escalation info directly from the WS event payload
-    // so the notification fires instantly without waiting on an HTTP fetchChats
-    // call that could race with the backend's DB commit.
-    if (changedConversationId != null &&
-        !_alertedNeedsHelpChatIds.contains(changedConversationId)) {
-      final eventData = event['data'];
-      if (eventData is Map) {
-        final status = (eventData['status'] as String?)?.trim().toLowerCase();
-        if (status == 'needs') {
-          _alertedNeedsHelpChatIds.add(changedConversationId);
-          final name =
-              (eventData['name'] as String?)?.trim() ?? 'Messenger customer';
-          final reason = (eventData['reason'] as String?)?.trim();
-          final lastMsg = (eventData['lastUserMessage'] as String?)?.trim();
-          final detail = (reason?.isNotEmpty ?? false)
-              ? reason!
-              : (lastMsg ?? '');
-          final body = detail.isNotEmpty
-              ? '$name: $detail'
-              : '$name needs help in Messenger.';
-          await addNotification(
-            type: PosNotificationType.system,
-            title: 'Chatbot needs you',
-            body: body,
-            actionTarget: 'messages',
-            orderId: changedConversationId,
-          );
-        }
-      }
-    }
-
-    // Fallback: fetch all chats and process (handles cleanup and catches
-    // any escalated chats not covered by the fast path, e.g. periodic sync).
-    try {
-      final chats = await fetchChats();
-      final activeNeedsIds = <String>{};
-      for (final chat in chats) {
-        final chatId = chat.id.trim();
-        if (chatId.isEmpty) continue;
-        if (chat.needsAttention) {
-          activeNeedsIds.add(chatId);
-          if (changedConversationId != null &&
-              changedConversationId != chatId) {
-            continue;
-          }
-          if (_alertedNeedsHelpChatIds.contains(chatId)) continue;
-          _alertedNeedsHelpChatIds.add(chatId);
-          await addNotification(
-            type: PosNotificationType.system,
-            title: 'Chatbot needs you',
-            body: _chatEscalationNotificationBody(chat),
-            actionTarget: 'messages',
-            orderId: chatId,
-          );
-        }
-      }
-      final alertedIds = _alertedNeedsHelpChatIds.toList(growable: false);
-      for (final id in alertedIds) {
-        if (!activeNeedsIds.contains(id)) {
-          _alertedNeedsHelpChatIds.remove(id);
-        }
-      }
-    } catch (error) {
-      debugPrint('[QB-CHAT] escalation notification sync failed: $error');
-    }
-  }
-
-  String _chatEscalationNotificationBody(ChatThread chat) {
-    final name = chat.name.trim().isNotEmpty
-        ? chat.name.trim()
-        : 'Messenger customer';
-    final detail = (chat.reason ?? '').trim().isNotEmpty
-        ? chat.reason!.trim()
-        : (chat.lastUserMessage ?? '').trim();
-    if (detail.isNotEmpty) return '$name: $detail';
-    return '$name needs help in Messenger.';
   }
 
   Future<void> checkForAppUpdate({bool quiet = true}) async {
@@ -2507,6 +2386,10 @@ class PosAppController extends ChangeNotifier {
         addons: access.addons,
         subscriptionPrices: access.subscriptionPrices,
         addonPrices: access.addonPrices,
+        status: access.subscriptionStatus,
+        package: access.subscriptionPackage,
+        plan: access.subscriptionPlan,
+        expiresAt: access.subscriptionExpiresAt,
       );
     } catch (error) {
       if (!quiet) rethrow;
@@ -2519,6 +2402,10 @@ class PosAppController extends ChangeNotifier {
     List<String> addons = const [],
     Map<String, int> subscriptionPrices = const {},
     Map<String, int> addonPrices = const {},
+    String? status,
+    String? package,
+    String? plan,
+    String? expiresAt,
   }) async {
     if (!hasAccess) return;
     subscriptionState = 'paid';
@@ -2527,10 +2414,20 @@ class PosAppController extends ChangeNotifier {
     _addons = addons;
     _subscriptionPrices = subscriptionPrices;
     _addonPrices = addonPrices;
+    subscriptionStatus = status ?? subscriptionStatus;
+    subscriptionPackage = package ?? subscriptionPackage;
+    if (plan != null && plan.isNotEmpty) selectedSubscriptionPlan = plan;
+    subscriptionExpiresAt = expiresAt ?? subscriptionExpiresAt;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_subscriptionStateKey, 'paid');
     await preferences.setBool(_needsOnboardingPaymentKey, false);
     await preferences.setStringList(_addonsKey, addons);
+    await preferences.setString(_subscriptionStatusKey, subscriptionStatus ?? '');
+    await preferences.setString(_subscriptionPackageKey, subscriptionPackage ?? '');
+    await preferences.setString(_subscriptionExpiresAtKey, subscriptionExpiresAt ?? '');
+    if (plan != null && plan.isNotEmpty) {
+      await preferences.setString(_selectedPlanKey, plan);
+    }
     notifyListeners();
   }
 
@@ -2561,6 +2458,10 @@ class PosAppController extends ChangeNotifier {
           addons: access.addons,
           subscriptionPrices: access.subscriptionPrices,
           addonPrices: access.addonPrices,
+          status: access.subscriptionStatus,
+          package: access.subscriptionPackage,
+          plan: access.subscriptionPlan,
+          expiresAt: access.subscriptionExpiresAt,
         );
         return null;
       }
@@ -2614,6 +2515,28 @@ class PosAppController extends ChangeNotifier {
       accountRole = result.role;
     }
     isLoggedIn = true;
+    // Persist subscription data from login response
+    _persistSubscriptionFields(result);
+  }
+
+  Future<void> _persistSubscriptionFields(AdminLoginResult result) async {
+    subscriptionStatus = result.subscriptionStatus;
+    subscriptionPackage = result.subscriptionPackage;
+    subscriptionExpiresAt = result.subscriptionExpiresAt;
+    if (result.addons.isNotEmpty) _addons = result.addons;
+    if (result.subscriptionPlan != null && result.subscriptionPlan!.isNotEmpty) {
+      selectedSubscriptionPlan = result.subscriptionPlan!;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_subscriptionStatusKey, result.subscriptionStatus ?? '');
+    await prefs.setString(_subscriptionPackageKey, result.subscriptionPackage ?? '');
+    await prefs.setString(_subscriptionExpiresAtKey, result.subscriptionExpiresAt ?? '');
+    if (result.addons.isNotEmpty) {
+      await prefs.setStringList(_addonsKey, result.addons);
+    }
+    if (result.subscriptionPlan != null && result.subscriptionPlan!.isNotEmpty) {
+      await prefs.setString(_selectedPlanKey, result.subscriptionPlan!);
+    }
   }
 
   Future<void> logOut() async {
@@ -2653,7 +2576,13 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_outletNameKey);
     await preferences.remove(_selectedPlanKey);
     await preferences.remove(_addonsKey);
+    await preferences.remove(_subscriptionStatusKey);
+    await preferences.remove(_subscriptionPackageKey);
+    await preferences.remove(_subscriptionExpiresAtKey);
     _addons = [];
+    subscriptionStatus = null;
+    subscriptionPackage = null;
+    subscriptionExpiresAt = null;
     // Drop any owner "view as manager" preview so the next session's switch
     // visibility is derived solely from the freshly authenticated role.
     _ownerViewPreview = false;
@@ -4340,7 +4269,6 @@ class PosAppController extends ChangeNotifier {
     }
     appUpdateInstaller.close();
     cloudApiService.close();
-    unawaited(_chatEventController.close());
     unawaited(database.close());
     super.dispose();
   }
@@ -4589,6 +4517,9 @@ class PosAppController extends ChangeNotifier {
   static final String _needsOnboardingPaymentKey =
       'local_pos_needs_onboarding_payment';
   static final String _selectedPlanKey = 'local_pos_selected_subscription_plan';
+  static final String _subscriptionStatusKey = 'local_pos_subscription_status';
+  static final String _subscriptionPackageKey = 'local_pos_subscription_package';
+  static final String _subscriptionExpiresAtKey = 'local_pos_subscription_expires_at';
   static final String _trialEndsAtKey = 'local_pos_trial_ends_at';
   static final String _unprintedKotOrderIdsKey =
       'local_pos_unprinted_kot_order_ids';

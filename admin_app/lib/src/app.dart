@@ -9,6 +9,7 @@ import 'core/localization/app_strings.dart';
 import 'core/platform/desktop_platform.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/notification_center.dart';
+import 'core/widgets/screen_blocker.dart';
 import 'core/widgets/shell_nav_scope.dart';
 import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
@@ -22,7 +23,6 @@ import 'features/inventory/stock_in_screen.dart';
 import 'features/inventory/stock_scan_flow.dart';
 import 'features/menu/menu_management_screen.dart';
 import 'features/menu/menu_scan_screen.dart';
-import 'features/messaging/messages_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/reports/reports_hub_screen.dart';
@@ -45,6 +45,8 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   bool _bootDone = false;
   bool _showIntro = false;
   int _initialShellIndex = 0;
+  bool _refreshingOffline = false;
+  StreamSubscription<bool>? _offlineConnectivitySub;
 
   @override
   void initState() {
@@ -60,11 +62,16 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
         });
       }
     });
+    _offlineConnectivitySub =
+        _controller.connectivityService.onlineStream.listen((online) {
+      if (online && mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _offlineConnectivitySub?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -156,6 +163,9 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
         onDismiss: _controller.dismissAdminBlockingNotice,
       );
     }
+    if (_controller.isOffline && _controller.isSubscriptionExpiredLocally) {
+      return _buildOfflineExpiryBlocker();
+    }
     if (_controller.pendingStaffInvite != null) {
       return StaffInviteScreen(
         onFinished: () => setState(() => _initialShellIndex = 0),
@@ -202,6 +212,88 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   }
 
   /// Default landing tab: Analytics for owner, Orders for manager/waiter.
+  Widget _buildOfflineExpiryBlocker() {
+    final text = _controller.strings;
+    return ScreenBlocker(
+      leading: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: PosColors.warning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(PosRadii.sm),
+        ),
+        child: const Icon(Icons.wifi_off_rounded, color: PosColors.warning, size: 24),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TfText(
+            text.adminBlockingNoticeEyebrow,
+            style: const TextStyle(
+              color: PosColors.warning,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.77,
+            ),
+          ),
+          const SizedBox(height: PosSpacing.sp3),
+          TfText(
+            text.offlineExpiryTitle,
+            style: const TextStyle(
+              color: PosColors.primaryDark,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: PosSpacing.sp3),
+          TfText(
+            text.offlineExpiryMessage,
+            style: const TextStyle(
+              color: PosColors.inkSoft,
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+              height: 1.55,
+            ),
+          ),
+          const SizedBox(height: PosSpacing.sp2),
+          TfText(
+            text.adminBlockingNoticeHelper,
+            style: const TextStyle(
+              color: PosColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        ScreenBlockerAction(
+          label: text.offlineExpiryCheckConnection,
+          icon: Icons.wifi_find_rounded,
+          busy: _refreshingOffline,
+          onPressed: _refreshingOffline ? null : _retryOfflineExpiry,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _retryOfflineExpiry() async {
+    setState(() => _refreshingOffline = true);
+    try {
+      final hasInternet =
+          await _controller.connectivityService.hasInternetAccess();
+      if (!mounted) return;
+      if (hasInternet) {
+        await _controller.syncSubscriptionAccessFromCloud(quiet: false);
+        if (mounted) setState(() {});
+      }
+    } finally {
+      if (mounted) setState(() => _refreshingOffline = false);
+    }
+  }
+
   int _defaultShellIndex() {
     final tabs = _tabOrderForRole(_controller.accountRole);
     final target = _controller.accountRole.isOwner
@@ -665,12 +757,6 @@ class _MainShellState extends State<MainShell> {
       case PosNotificationTarget.settings:
         _selectTab(_AppTab.more);
         return;
-      case PosNotificationTarget.messages:
-        // Chatbot-escalation notifications route to the Messages inbox (mgr+).
-        if (AppScope.read(context).canMessages) {
-          _pushScreen(const MessagesScreen());
-        }
-        return;
       case PosNotificationTarget.none:
         return;
     }
@@ -705,24 +791,6 @@ class _MainShellState extends State<MainShell> {
     if (mounted) await AppScope.read(context).refreshInventorySummary();
   }
 
-  Future<void> _deepLinkToChat(String conversationId) async {
-    final app = AppScope.read(context);
-    try {
-      final chats = await app.fetchChats();
-      final chat = chats.where((c) => c.id == conversationId).firstOrNull;
-      if (!mounted) return;
-      if (chat != null) {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => ChatThreadScreen(chat: chat)));
-        return;
-      }
-      _pushScreen(const MessagesScreen());
-    } catch (_) {
-      if (mounted) _pushScreen(const MessagesScreen());
-    }
-  }
-
   void _consumeFcmNavigation(PosAppController app) {
     final data = app.pendingFcmNavigation;
     if (data == null) return;
@@ -741,22 +809,9 @@ class _MainShellState extends State<MainShell> {
       // picks up orderId from a shared state if we add it there.
       return;
     }
-    if (actionTarget == 'messages' || actionTarget == 'chat') {
-      if (AppScope.read(context).canMessages) {
-        _pushScreen(const MessagesScreen());
-      }
-      return;
-    }
     final target = PosNotificationTarget.parse(actionTarget);
     _navigateNotificationTarget(target);
   }
-
-  void _pushScreen(Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
-  }
-
-  bool _isChatNotification(PosNotification n) =>
-      n.type == PosNotificationType.system && n.actionTarget == 'messages';
 
   void _maybeShowNotification(PosAppController app) {
     final unread = app.notifications
@@ -764,10 +819,7 @@ class _MainShellState extends State<MainShell> {
         .toList(growable: false);
     if (unread.isEmpty) return;
     final latest = unread.first;
-    final isChatAlert = _isChatNotification(latest);
-    final alertKey = isChatAlert
-        ? latest.id
-        : unread.length > 1
+    final alertKey = unread.length > 1
         ? 'bulk:${unread.length}:${latest.id}'
         : latest.orderId != null
         ? '${latest.orderId}:${latest.type.name}'
@@ -796,10 +848,8 @@ class _MainShellState extends State<MainShell> {
       return;
     }
     final latest = unread.first;
-    final isChatAlert = _isChatNotification(latest);
-    final alertKey = isChatAlert
-        ? latest.id
-        : unread.length > 1
+    final singleAlertOnly = unread.length == 1;
+    final alertKey = unread.length > 1
         ? 'bulk:${unread.length}:${latest.id}'
         : latest.orderId != null
         ? '${latest.orderId}:${latest.type.name}'
@@ -813,14 +863,14 @@ class _MainShellState extends State<MainShell> {
     _pendingNotificationToastKey = null;
     showTopNotificationToast(
       context,
-      title: isChatAlert || unread.length == 1
+      title: singleAlertOnly
           ? latest.title
           : text.notificationSummaryTitle(unread.length),
-      body: isChatAlert || unread.length == 1
+      body: singleAlertOnly
           ? latest.body
           : text.notificationSummaryBody,
       onOpen: () {
-        if (unread.length > 1 && !isChatAlert) {
+        if (unread.length > 1 && !singleAlertOnly) {
           showNotificationCenter(
             context,
             onNavigateToOrders: () => _selectTab(_AppTab.orders),
@@ -828,11 +878,7 @@ class _MainShellState extends State<MainShell> {
           );
         } else {
           app.markNotificationRead(latest.id);
-          if (isChatAlert && latest.orderId != null) {
-            _deepLinkToChat(latest.orderId!);
-          } else {
-            _navigateNotificationTarget(latest.target);
-          }
+          _navigateNotificationTarget(latest.target);
         }
       },
     );
@@ -1310,16 +1356,6 @@ class _AppNavDrawer extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp2),
                 children: [
                   for (final tab in primary) rowFor(tab),
-                  // Messages stays permission-gated here.
-                  if (app.canMessages) ...[
-                    const _DrawerDivider(),
-                    _DrawerNavRow.icon(
-                      icon: Icons.forum_outlined,
-                      label: text.messages,
-                      selected: false,
-                      onTap: () => goTarget(PosNotificationTarget.messages),
-                    ),
-                  ],
                   const _DrawerDivider(),
                   _DrawerNavRow.destination(
                     destination: _destinationFor(_AppTab.more, text),

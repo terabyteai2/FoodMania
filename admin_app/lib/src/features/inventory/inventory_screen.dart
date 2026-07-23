@@ -582,7 +582,7 @@ class _HCell extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TfTextStyles.badgeText.copyWith(
+              style: TfTextStyles.eyebrow.copyWith(
                 color: active ? PosColors.accentStrong : PosColors.muted,
                 letterSpacing: 0.55,
               ),
@@ -678,9 +678,7 @@ class _StockRow extends StatelessWidget {
                     // "Chinigur…" (one-language pass).
                     maxLines: advanced ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TfTextStyles.meta.copyWith(
-                      color: PosColors.text,
-                    ),
+                    style: TfTextStyles.rowTitle,
                   ),
                   if (!advanced) ...[
                     const SizedBox(height: 2),
@@ -688,7 +686,7 @@ class _StockRow extends StatelessWidget {
                       tfFormatCurrency(context, _itemValue(item)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TfTextStyles.meta,
+                      style: TfTextStyles.bodyMuted,
                     ),
                   ],
                 ],
@@ -704,7 +702,7 @@ class _StockRow extends StatelessWidget {
                     if (item.todayIn > 0)
                       TfText(
                         '+${tfFormatNumber(context, item.todayIn)}',
-                        style: TfTextStyles.badgeText.copyWith(
+                        style: TfTextStyles.label.copyWith(
                           color: PosColors.success,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -712,7 +710,7 @@ class _StockRow extends StatelessWidget {
                     if (item.todayOut > 0)
                       TfText(
                         '-${tfFormatNumber(context, item.todayOut)}',
-                        style: TfTextStyles.badgeText.copyWith(
+                        style: TfTextStyles.label.copyWith(
                           color: PosColors.muted,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -720,7 +718,7 @@ class _StockRow extends StatelessWidget {
                     if (item.todayIn == 0 && item.todayOut == 0)
                       TfText(
                         '—',
-                        style: TfTextStyles.meta.copyWith(
+                        style: TfTextStyles.bodyMuted.copyWith(
                           color: PosColors.mutedSoft,
                         ),
                       ),
@@ -737,7 +735,7 @@ class _StockRow extends StatelessWidget {
                       return TfText(
                         '—',
                         textAlign: TextAlign.right,
-                        style: TfTextStyles.meta.copyWith(
+                        style: TfTextStyles.bodyMuted.copyWith(
                           color: PosColors.mutedSoft,
                         ),
                       );
@@ -745,7 +743,7 @@ class _StockRow extends StatelessWidget {
                     return TfText(
                       '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
                       textAlign: TextAlign.right,
-                      style: TfTextStyles.meta.copyWith(
+                      style: TfTextStyles.body.copyWith(
                         fontWeight: FontWeight.w700,
                         fontFeatures: const [FontFeature.tabularFigures()],
                         color: net > 0 ? PosColors.success : PosColors.danger,
@@ -769,7 +767,7 @@ class _StockRow extends StatelessWidget {
                     children: [
                       TfText(
                         _formatQty(context, item.onHand),
-                        style: TfTextStyles.meta.copyWith(
+                        style: TfTextStyles.rowMoney.copyWith(
                           color: qtyColor,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -779,7 +777,7 @@ class _StockRow extends StatelessWidget {
                         unit,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                      style: TfTextStyles.badgeText.copyWith(
+                      style: TfTextStyles.label.copyWith(
                         color: PosColors.muted,
                       ),
                       ),
@@ -818,7 +816,7 @@ class _AdvancedDrilldowns extends StatelessWidget {
       children: [
         TfText(
           text.advancedSection.toUpperCase(),
-          style: TfTextStyles.badgeText.copyWith(
+          style: TfTextStyles.eyebrow.copyWith(
             color: PosColors.muted,
             letterSpacing: 0.55,
           ),
@@ -868,7 +866,7 @@ class _AdvancedDrilldowns extends StatelessWidget {
             Expanded(
               child: TfText(
                 text.stockItemDetailHint,
-              style: TfTextStyles.meta,
+              style: TfTextStyles.bodyMuted,
               ),
             ),
           ],
@@ -921,16 +919,14 @@ class _DrillCard extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TfTextStyles.bodyPrimary.copyWith(
-                color: PosColors.text,
-              ),
+              style: TfTextStyles.rowTitle,
             ),
             const SizedBox(height: 1),
             TfText(
               hint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-                style: TfTextStyles.meta,
+                style: TfTextStyles.bodyMuted,
               ),
             ],
         ),
@@ -969,7 +965,7 @@ class _AddItemButton extends StatelessWidget {
             const SizedBox(width: 8),
             TfText(
               text.addInventoryItem,
-              style: TfTextStyles.bodyPrimary.copyWith(
+              style: TfTextStyles.ctaLabel.copyWith(
                 color: PosColors.accentStrong,
               ),
             ),
@@ -1079,7 +1075,7 @@ class _SheetShell extends StatelessWidget {
                   Expanded(
                     child: TfText(
                       title,
-                      style: TfTextStyles.heading,
+                      style: TfTextStyles.appBarTitle,
                     ),
                   ),
                   TfIconButton(
@@ -1203,7 +1199,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
         TfField(label: text.itemCategory, controller: _categoryCtrl),
         TfText(
           text.unit,
-          style: TfTextStyles.meta.copyWith(
+          style: TfTextStyles.bodyMuted.copyWith(
             color: PosColors.slate,
           ),
         ),
@@ -1293,7 +1289,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
           backgroundColor: PosColors.background,
           title: TfText(
             isEdit ? text.editInventoryItem : text.addInventoryItem,
-            style: TfTextStyles.heading,
+            style: TfTextStyles.appBarTitle,
           ),
         ),
         body: ListView(

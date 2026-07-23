@@ -21,8 +21,7 @@ enum PosNotificationTarget {
   inventory,
   menu,
   receiptPrinter,
-  settings,
-  messages;
+  settings;
 
   static PosNotificationTarget parse(String? value) {
     final normalized = (value ?? '').trim().toLowerCase();
@@ -33,13 +32,6 @@ enum PosNotificationTarget {
         normalized == 'orders' ||
         normalized == 'order') {
       return PosNotificationTarget.orders;
-    }
-    if (normalized == 'messages' ||
-        normalized == 'chat' ||
-        normalized == 'chats' ||
-        normalized == 'escalation' ||
-        normalized == 'needs_help') {
-      return PosNotificationTarget.messages;
     }
     if (normalized == 'stock' ||
         normalized == 'inventory' ||

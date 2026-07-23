@@ -709,6 +709,15 @@ class _OrdersScreenState extends State<OrdersScreen>
             ),
             Divider(height: 1, color: PosColors.line),
             ListTile(
+              leading: const Icon(Icons.print_outlined, color: PosColors.slate),
+              title: TfText(text.reprintAction),
+              onTap: () {
+                Navigator.pop(context);
+                _printBill(context, order);
+              },
+            ),
+            Divider(height: 1, color: PosColors.line),
+            ListTile(
               leading: const Icon(
                 Icons.delete_outline_rounded,
                 color: PosColors.danger,
@@ -1431,14 +1440,14 @@ _ChannelStyle _resolveChannel(OrderModel order) {
     case OrderSource.cloud:
       return const _ChannelStyle(
         'storefront',
-        Icons.public,
+        TfNavIcon.storefront,
         PosColors.channelWebsite,
         PosColors.channelNeutralSoft,
       );
     case OrderSource.facebookMessenger:
       return const _ChannelStyle(
         'chatbot',
-        Icons.chat_bubble_outline_rounded,
+        TfNavIcon.chat,
         PosColors.channelMessenger,
         PosColors.channelNeutralSoft,
       );
@@ -1446,7 +1455,7 @@ _ChannelStyle _resolveChannel(OrderModel order) {
     case OrderSource.localLan:
       return const _ChannelStyle(
         'counter',
-        Icons.storefront_outlined,
+        TfNavIcon.counter,
         PosColors.channelCounter,
         PosColors.channelNeutralSoft,
       );
@@ -1455,14 +1464,14 @@ _ChannelStyle _resolveChannel(OrderModel order) {
       if (role == 'waiter' || role == 'staff') {
         return const _ChannelStyle(
           'waiter',
-          Icons.groups_outlined,
+          TfNavIcon.waiter,
           PosColors.channelWaiter,
           PosColors.channelNeutralSoft,
         );
       }
       return const _ChannelStyle(
         'manager',
-        Icons.person_outline_rounded,
+        TfNavIcon.manager,
         PosColors.channelManager,
         PosColors.channelNeutralSoft,
       );
@@ -1566,7 +1575,6 @@ class _OrderCardState extends State<_OrderCard> {
         : PosColors.muted;
     final escalated = !identical(ageColor, PosColors.muted);
 
-    final channel = _resolveChannel(order);
     final typeLabel = _sourceLabel(order, text);
     // KOT went to the kitchen: recorded batches (server) or this device's
     // print history. Shown as a quiet check on the subline.
@@ -1590,24 +1598,20 @@ class _OrderCardState extends State<_OrderCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             TfText(
               order.displaySequence,
-              style: TfTextStyles.statNumber.copyWith(
+              style: TfTextStyles.sectionHeader.copyWith(
                 fontFamily: tfFontFamily(context),
                 color: PosColors.text,
               ),
             ),
             const SizedBox(width: 8),
-            // Channel glyph inline and neutral — the boxed hue wash was
-            // decoration; type + age carry the operational signal.
-            Icon(channel.icon, size: 14, color: PosColors.ink2),
-            const SizedBox(width: 4),
             Expanded(
               child: TfText(
                 typeLabel,
-                style: TfTextStyles.rowTitle.copyWith(color: PosColors.ink2),
+                style: TfTextStyles.rowTitle.copyWith(color: PosColors.text),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1844,10 +1848,24 @@ class _OrderCardState extends State<_OrderCard> {
               ),
             ),
             const SizedBox(width: 8),
-            TfStatusBadge(
-              label: text.completedTab,
-              kind: TfStatusKind.served,
-              upper: false,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: PosColors.primarySoft,
+                borderRadius: BorderRadius.circular(PosRadii.xs),
+                border: Border.all(
+                  color: PosColors.accentStrong.withValues(alpha: 0.14),
+                  width: 1,
+                ),
+              ),
+              child: TfText(
+                _sourceLabel(order, text),
+                style: TfTextStyles.sectionStrip.copyWith(
+                  color: PosColors.accentStrong,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const Spacer(),
             // createdAt (not settledAt) so the time always agrees with the
@@ -2105,9 +2123,9 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 children: [
                   // ── Header ──────────────────────────────────────────────
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
                       TfText(
                         order.displaySequence,
                         style: TfTextStyles.tileNumber.copyWith(
@@ -3868,7 +3886,7 @@ class _WizardHeader extends StatelessWidget {
 
     return Container(
       color: color,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp2, PosSpacing.sp4, PosSpacing.sp2),
       child: Row(
         children: [
           if (onBack != null) ...[
@@ -4014,7 +4032,7 @@ class _SourceAndTableStep extends StatelessWidget {
       children: [
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+            padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp3, PosSpacing.sp4, PosSpacing.sp6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -4134,7 +4152,7 @@ class _SourceTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          padding: const EdgeInsets.symmetric(vertical: PosDensity.cardPad, horizontal: PosSpacing.sp3),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(PosRadii.card),
             border: Border.all(
@@ -4332,97 +4350,31 @@ class _ReviewStep extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () => _showKitchenNoteSheet(context, noteCtrl),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: noteCtrl.text.isEmpty
-                            ? PosColors.surfaceSunk
-                            : PosColors.primarySoft,
-                        borderRadius: BorderRadius.circular(PosRadii.md),
-                        border: Border.all(
-                          color: noteCtrl.text.isEmpty
-                              ? PosColors.lineStrong
-                              : PosColors.primary,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.notes_outlined,
-                            size: 16,
-                            color: noteCtrl.text.isEmpty
-                                ? PosColors.ink2
-                                : PosColors.accentStrong,
-                          ),
-                          const SizedBox(width: 6),
-                          TfText(
-                            noteCtrl.text.isEmpty
-                                ? text.kitchenNote
-                                : noteCtrl.text,
-                            style: TfTextStyles.rowMoney.copyWith(
-                              color: noteCtrl.text.isEmpty
-                                  ? PosColors.ink2
-                                  : PosColors.accentStrong,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: TfButton(
+                    label: noteCtrl.text.isEmpty
+                        ? text.kitchenNote
+                        : noteCtrl.text,
+                    icon: Icons.notes_outlined,
+                    variant: TfButtonVariant.ghost,
+                    size: TfButtonSize.sm,
+                    fullWidth: true,
+                    onPressed: () => _showKitchenNoteSheet(context, noteCtrl),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () => _showDiscountSheet(
+                  child: TfButton(
+                    label: discount > 0.005
+                        ? '-${tfFormatCurrency(context, discount)}'
+                        : (text.isBn ? 'ডিসকাউন্ট' : 'Discount'),
+                    icon: Icons.local_offer_outlined,
+                    variant: TfButtonVariant.ghost,
+                    size: TfButtonSize.sm,
+                    fullWidth: true,
+                    onPressed: () => _showDiscountSheet(
                       context,
                       discountCtrl,
                       onDiscountChanged,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: discount > 0.005
-                            ? PosColors.primarySoft
-                            : PosColors.surfaceSunk,
-                        borderRadius: BorderRadius.circular(PosRadii.md),
-                        border: Border.all(
-                          color: discount > 0.005
-                              ? PosColors.primary
-                              : PosColors.lineStrong,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.local_offer_outlined,
-                            size: 16,
-                            color: discount > 0.005
-                                ? PosColors.accentStrong
-                                : PosColors.ink2,
-                          ),
-                          const SizedBox(width: 6),
-                          TfText(
-                            discount > 0.005
-                                ? '-${tfFormatCurrency(context, discount)}'
-                                : (text.isBn ? 'ডিসকাউন্ট' : 'Discount'),
-                            style: TfTextStyles.rowMoney.copyWith(
-                              color: discount > 0.005
-                                  ? PosColors.accentStrong
-                                  : PosColors.ink2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),

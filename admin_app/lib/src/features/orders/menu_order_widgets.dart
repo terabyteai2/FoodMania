@@ -96,6 +96,7 @@ class _MenuStepState extends State<MenuStep> {
           onLeading: widget.onBack,
           leadingIsClose: widget.leadingIsClose,
         ),
+        const SizedBox(height: PosSpacing.sp1),
         _MenuSearchBar(
           searchCtrl: widget.searchCtrl,
           query: widget.query,
@@ -104,13 +105,16 @@ class _MenuStepState extends State<MenuStep> {
           onCodeSubmit: widget.onCodeSubmit,
           onToggleCode: widget.onToggleCodeMode,
         ),
-        if (!widget.codeMode)
+        if (!widget.codeMode) ...[
+          const SizedBox(height: PosSpacing.sp1),
           CategoryChips(
             categories: widget.categories,
             selected: widget.selectedCategory,
             counts: widget.categoryCounts,
             onSelected: widget.onCategorySelected,
           ),
+        ],
+        const SizedBox(height: PosSpacing.sp1),
         Expanded(
           child: widget.codeMode
               ? _ShortCodeList(
@@ -237,7 +241,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
     final borderColor = _focused ? PosColors.primary : PosColors.line;
     final btnBorderColor = _focused ? PosColors.primary : PosColors.lineStrong;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp2, PosSpacing.sp4, PosSpacing.sp1),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
@@ -259,10 +263,9 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: widget.codeMode ? text.shortCodeSearchHint : text.searchByName,
-                prefixIcon: Icon(
-                  widget.codeMode ? Icons.tag_rounded : Icons.search_rounded,
-                  color: PosColors.muted,
-                ),
+                prefixIcon: widget.codeMode
+                    ? null
+                    : Icon(Icons.search_rounded, color: PosColors.muted),
                 suffixIcon: widget.query.isEmpty
                     ? null
                     : IconButton(
@@ -285,6 +288,10 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                   padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3),
                   decoration: BoxDecoration(
                     color: widget.codeMode ? PosColors.primary : PosColors.surface,
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(PosRadii.md),
+                      bottomRight: Radius.circular(PosRadii.md),
+                    ),
                     border: Border(
                       left: BorderSide(color: btnBorderColor),
                       top: BorderSide(color: btnBorderColor),
@@ -416,7 +423,7 @@ class _MenuContent extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
             PosSpacing.sp4,
-            PosDensity.gridGap,
+            PosSpacing.sp1,
             PosSpacing.sp4,
             PosDensity.sectionGap,
           ),
@@ -477,7 +484,7 @@ class _QtyStepperInline extends StatelessWidget {
               tfFormatNumber(context, qty),
               textAlign: TextAlign.center,
               style: TfTextStyles.rowTitle.copyWith(
-                fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -553,7 +560,7 @@ class _GridTile extends StatelessWidget {
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: PosColors.surface,
+            color: inCart ? PosColors.surfaceSunk : PosColors.surface,
             border: Border.all(color: PosColors.line),
             borderRadius: BorderRadius.circular(PosRadii.xl),
             boxShadow: PosShadows.soft,
@@ -603,7 +610,7 @@ class _GridTile extends StatelessWidget {
                               textAlign: TextAlign.center,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: TfTextStyles.rowTitle.copyWith(
+                              style: TfTextStyles.sectionStrip.copyWith(
                                 color: PosColors.primaryDark,
                                 height: 1.2,
                               ),
@@ -670,17 +677,12 @@ class _TileStepper extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: onDecrement,
               child: Container(
-                decoration: const BoxDecoration(
-                  color: PosColors.surface,
-                  border: Border(
-                    right: BorderSide(color: PosColors.lineStrong),
-                  ),
-                ),
+                color: PosColors.secondary,
                 alignment: Alignment.center,
                 child: const Icon(
                   Icons.remove_rounded,
                   size: 18,
-                  color: PosColors.secondary,
+                  color: PosColors.onSecondary,
                 ),
               ),
             ),
@@ -690,12 +692,17 @@ class _TileStepper extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: onIncrement,
               child: Container(
-                color: PosColors.secondary,
+                decoration: const BoxDecoration(
+                  color: PosColors.surface,
+                  border: Border(
+                    right: BorderSide(color: PosColors.lineStrong),
+                  ),
+                ),
                 alignment: Alignment.center,
                 child: const Icon(
                   Icons.add_rounded,
                   size: 18,
-                  color: PosColors.onSecondary,
+                  color: PosColors.secondary,
                 ),
               ),
             ),
@@ -746,6 +753,7 @@ class _PriceTag extends StatelessWidget {
     return TfText(
       tfFormatNumber(context, price),
       style: TfTextStyles.badgeText.copyWith(
+        fontSize: 9,
         fontWeight: FontWeight.w500,
         color: PosColors.ink2,
         fontFeatures: const [FontFeature.tabularFigures()],
@@ -928,7 +936,7 @@ class _CodeBadge extends StatelessWidget {
       child: TfText(
         shortCode == null ? '—' : '$shortCode',
         style: TfTextStyles.rowTitle.copyWith(
-          fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w500,
           color: PosColors.ink2,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
@@ -1455,7 +1463,7 @@ class _OptionBtn extends StatelessWidget {
               child: TfText(
                 label,
                 style: TfTextStyles.rowTitle.copyWith(
-                  fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
                   color: PosColors.primaryDark,
                 ),
               ),

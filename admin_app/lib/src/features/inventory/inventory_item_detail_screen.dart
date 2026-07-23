@@ -50,7 +50,7 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
         backgroundColor: PosColors.background,
         title: TfText(
           item.localizedName(app.language),
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: TfTextStyles.appBarTitle,
         ),
         actions: [
           if (app.isOwner && widget.onEdit != null)
@@ -72,23 +72,21 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const TfText(
+                    TfText(
                       'On hand',
-                      style: TextStyle(
+                      style: TfTextStyles.sectionStrip.copyWith(
                         color: PosColors.textTer,
-                        fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.04,
                         height: 1.3,
                       ),
                     ),
                     const SizedBox(height: 6),
                     TfText(
                       '${item.quantity.toStringAsFixed(1)} $unit',
-                      style: const TextStyle(
-                        color: PosColors.primaryDark,
+                      style: TfTextStyles.statNumber.copyWith(
                         fontSize: 40,
                         fontWeight: FontWeight.w800,
+                        color: PosColors.primaryDark,
                         height: 1.1,
                         letterSpacing: -0.02,
                       ),
@@ -118,26 +116,22 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const TfText(
+              TfText(
                 '30-day movement',
-                style: TextStyle(
+                style: TfTextStyles.sectionStrip.copyWith(
                   color: PosColors.textTer,
-                  fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.04,
                   height: 1.3,
                 ),
               ),
               const SizedBox(height: 8),
               _MovementChart(rows: rows),
               const SizedBox(height: 20),
-              const TfText(
+              TfText(
                 'Recent movement',
-                style: TextStyle(
+                style: TfTextStyles.sectionStrip.copyWith(
                   color: PosColors.textTer,
-                  fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.04,
                   height: 1.3,
                 ),
               ),
@@ -149,7 +143,7 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
                         padding: EdgeInsets.all(16),
                         child: TfText(
                           'No movements recorded yet.',
-                          style: TextStyle(color: PosColors.muted),
+                          style: TfTextStyles.bodyMuted,
                         ),
                       )
                     : Column(
@@ -198,18 +192,16 @@ class _Metric extends StatelessWidget {
       children: [
         TfText(
           label,
-          style: const TextStyle(
+          style: TfTextStyles.sectionStrip.copyWith(
             color: PosColors.textTer,
-            fontSize: 12,
             fontWeight: FontWeight.w700,
-            letterSpacing: 0.04,
             height: 1.3,
           ),
         ),
         const SizedBox(height: 6),
         TfText(
           value,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          style: TfTextStyles.rowMoney,
         ),
       ],
     ),
@@ -238,7 +230,7 @@ class _MovementChart extends StatelessWidget {
                     child: Center(
                       child: TfText(
                         'Movement chart appears after stock changes.',
-                        style: TextStyle(color: PosColors.muted, fontSize: 12),
+                          style: TfTextStyles.bodyMuted,
                       ),
                     ),
                   ),
@@ -290,7 +282,9 @@ class _MovementRow extends StatelessWidget {
           Expanded(
             child: TfText(
               row.reason.isNotEmpty ? row.reason : row.type.label(),
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: TfTextStyles.body.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Column(
@@ -298,14 +292,16 @@ class _MovementRow extends StatelessWidget {
             children: [
               TfText(
                 '${positive ? '+' : ''}${row.delta.toStringAsFixed(1)} $unit',
-                style: TextStyle(
-                  color: positive ? PosColors.success : PosColors.warning,
+                style: TfTextStyles.body.copyWith(
                   fontWeight: FontWeight.w600,
+                  color: positive ? PosColors.success : PosColors.warning,
                 ),
               ),
               TfText(
                 DateFormat('MMM d, h:mm a').format(row.createdAt),
-                style: const TextStyle(color: PosColors.muted, fontSize: 10),
+                style: TfTextStyles.label.copyWith(
+                  color: PosColors.muted,
+                ),
               ),
             ],
           ),

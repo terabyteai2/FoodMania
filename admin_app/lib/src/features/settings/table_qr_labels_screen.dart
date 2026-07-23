@@ -25,7 +25,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   Future<void> _load() async {
@@ -332,7 +332,6 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
     }
 
     final tables = _allTables();
-    final rawSlug = slug;
 
     if (tables.isEmpty) {
       return Center(
@@ -369,7 +368,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: 2 + tables.length,
+      itemCount: 1 + tables.length,
       itemBuilder: (context, index) {
         if (index == 0) {
           return Padding(
@@ -443,17 +442,7 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
             ),
           );
         }
-        if (index == 1) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: _DiagnosticBanner(
-              slug: rawSlug,
-              tablesCount: tables.length,
-              printerConnected: AppScope.of(context).printerState.connected,
-            ),
-          );
-        }
-        final table = tables[index - 2];
+        final table = tables[index - 1];
         final label = table.label;
         final url = _tableUrl(label);
         final isPrinting = _printing.contains(label);
@@ -530,85 +519,6 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
           ),
         );
       },
-    );
-  }
-}
-
-class _DiagnosticBanner extends StatelessWidget {
-  const _DiagnosticBanner({
-    required this.slug,
-    required this.tablesCount,
-    required this.printerConnected,
-  });
-
-  final String slug;
-  final int tablesCount;
-  final bool printerConnected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: TfCard(
-        padding: const EdgeInsets.all(12),
-        color: PosColors.neutralSoft,
-        borderColor: PosColors.neutralWash,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 14,
-                  color: PosColors.accentStrong,
-                ),
-                const SizedBox(width: 6),
-                TfText(
-                  'Diagnostics',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.accentStrong,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            _diagRow('Slug', slug),
-            _diagRow('Tables loaded', '$tablesCount'),
-            _diagRow(
-              'Printer',
-              printerConnected ? 'Connected' : 'Disconnected',
-            ),
-            _diagRow('QR base URL', 'https://$slug.quickbytes.buzz'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _diagRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Row(
-        children: [
-          TfText(
-            '$label: ',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: PosColors.inkSoft,
-            ),
-          ),
-          Expanded(
-            child: TfText(
-              value,
-              style: TextStyle(fontSize: 11, color: PosColors.slate),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

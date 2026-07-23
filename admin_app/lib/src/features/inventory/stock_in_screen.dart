@@ -491,7 +491,7 @@ class _StockInBottomBar extends StatelessWidget {
               const SizedBox(width: 12),
               TfText(
                 tfFormatCurrency(context, total),
-                style: TfTextStyles.price.copyWith(
+                style: TfTextStyles.rowMoney.copyWith(
                   color: PosColors.slate,
                   height: 1,
                 ),
@@ -579,9 +579,8 @@ class _LineCard extends StatelessWidget {
                     hintText: 'Item name',
                     isDense: true,
                   ),
-                  style: const TextStyle(
+                  style: TfTextStyles.rowTitle.copyWith(
                     color: PosColors.slate,
-                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     height: 1.2,
                   ),
@@ -659,9 +658,8 @@ class _QuantityField extends StatelessWidget {
                 isDense: true,
                 borderRadius: BorderRadius.circular(10),
                 icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
-                style: const TextStyle(
+                style: TfTextStyles.bodyMuted.copyWith(
                   color: PosColors.slate,
-                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   height: 1,
                 ),
@@ -671,9 +669,8 @@ class _QuantityField extends StatelessWidget {
                         value: unit,
                         child: TfText(
                           InventoryUnits.displayLabel(unit, isBn: text.isBn),
-                          style: const TextStyle(
+                          style: TfTextStyles.bodyMuted.copyWith(
                             color: PosColors.slate,
-                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -714,9 +711,8 @@ class _QuantityField extends StatelessWidget {
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 12),
                 ),
-                style: const TextStyle(
+                style: TfTextStyles.rowTitle.copyWith(
                   color: PosColors.slate,
-                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
                 ),
@@ -749,11 +745,10 @@ class _CostField extends StatelessWidget {
       child: _SourceFieldFrame(
         child: Row(
           children: [
-            const TfText(
+            TfText(
               '৳',
-              style: TextStyle(
+              style: TfTextStyles.rowMoney.copyWith(
                 color: PosColors.muted,
-                fontSize: 16,
                 fontWeight: FontWeight.w700,
                 height: 1,
               ),
@@ -776,9 +771,8 @@ class _CostField extends StatelessWidget {
                     isDense: true,
                     contentPadding: EdgeInsets.symmetric(vertical: 12),
                   ),
-                style: const TextStyle(
+                style: TfTextStyles.rowTitle.copyWith(
                   color: PosColors.slate,
-                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
                 ),
@@ -806,10 +800,8 @@ class _FieldColumn extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TfTextStyles.label.copyWith(
             color: PosColors.muted,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
             height: 1.1,
           ),
         ),
@@ -875,10 +867,8 @@ class _AddAnotherLineButton extends StatelessWidget {
                       text.addAnotherLine,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TfTextStyles.rowTitle.copyWith(
                         color: PosColors.primaryDark,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
                         height: 1.2,
                       ),
                     ),
@@ -918,11 +908,9 @@ class _ExistingItemsSection extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 10),
           child: TfText(
             text.inventory.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+            style: TfTextStyles.eyebrow.copyWith(
               color: PosColors.muted,
+              letterSpacing: 0.8,
             ),
           ),
         ),
@@ -991,19 +979,15 @@ class _ExistingStockInRow extends StatelessWidget {
                     item.localizedName(AppScope.of(context).language),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
+                    style: TfTextStyles.rowTitle.copyWith(
                       fontWeight: FontWeight.w600,
                       height: 1.2,
-                      color: PosColors.text,
                     ),
                   ),
                   const SizedBox(height: 1),
                   TfText(
                     'System: ${_fmtQty(system)} $unit',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: PosColors.muted,
+                    style: TfTextStyles.bodyMuted.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1022,19 +1006,17 @@ class _ExistingStockInRow extends StatelessWidget {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: '—',
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                  hintStyle: TextStyle(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  hintStyle: TfTextStyles.label.copyWith(
                     fontWeight: FontWeight.w700,
                     color: PosColors.mutedSoft,
                   ),
                 ),
-                style: const TextStyle(
-                  fontSize: 15,
+                style: TfTextStyles.rowTitle.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: PosColors.text,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
@@ -1046,10 +1028,8 @@ class _ExistingStockInRow extends StatelessWidget {
                 unit,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12.5,
+                style: TfTextStyles.bodyMuted.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: PosColors.muted,
                 ),
               ),
             ),

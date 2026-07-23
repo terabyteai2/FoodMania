@@ -383,11 +383,8 @@ class _CountLineState extends State<_CountLine> {
                     item.localizedName(AppScope.of(context).language),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                    style: TfTextStyles.rowTitle.copyWith(
                       height: 1.2,
-                      color: PosColors.text,
                     ),
                   ),
                   const SizedBox(height: 1),
@@ -395,18 +392,15 @@ class _CountLineState extends State<_CountLine> {
                     children: [
                       TfText(
                         'System: ${_fmt(system)} $unit',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: PosColors.muted,
+                        style: TfTextStyles.bodyMuted.copyWith(
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       if (variance != null && variance != 0) ...[
                         const SizedBox(width: 4),
                         TfText(
-                          '· ${variance > 0 ? '+' : ''}${_fmt(variance)}',
-                          style: TextStyle(
-                            fontSize: 12.5,
+                            '· ${variance > 0 ? '+' : ''}${_fmt(variance)}',
+                          style: TfTextStyles.body.copyWith(
                             fontWeight: FontWeight.w600,
                             color: variance > 0
                                 ? PosColors.success
@@ -435,13 +429,12 @@ class _CountLineState extends State<_CountLine> {
                   hintText: '—',
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                  hintStyle: const TextStyle(
+                  hintStyle: TfTextStyles.label.copyWith(
                     fontWeight: FontWeight.w700,
                     color: PosColors.mutedSoft,
                   ),
                 ),
-                style: const TextStyle(
-                  fontSize: 15,
+                style: TfTextStyles.rowTitle.copyWith(
                   fontWeight: FontWeight.w700,
                   color: PosColors.text,
                   fontFeatures: [FontFeature.tabularFigures()],
@@ -455,10 +448,8 @@ class _CountLineState extends State<_CountLine> {
                 unit,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12.5,
+                style: TfTextStyles.bodyMuted.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: PosColors.muted,
                 ),
               ),
             ),

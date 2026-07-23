@@ -8,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 /// token set. Those map 1:1 onto the existing [PosColors] deep-plum system, so
 /// this class is a thin alias layer — no new colour literals are introduced.
 /// Numerics use Inter with tabular figures; "mono" labels use the bundled
-/// JetBrains Mono family (already declared in pubspec.yaml).
+/// Inter family (already declared in pubspec.yaml).
 class Pc {
   Pc._();
 
@@ -63,7 +63,7 @@ class Pc {
   static const double rMd = PosRadii.md;
   static const double rPill = PosRadii.pill;
 
-  static const String monoFamily = 'JetBrains Mono';
+  static const String monoFamily = 'Inter';
 
   /// Tabular-figure numeric style on the bundled Inter family.
   static TextStyle num(
@@ -74,7 +74,7 @@ class Pc {
     double? height,
   }) => TextStyle(
     fontFamily: 'Inter',
-    fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
+    fontFamilyFallback: const ['Noto Sans Bengali'],
     fontFeatures: const [FontFeature.tabularFigures()],
     fontSize: size,
     fontWeight: weight,

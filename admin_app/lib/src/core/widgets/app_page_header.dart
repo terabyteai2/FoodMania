@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
-import '../../features/messaging/messages_screen.dart';
 import '../../models/pos_notification.dart';
 import '../theme/app_theme.dart';
 import 'notification_center.dart';
@@ -69,16 +68,6 @@ class AppPageHeader extends StatelessWidget {
               semanticLabel: text.advanced,
             ),
             const SizedBox(width: 10),
-          ],
-          if (app.canMessages) ...[
-            TfBarButton(
-              icon: TfSourceIconName.chat,
-              tooltip: text.messages,
-              onPressed: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const MessagesScreen())),
-            ),
-            const SizedBox(width: 8),
           ],
           HeaderNotificationBell(
             onNavigateToOrders: onNavigateToOrders ?? () {},

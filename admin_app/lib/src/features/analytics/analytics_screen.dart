@@ -407,7 +407,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         child: Text(
           message,
           style: TfTextStyles.label.copyWith(
-            fontFamily: 'JetBrains Mono',
+            fontFamily: 'Inter',
             fontWeight: FontWeight.w400,
             color: PosColors.muted,
           ),

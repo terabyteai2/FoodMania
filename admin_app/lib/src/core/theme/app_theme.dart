@@ -203,7 +203,7 @@ class PosDensity {
   static const double rowMin = 48;
 
   /// Menu/order-build grid tile mainAxisExtent (≥8 tiles per phone screen).
-  static const double tileMenu = 111;
+  static const double tileMenu = 113;
 
   /// FOH table tile childAspectRatio (square, packed with state data).
   static const double tileTableAspect = 1.0;
@@ -334,7 +334,7 @@ class AppTheme {
 
     final baseText = TextStyle(
       fontFamily: 'Inter',
-      fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
+      fontFamilyFallback: const ['Noto Sans Bengali'],
       color: ink,
       fontWeight: FontWeight.w400,
       letterSpacing: 0,
@@ -345,7 +345,7 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: bg,
       fontFamily: 'Inter',
-      fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
+      fontFamilyFallback: const ['Noto Sans Bengali'],
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       textTheme: TextTheme(
@@ -614,14 +614,14 @@ class AppTheme {
         ),
         titleTextStyle: TextStyle(
           fontFamily: 'Inter',
-          fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
+          fontFamilyFallback: const ['Noto Sans Bengali'],
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: ink,
         ),
         contentTextStyle: TextStyle(
           fontFamily: 'Inter',
-          fontFamilyFallback: const ['Hind Siliguri', 'Noto Sans Bengali'],
+          fontFamilyFallback: const ['Noto Sans Bengali'],
           fontSize: 14,
           color: mut,
           height: 1.50,

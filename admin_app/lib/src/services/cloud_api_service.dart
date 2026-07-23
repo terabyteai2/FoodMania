@@ -12,7 +12,6 @@ import '../models/account_role.dart';
 import '../models/admin_blocking_notice.dart';
 import '../models/app_update_info.dart';
 import '../models/audit_entry.dart';
-import '../models/chat_thread.dart';
 import '../models/daily_report.dart';
 import '../models/dashboard_summary.dart';
 import '../models/facebook_chatbot_config.dart';
@@ -218,6 +217,11 @@ class AdminLoginResult {
     this.hasAppAccess = false,
     this.logoUrl,
     this.logoBitmapUrl,
+    this.subscriptionStatus,
+    this.subscriptionPlan,
+    this.subscriptionPackage,
+    this.subscriptionExpiresAt,
+    this.addons = const [],
   });
 
   final String accountId;
@@ -237,11 +241,20 @@ class AdminLoginResult {
   final bool hasAppAccess;
   final String? logoUrl;
   final String? logoBitmapUrl;
+  final String? subscriptionStatus;
+  final String? subscriptionPlan;
+  final String? subscriptionPackage;
+  final String? subscriptionExpiresAt;
+  final List<String> addons;
 
   static AdminLoginResult fromAuthPayload(Map<String, Object?> data) {
     final account = data['account'] is Map
         ? Map<String, Object?>.from(data['account'] as Map)
         : <String, Object?>{};
+    final rawAddons = data['addons'];
+    final addons = rawAddons is List
+        ? rawAddons.cast<String>()
+        : <String>[];
     return AdminLoginResult(
       accountId: account['id']?.toString().trim() ?? '',
       role: AccountRole.parse(
@@ -264,6 +277,11 @@ class AdminLoginResult {
       hasAppAccess: data['hasAppAccess'] == true,
       logoUrl: TenantBootstrapResult._optional(data['logoUrl']),
       logoBitmapUrl: TenantBootstrapResult._optional(data['logoBitmapUrl']),
+      subscriptionStatus: data['subscriptionStatus']?.toString(),
+      subscriptionPlan: data['subscriptionPlan']?.toString(),
+      subscriptionPackage: data['subscriptionPackage']?.toString(),
+      subscriptionExpiresAt: data['subscriptionExpiresAt']?.toString(),
+      addons: addons,
     );
   }
 
@@ -645,6 +663,8 @@ class AppAccessResult {
     required this.hasAppAccess,
     this.subscriptionStatus,
     this.subscriptionPlan,
+    this.subscriptionPackage,
+    this.subscriptionExpiresAt,
     this.addons = const [],
     this.subscriptionPrices = const {},
     this.addonPrices = const {},
@@ -653,6 +673,8 @@ class AppAccessResult {
   final bool hasAppAccess;
   final String? subscriptionStatus;
   final String? subscriptionPlan;
+  final String? subscriptionPackage;
+  final String? subscriptionExpiresAt;
   final List<String> addons;
   final Map<String, int> subscriptionPrices;
   final Map<String, int> addonPrices;
@@ -674,6 +696,8 @@ class AppAccessResult {
       hasAppAccess: data['hasAppAccess'] == true,
       subscriptionStatus: data['subscriptionStatus']?.toString(),
       subscriptionPlan: data['subscriptionPlan']?.toString(),
+      subscriptionPackage: data['subscriptionPackage']?.toString(),
+      subscriptionExpiresAt: data['subscriptionExpiresAt']?.toString(),
       addons: addons,
       subscriptionPrices: _parseStringIntMap(data['subscriptionPrices']),
       addonPrices: _parseStringIntMap(data['addonPrices']),
@@ -2209,52 +2233,6 @@ class CloudApiService {
       for (final entry in data)
         (entry['menuItemId'] as String): (entry['qty'] as num).toInt(),
     };
-  }
-
-  Future<List<ChatThread>> fetchChats() async {
-    _requireServerConfig();
-    final uri = _uri('/admin/chatbot/chats');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final json = await _sendJson('GET', uri);
-    final data = json['data'];
-    if (data is! Map) {
-      throw CloudApiException('Chats response was malformed.');
-    }
-    final chats = (data['chats'] as List?) ?? const [];
-    return chats
-        .whereType<Map>()
-        .map((row) => ChatThread.fromJson(Map<String, Object?>.from(row)))
-        .toList(growable: false);
-  }
-
-  Future<ChatThread> replyToChat(String conversationId, String text) async {
-    _requireServerConfig();
-    final uri = _uri('/admin/chatbot/chats/$conversationId/reply');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final json = await _sendJson('POST', uri, body: {'text': text});
-    final data = json['data'];
-    if (data is! Map) {
-      throw CloudApiException('Chat reply response was malformed.');
-    }
-    return ChatThread.fromJson(Map<String, Object?>.from(data));
-  }
-
-  Future<ChatThread> handBackChat(String conversationId) async {
-    _requireServerConfig();
-    final uri = _uri('/admin/chatbot/chats/$conversationId/handback');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final json = await _sendJson('POST', uri);
-    final data = json['data'];
-    if (data is! Map) {
-      throw CloudApiException('Chat handback response was malformed.');
-    }
-    return ChatThread.fromJson(Map<String, Object?>.from(data));
   }
 
   /// Unified inventory scan. The backend (LLM) classifies the photographed

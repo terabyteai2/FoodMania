@@ -75,7 +75,7 @@ TextStyle tfSafeTextStyle(
   return base.copyWith(
     fontFamily: family,
     fontFamilyFallback: isBn
-        ? const ['Hind Siliguri']
+        ? null
         : base.fontFamilyFallback,
     letterSpacing: tracking,
     height: safeHeight,
@@ -96,7 +96,7 @@ StrutStyle? tfSafeStrutStyle(
       : base.height;
   return StrutStyle(
     fontFamily: tfBanglaFontFamily,
-    fontFamilyFallback: const ['Hind Siliguri'],
+    fontFamilyFallback: null,
     fontSize: base.fontSize,
     height: safeHeight,
     leadingDistribution: TextLeadingDistribution.even,
@@ -2875,6 +2875,11 @@ class TfNavIcon {
   static const IconData chevron = Icons.chevron_right_rounded;
   static const IconData sparkle = Icons.auto_awesome_outlined;
   static const IconData flame = Icons.local_fire_department_outlined;
+  static const IconData storefront = Icons.public;
+  static const IconData chat = Icons.chat_bubble_outline_rounded;
+  static const IconData counter = Icons.storefront_outlined;
+  static const IconData waiter = Icons.groups_outlined;
+  static const IconData manager = Icons.person_outline_rounded;
 }
 
 // ---------------------------------------------------------------------------

@@ -162,7 +162,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   action: Switch(
                     value: app.printerState.autoPrintEnabled,
                     onChanged: (v) => app.setAutoPrintOrders(v),
-                    activeThumbColor: PosColors.primary,
+                    activeThumbColor: Colors.white,
+                    inactiveThumbColor: Colors.white,
                   ),
                 ),
                 _SettingActionData(

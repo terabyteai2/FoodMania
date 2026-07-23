@@ -13,7 +13,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
   http: ^1.6.0
   http_parser: ^4.1.2
   sqflite: ^2.4.2+1
@@ -38,10 +37,8 @@ dependencies:
   permission_handler: ^12.0.1
   cached_network_image: ^3.4.1
   image: ^4.5.0
-  google_sign_in: ^6.3.0
   sms_autofill: ^2.4.0
   audioplayers: ^6.1.0
-  file_picker: ^8.1.7
   flutter_local_notifications: ^19.4.0
   firebase_core: ^3.12.0
   firebase_messaging: ^15.2.0
@@ -58,24 +55,11 @@ flutter:
   uses-material-design: true
 
   assets:
-    # Admin_res.png (1.3MB, 1254x1254) was bundled but never referenced in code.
     - assets/brand/
     - assets/sounds/
     - assets/menu_placeholders/
 
   fonts:
-    - family: Plus Jakarta Sans
-      fonts:
-        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
-          weight: 800
     - family: Inter
       fonts:
         - asset: assets/fonts/Inter.ttf
@@ -84,21 +68,9 @@ flutter:
           weight: 600
         - asset: assets/fonts/Inter.ttf
           weight: 700
-    - family: Hind Siliguri
-      fonts:
-        - asset: assets/fonts/HindSiliguri-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/HindSiliguri-Medium.ttf
-          weight: 500
     - family: Noto Sans Bengali
       fonts:
         - asset: assets/fonts/NotoSansBengali-Regular.ttf
           weight: 400
         - asset: assets/fonts/NotoSansBengali-Bold.ttf
           weight: 700
-    - family: JetBrains Mono
-      fonts:
-        - asset: assets/fonts/JetBrainsMono.ttf
-          weight: 400
-        - asset: assets/fonts/JetBrainsMono.ttf
-          weight: 500

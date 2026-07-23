@@ -154,7 +154,6 @@ class AppStrings {
       : 'No sales in this period yet. Reports will appear here once orders come in.';
   String get stockTab => isBn ? 'স্টক' : 'Stock';
   String get manageSection => isBn ? 'ম্যানেজ' : 'Manage';
-  String get messages => isBn ? 'মেসেজ' : 'Messages';
   String get staff => isBn ? 'স্টাফ' : 'Staff';
   String get auditTrail => isBn ? 'অডিট ট্রেইল' : 'Audit trail';
   String get serviceMode => isBn ? 'সার্ভিস মোড' : 'Service mode';
@@ -551,6 +550,15 @@ class AppStrings {
       : 'Only Terafoods support can remove this message. The app will unlock automatically when access is restored.';
   String get adminBlockingNoticeCheckAgain =>
       isBn ? 'আবার যাচাই করুন' : 'Check again';
+  String get offlineExpiryTitle => isBn
+      ? 'আপনার সাবস্ক্রিপশনের মেয়াদ শেষ হয়েছে'
+      : 'Your subscription has ended';
+  String get offlineExpiryMessage => isBn
+      ? 'সাবস্ক্রিপশন পুনরায় সক্রিয় করতে ইন্টারনেটে সংযোগ করুন।'
+      : 'Connect to the internet to renew your subscription.';
+  String get offlineExpiryCheckConnection => isBn
+      ? 'সংযোগ পরীক্ষা করুন'
+      : 'Check connection';
   String get adminBlockingNoticeRefreshFailed => isBn
       ? 'সার্ভারে পৌঁছানো যায়নি। সংযোগ ঠিক হলে আবার যাচাই করুন।'
       : 'Could not reach the server. Check again when the connection is available.';
@@ -1396,35 +1404,6 @@ class AppStrings {
   String get managerOwnerOnly => isBn
       ? 'শুধু মালিক ম্যানেজার যোগ করতে পারেন'
       : 'Only an owner can add a manager';
-
-  // Messages — Messenger takeover (spec §4.6)
-  String get botLive => isBn ? 'বট চালু' : 'Bot live';
-  String needsYouCount(int n) => isBn ? 'আপনার দরকার ${_n(n)}' : 'Needs you $n';
-  String get allChats => isBn ? 'সব চ্যাট' : 'All chats';
-  String get viaMessenger => isBn ? 'মেসেঞ্জারে' : 'via Messenger';
-  String get chatbotNeedsHelp =>
-      isBn ? 'চ্যাটবটের আপনার সাহায্য দরকার' : 'Chatbot needs your help';
-  String get bytesBot => isBn ? 'বট' : 'BYTES BOT';
-  String get writeReplyHint => isBn ? 'একটি উত্তর লিখুন…' : 'Write a reply…';
-  String get handBackToBot => isBn ? 'বটের কাছে ফেরত' : 'Hand back to bot';
-  String get handedBackToBot =>
-      isBn ? 'বটের কাছে ফেরত দেওয়া হয়েছে' : 'Handed back to the bot';
-  String get handedBackToYou =>
-      isBn ? 'আপনার কাছে হস্তান্তর করা হয়েছে' : 'Handed back to you';
-  String get noConversations =>
-      isBn ? 'কোনো কথোপকথন নেই' : 'No conversations yet';
-  String get noConversationsHint => isBn
-      ? 'গ্রাহকদের মেসেঞ্জার চ্যাট এখানে দেখা যাবে।'
-      : 'Customer Messenger chats will appear here.';
-  String get chatsLoadFailed =>
-      isBn ? 'চ্যাট লোড করা যায়নি' : "Couldn't load chats";
-  String get replyFailed =>
-      isBn ? 'উত্তর পাঠানো যায়নি' : "Couldn't send reply";
-  String get sendImageComingSoon =>
-      isBn ? 'ছবি পাঠানো শীঘ্রই আসছে' : 'Image send coming soon';
-  String get imageMessage => isBn ? '📷 ছবি' : '📷 Image';
-  String get noChatsNeedYou =>
-      isBn ? 'কোনো চ্যাটে আপনার দরকার নেই' : 'No chats need you';
 
   // Audit trail (spec §4.10)
   String get auditAllFilter => isBn ? 'সব' : 'All';
