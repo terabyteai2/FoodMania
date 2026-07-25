@@ -35,6 +35,7 @@ Future<void> openNewOrderForm(
   String? initialTableNo,
   bool startAtMenu = false,
   bool startAtReview = false,
+  bool startWithCodeMode = false,
 }) async {
   final app = AppScope.of(context);
   // Full menu, including 86'd items — the grid/code list render them dimmed
@@ -72,6 +73,7 @@ Future<void> openNewOrderForm(
           initialTableNo: initialTableNo,
           startAtMenu: startAtMenu,
           startAtReview: startAtReview,
+          startWithCodeMode: startWithCodeMode,
           onCreateOrder: (result) async {
             final order = await app.createManualOrder(
               requestedItems: result.items,
@@ -3221,6 +3223,7 @@ class _NewOrderPage extends StatefulWidget {
     this.initialTableNo,
     this.startAtMenu = false,
     this.startAtReview = false,
+    this.startWithCodeMode = false,
     this.itemPopularity = const {},
   });
 
@@ -3238,6 +3241,7 @@ class _NewOrderPage extends StatefulWidget {
   final String? initialTableNo;
   final bool startAtMenu;
   final bool startAtReview;
+  final bool startWithCodeMode;
 
   @override
   State<_NewOrderPage> createState() => _NewOrderPageState();
@@ -3261,7 +3265,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _custPhoneCtrl = TextEditingController();
   final _custAddrCtrl = TextEditingController();
   String _query = '';
-  bool _codeMode = false;
+  late bool _codeMode;
   OrderModel? _createdOrder;
   bool _creating = false;
   Timer? _closeTimer;
@@ -3269,6 +3273,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   @override
   void initState() {
     super.initState();
+    _codeMode = widget.startWithCodeMode;
     debugPrint('[QB-WIZARD] initState: menuItems=${widget.menuItems.length} cats=${widget.menuItems.map((i) => i.category).toSet()}');
     _cartLines.addAll(widget.initialCartLines ?? const []);
     final validIds = widget.menuItems.map((item) => item.id).toSet();

@@ -31,7 +31,19 @@ const dict = {
     en: 'This outlet does not have an active subscription. Complete payment from the QuickBytes phone app.',
     bn: 'এই আউটলেটের সাবস্ক্রিপশন সক্রিয় নেই। QuickBytes ফোন অ্যাপ থেকে পেমেন্ট সম্পন্ন করুন।',
   },
+  subscriptionExpiredOffline: {
+    en: 'Your subscription has expired. Connect to the internet to renew.',
+    bn: 'আপনার সাবস্ক্রিপশনের মেয়াদ শেষ হয়েছে। পুনরায় সাবস্ক্রাইব করতে ইন্টারনেটে সংযোগ করুন।',
+  },
   refreshAccess: { en: 'Re-check access', bn: 'আবার যাচাই করুন' },
+  'screenBlocker.eyebrowSubscription': { en: 'SUBSCRIPTION LOCKED', bn: 'সাবস্ক্রিপশন লকড' },
+  'screenBlocker.eyebrowAnnouncement': { en: 'ANNOUNCEMENT', bn: 'ঘোষণা' },
+  'screenBlocker.eyebrowPaymentLink': { en: 'PAYMENT LINK', bn: 'পেমেন্ট লিংক' },
+  'screenBlocker.helper': { en: 'Contact your admin or check your subscription.', bn: 'আপনার অ্যাডমিনের সাথে যোগাযোগ করুন বা আপনার সাবস্ক্রিপশন চেক করুন।' },
+  'screenBlocker.payNow': { en: 'Pay now', bn: 'এখনই পেমেন্ট' },
+  'screenBlocker.submit': { en: 'Submit', bn: 'জমা দিন' },
+  'screenBlocker.skip': { en: 'Skip', bn: 'এড়িয়ে যান' },
+  'screenBlocker.error': { en: 'Something went wrong. Try again.', bn: 'কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।' },
   createRestaurant: { en: 'Create your restaurant', bn: 'আপনার রেস্টুরেন্ট তৈরি করুন' },
   restaurantName: { en: 'Restaurant name', bn: 'রেস্টুরেন্টের নাম' },
   ownerName: { en: 'Your name', bn: 'আপনার নাম' },
@@ -570,5 +582,10 @@ const dict = {
 export type StringKey = keyof typeof dict;
 
 export function t(key: StringKey, lang: Lang): string {
-  return dict[key][lang];
+  const entry = dict[key];
+  if (!entry) {
+    console.error('t(): missing key', key, 'lang', lang);
+    return `[${key}]`;
+  }
+  return entry[lang];
 }

@@ -138,7 +138,7 @@ def subscription_access_dict(
     return {
         "hasAppAccess": outlet_has_app_access(sub),
         "subscriptionStatus": sub.status if sub else None,
-        "subscriptionPlan": sub.package if sub else None,
+        "subscriptionPlan": sub.plan if sub else None,
         "subscriptionPackage": sub.package if sub else None,
         "subscriptionExpiresAt": (
             sub.expires_at.isoformat() if sub and sub.expires_at else None

@@ -241,12 +241,24 @@ class _TableQrLabelsScreenState extends State<TableQrLabelsScreen> {
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SubscriptionGateCard(feature: 'website_qr'),
-          Expanded(child: _buildBody(text)),
-        ],
+      body: Builder(
+        builder: (context) {
+          final app = AppScope.of(context);
+          if (app.hasFeature('website_qr')) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _buildBody(text)),
+              ],
+            );
+          }
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(PosSpacing.sp4),
+              child: const SubscriptionGateCard(feature: 'website_qr'),
+            ),
+          );
+        },
       ),
     );
   }

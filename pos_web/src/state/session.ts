@@ -3,19 +3,89 @@ import type { AdminAccessResult, AuthPayload, BlockingNotice } from '../api/type
 import { api, setDeviceToken } from '../api/client';
 import type { Lang } from '../i18n/strings';
 
-const SESSION_KEY = 'qbpos.session';
+const STORAGE_KEY = 'qbpos.auth';
+const OLD_STORAGE_KEY = 'qbpos.session';
 const LANG_KEY = 'qbpos.lang';
 
-function loadSession(): AuthPayload | null {
+// XOR key — minified by Vite, prevents trivial localStorage editing
+const XOR_KEY = '!F0odMan!a@2024#Offline';
+
+function fnv1a32(data: Uint8Array): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < data.length; i++) {
+    h ^= data[i];
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}
+
+function encodeSession(payload: AuthPayload): string {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  const hash = fnv1a32(bytes);
+  let binary = '';
+  binary += String.fromCharCode(hash & 0xFF, (hash >> 8) & 0xFF, (hash >> 16) & 0xFF, (hash >>> 24) & 0xFF);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i] ^ XOR_KEY.charCodeAt(i % XOR_KEY.length));
+  }
+  return btoa(binary);
+}
+
+function decodeSession(encoded: string): AuthPayload | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AuthPayload;
+    const chars = atob(encoded);
+    const len = chars.length;
+    if (len < 5) return null;
+    const storedHash =
+      chars.charCodeAt(0) | (chars.charCodeAt(1) << 8) | (chars.charCodeAt(2) << 16) | (chars.charCodeAt(3) << 24);
+    const decBytes = new Uint8Array(len - 4);
+    for (let i = 4; i < len; i++) {
+      decBytes[i - 4] = chars.charCodeAt(i) ^ XOR_KEY.charCodeAt((i - 4) % XOR_KEY.length);
+    }
+    if (fnv1a32(decBytes) !== storedHash) return null;
+    const json = new TextDecoder().decode(decBytes);
+    const parsed = JSON.parse(json) as AuthPayload;
     if (!parsed.deviceToken || !parsed.outletId) return null;
     return parsed;
   } catch {
     return null;
   }
+}
+
+function saveSession(payload: AuthPayload) {
+  localStorage.setItem(STORAGE_KEY, encodeSession(payload));
+}
+
+function loadSession(): AuthPayload | null {
+  // Migrate from old plain-JSON format
+  const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
+  if (oldRaw && !localStorage.getItem(STORAGE_KEY)) {
+    try {
+      const parsed = JSON.parse(oldRaw) as AuthPayload;
+      if (parsed.deviceToken && parsed.outletId) {
+        saveSession(parsed);
+        localStorage.removeItem(OLD_STORAGE_KEY);
+      }
+    } catch { /* old format unusable, ignore */ }
+  }
+
+  const encoded = localStorage.getItem(STORAGE_KEY);
+  if (!encoded) return null;
+  const payload = decodeSession(encoded);
+  if (!payload) {
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
+
+  // Local subscription expiry enforcement (works offline)
+  if (payload.subscriptionExpiresAt) {
+    const expiresAt = new Date(payload.subscriptionExpiresAt).getTime();
+    if (!isNaN(expiresAt) && expiresAt < Date.now()) {
+      payload.hasAppAccess = false;
+    }
+  }
+
+  return payload;
 }
 
 const initialSession = loadSession();
@@ -48,7 +118,7 @@ function applyAdminAccess(set: any, access: AdminAccessResult) {
   }
 }
 
-export const useSession = create<SessionState>((set, get) => ({
+export const useSession = create<SessionState>((set) => ({
   session: initialSession,
   lang: (localStorage.getItem(LANG_KEY) as Lang) || 'en',
   blockingNotice: null,
@@ -56,22 +126,19 @@ export const useSession = create<SessionState>((set, get) => ({
   addonPrices: {},
 
   login: (payload) => {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    saveSession(payload);
     setDeviceToken(payload.deviceToken);
     set({ session: payload });
-    // background fetch of access + blocking notice
-    api.adminAccess().then((access) => applyAdminAccess(set, access));
-    api.fetchBlockingNotice().then((notice) => {
-      const s = useSession.getState();
-      // only set blocking notice if app does not have access
-      if (!s.session?.hasAppAccess) {
-        set({ blockingNotice: notice });
+    api.adminAccess().then((access) => {
+      applyAdminAccess(set, access);
+      if (!access.hasAppAccess) {
+        api.fetchBlockingNotice().then((notice) => set({ blockingNotice: notice }));
       }
     });
   },
 
   logout: () => {
-    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     setDeviceToken(null);
     set({ session: null });
   },
@@ -101,7 +168,7 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   respondBlockingNotice: async (phone: string) => {
-    const result = await api.respondBlockingNotice({ phone });
+    const result = await api.respondBlockingNotice({ response: phone });
     return result.ok;
   },
 }));

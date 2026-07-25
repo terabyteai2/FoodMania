@@ -215,11 +215,13 @@ created_at: datetime
 Table: outlet_subscriptions
 id: str PK
 outlet_id: str FK -> outlets.id UNIQUE
-plan: str (default "trial")  // trial|monthly|yearly
-status: str (default "active")  // active|expired|cancelled
+plan: str (default "trial")  // trial|monthly|annual  (billing frequency)
+package: str?  // null (trial) | standard | pro | premium  (base tier)
+status: str (default "trial")  // trial|active|on_hold|paused|cancelled
 starts_at: datetime
 expires_at: datetime?
 last_payment_session_id: str?
+addons: str (default "[]")  // JSON list of addon feature keys, e.g. ["inventory","website_qr","messenger_bot"]
 updated_at: datetime
 
 Relationships: outlet

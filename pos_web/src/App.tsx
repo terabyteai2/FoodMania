@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useSession } from './state/session';
 import { Login } from './screens/Login';
 import { Shell } from './screens/Shell';
 import { t } from './i18n/strings';
+import { ScreenBlocker } from './components/ScreenBlocker';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 
 function OfflineNoSession() {
   const { lang } = useSession();
@@ -21,7 +24,10 @@ function OfflineNoSession() {
 }
 
 export function App() {
-  const { session, lang, logout } = useSession();
+  useRegisterSW();
+  const { session, lang, blockingNotice, refreshAccess, respondBlockingNotice } = useSession();
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const path = window.location.pathname;
 
   if (!session) {
@@ -38,15 +44,57 @@ export function App() {
     return null;
   }
 
-  if (session.hasAppAccess === false) {
+  if (session.hasAppAccess === false || blockingNotice?.enabled) {
+    const isOfflineBlocked = !navigator.onLine && session.hasAppAccess === false;
+
+    const handleRetry = async () => {
+      if (!navigator.onLine) {
+        setError(t('subscriptionExpiredOffline', lang));
+        return;
+      }
+      setRefreshing(true);
+      setError(null);
+      try {
+        await refreshAccess();
+      } catch {
+        setError(t('screenBlocker.error', lang));
+      } finally {
+        setRefreshing(false);
+      }
+    };
+
+    const handleRespond = async (response: string): Promise<boolean> => {
+      setError(null);
+      try {
+        const ok = await respondBlockingNotice(response);
+        if (!ok) setError(t('screenBlocker.error', lang));
+        return ok;
+      } catch {
+        setError(t('screenBlocker.error', lang));
+        return false;
+      }
+    };
+
     return (
-      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="card" style={{ maxWidth: 440, padding: 28, textAlign: 'center' }}>
-          <h3 style={{ marginBottom: 10 }}>{session.outletName}</h3>
-          <p style={{ color: 'var(--ink-2)', marginBottom: 18 }}>{t('subscriptionBlocked', lang)}</p>
-          <button className="btn btn-outline" onClick={logout}>{t('logout', lang)}</button>
-        </div>
-      </div>
+      <ScreenBlocker
+        notice={blockingNotice || {
+          enabled: true,
+          title: t(isOfflineBlocked ? 'subscriptionExpiredOffline' : 'subscriptionBlocked', lang),
+          message: '',
+          imageUrl: null,
+          inputField: false,
+          inputLabel: null,
+          updatedAt: null,
+          type: 'subscription',
+          ctaLabel: null,
+          ctaUrl: null,
+          dismissible: false,
+        }}
+        refreshing={refreshing}
+        error={error}
+        onRetry={handleRetry}
+        onRespond={handleRespond}
+      />
     );
   }
 

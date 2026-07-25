@@ -26,6 +26,7 @@ void main() {
 
     final controller = PosAppController()
       ..language = AppLanguage.en
+      ..subscriptionState = 'trial'
       ..inventorySummary = InventorySummary(
         asOf: DateTime(2026, 6, 1),
         stockValueBdt: 12096,

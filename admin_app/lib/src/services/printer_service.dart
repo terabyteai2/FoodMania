@@ -303,7 +303,7 @@ class PrinterService {
   static const String _windowsPaperWidthKey = 'printer_windows_paper_width_mm';
   static const int _ticketWidth = 32;
   // Print-speed target: 90 mm/sec (GS ( E density/speed command).
-  static const int debugTargetPrintSpeedMmPerSecond = 90;
+  static const int debugTargetPrintSpeedMmPerSecond = 180;
   // Extra line feeds after the last printed pixel so the tear-off point clears
   // the printer housing. ESC d n feeds n lines (≈1 mm each on 58 mm paper).
   static const int _trailingFeedLines = 10;

@@ -335,55 +335,74 @@ class _InventoryScreenState extends State<InventoryScreen>
               },
             ),
           ),
-          const SubscriptionGateCard(feature: 'inventory'),
-          const SizedBox(height: PosSpacing.sp3),
-          _SummaryStrip(
-            text: text,
-            stockValue: stockValue,
-            lowCount: lowCount,
-            lowActive: _sort == _StockSort.status,
-            onTapLow: _surfaceBelowPar,
-          ),
-          SizedBox(height: PosSpacing.sp2),
           Expanded(
-            child: Stack(
-              children: [
-                items.isEmpty
-                    ? Center(
-                        child: TfEmptyState(
-                          icon: Icons.inventory_2_outlined,
-                          title: text.noStockItems,
-                          message: 'Use Stock in to add your first item.',
-                          messageBn: text.addFirstStockItem,
-                        ),
-                      )
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Builder(
+              builder: (context) {
+                final app = AppScope.of(context);
+                if (app.hasFeature('inventory')) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: PosSpacing.sp3),
+                      _SummaryStrip(
+                        text: text,
+                        stockValue: stockValue,
+                        lowCount: lowCount,
+                        lowActive: _sort == _StockSort.status,
+                        onTapLow: _surfaceBelowPar,
+                      ),
+                      SizedBox(height: PosSpacing.sp2),
+                      Expanded(
+                        child: Stack(
                           children: [
-                            _StockTable(
-                              text: text,
-                              items: sorted,
-                              advanced: _advanced,
-                              sort: _sort,
-                              dir: _dir,
-                              onSort: _toggleSort,
-                              onRowTap: (item) => _openRow(context, app, item),
-                            ),
-                            const SizedBox(height: 12),
-                            _AddItemButton(
-                              text: text,
-                              onPressed: () => _showAddItem(context),
-                            ),
-                            if (_advanced) ...[
-                              const SizedBox(height: 14),
-                              _AdvancedDrilldowns(text: text),
-                            ],
+                            items.isEmpty
+                                ? Center(
+                                    child: TfEmptyState(
+                                      icon: Icons.inventory_2_outlined,
+                                      title: text.noStockItems,
+                                      message: 'Use Stock in to add your first item.',
+                                      messageBn: text.addFirstStockItem,
+                                    ),
+                                  )
+                                : SingleChildScrollView(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        _StockTable(
+                                          text: text,
+                                          items: sorted,
+                                          advanced: _advanced,
+                                          sort: _sort,
+                                          dir: _dir,
+                                          onSort: _toggleSort,
+                                          onRowTap: (item) => _openRow(context, app, item),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        _AddItemButton(
+                                          text: text,
+                                          onPressed: () => _showAddItem(context),
+                                        ),
+                                        if (_advanced) ...[
+                                          const SizedBox(height: 14),
+                                          _AdvancedDrilldowns(text: text),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
                           ],
                         ),
                       ),
-              ],
+                    ],
+                  );
+                }
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(PosSpacing.sp4),
+                    child: const SubscriptionGateCard(feature: 'inventory'),
+                  ),
+                );
+              },
             ),
           ),
         ],

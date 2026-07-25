@@ -147,6 +147,14 @@ rsync -az --delete \
   "${PLACEHOLDER_SOURCE}/" \
   "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/backend/uploads/menu_placeholders/"
 
+say "Syncing software download files (APKs, desktop builds, etc.)"
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+  "mkdir -p '${REMOTE_DIR}/backend/uploads/software_downloads'"
+rsync -az --delete \
+  -e "ssh -p ${VPS_PORT}" \
+  "${REPO_ROOT}/backend/uploads/software_downloads/" \
+  "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/backend/uploads/software_downloads/"
+
 say "Updating nginx routes + restarting backend"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" bash -s <<REMOTE
 set -euo pipefail

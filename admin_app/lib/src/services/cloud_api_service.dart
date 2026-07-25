@@ -903,6 +903,15 @@ class CloudApiService {
     return AppAccessResult.fromJson(response);
   }
 
+  /// Fetch subscription upgrade info: current plan, addon options, message for ScreenBlocker.
+  Future<Map<String, dynamic>> fetchSubscriptionUpgrade() async {
+    final uri = _uri('/admin/subscription/upgrade');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    return _sendJson('GET', uri);
+  }
+
   Future<AppUpdateInfo> fetchAppUpdate() async {
     final uri = _uri('/admin/app-update');
     if (uri == null) {

@@ -278,6 +278,8 @@ class PosAppController extends ChangeNotifier {
   String? subscriptionStatus;
   String? subscriptionPackage;
   String? subscriptionExpiresAt;
+  bool upgradingSubscription = false;
+  Map<String, dynamic>? upgradeInfo;
 
   bool get isOffline => _lastInternetOnline == false;
 
@@ -935,10 +937,36 @@ class PosAppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Placeholder — requests subscription/pricing info from backend (not yet wired).
+  /// Fetch upgrade info from backend and store it for the ScreenBlocker.
   Future<void> requestSubscriptionUpgrade({String? feature}) async {
-    debugPrint('[Sub] requestSubscriptionUpgrade — feature=$feature (backend not yet implemented)');
-    // TODO: hit subscription/addon API when backend is ready
+    if (upgradingSubscription) return;
+    upgradeInfo = null;
+    upgradingSubscription = true;
+    notifyListeners();
+    try {
+      if (cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl) {
+        cloudApiService.configure(
+          cloudConfig: cloudConfig,
+          serverConfig: serverConfig,
+        );
+        upgradeInfo = await cloudApiService.fetchSubscriptionUpgrade();
+        debugPrint('[Sub] upgradeInfo received: $upgradeInfo');
+      } else {
+        debugPrint('[Sub] cloud not configured — hasDeviceToken=${cloudConfig.hasDeviceToken} hasValidBaseUrl=${cloudConfig.hasValidBaseUrl}');
+      }
+    } catch (error) {
+      lastError = 'Failed to load subscription info.';
+      debugPrint('[Sub] requestSubscriptionUpgrade error: $error');
+    } finally {
+      upgradingSubscription = false;
+      notifyListeners();
+    }
+  }
+
+  /// Clear stored upgrade info (e.g., after dialog is dismissed).
+  void clearUpgradeInfo() {
+    upgradeInfo = null;
+    notifyListeners();
   }
 
   /// Saves the manager's plan choice; app unlocks when platform admin activates access.

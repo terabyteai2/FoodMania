@@ -872,13 +872,15 @@ class _RestaurantDetailsContentState extends State<_RestaurantDetailsContent> {
         onTap: _openCustomerMenuTheme,
       ),
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SubscriptionGateCard(feature: 'inventory'),
-        SizedBox(height: PosSpacing.sp2),
-        _SettingsGroupCard(items: items),
-      ],
+    return SubscriptionGateCard(
+      feature: 'website_qr',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: PosSpacing.sp2),
+          _SettingsGroupCard(items: items),
+        ],
+      ),
     );
   }
 }
@@ -1229,78 +1231,85 @@ class _FacebookChatbotSettingsPageState
       subtitle: text.facebookMessengerBotSubtitle,
       icon: Icons.chat_bubble_outline_rounded,
       children: [
-        const SubscriptionGateCard(feature: 'messenger_bot'),
-        SizedBox(height: PosSpacing.sp2),
-        Row(
-          children: [
-            TfStatusBadge(label: statusLabel, kind: statusKind, upper: false),
-            if (app.facebookChatbotLoading) ...[
-              SizedBox(width: 8),
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
+        SubscriptionGateCard(
+          feature: 'messenger_bot',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: PosSpacing.sp2),
+              Row(
+                children: [
+                  TfStatusBadge(label: statusLabel, kind: statusKind, upper: false),
+                  if (app.facebookChatbotLoading) ...[
+                    SizedBox(width: 8),
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                ],
+              ),
+              SizedBox(height: 12),
+              TfButton(
+                label: config != null && config.isConfigured
+                    ? text.reconnectFacebookPage
+                    : text.connectFacebookPage,
+                icon: Icons.login_rounded,
+                busy: app.facebookChatbotLoading,
+                fullWidth: true,
+                onPressed: app.facebookChatbotLoading ? null : _connectWithFacebook,
+              ),
+              SizedBox(height: 8),
+              _FacebookToggleRow(
+                label: text.facebookBotEnabled,
+                value: _enabled,
+                onChanged: (value) => setState(() => _enabled = value),
+              ),
+              _FacebookToggleRow(
+                label: text.facebookOrderingEnabled,
+                value: _orderingEnabled,
+                onChanged: (value) => setState(() => _orderingEnabled = value),
+              ),
+              SizedBox(height: 10),
+              _FacebookInfoRow(
+                label: text.facebookWebhookUrl,
+                value: webhookUrl,
+                copyable: webhookUrl.isNotEmpty,
+              ),
+              if (config != null && config.isConfigured) ...[
+                _FacebookInfoRow(
+                  label: text.facebookPageName,
+                  value: config.pageName,
+                ),
+                _FacebookInfoRow(label: text.facebookPageId, value: config.pageId),
+                _FacebookInfoRow(
+                  label: text.facebookTokenSavedAs,
+                  value: config.tokenPreview,
+                ),
+              ],
+              if ((app.facebookChatbotError ?? config?.lastError ?? '').isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: TfText(
+                    app.facebookChatbotError ?? config?.lastError ?? '',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
+                  ),
+                ),
+              SizedBox(height: 14),
+              TfButton(
+                label: text.saveMessengerSettings,
+                icon: Icons.check_rounded,
+                busy: app.busy,
+                fullWidth: true,
+                onPressed: app.busy || config == null || !config.isConfigured
+                    ? null
+                    : _save,
               ),
             ],
-          ],
-        ),
-        SizedBox(height: 12),
-        TfButton(
-          label: config != null && config.isConfigured
-              ? text.reconnectFacebookPage
-              : text.connectFacebookPage,
-          icon: Icons.login_rounded,
-          busy: app.facebookChatbotLoading,
-          fullWidth: true,
-          onPressed: app.facebookChatbotLoading ? null : _connectWithFacebook,
-        ),
-        SizedBox(height: 8),
-        _FacebookToggleRow(
-          label: text.facebookBotEnabled,
-          value: _enabled,
-          onChanged: (value) => setState(() => _enabled = value),
-        ),
-        _FacebookToggleRow(
-          label: text.facebookOrderingEnabled,
-          value: _orderingEnabled,
-          onChanged: (value) => setState(() => _orderingEnabled = value),
-        ),
-        SizedBox(height: 10),
-        _FacebookInfoRow(
-          label: text.facebookWebhookUrl,
-          value: webhookUrl,
-          copyable: webhookUrl.isNotEmpty,
-        ),
-        if (config != null && config.isConfigured) ...[
-          _FacebookInfoRow(
-            label: text.facebookPageName,
-            value: config.pageName,
           ),
-          _FacebookInfoRow(label: text.facebookPageId, value: config.pageId),
-          _FacebookInfoRow(
-            label: text.facebookTokenSavedAs,
-            value: config.tokenPreview,
-          ),
-        ],
-        if ((app.facebookChatbotError ?? config?.lastError ?? '').isNotEmpty)
-          Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: TfText(
-              app.facebookChatbotError ?? config?.lastError ?? '',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
-            ),
-          ),
-        SizedBox(height: 14),
-        TfButton(
-          label: text.saveMessengerSettings,
-          icon: Icons.check_rounded,
-          busy: app.busy,
-          fullWidth: true,
-          onPressed: app.busy || config == null || !config.isConfigured
-              ? null
-              : _save,
         ),
       ],
     );

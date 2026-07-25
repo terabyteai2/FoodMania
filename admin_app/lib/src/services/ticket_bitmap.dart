@@ -204,7 +204,7 @@ class TicketBitmapRenderer {
     final hasTable =
         data.tableLabel?.trim().isNotEmpty == true &&
         data.tableValue?.trim().isNotEmpty == true;
-    final height = (336 + dynamicRows + noteRows + (hasTable ? 30 : 0))
+    final height = (336 + dynamicRows + noteRows + (hasTable ? 60 : 30))
         .toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -223,34 +223,41 @@ class TicketBitmapRenderer {
       align: TextAlign.center,
     );
     y = _rule(canvas, y + 8);
-    // Row 1: Table (left) + Order # (right)
+    // Row 1: Order #
+    y = _text(
+      canvas,
+      data.serialValue,
+      y,
+      fontSize: 23,
+      weight: FontWeight.w700,
+      gap: 2,
+    );
+    // Row 2: Table (if hasTable)
     if (hasTable) {
-      y = _row(
+      y = _text(
         canvas,
         '${data.tableLabel!.trim()}: ${data.tableValue!.trim()}',
-        data.serialValue,
         y,
-        fontSize: 26,
+        fontSize: 23,
+        weight: FontWeight.w500,
         gap: 2,
       );
-    } else {
-      y = _row(canvas, '', data.serialValue, y, fontSize: 26, gap: 2);
     }
-    // Row 2: Date + time as one left-aligned line
+    // Row 3: Date + time as one left-aligned line
     y = _text(
       canvas,
       '${data.dateLabel}: ${data.dateValue} - ${data.timeValue}',
       y,
-      fontSize: 26,
+      fontSize: 23,
       weight: FontWeight.w500,
       gap: 2,
     );
-    // Row 3: Type
+    // Row 4: Type
     y = _text(
       canvas,
       '${data.typeLabel}: ${data.typeValue}',
       y,
-      fontSize: 26,
+      fontSize: 23,
       weight: FontWeight.w500,
       gap: 2,
     );
@@ -872,14 +879,14 @@ class TicketBitmapRenderer {
     const maxRightWidth = 98.0;
     final amount = _painter(
       item.lineTotalText,
-      fontSize: 20,
+      fontSize: 19,
       weight: FontWeight.w500,
       align: TextAlign.right,
     )..layout(maxWidth: maxRightWidth);
     final leftMaxWidth = (_width - (_padding * 2)) - amount.width - 18;
     final left = _painter(
       '${item.qtyText} ${item.name}',
-      fontSize: 20,
+      fontSize: 19,
       weight: FontWeight.w500,
       maxLines: 2,
     )..layout(maxWidth: leftMaxWidth.clamp(72, _width).toDouble());

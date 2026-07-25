@@ -275,16 +275,18 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                         },
                         icon: Icon(Icons.close_rounded, color: PosColors.muted),
                       ),
-                contentPadding: const EdgeInsets.only(top: PosDensity.cardPad, bottom: PosDensity.cardPad, left: PosSpacing.sp3, right: 90),
+                contentPadding: const EdgeInsets.only(top: PosDensity.cardPad, bottom: PosDensity.cardPad, left: PosSpacing.sp3, right: PosSpacing.sp3),
               ),
             ),
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
-              child: GestureDetector(
-                onTap: widget.onToggleCode,
-                child: Container(
+              child: Offstage(
+                offstage: true,
+                child: GestureDetector(
+                  onTap: widget.onToggleCode,
+                  child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3),
                   decoration: BoxDecoration(
                     color: widget.codeMode ? PosColors.primary : PosColors.surface,
@@ -307,6 +309,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                     ),
                   ),
                 ),
+              ),
               ),
             ),
           ],

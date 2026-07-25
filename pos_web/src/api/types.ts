@@ -55,8 +55,7 @@ export interface BlockingNotice {
 }
 
 export interface BlockingNoticeRespondRequest {
-  phone: string;
-  transactionId?: string | null;
+  response: string;
 }
 
 export interface AdminAccessResult {

@@ -152,6 +152,7 @@ void main() {
     (tester) async {
       final controller = PosAppController()
         ..language = AppLanguage.en
+        ..subscriptionState = 'trial'
         ..serverConfig = ServerConfig(
           serverId: 'server-1',
           restaurantId: 'restaurant-1',

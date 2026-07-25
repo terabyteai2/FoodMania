@@ -144,30 +144,27 @@ export function renderKot(
   const u = width / 384;
   const now = new Date();
 
-  textCenter(p, 'KITCHEN ORDER', 26 * u, 800, 8);
+  textCenter(p, 'KITCHEN ORDER', 30 * u, 800, 6);
   hline(p, false);
-  textRow(p, `Date: ${fmtDate(now)}`, `Time: ${fmtTime(now)}`, 20 * u);
-  p.y += 6;
-  textCenter(p, `# ${order.serialNumber}`, 44 * u, 800, 10);
-  textRow(
-    p,
-    `Type: [ ${serviceLabel(order)} ]`,
-    order.tableNo ? `Table: ${order.tableNo}` : '',
-    20 * u, 600, 600,
-  );
-  if (ctx.serverRole) textLeft(p, `Server: ${ctx.serverRole}`, 20 * u);
+  textCenter(p, `Date: ${fmtDate(now)}   Time: ${fmtTime(now)}`, 22 * u, 400, 4);
+  p.y += 4;
+  textCenter(p, `# ${order.serialNumber}`, 48 * u, 800, 10);
+  let infoLine = `Type: [ ${serviceLabel(order)} ]`;
+  if (order.tableNo) infoLine += `    Table: ${order.tableNo}`;
+  textCenter(p, infoLine, 24 * u, 600, 4);
+  if (ctx.serverRole) textCenter(p, `Server: ${ctx.serverRole}`, 22 * u, 400, 4);
   hline(p);
   for (const line of batchLines) {
-    textWrap(p, `[${line.qty}] ${line.name}`, 24 * u, 700);
-    if (line.note) textWrap(p, `** ${line.note} **`, 20 * u, 600, 18 * u);
+    textWrap(p, `[${line.qty}] ${line.name}`, 28 * u, 700);
+    if (line.note) textWrap(p, `** ${line.note} **`, 24 * u, 600, 18 * u);
     p.y += 4;
   }
   if (kotNote) {
     p.y += 4;
-    textWrap(p, `NOTE: ${kotNote}`, 20 * u, 700);
+    textWrap(p, `NOTE: ${kotNote}`, 24 * u, 700);
   }
   hline(p);
-  textCenter(p, `Printed: ${fmtTime(now)}`, 18 * u, 400, 4);
+  textCenter(p, `Printed: ${fmtTime(now)}`, 22 * u, 400, 4);
   return trim(p);
 }
 
@@ -182,56 +179,75 @@ export function renderReceipt(
   const u = width / 384;
   const created = order.createdAt ? new Date(order.createdAt) : new Date();
 
-  textCenter(p, ctx.restaurantName, 26 * u, 800, 4);
+  textCenter(p, ctx.restaurantName, 30 * u, 800, 4);
   if (ctx.outletName && ctx.outletName !== ctx.restaurantName) {
-    textCenter(p, ctx.outletName, 19 * u, 500, 4);
+    textCenter(p, ctx.outletName, 23 * u, 500, 4);
   }
   hline(p, false);
-  textCenter(p, `Date: ${fmtDate(created)}   Time: ${fmtTime(created)}`, 18 * u, 400, 8);
-  textCenter(p, `#${order.serialNumber}`, 34 * u, 800, 8);
+  textCenter(p, `Date: ${fmtDate(created)}   Time: ${fmtTime(created)}`, 22 * u, 400, 8);
+  textCenter(p, `#${order.serialNumber}`, 38 * u, 800, 8);
 
   const badge = `[ ${serviceLabel(order)} ]`;
   const table = order.tableNo ? `Table: ${order.tableNo}` : '';
   const server = order.createdByRole ? `Server: ${order.createdByRole}` : '';
-  textCenter(p, [badge, table, server].filter(Boolean).join('   '), 19 * u, 600, 8);
+  textCenter(p, [badge, table, server].filter(Boolean).join('   '), 23 * u, 600, 8);
   hline(p);
 
-  // items header + rows
-  textRow(p, 'ITEM', 'TOTAL', 17 * u, 700, 700, 4);
+  font(p, 21 * u, 700);
+  const totalR = p.width - p.margin;
+  const priceR = totalR - 75 * u;
+  const itemW = priceR - p.margin - 4 * u;
+  p.ctx.textAlign = 'left';
+  p.ctx.fillText('ITEM', p.margin, p.y, itemW);
+  p.ctx.textAlign = 'right';
+  p.ctx.fillText('PRICE', priceR, p.y);
+  p.ctx.fillText('TOTAL', totalR, p.y);
+  p.y += 21 * u + 4;
   hline(p);
   for (const it of order.items) {
-    const name = it.name;
-    textRow(p, `${it.qty} x ${name}`, formatTk(it.lineTotal), 20 * u, 500, 600, 3);
-    if (it.note) textWrap(p, `- ${it.note}`, 17 * u, 400, 16 * u);
+    const name = `${it.qty}x ${it.name}`;
+    font(p, 24 * u, 500);
+    p.ctx.save();
+    p.ctx.beginPath();
+    p.ctx.rect(p.margin, p.y, itemW, 24 * u + 4);
+    p.ctx.clip();
+    p.ctx.textAlign = 'left';
+    p.ctx.fillText(name, p.margin, p.y);
+    p.ctx.restore();
+    p.ctx.textAlign = 'right';
+    p.ctx.fillText(formatTk(it.price), priceR, p.y);
+    p.ctx.fillText(formatTk(it.lineTotal), totalR, p.y);
+    p.y += 24 * u + 3;
+    if (it.note) textWrap(p, `- ${it.note}`, 21 * u, 400, 16 * u);
   }
   hline(p);
 
-  textRow(p, 'Subtotal', formatTk(order.subtotal ?? 0), 19 * u);
+  textRow(p, 'Subtotal', formatTk(order.subtotal ?? 0), 23 * u);
   if ((order.vatAmount ?? 0) > 0) {
-    textRow(p, `VAT (${order.vatRatePercent ?? 0}%)`, formatTk(order.vatAmount ?? 0), 19 * u);
+    textRow(p, `VAT (${order.vatRatePercent ?? 0}%)`, formatTk(order.vatAmount ?? 0), 23 * u);
   }
   if ((order.serviceChargeAmount ?? 0) > 0) {
-    textRow(p, `Service charge (${order.serviceChargeRatePercent ?? 0}%)`, formatTk(order.serviceChargeAmount ?? 0), 19 * u);
+    textRow(p, `Service charge (${order.serviceChargeRatePercent ?? 0}%)`, formatTk(order.serviceChargeAmount ?? 0), 23 * u);
   }
   if ((order.deliveryCharge ?? 0) > 0) {
-    textRow(p, 'Delivery', formatTk(order.deliveryCharge ?? 0), 19 * u);
+    textRow(p, 'Delivery', formatTk(order.deliveryCharge ?? 0), 23 * u);
   }
   if ((order.discountAmount ?? 0) > 0) {
-    textRow(p, `Discount${order.discountLabel ? ` (${order.discountLabel})` : ''}`, `-${formatTk(order.discountAmount ?? 0)}`, 19 * u, 400, 600);
+    textRow(p, `Discount${order.discountLabel ? ` (${order.discountLabel})` : ''}`, `-${formatTk(order.discountAmount ?? 0)}`, 23 * u, 400, 600);
   }
   p.y += 4;
-  textRow(p, 'TOTAL', formatTk(order.totalAmount), 26 * u, 800, 800, 8);
+  textRow(p, 'TOTAL', formatTk(order.totalAmount), 30 * u, 800, 800, 8);
 
   if (opts.paid) {
     hline(p);
-    textCenter(p, `PAID${opts.paymentLabel ? ` — ${opts.paymentLabel.toUpperCase()}` : ''}`, 20 * u, 700, 6);
+    textCenter(p, `PAID${opts.paymentLabel ? ` — ${opts.paymentLabel.toUpperCase()}` : ''}`, 24 * u, 700, 6);
   }
-  if (order.customerName) textLeft(p, `Customer: ${order.customerName}`, 18 * u);
-  if (order.deliveryAddress) textWrap(p, `Address: ${order.deliveryAddress}`, 18 * u);
-  if (order.mobileNumber) textLeft(p, `Mobile: ${order.mobileNumber}`, 18 * u);
+  if (order.customerName) textLeft(p, `Customer: ${order.customerName}`, 22 * u);
+  if (order.deliveryAddress) textWrap(p, `Address: ${order.deliveryAddress}`, 22 * u);
+  if (order.mobileNumber) textLeft(p, `Mobile: ${order.mobileNumber}`, 22 * u);
 
   hline(p, false);
-  textCenter(p, 'Thank you! Powered by QuickBytes', 16 * u, 400, 2);
+  textCenter(p, 'Thank you! Powered by QuickBytes', 20 * u, 400, 2);
   return trim(p);
 }
 

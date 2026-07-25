@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -59,6 +60,9 @@ from schemas import (
 from subscription_service import (
     get_or_create_subscription,
     grant_outlet_access,
+    load_prices,
+    maybe_expire_subscription,
+    outlet_has_app_access,
     register_onboarding_plan,
     resolve_subscription_access_for_outlet,
     subscription_access_dict,
@@ -249,6 +253,74 @@ async def admin_app_access(
     if not outlet_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
     return ok(await resolve_subscription_access_for_outlet(db, outlet_id))
+
+
+@router.get("/admin/subscription/upgrade")
+async def admin_subscription_upgrade(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return subscription upgrade info for the ScreenBlocker in the admin app."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    outlet_id = payload.get("sub") or payload.get("outlet_id")
+    if not outlet_id:
+        logger.warning("upgrade: no outlet_id in token payload=%s", payload)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+
+    sub = (
+        await db.execute(
+            select(OutletSubscription).where(OutletSubscription.outlet_id == outlet_id)
+        )
+    ).scalar_one_or_none()
+
+    logger.info("upgrade: outlet_id=%s sub=%s", outlet_id, sub.id if sub else None)
+
+    sub = await maybe_expire_subscription(db, sub)
+    prices = await load_prices(db)
+
+    sub_prices = prices["subscriptionPrices"]
+    addon_prices = prices["addonPrices"]
+
+    logger.info("upgrade: sub_prices=%s addon_prices=%s", sub_prices, addon_prices)
+
+    pkg = (sub.package or "standard").lower() if sub else "standard"
+    status = sub.status if sub else "none"
+    user_addons = set(json.loads(sub.addons or "[]")) if sub else set()
+
+    price = sub_prices.get(pkg, 500)
+
+    addon_options = []
+    for key in sorted(addon_prices.keys()):
+        addon_options.append({
+            "key": key,
+            "label": key.replace("_", " ").title(),
+            "price": addon_prices[key],
+            "owned": key in user_addons,
+        })
+
+    logger.info("upgrade: pkg=%s status=%s user_addons=%s addon_options=%s", pkg, status, user_addons, addon_options)
+
+    return ok({
+        "title": f"Subscription — {pkg.title()}",
+        "message": (
+            f"Current plan: {pkg.title()} ({status}).\n"
+            f"Pay ৳{price} to bKash 01575873000 to activate/renew.\n\n"
+            f"Select add-ons you want below. "
+            f"After payment, tap 'Check now' to verify."
+        ),
+        "inputField": True,
+        "inputLabel": "Your bKash number (if different from account phone)",
+        "type": "subscription_upgrade",
+        "dismissible": False,
+        "hasAppAccess": outlet_has_app_access(sub),
+        "subscriptionStatus": status,
+        "currentPlan": pkg,
+        "currentPackage": pkg,
+        "subscriptionPrices": sub_prices,
+        "addonOptions": addon_options,
+    })
 
 
 @router.post("/admin/subscription/addon")

@@ -683,8 +683,21 @@ class _MainShellState extends State<MainShell> {
                   minExtendedWidth: 232,
                   groupAlignment: -0.86,
                   leading: Padding(
-                    padding: EdgeInsets.fromLTRB(14, 22, 14, 28),
-                    child: _RailLogo(extended: extended),
+                    padding: EdgeInsets.fromLTRB(14, 22, 14, 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: _RailLogo(extended: extended),
+                        ),
+                        _QuickBillRailItem(
+                          extended: extended,
+                          onTap: () => _handleDrawerAction(_DrawerAction.quickBill),
+                        ),
+                        SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                   trailing: Padding(
                     padding: EdgeInsets.fromLTRB(12, 18, 12, 22),
@@ -765,6 +778,14 @@ class _MainShellState extends State<MainShell> {
   /// Drawer group-child actions: quick screens/sheets that don't map to a tab.
   void _handleDrawerAction(_DrawerAction action) {
     switch (action) {
+      case _DrawerAction.quickBill:
+        _selectTab(_AppTab.orders);
+        unawaited(openNewOrderForm(
+          context,
+          startAtMenu: true,
+          startWithCodeMode: true,
+        ));
+        break;
       case _DrawerAction.stockScan:
         unawaited(runStockScanFlow(
           context,
@@ -1183,9 +1204,55 @@ class _RailLogo extends StatelessWidget {
   }
 }
 
+class _QuickBillRailItem extends StatelessWidget {
+  const _QuickBillRailItem({required this.extended, required this.onTap});
+
+  final bool extended;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.select(context, AppAspect.language).strings;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+        child: Container(
+          height: extended ? 48 : 56,
+          decoration: BoxDecoration(
+            border: Border.all(color: PosColors.line),
+            borderRadius: BorderRadius.circular(PosRadii.md),
+          ),
+          child: extended
+              ? Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.flash_on_rounded, size: 20, color: PosColors.warning),
+                      SizedBox(width: 10),
+                      Text(
+                        text.quickBill,
+                        style: TextStyle(
+                          color: PosColors.slate,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Icon(Icons.flash_on_rounded, size: 22, color: PosColors.warning),
+        ),
+      ),
+    );
+  }
+}
+
 /// Quick actions reachable from drawer group children — screens/sheets that
 /// don't map to a nav tab. Handled by [_MainShellState._handleDrawerAction].
 enum _DrawerAction {
+  quickBill,
   stockScan,
   stockIn,
   stockCount,
@@ -1355,7 +1422,16 @@ class _AppNavDrawer extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp2),
                 children: [
-                  for (final tab in primary) rowFor(tab),
+                  for (final tab in primary) ...[
+                    if (tab == _AppTab.orders)
+                      _DrawerNavRow.icon(
+                        icon: Icons.flash_on_outlined,
+                        label: text.quickBill,
+                        selected: false,
+                        onTap: () => goAction(_DrawerAction.quickBill),
+                      ),
+                    rowFor(tab),
+                  ],
                   const _DrawerDivider(),
                   _DrawerNavRow.destination(
                     destination: _destinationFor(_AppTab.more, text),
