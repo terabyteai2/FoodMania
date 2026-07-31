@@ -90,39 +90,47 @@ void main() {
   test('menu scan response keeps valid import candidates and table count', () {
     final result = MenuScanResult.fromJson({
       'data': {
-        'provider': 'xai',
-        'pageCount': 2,
-        'items': [
+        'images': [
           {
-            'nameEn': 'Chicken Roll',
-            'nameBn': 'চিকেন রোল',
-            'descriptionEn': 'Warm chicken roll.',
-            'descriptionBn': 'গরম চিকেন রোল।',
-            'categoryEn': 'Snacks',
-            'categoryBn': 'স্ন্যাকস',
-            'price': 180,
-            'isAvailable': true,
-            'iconKey': 'chicken',
-            'imageUrl':
-                'https://api.example.com/uploads/menu_placeholders/chicken-1.png',
-            'subItems': [
-              {'nameEn': 'Sauce', 'nameBn': 'সস'},
+            'pageIndex': 0,
+            'items': [
+              {
+                'nameEn': 'Chicken Roll',
+                'nameBn': 'চিকেন রোল',
+                'descriptionEn': 'Warm chicken roll.',
+                'descriptionBn': 'গরম চিকেন রোল।',
+                'categoryEn': 'Snacks',
+                'categoryBn': 'স্ন্যাকস',
+                'price': 180,
+                'isAvailable': true,
+                'iconKey': 'chicken',
+                'imageUrl':
+                    'https://api.example.com/uploads/menu_placeholders/chicken-1.png',
+                'subItems': [
+                  {'nameEn': 'Sauce', 'nameBn': 'সস'},
+                ],
+                'addOns': [
+                  {'nameEn': 'Cheese', 'nameBn': 'চিজ', 'price': 30},
+                  {'nameEn': 'Free salad', 'nameBn': 'সালাদ', 'price': 0},
+                ],
+                'sizeVariants': [],
+              },
+              {
+                'nameEn': 'Broken price',
+                'nameBn': 'ভাঙা দাম',
+                'descriptionEn': 'Skip this one.',
+                'descriptionBn': 'এটি বাদ দিন।',
+                'categoryEn': 'General',
+                'categoryBn': 'সাধারণ',
+                'price': 0,
+              },
             ],
-            'addOns': [
-              {'nameEn': 'Cheese', 'nameBn': 'চিজ', 'price': 30},
-              {'nameEn': 'Free salad', 'nameBn': 'সালাদ', 'price': 0},
-            ],
-          },
-          {
-            'nameEn': 'Broken price',
-            'nameBn': 'ভাঙা দাম',
-            'descriptionEn': 'Skip this one.',
-            'descriptionBn': 'এটি বাদ দিন।',
-            'categoryEn': 'General',
-            'categoryBn': 'সাধারণ',
-            'price': 0,
+            'provider': 'deepseek',
+            'pageCount': 1,
+            'warnings': [],
           },
         ],
+        'totalPages': 2,
       },
     });
     final tenant = TenantBootstrapResult.fromJson({
@@ -137,7 +145,7 @@ void main() {
       },
     });
 
-    expect(result.provider, 'xai');
+    expect(result.provider, 'deepseek');
     expect(result.pageCount, 2);
     expect(result.items.map((item) => item.nameEn), ['Chicken Roll']);
     expect(result.items.single.iconKey, 'chicken');

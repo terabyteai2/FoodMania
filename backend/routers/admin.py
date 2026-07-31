@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -6,6 +7,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from auth import (
     create_device_token,
@@ -201,6 +204,7 @@ async def _auth_payload(
             select(OutletSubscription).where(OutletSubscription.outlet_id == outlet.id)
         )
     ).scalar_one_or_none()
+    logger.info("[SUB] _auth_payload — outlet=%s sub=%s status=%s", outlet.id, sub.id if sub else None, sub.status if sub else None)
     token = create_device_token(outlet.id, account.id)
     return {
         "serverId": server_id or outlet.server_id,
@@ -231,16 +235,18 @@ async def admin_register_onboarding_plan(
     """Record plan choice from the app so platform admin can activate the outlet."""
     outlet_id = payload.get("sub") or payload.get("outlet_id")
     if not outlet_id:
+        logger.warning("[SUB] onboarding — no outlet_id in payload")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+    logger.info("[SUB] onboarding — outlet=%s plan=%s package=%s", outlet_id, body.plan, body.package)
     sub = await register_onboarding_plan(db, outlet_id, plan=body.plan, package=body.package)
     await db.commit()
     await db.refresh(sub)
-    return ok(
-        {
-            **subscription_access_dict(sub),
-            **subscription_to_dict(sub),
-        }
-    )
+    result = {
+        **subscription_access_dict(sub),
+        **subscription_to_dict(sub),
+    }
+    logger.info("[SUB] onboarding — response=%s", result)
+    return ok(result)
 
 
 @router.get("/admin/access")
@@ -251,8 +257,11 @@ async def admin_app_access(
     """Outlet subscription access — used by the admin app to unlock after platform payment approval."""
     outlet_id = payload.get("sub") or payload.get("outlet_id")
     if not outlet_id:
+        logger.warning("[SUB] admin/access — no outlet_id in payload")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
-    return ok(await resolve_subscription_access_for_outlet(db, outlet_id))
+    result = await resolve_subscription_access_for_outlet(db, outlet_id)
+    logger.info("[SUB] admin/access — outlet=%s response=%s", outlet_id, result)
+    return ok(result)
 
 
 @router.get("/admin/subscription/upgrade")
@@ -261,12 +270,9 @@ async def admin_subscription_upgrade(
     db: AsyncSession = Depends(get_db),
 ):
     """Return subscription upgrade info for the ScreenBlocker in the admin app."""
-    import logging
-    logger = logging.getLogger(__name__)
-
     outlet_id = payload.get("sub") or payload.get("outlet_id")
     if not outlet_id:
-        logger.warning("upgrade: no outlet_id in token payload=%s", payload)
+        logger.warning("[SUB] upgrade — no outlet_id in token payload=%s", payload)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
 
     sub = (
@@ -275,15 +281,13 @@ async def admin_subscription_upgrade(
         )
     ).scalar_one_or_none()
 
-    logger.info("upgrade: outlet_id=%s sub=%s", outlet_id, sub.id if sub else None)
+    logger.info("[SUB] upgrade — outlet=%s sub=%s", outlet_id, sub.id if sub else None)
 
     sub = await maybe_expire_subscription(db, sub)
     prices = await load_prices(db)
 
     sub_prices = prices["subscriptionPrices"]
     addon_prices = prices["addonPrices"]
-
-    logger.info("upgrade: sub_prices=%s addon_prices=%s", sub_prices, addon_prices)
 
     pkg = (sub.package or "standard").lower() if sub else "standard"
     status = sub.status if sub else "none"
@@ -300,7 +304,7 @@ async def admin_subscription_upgrade(
             "owned": key in user_addons,
         })
 
-    logger.info("upgrade: pkg=%s status=%s user_addons=%s addon_options=%s", pkg, status, user_addons, addon_options)
+    logger.info("[SUB] upgrade — outlet=%s pkg=%s status=%s price=%s user_addons=%s addon_options=%s", outlet_id, pkg, status, price, user_addons, addon_options)
 
     return ok({
         "title": f"Subscription — {pkg.title()}",
@@ -331,7 +335,9 @@ async def admin_request_addon(
     """Stub — platform admin will implement addon purchase logic later."""
     outlet_id = payload.get("sub") or payload.get("outlet_id")
     if not outlet_id:
+        logger.warning("[SUB] addon — no outlet_id in payload")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+    logger.info("[SUB] addon — outlet=%s (stub, not implemented)", outlet_id)
     return ok({"message": "Addon purchase endpoint — not yet implemented."})
 
 
@@ -946,3 +952,32 @@ async def update_staff(
     await db.commit()
     await db.refresh(account)
     return ok({"account": _account_dict(account)})
+
+
+@router.delete("/admin/staff/{account_id}")
+async def delete_staff(
+    account_id: str,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    manager = await _current_account(payload, db, require_manager=True)
+    account = (
+        await db.execute(
+            select(AdminAccount).where(
+                (AdminAccount.id == account_id)
+                & (AdminAccount.outlet_id == manager.outlet_id)
+                & (AdminAccount.role.in_((MANAGER, *FLOOR_ROLES)))
+            )
+        )
+    ).scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
+    # Only an owner may delete a manager seat.
+    if account.role == MANAGER and manager.role != OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an owner can delete a manager.",
+        )
+    await db.delete(account)
+    await db.commit()
+    return ok({"deleted": True})

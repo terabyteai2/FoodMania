@@ -4,6 +4,8 @@ import { Login } from './screens/Login';
 import { Shell } from './screens/Shell';
 import { t } from './i18n/strings';
 import { ScreenBlocker } from './components/ScreenBlocker';
+import type { UpgradeInfo } from './api/types';
+import { api } from './api/client';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
 function OfflineNoSession() {
@@ -28,19 +30,19 @@ export function App() {
   const { session, lang, blockingNotice, refreshAccess, respondBlockingNotice } = useSession();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
   const path = window.location.pathname;
+  console.log('[auth] App: path=' + path + ' hasSession=' + (session !== null) + ' online=' + navigator.onLine);
 
   if (!session) {
-    if (path === '/login') return <Login />;
     if (navigator.onLine) {
-      window.location.href = '/landing/';
-      return null;
+      return <Login />;
     }
     return <OfflineNoSession />;
   }
 
-  if (path === '/login') {
-    window.location.href = '/';
+  if (path === '/login' || path === '/signup') {
+    window.location.replace('/app/');
     return null;
   }
 
@@ -56,6 +58,8 @@ export function App() {
       setError(null);
       try {
         await refreshAccess();
+        const info = await api.fetchUpgradeInfo();
+        setUpgradeInfo(info);
       } catch {
         setError(t('screenBlocker.error', lang));
       } finally {
@@ -90,6 +94,7 @@ export function App() {
           ctaUrl: null,
           dismissible: false,
         }}
+        upgradeInfo={upgradeInfo}
         refreshing={refreshing}
         error={error}
         onRetry={handleRetry}

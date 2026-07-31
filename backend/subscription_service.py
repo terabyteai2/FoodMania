@@ -6,10 +6,13 @@ Addon features: inventory (199/mo), website_qr (199/mo), messenger_bot (199/mo)
 """
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from models import Outlet, OutletSubscription, SystemConfig, UddoktaPaySession
 from services.blocking_notice import disabled_blocking_notice
@@ -53,6 +56,7 @@ async def load_prices(db: AsyncSession) -> dict[str, dict[str, int]]:
         try:
             subscription_prices = json.loads(sub_raw.value)
         except (json.JSONDecodeError, TypeError):
+            logger.warning("[SUB] load_prices: failed to parse subscription_prices raw=%s", sub_raw.value)
             pass
 
     addon_prices = DEFAULT_ADDON_PRICES
@@ -60,8 +64,10 @@ async def load_prices(db: AsyncSession) -> dict[str, dict[str, int]]:
         try:
             addon_prices = json.loads(addon_raw.value)
         except (json.JSONDecodeError, TypeError):
+            logger.warning("[SUB] load_prices: failed to parse addon_prices raw=%s", addon_raw.value)
             pass
 
+    logger.info("[SUB] load_prices → sub_prices=%s addon_prices=%s", subscription_prices, addon_prices)
     return {
         "subscriptionPrices": subscription_prices,
         "addonPrices": addon_prices,
@@ -80,30 +86,43 @@ async def resolve_outlet_by_server_id(db: AsyncSession, server_id: str) -> Outle
 
 def outlet_needs_activation(sub: OutletSubscription | None) -> bool:
     if sub is None:
+        logger.info("[SUB] outlet_needs_activation — sub=None → False")
         return False
-    return sub.status == "on_hold"
+    result = sub.status == "on_hold"
+    logger.info("[SUB] outlet_needs_activation — sub=%s status=%s → %s", sub.id, sub.status, result)
+    return result
 
 
 def outlet_has_app_access(sub: OutletSubscription | None) -> bool:
     if sub is None:
+        logger.info("[SUB] outlet_has_app_access — sub=None → False")
         return False
     if sub.status not in ("trial", "active"):
+        logger.info("[SUB] outlet_has_app_access — sub=%s status=%s ∉ (trial,active) → False", sub.id, sub.status)
         return False
-    if sub.expires_at is not None and sub.expires_at <= _now():
+    now = _now()
+    if sub.expires_at is not None and sub.expires_at <= now:
+        logger.info("[SUB] outlet_has_app_access — sub=%s status=%s expires_at=%s <= now=%s → False (expired)", sub.id, sub.status, sub.expires_at, now)
         return False
+    logger.info("[SUB] outlet_has_app_access — sub=%s status=%s expires_at=%s → True", sub.id, sub.status, sub.expires_at)
     return True
 
 
 def outlet_has_feature(sub: OutletSubscription | None, feature: str) -> bool:
     """Per-feature access check — trial gets everything, active checks addons."""
     if not outlet_has_app_access(sub):
+        logger.info("[SUB] outlet_has_feature — sub=%s feature=%s → False (no app access)", sub.id if sub else None, feature)
         return False
     if sub.status == "trial":
+        logger.info("[SUB] outlet_has_feature — sub=%s feature=%s status=trial → True (unrestricted)", sub.id, feature)
         return True
     if feature in BASE_FEATURES:
+        logger.info("[SUB] outlet_has_feature — sub=%s feature=%s in base → True", sub.id, feature)
         return True
     user_addons = json.loads(sub.addons or "[]")
-    return feature in user_addons
+    result = feature in user_addons
+    logger.info("[SUB] outlet_has_feature — sub=%s feature=%s addons=%s → %s", sub.id, feature, user_addons, result)
+    return result
 
 
 def _parse_addons(sub: OutletSubscription | None) -> list[str]:
@@ -117,15 +136,20 @@ async def maybe_expire_subscription(
 ) -> OutletSubscription | None:
     """Flip expired trial/active subscriptions to on_hold."""
     if sub is None:
+        logger.info("[SUB] maybe_expire_subscription — sub=None → None")
         return None
     now = _now()
     expired = sub.expires_at is not None and sub.expires_at <= now
     if not expired:
+        logger.info("[SUB] maybe_expire_subscription — sub=%s status=%s expires_at=%s → no-op (not expired)", sub.id, sub.status, sub.expires_at)
         return sub
     if sub.status in ("trial", "active"):
+        logger.info("[SUB] maybe_expire_subscription — sub=%s status=%s expires_at=%s → expiring to on_hold", sub.id, sub.status, sub.expires_at)
         sub.status = "on_hold"
         sub.updated_at = now
         await db.flush()
+    else:
+        logger.info("[SUB] maybe_expire_subscription — sub=%s status=%s expired but not in (trial,active) → keeping status", sub.id, sub.status)
     return sub
 
 
@@ -135,7 +159,7 @@ def subscription_access_dict(
     subscription_prices: dict[str, int] | None = None,
     addon_prices: dict[str, int] | None = None,
 ) -> dict:
-    return {
+    result = {
         "hasAppAccess": outlet_has_app_access(sub),
         "subscriptionStatus": sub.status if sub else None,
         "subscriptionPlan": sub.plan if sub else None,
@@ -147,6 +171,8 @@ def subscription_access_dict(
         "subscriptionPrices": subscription_prices or DEFAULT_SUBSCRIPTION_PRICES,
         "addonPrices": addon_prices or DEFAULT_ADDON_PRICES,
     }
+    logger.info("[SUB] subscription_access_dict — sub=%s result=%s", sub.id if sub else None, result)
+    return result
 
 
 async def grant_outlet_access(
@@ -166,6 +192,7 @@ async def grant_outlet_access(
     sub.expires_at = now + timedelta(days=days)
     sub.updated_at = now
     await db.flush()
+    logger.info("[SUB] grant_outlet_access — outlet=%s sub=%s package=%s days=%s expires_at=%s", outlet_id, sub.id, sub.package, days, sub.expires_at)
     return sub
 
 
@@ -173,11 +200,13 @@ async def resolve_subscription_access_for_outlet(
     db: AsyncSession,
     outlet_id: str,
 ) -> dict:
+    logger.info("[SUB] resolve_subscription_access_for_outlet — outlet=%s", outlet_id)
     sub = (
         await db.execute(
             select(OutletSubscription).where(OutletSubscription.outlet_id == outlet_id)
         )
     ).scalar_one_or_none()
+    logger.info("[SUB] resolve_subscription_access — found sub=%s status=%s", sub.id if sub else None, sub.status if sub else None)
     sub = await maybe_expire_subscription(db, sub)
     prices = await load_prices(db)
     return subscription_access_dict(
@@ -211,6 +240,7 @@ async def get_or_create_subscription(db: AsyncSession, outlet_id: str) -> Outlet
         )
     ).scalar_one_or_none()
     if sub is not None:
+        logger.info("[SUB] get_or_create_subscription — outlet=%s found existing sub=%s status=%s", outlet_id, sub.id, sub.status)
         return sub
     now = _now()
     sub = OutletSubscription(
@@ -222,6 +252,7 @@ async def get_or_create_subscription(db: AsyncSession, outlet_id: str) -> Outlet
     )
     db.add(sub)
     await db.flush()
+    logger.info("[SUB] get_or_create_subscription — outlet=%s CREATED new trial sub=%s expires_at=%s", outlet_id, sub.id, sub.expires_at)
     return sub
 
 
@@ -232,6 +263,7 @@ async def blocking_notice_for_subscription(
     db: AsyncSession, sub: OutletSubscription | None
 ) -> dict:
     if sub is None or sub.status not in BLOCKING_STATUSES:
+        logger.info("[SUB] blocking_notice — sub=%s → disabled (status=%s)", sub.id if sub else None, sub.status if sub else None)
         return disabled_blocking_notice()
 
     prices = await load_prices(db)
@@ -241,7 +273,7 @@ async def blocking_notice_for_subscription(
     pkg = (sub.package or "standard").lower()
     price = sub_prices.get(pkg, 500)
 
-    return {
+    result = {
         "enabled": True,
         "title": f"Subscription {status_label}",
         "message": (
@@ -257,6 +289,8 @@ async def blocking_notice_for_subscription(
         "ctaUrl": None,
         "dismissible": False,
     }
+    logger.info("[SUB] blocking_notice — sub=%s status=%s → enabled title=%s", sub.id, sub.status, result["title"])
+    return result
 
 
 async def register_onboarding_plan(
@@ -276,7 +310,6 @@ async def register_onboarding_plan(
         if clean not in VALID_PACKAGES:
             clean = "standard"
     else:
-        # Legacy mapping: monthly/annual → standard
         clean = "standard"
     now = _now()
     sub = await get_or_create_subscription(db, outlet_id)
@@ -284,6 +317,7 @@ async def register_onboarding_plan(
     sub.status = "on_hold"
     sub.updated_at = now
     await db.flush()
+    logger.info("[SUB] register_onboarding_plan — outlet=%s sub=%s plan=%s package=%s → status=on_hold", outlet_id, sub.id, plan, clean)
     return sub
 
 
@@ -300,6 +334,7 @@ async def activate_subscription_from_payment(
     if outlet is None:
         outlet = await resolve_outlet_by_server_id(db, session.server_id)
     if outlet is None:
+        logger.warning("[SUB] activate_from_payment — no outlet found for session=%s server_id=%s", session.id, session.server_id)
         return None
 
     if not session.outlet_id:
@@ -314,4 +349,5 @@ async def activate_subscription_from_payment(
     sub.last_payment_session_id = session.id
     sub.updated_at = now
     await db.flush()
+    logger.info("[SUB] activate_from_payment — outlet=%s sub=%s session=%s expires_at=%s", outlet.id, sub.id, session.id, sub.expires_at)
     return sub

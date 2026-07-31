@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Build and deploy ONLY the pos_web app (static SPA at /var/www/rastarant/backend/pos_dist/).
-# Fast cycle for frontend work — no backend restart, no full rsync.
+# Build and deploy ONLY the customer menu frontend (static SPA at /var/www/rastarant/backend/frontend_dist/).
 #
-#   Usage:  bash deploy/deploy-pos-web.sh
-#
-# Builds pos_web, rsyncs just backend/pos_dist/ to the VPS, and reloads nginx.
+# Usage:  bash deploy/customer_menu.sh
 
 set -euo pipefail
 
 VPS_HOST="${VPS_HOST:-160.187.130.80}"
 VPS_USER="${VPS_USER:-root}"
 VPS_PORT="${VPS_PORT:-22}"
-REMOTE_POS_DIR="/var/www/rastarant/backend/pos_dist"
+REMOTE_DIR="/var/www/rastarant/backend/frontend_dist"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -29,7 +26,7 @@ ensure_modern_node() {
     return
   fi
   local nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
-  [[ -f "${nvm_sh}" ]] || die "Node 18+ is required for Vite builds. Install Node 20 or nvm."
+  [[ -f "${nvm_sh}" ]] || die "Node 18+ is required for Vite builds."
   # shellcheck disable=SC1090
   source "${nvm_sh}"
   nvm use 20.20.0 >/dev/null 2>&1 \
@@ -46,26 +43,26 @@ ssh -o BatchMode=yes -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "true" 2>/dev/nu
 
 ensure_modern_node
 
-say "Installing pos_web dependencies"
-cd "${REPO_ROOT}/pos_web"
+say "Installing customer_menu dependencies"
+cd "${REPO_ROOT}/customer_menu/frontend"
 if [[ -f package-lock.json ]]; then
   npm ci --silent 2>/dev/null || die "npm ci failed"
 else
   npm install --silent 2>/dev/null || die "npm install failed"
 fi
 
-say "Building pos_web"
-npm run build --silent 2>/dev/null || die "Build failed"
+say "Building customer_menu"
+npm run build || die "Build failed"
 
-say "Syncing build output to ${VPS_USER}@${VPS_HOST}:${REMOTE_POS_DIR}"
-ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "mkdir -p '${REMOTE_POS_DIR}'"
+say "Syncing build output to ${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}"
+ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "mkdir -p '${REMOTE_DIR}'"
 rsync -az --delete \
   -e "ssh -p ${VPS_PORT}" \
-  "${REPO_ROOT}/backend/pos_dist/" \
-  "${VPS_USER}@${VPS_HOST}:${REMOTE_POS_DIR}/"
+  "${REPO_ROOT}/backend/frontend_dist/" \
+  "${VPS_USER}@${VPS_HOST}:${REMOTE_DIR}/"
 
-ok "POS web build deployed"
+ok "Customer menu build deployed"
 
 say "Reloading nginx"
 ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "nginx -t && systemctl reload nginx"
-ok "Done — pos_web updated at https://quickbytes.buzz/app/"
+ok "Done — customer menu updated (wildcard subdomains *.quickbytes.buzz)"

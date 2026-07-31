@@ -79,7 +79,11 @@ export function Billing() {
     });
   }, [menu.items, menu.favorites, category, search]);
 
-  const inCartIds = useMemo(() => new Set(cart.lines.map((l) => l.menuItemId)), [cart.lines]);
+  const cartCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of cart.lines) if (l.menuItemId) m.set(l.menuItemId, (m.get(l.menuItemId) ?? 0) + l.qty);
+    return m;
+  }, [cart.lines]);
   const totals = cart.totals();
 
   // ---------- item entry ----------
@@ -92,6 +96,11 @@ export function Billing() {
       unitPrice: custom?.unitPrice ?? item.price,
       note: custom?.note ?? null,
     });
+  };
+
+  const decItem = (itemId: string) => {
+    const line = cart.lines.find((l) => l.menuItemId === itemId);
+    if (line) cart.setQty(line.lineId, line.qty - 1);
   };
 
   const tapItem = (item: PosMenuItem) => {
@@ -220,13 +229,17 @@ export function Billing() {
             {visibleItems.map((item) => (
               <button
                 key={item.raw.id}
-                className={`item-tile ${inCartIds.has(item.raw.id) ? 'in-cart' : ''} ${!item.raw.isAvailable ? 'unavailable' : ''}`}
+                className={`item-tile ${cartCounts.has(item.raw.id) ? 'in-cart' : ''} ${!item.raw.isAvailable ? 'unavailable' : ''}`}
                 style={{ '--cat-hue': catHue(item.category) } as React.CSSProperties}
                 onClick={() => item.raw.isAvailable && tapItem(item)}
                 onContextMenu={(e) => { e.preventDefault(); menu.toggleFavorite(item.raw.id); }}
                 title={`${itemDisplayName(item, bn)}${item.raw.shortCode != null ? ` · ${t('foh.code', lang)} ${item.raw.shortCode}` : ''}`}
               >
                 {menu.favorites.has(item.raw.id) && <span className="item-fav-dot">♥</span>}
+                {cartCounts.get(item.raw.id)! > 0 && <>
+                  <button className="item-minus-btn" onClick={(e) => { e.stopPropagation(); decItem(item.raw.id); }}>−</button>
+                  <span className="item-count-badge">{cartCounts.get(item.raw.id)}</span>
+                </>}
                 <span className="item-name">{itemDisplayName(item, bn)}</span>
               </button>
             ))}

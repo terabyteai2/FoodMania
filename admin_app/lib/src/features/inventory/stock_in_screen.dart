@@ -331,6 +331,15 @@ class _StockInScreenState extends State<StockInScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TfText(
+                      text.stockInInstruction,
+                      style: TfTextStyles.bodyMuted.copyWith(
+                        color: PosColors.muted,
+                      ),
+                    ),
+                  ),
                   if (_scanning || _scanError != null || _scanProvider != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -347,6 +356,7 @@ class _StockInScreenState extends State<StockInScreen> {
                       key: ValueKey(
                         'stock-in-line-${_lines[i].linkedItemId ?? _lines[i].identity}',
                       ),
+                      index: i,
                       line: _lines[i],
                       text: text,
                       showRemove: _lines.length > 1,
@@ -536,6 +546,7 @@ class _LineCard extends StatelessWidget {
     required this.showRemove,
     required this.onRemove,
     required this.onChanged,
+    required this.index,
     super.key,
   });
 
@@ -544,6 +555,7 @@ class _LineCard extends StatelessWidget {
   final bool showRemove;
   final VoidCallback onRemove;
   final VoidCallback onChanged;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
@@ -551,78 +563,88 @@ class _LineCard extends StatelessWidget {
     return TfCard(
       padding: const EdgeInsets.all(13),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: PosColors.surfaceSunk,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.inventory_2_outlined,
-                  size: 19,
-                  color: PosColors.slate,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: TfText(
+              'Item ${index + 1}',
+              style: TfTextStyles.rowTitle.copyWith(
+                color: PosColors.text,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  key: ValueKey('stock-in-name-${line.identity}'),
-                  controller: line.nameCtrl,
-                  onChanged: (_) => onChanged(),
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    hintText: 'Item name',
-                    isDense: true,
-                  ),
-                  style: TfTextStyles.rowTitle.copyWith(
-                    color: PosColors.slate,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-              if (showRemove)
-                SizedBox.square(
-                  dimension: 30,
-                  child: IconButton(
-                    key: ValueKey('stock-in-remove-${line.identity}'),
-                    padding: EdgeInsets.zero,
-                    tooltip: text.cancel,
-                    icon: const Icon(Icons.close_rounded, size: 17),
-                    color: PosColors.muted,
-                    onPressed: onRemove,
-                  ),
-                ),
-            ],
+            ),
           ),
-          const SizedBox(height: 10),
           Row(
-            children: [
-              Expanded(
-                child: _QuantityField(
-                  line: line,
-                  label: text.stockInQuantityLabel,
-                  text: text,
-                  onChanged: onChanged,
-                ),
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: PosColors.surfaceSunk,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 19,
+                      color: PosColors.slate,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      key: ValueKey('stock-in-name-${line.identity}'),
+                      controller: line.nameCtrl,
+                      onChanged: (_) => onChanged(),
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        hintText: 'Item name',
+                        isDense: true,
+                      ),
+                      style: TfTextStyles.rowTitle.copyWith(
+                        color: PosColors.slate,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                  if (showRemove)
+                    SizedBox.square(
+                      dimension: 30,
+                      child: IconButton(
+                        key: ValueKey('stock-in-remove-${line.identity}'),
+                        padding: EdgeInsets.zero,
+                        tooltip: text.cancel,
+                        icon: const Icon(Icons.close_rounded, size: 17),
+                        color: PosColors.muted,
+                        onPressed: onRemove,
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _CostField(
-                  controller: line.unitPriceCtrl,
-                  label: text.stockInCostPerUnit(unitLabel),
-                  fieldKey: ValueKey('stock-in-cost-${line.identity}'),
-                  onChanged: (_) {
-                    line.recomputeTotalFromUnitPrice();
-                    onChanged();
-                  },
-                ),
-              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _QuantityField(
+                      line: line,
+                      label: text.stockInQuantityLabel,
+                      text: text,
+                      onChanged: onChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _CostField(
+                      controller: line.unitPriceCtrl,
+                      label: text.stockInCostPerUnit(unitLabel),
+                      fieldKey: ValueKey('stock-in-cost-${line.identity}'),
+                      onChanged: (_) {
+                        line.recomputeTotalFromUnitPrice();
+                        onChanged();
+                      },
+                    ),
+                  ),
             ],
           ),
         ],
@@ -909,7 +931,7 @@ class _ExistingItemsSection extends StatelessWidget {
           child: TfText(
             text.inventory.toUpperCase(),
             style: TfTextStyles.eyebrow.copyWith(
-              color: PosColors.muted,
+              color: PosColors.text,
               letterSpacing: 0.8,
             ),
           ),
@@ -943,22 +965,21 @@ class _ExistingStockInRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final unit = InventoryUnits.displayLabel(item.unit, isBn: text.isBn);
-    final system = item.quantity;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Container(
         decoration: BoxDecoration(
           color: PosColors.surface,
           borderRadius: BorderRadius.circular(PosRadii.card),
           border: Border.all(color: PosColors.line),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: PosColors.surfaceSunk,
                 borderRadius: BorderRadius.circular(8),
@@ -966,37 +987,26 @@ class _ExistingStockInRow extends StatelessWidget {
               alignment: Alignment.center,
               child: const Icon(
                 Icons.grid_on_rounded,
-                size: 18,
+                size: 16,
                 color: PosColors.inkSoft,
               ),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TfText(
-                    item.localizedName(AppScope.of(context).language),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TfTextStyles.rowTitle.copyWith(
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  TfText(
-                    'System: ${_fmtQty(system)} $unit',
-                    style: TfTextStyles.bodyMuted.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              child: TfText(
+                item.localizedName(AppScope.of(context).language),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TfTextStyles.rowTitle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  height: 1.2,
+                  color: PosColors.text,
+                ),
               ),
             ),
             const SizedBox(width: 10),
             SizedBox(
-              width: 78,
+              width: 72,
               child: TextField(
                 controller: controller,
                 textAlign: TextAlign.center,
@@ -1009,7 +1019,7 @@ class _ExistingStockInRow extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: '—',
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   hintStyle: TfTextStyles.label.copyWith(
                     fontWeight: FontWeight.w700,
                     color: PosColors.mutedSoft,
@@ -1021,9 +1031,9 @@ class _ExistingStockInRow extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 10),
             SizedBox(
-              width: 28,
+              width: 26,
               child: TfText(
                 unit,
                 maxLines: 1,
@@ -1038,10 +1048,6 @@ class _ExistingStockInRow extends StatelessWidget {
       ),
     );
   }
-
-  static String _fmtQty(double value) => value == value.roundToDouble()
-      ? value.toInt().toString()
-      : value.toStringAsFixed(1);
 }
 
 class _DashedBorderPainter extends CustomPainter {

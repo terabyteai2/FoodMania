@@ -3,7 +3,7 @@
 
 import type {
   AdminAccessResult, AnalyticsRange, AnalyticsSummaryWire, ApiEnvelope, AuthPayload,
-  BlockingNotice, BlockingNoticeRespondRequest,
+  BlockingNotice, BlockingNoticeRespondRequest, UpgradeInfo,
   DailyStockCountPayload, DailyStockCountResult, DashboardSummaryWire,
   InventoryDailyReportWire, InventoryItemPayload,
   InventoryItemWire, InventoryPullWire, InventorySummaryWire, InventorySupplierPayload,
@@ -108,6 +108,7 @@ export const api = {
   fetchBlockingNotice: () => request<BlockingNotice>('/admin/blocking-notice'),
   respondBlockingNotice: (body: BlockingNoticeRespondRequest) =>
     request<{ ok: boolean }>('/admin/blocking-notice/respond', { method: 'POST', body }),
+  fetchUpgradeInfo: () => request<UpgradeInfo>('/admin/subscription/upgrade'),
 
   // ---------- data pulls ----------
   fetchMenu: (outletId: string) => request<MenuItemWire[]>(`/outlets/${outletId}/menu`),

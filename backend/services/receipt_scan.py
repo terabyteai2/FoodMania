@@ -46,32 +46,11 @@ class _Provider:
 def _providers() -> list[_Provider]:
     return [
         _Provider(
-            name="groq",
-            api_key=settings.GROQ_API_KEY.strip(),
-            model=settings.MENU_SCAN_GROQ_MODEL.strip(),
-            url="https://api.groq.com/openai/v1/chat/completions",
-            supports_schema=False,
-        ),
-        _Provider(
-            name="xai",
-            api_key=settings.XAI_API_KEY.strip(),
-            model=settings.MENU_SCAN_XAI_MODEL.strip(),
-            url="https://api.x.ai/v1/chat/completions",
-            supports_schema=True,
-        ),
-        _Provider(
             name="deepseek",
             api_key=settings.DEEPSEEK_API_KEY.strip(),
             model=settings.MENU_SCAN_DEEPSEEK_MODEL.strip(),
             url="https://api.deepseek.com/chat/completions",
             supports_schema=False,
-        ),
-        _Provider(
-            name="openai",
-            api_key=settings.OPENAI_API_KEY.strip(),
-            model=settings.MENU_SCAN_OPENAI_MODEL.strip(),
-            url="https://api.openai.com/v1/chat/completions",
-            supports_schema=True,
         ),
     ]
 
@@ -248,20 +227,12 @@ def _request_payload(
     category: str | None = None,
     known_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    payload = {
+    return {
         "model": provider.model,
         "temperature": 0,
         "messages": _prompt(page_texts, category=category, known_items=known_items),
         "response_format": _response_format(provider),
     }
-    if provider.name == "groq":
-        payload.update(
-            {
-                "reasoning_format": "hidden",
-                "reasoning_effort": "low",
-            }
-        )
-    return payload
 
 
 def _message_content(payload: dict[str, Any]) -> str:
@@ -422,70 +393,59 @@ async def parse_receipt_text(
         for entry in (known_items or [])
         if str(entry.get("id") or "").strip()
     }
-    warnings: list[str] = []
     configured = [provider for provider in _providers() if provider.api_key and provider.model]
     if not configured:
         raise ReceiptScanError("Receipt scan AI is not configured on the backend.")
 
+    provider = configured[0]
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
-        for provider in configured:
-            try:
-                logger.info(
-                    "receipt scan llm request provider=%s model=%s pages=%s category=%s",
-                    provider.name,
-                    provider.model,
-                    len(clean_pages),
-                    category or "auto",
-                )
-                response = await client.post(
-                    provider.url,
-                    headers={
-                        "Authorization": f"Bearer {provider.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=_request_payload(
-                        provider,
-                        clean_pages,
-                        category=category,
-                        known_items=known_items,
-                    ),
-                )
-                response.raise_for_status()
-                decoded = response.json()
-                resolved, items = _validated_items(
-                    _message_content(decoded),
+        logger.info(
+            "receipt scan llm request provider=%s model=%s pages=%s category=%s",
+            provider.name,
+            provider.model,
+            len(clean_pages),
+            category or "auto",
+        )
+        try:
+            response = await client.post(
+                provider.url,
+                headers={
+                    "Authorization": f"Bearer {provider.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=_request_payload(
+                    provider,
+                    clean_pages,
                     category=category,
-                    known_ids=known_ids,
-                )
-                logger.info(
-                    "receipt scan llm parsed provider=%s category=%s items=%s",
-                    provider.name,
-                    resolved,
-                    len(items),
-                )
-                return ReceiptScanParseResult(
-                    items=items,
-                    provider=provider.name,
-                    warnings=warnings,
-                    category=resolved,
-                )
-            except httpx.HTTPStatusError as error:
-                logger.warning(
-                    "receipt scan llm provider rejected provider=%s status=%s detail=%s",
-                    provider.name,
-                    error.response.status_code,
-                    _provider_error_detail(error.response),
-                )
-                warnings.append(f"{provider.name}: {error}")
-            except (httpx.HTTPError, ValueError, ReceiptScanError) as error:
-                logger.warning(
-                    "receipt scan llm provider failed provider=%s error=%s",
-                    provider.name,
-                    error,
-                )
-                warnings.append(f"{provider.name}: {error}")
-
-    raise ReceiptScanError("All configured receipt scan AI providers failed.")
+                    known_items=known_items,
+                ),
+            )
+            response.raise_for_status()
+            decoded = response.json()
+            resolved, items = _validated_items(
+                _message_content(decoded),
+                category=category,
+                known_ids=known_ids,
+            )
+            logger.info(
+                "receipt scan llm parsed provider=%s category=%s items=%s",
+                provider.name,
+                resolved,
+                len(items),
+            )
+            return ReceiptScanParseResult(
+                items=items,
+                provider=provider.name,
+                warnings=[],
+                category=resolved,
+            )
+        except (httpx.HTTPError, ValueError, ReceiptScanError) as error:
+            logger.warning(
+                "receipt scan llm provider failed provider=%s error=%s",
+                provider.name,
+                error,
+            )
+            raise ReceiptScanError(f"{provider.name}: {error}") from error
 
 
 def _suffix_for_content_type(content_type: str) -> str:

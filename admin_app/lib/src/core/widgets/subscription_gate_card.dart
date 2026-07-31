@@ -22,9 +22,13 @@ class _SubscriptionGateCardState extends State<SubscriptionGateCard> {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     if (widget.feature != null) {
-      if (app.hasFeature(widget.feature!)) return widget.child ?? const SizedBox.shrink();
+      final allowed = app.hasFeature(widget.feature!);
+      debugPrint('[SUB] SubscriptionGateCard.build — feature=${widget.feature} hasFeature=$allowed subState=${app.subscriptionState}');
+      if (allowed) return widget.child ?? const SizedBox.shrink();
     } else {
-      if (app.subscriptionState == 'paid') return widget.child ?? const SizedBox.shrink();
+      final paid = app.subscriptionState == 'paid';
+      debugPrint('[SUB] SubscriptionGateCard.build — no feature, subState=${app.subscriptionState} isPaid=$paid');
+      if (paid) return widget.child ?? const SizedBox.shrink();
     }
 
     return Container(
@@ -90,13 +94,17 @@ class _SubscriptionGateCardState extends State<SubscriptionGateCard> {
 
   Future<void> _handleUpgrade() async {
     final app = AppScope.of(context);
+    debugPrint('[SUB] SubscriptionGateCard._handleUpgrade — feature=${widget.feature}');
     setState(() => _busy = true);
     await app.requestSubscriptionUpgrade(feature: widget.feature);
     if (!mounted) return;
     setState(() => _busy = false);
 
     if (app.upgradeInfo != null) {
+      debugPrint('[SUB] SubscriptionGateCard._handleUpgrade — upgradeInfo received, showing dialog');
       await _showUpgradeDialog(app);
+    } else {
+      debugPrint('[SUB] SubscriptionGateCard._handleUpgrade — upgradeInfo is null, not showing dialog');
     }
   }
 
@@ -142,21 +150,35 @@ class _UpgradeScreenBlockerState extends State<_UpgradeScreenBlocker> {
   @override
   Widget build(BuildContext context) {
     final info = widget.app.upgradeInfo;
-    debugPrint('[UpgradeBlocker] info=$info');
+    debugPrint('[SUB] UpgradeBlocker.build — info=$info');
     if (info == null) {
-      debugPrint('[UpgradeBlocker] info is null — showing spinner');
+      debugPrint('[SUB] UpgradeBlocker.build — info is null, showing spinner');
       return Scaffold(
         backgroundColor: PosColors.background,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    final addonOptions = (info['addonOptions'] as List<dynamic>?) ?? [];
-    final message = info['message'] as String? ?? '';
-    final title = info['title'] as String? ?? 'Subscription';
-    final inputField = info['inputField'] as bool? ?? false;
-    final inputLabel = info['inputLabel'] as String? ?? '';
-    debugPrint('[UpgradeBlocker] title=$title msg=$message addonOptions=$addonOptions');
+    final data = info['data'] as Map<String, dynamic>? ?? info;
+    final addonOptions = (data['addonOptions'] as List<dynamic>?) ?? [];
+    final message = data['message'] as String? ?? '';
+    final title = data['title'] as String? ?? '';
+    final inputField = data['inputField'] as bool? ?? false;
+    final inputLabel = data['inputLabel'] as String? ?? '';
+    final prices = data['subscriptionPrices'] as Map<String, dynamic>? ?? {};
+    final currentPkg = data['currentPackage'] as String? ?? 'standard';
+    final basePrice = (prices[currentPkg] as num?)?.toInt() ?? 500;
+    int addonTotal = 0;
+    for (final opt in addonOptions) {
+      final price = (opt['price'] as num?)?.toInt() ?? 0;
+      final key = opt['key'] as String;
+      final owned = opt['owned'] as bool? ?? false;
+      if (owned || widget.checked.contains(key)) {
+        addonTotal += price;
+      }
+    }
+    final grandTotal = basePrice + addonTotal;
+    debugPrint('[SUB] UpgradeBlocker.build — title=$title msg=$message basePrice=$basePrice addonTotal=$addonTotal grandTotal=$grandTotal addonOptions=$addonOptions');
 
     return PopScope(
       canPop: !_checking,
@@ -259,6 +281,76 @@ class _UpgradeScreenBlockerState extends State<_UpgradeScreenBlocker> {
                       : null,
                 );
               }),
+              const SizedBox(height: PosSpacing.sp2),
+              const Divider(height: 1, thickness: 1, color: PosColors.line),
+              const SizedBox(height: PosSpacing.sp2),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TfText(
+                    'Plan (${currentPkg[0].toUpperCase()}${currentPkg.substring(1)})',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: PosColors.inkSoft,
+                    ),
+                  ),
+                  TfText(
+                    '৳$basePrice/mo',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: PosColors.primaryDark,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              if (addonTotal > 0) ...[
+                const SizedBox(height: PosSpacing.sp1),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TfText(
+                      'Add-ons',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: PosColors.inkSoft,
+                      ),
+                    ),
+                    TfText(
+                      '৳$addonTotal/mo',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: PosColors.primaryDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: PosSpacing.sp2),
+              const Divider(height: 1, thickness: 1, color: PosColors.line),
+              const SizedBox(height: PosSpacing.sp2),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TfText(
+                    'Total',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: PosColors.primaryDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  TfText(
+                    '৳$grandTotal/mo',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: PosColors.success,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ],
         ),
@@ -286,26 +378,29 @@ class _UpgradeScreenBlockerState extends State<_UpgradeScreenBlocker> {
   }
 
   Future<void> _checkNow() async {
-    debugPrint('[UpgradeBlocker] checkNow — feature=${widget.feature}');
+    debugPrint('[SUB] UpgradeBlocker._checkNow — feature=${widget.feature}');
     setState(() => _checking = true);
     try {
+      debugPrint('[SUB] UpgradeBlocker._checkNow — calling syncSubscriptionAccessFromCloud');
       await widget.app.syncSubscriptionAccessFromCloud(quiet: false);
 
       final hasAccess = widget.feature != null
           ? widget.app.hasFeature(widget.feature!)
           : widget.app.subscriptionState == 'paid';
 
-      debugPrint('[UpgradeBlocker] checkNow — hasAccess=$hasAccess subState=${widget.app.subscriptionState}');
+      debugPrint('[SUB] UpgradeBlocker._checkNow — after sync: hasAccess=$hasAccess subState=${widget.app.subscriptionState} status=${widget.app.subscriptionStatus} package=${widget.app.subscriptionPackage} addons=${widget.app.purchasedAddons}');
 
       if (hasAccess) {
+        debugPrint('[SUB] UpgradeBlocker._checkNow — access granted, dismissing dialog');
         widget.app.clearUpgradeInfo();
         if (mounted) Navigator.of(context).pop();
         return;
       }
 
+      debugPrint('[SUB] UpgradeBlocker._checkNow — still blocked, re-fetching upgrade info');
       await widget.app.requestSubscriptionUpgrade(feature: widget.feature);
     } catch (e) {
-      debugPrint('[UpgradeBlocker] checkNow error: $e');
+      debugPrint('[SUB] UpgradeBlocker._checkNow error: $e');
     } finally {
       if (mounted) setState(() => _checking = false);
     }

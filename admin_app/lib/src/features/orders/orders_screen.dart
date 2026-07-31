@@ -670,7 +670,24 @@ class _OrdersScreenState extends State<OrdersScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: TfText(text.billPrinted(order.displaySequence))),
       );
+    } else if (_isPrinterNotConnected(app.printerState.lastError)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText(text.noPrinterOrderCompleted)),
+      );
     }
+  }
+
+  static bool _isPrinterNotConnected(String? error) {
+    if (error == null || error.trim().isEmpty) return false;
+    const messages = <String>{
+      'Printer is not connected.',
+      'Connect a USB printer or select a Bluetooth printer first.',
+      'Select a Bluetooth printer first.',
+      'Turn on Bluetooth first.',
+      'USB printer is not ready.',
+      'Bluetooth is not ready.',
+    };
+    return messages.contains(error.trim());
   }
 
   Future<void> _changeStatus(
@@ -1538,7 +1555,7 @@ class _OrderCardState extends State<_OrderCard> {
         child: Padding(
           padding: const EdgeInsets.all(PosDensity.cardPad),
           child: isCompleted
-              ? _completedBody(context)
+              ? _completedBody(context, canPrint: canPrint)
               : _ongoingBody(
                   context,
                   isPending: isPending,
@@ -1604,20 +1621,26 @@ class _OrderCardState extends State<_OrderCard> {
           children: [
             TfText(
               order.displaySequence,
-              style: TfTextStyles.sectionHeader.copyWith(
+              style: TfTextStyles.price.copyWith(
                 fontFamily: tfFontFamily(context),
                 color: PosColors.text,
               ),
             ),
             const SizedBox(width: 8),
-            Expanded(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: PosColors.addBg,
+                borderRadius: BorderRadius.circular(PosRadii.sm),
+              ),
               child: TfText(
                 typeLabel,
-                style: TfTextStyles.rowTitle.copyWith(color: PosColors.text),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                style: TfTextStyles.label.copyWith(
+                  color: PosColors.addBlue,
+                ),
               ),
             ),
+            const Spacer(),
             // No pending/accepted badge — pending is conveyed by the Accept
             // action + card border. Only surface LATE as an urgency signal.
             if (isLate) ...[
@@ -1804,7 +1827,7 @@ class _OrderCardState extends State<_OrderCard> {
   /// Owner-facing record card (QuicklyServices reference): serial + Completed
   /// pill + time-of-day, item rows with per-line amounts, Total block, and a
   /// muted meta line (payment · type · by role).
-  Widget _completedBody(BuildContext context) {
+  Widget _completedBody(BuildContext context, {required bool canPrint}) {
     final order = widget.order;
     final app = AppScope.of(context);
     final text = app.strings;
@@ -1843,27 +1866,22 @@ class _OrderCardState extends State<_OrderCard> {
           children: [
             TfText(
               order.displaySequence,
-              style: TfTextStyles.orderSerial.copyWith(
+              style: TfTextStyles.price.copyWith(
                 fontFamily: tfFontFamily(context),
-                fontWeight: FontWeight.w700,
                 color: PosColors.text,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: PosColors.primarySoft,
-                borderRadius: BorderRadius.circular(PosRadii.xs),
-                border: Border.all(
-                  color: PosColors.accentStrong.withValues(alpha: 0.14),
-                  width: 1,
-                ),
+                color: PosColors.addBg,
+                borderRadius: BorderRadius.circular(PosRadii.sm),
               ),
               child: TfText(
                 _sourceLabel(order, text),
-                style: TfTextStyles.sectionStrip.copyWith(
-                  color: PosColors.accentStrong,
+                style: TfTextStyles.label.copyWith(
+                  color: PosColors.addBlue,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1989,6 +2007,22 @@ class _OrderCardState extends State<_OrderCard> {
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        if (canPrint) ...[
+          const SizedBox(height: PosDensity.sectionGap),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TfButton(
+                label: text.reprintAction,
+                icon: Icons.receipt_long_outlined,
+                variant: TfButtonVariant.ghost,
+                size: TfButtonSize.sm,
+                fullWidth: false,
+                onPressed: widget.onPrintBill,
+              ),
+            ],
           ),
         ],
       ],
@@ -3780,6 +3814,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     searchCtrl: _searchCtrl,
                     query: _query,
                     codeMode: _codeMode,
+                    quickBillMode: _codeMode,
                     categoryCounts: _categoryCounts,
                     title: _tableLabel.isEmpty
                         ? (text.isBn ? 'মেনু' : 'Menu')
@@ -3790,6 +3825,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     leadingIsClose: _step <= firstReachableStep,
                     onSearchChanged: (value) => setState(() => _query = value),
                     onToggleCodeMode: _toggleCodeMode,
+                    onToggleQuickBill: _toggleCodeMode,
                     onCodeSubmit: _onCodeSubmit,
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),

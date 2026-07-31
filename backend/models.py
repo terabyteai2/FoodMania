@@ -405,6 +405,8 @@ class ChatbotIntegration(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     ordering_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_session_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    llm_batch_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

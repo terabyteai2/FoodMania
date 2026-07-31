@@ -42,7 +42,7 @@
 }
 .tables-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
-.dot-vacant { border: 1px dashed var(--muted); background: transparent; }
+.dot-vacant { border: 1px solid #CBD5E1; background: #fff; }
 .dot-running { background: var(--primary); }
 .dot-kot { background: var(--warning, #E8A33D); }
 .dot-paid { background: var(--success, #2FA36B); }
@@ -60,15 +60,16 @@
 .table-tile {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; height: 92px; border-radius: 12px; cursor: pointer;
-  background: #fff; border: 1px solid var(--line); transition: transform 0.06s, box-shadow 0.12s;
+  background: #fff; border: 1px solid #CBD5E1; transition: transform 0.06s, box-shadow 0.12s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
-.table-tile:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+.table-tile:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .table-label { font-weight: 800; font-size: var(--fs-15); }
 .table-seats { font-size: var(--fs-11); color: var(--muted); }
 .table-amount { font-weight: 800; font-size: var(--fs-13); }
 .table-elapsed { font-size: var(--fs-11); color: var(--ink-2); }
 
-.table-tile.state-vacant { border-style: dashed; border-color: var(--muted); color: var(--ink-2); background: transparent; }
+.table-tile.state-vacant { color: var(--ink-2); }
 .table-tile.state-running { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, #fff); }
 .table-tile.state-running .table-amount { color: var(--primary); }
 .table-tile.state-kot { border-color: var(--warning, #E8A33D); background: color-mix(in srgb, var(--warning, #E8A33D) 12%, #fff); }

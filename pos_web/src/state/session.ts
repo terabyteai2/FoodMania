@@ -7,7 +7,6 @@ const STORAGE_KEY = 'qbpos.auth';
 const OLD_STORAGE_KEY = 'qbpos.session';
 const LANG_KEY = 'qbpos.lang';
 
-// XOR key — minified by Vite, prevents trivial localStorage editing
 const XOR_KEY = '!F0odMan!a@2024#Offline';
 
 function fnv1a32(data: Uint8Array): number {
@@ -35,19 +34,27 @@ function decodeSession(encoded: string): AuthPayload | null {
   try {
     const chars = atob(encoded);
     const len = chars.length;
-    if (len < 5) return null;
+    if (len < 5) { console.log('[auth] decodeSession: too short len=' + len); return null; }
     const storedHash =
       chars.charCodeAt(0) | (chars.charCodeAt(1) << 8) | (chars.charCodeAt(2) << 16) | (chars.charCodeAt(3) << 24);
     const decBytes = new Uint8Array(len - 4);
     for (let i = 4; i < len; i++) {
       decBytes[i - 4] = chars.charCodeAt(i) ^ XOR_KEY.charCodeAt((i - 4) % XOR_KEY.length);
     }
-    if (fnv1a32(decBytes) !== storedHash) return null;
+    const computedHash = fnv1a32(decBytes);
+    if (computedHash !== storedHash) {
+      console.log('[auth] decodeSession: hash mismatch stored=' + storedHash + ' computed=' + computedHash);
+      return null;
+    }
     const json = new TextDecoder().decode(decBytes);
     const parsed = JSON.parse(json) as AuthPayload;
-    if (!parsed.deviceToken || !parsed.outletId) return null;
+    if (!parsed.deviceToken || !parsed.outletId) {
+      console.log('[auth] decodeSession: missing deviceToken or outletId');
+      return null;
+    }
     return parsed;
-  } catch {
+  } catch (e) {
+    console.log('[auth] decodeSession: catch', e);
     return null;
   }
 }
@@ -57,7 +64,6 @@ function saveSession(payload: AuthPayload) {
 }
 
 function loadSession(): AuthPayload | null {
-  // Migrate from old plain-JSON format
   const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
   if (oldRaw && !localStorage.getItem(STORAGE_KEY)) {
     try {
@@ -66,30 +72,37 @@ function loadSession(): AuthPayload | null {
         saveSession(parsed);
         localStorage.removeItem(OLD_STORAGE_KEY);
       }
-    } catch { /* old format unusable, ignore */ }
+    } catch { }
   }
 
   const encoded = localStorage.getItem(STORAGE_KEY);
-  if (!encoded) return null;
+  if (!encoded) {
+    console.log('[auth] loadSession: no stored session');
+    return null;
+  }
   const payload = decodeSession(encoded);
   if (!payload) {
+    console.log('[auth] loadSession: decode failed, clearing');
     localStorage.removeItem(STORAGE_KEY);
     return null;
   }
 
-  // Local subscription expiry enforcement (works offline)
   if (payload.subscriptionExpiresAt) {
     const expiresAt = new Date(payload.subscriptionExpiresAt).getTime();
     if (!isNaN(expiresAt) && expiresAt < Date.now()) {
+      console.log('[auth] loadSession: locally expired, hasAppAccess=false');
       payload.hasAppAccess = false;
     }
   }
 
+  console.log('[auth] loadSession: ok outletId=' + payload.outletId + ' hasAppAccess=' + payload.hasAppAccess);
   return payload;
 }
 
 const initialSession = loadSession();
-if (initialSession) setDeviceToken(initialSession.deviceToken);
+if (initialSession) {
+  setDeviceToken(initialSession.deviceToken);
+}
 
 interface SessionState {
   session: AuthPayload | null;
@@ -126,6 +139,7 @@ export const useSession = create<SessionState>((set) => ({
   addonPrices: {},
 
   login: (payload) => {
+    console.log('[auth] login: outletId=' + payload.outletId + ' hasAppAccess=' + payload.hasAppAccess);
     saveSession(payload);
     setDeviceToken(payload.deviceToken);
     set({ session: payload });
@@ -138,6 +152,7 @@ export const useSession = create<SessionState>((set) => ({
   },
 
   logout: () => {
+    console.log('[auth] logout');
     localStorage.removeItem(STORAGE_KEY);
     setDeviceToken(null);
     set({ session: null });
@@ -151,7 +166,6 @@ export const useSession = create<SessionState>((set) => ({
   refreshAccess: async () => {
     const access = await api.adminAccess();
     applyAdminAccess(set, access);
-    // re-fetch the blocking notice since access may have changed
     api.fetchBlockingNotice().then((notice) => {
       const s = useSession.getState();
       if (!s.session?.hasAppAccess) {

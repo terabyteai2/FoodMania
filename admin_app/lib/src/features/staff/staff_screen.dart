@@ -111,6 +111,7 @@ class _StaffScreenState extends State<StaffScreen> {
                         member: m,
                         canToggle: canToggle,
                         onToggle: (v) => _toggleActive(m, v),
+                        onDelete: () => _confirmDelete(context, app, m),
                       );
                     },
                   ),
@@ -133,6 +134,33 @@ class _StaffScreenState extends State<StaffScreen> {
     );
   }
 
+  Future<void> _confirmDelete(BuildContext context, PosAppController app, StaffMember m) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: TfText(app.strings.deleteStaff),
+        content: TfText(app.strings.deleteStaffConfirm),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: TfText(app.strings.cancel)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: TfText(app.strings.deleteAction, style: const TextStyle(color: PosColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await app.removeStaffAccount(m.id);
+        if (!context.mounted) return;
+        _reload();
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: TfText(app.strings.inviteFailed)));
+      }
+    }
+  }
+
   Future<void> _openInvite(BuildContext context, PosAppController app) async {
     final sent = await showModalBottomSheet<bool>(
       context: context,
@@ -151,12 +179,14 @@ class _StaffCard extends StatelessWidget {
     required this.member,
     required this.canToggle,
     required this.onToggle,
+    required this.onDelete,
   });
 
   final AppStrings text;
   final StaffMember member;
   final bool canToggle;
   final ValueChanged<bool> onToggle;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -229,6 +259,27 @@ class _StaffCard extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 4),
+          PopupMenuButton<_StaffAction>(
+            icon: const Icon(Icons.more_vert, size: 20, color: PosColors.muted),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onSelected: (action) {
+              if (action == _StaffAction.delete) onDelete();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: _StaffAction.delete,
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18, color: PosColors.danger),
+                    const SizedBox(width: 8),
+                    TfText(text.deleteStaff, style: const TextStyle(color: PosColors.danger)),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(width: 8),
           TfToggle(
             value: member.isActive,
@@ -241,6 +292,8 @@ class _StaffCard extends StatelessWidget {
     );
   }
 }
+
+enum _StaffAction { delete }
 
 class _RoleBadge extends StatelessWidget {
   const _RoleBadge({required this.text, required this.role});

@@ -53,6 +53,10 @@ class PosColors {
   static const Color accentStrong = blue700; // #1D339B blue text on white
   static const Color accentOnInk = blue300; // light blue on dark backgrounds
 
+  // ── Add-to-cart (item-grid plus button) ─────────────────────────────────
+  static const Color addBlue = Color(0xFF2D4EF5);
+  static const Color addBg = Color(0xFFE8ECFE);
+
   // ── Secondary — navy (the calm dark CTA counterpart) ────────────────────
   static const Color secondary = Color(0xFF1E2A44); // --ink-btn
   static const Color secondaryPress = Color(0xFF15203A); // --ink-btn-press
@@ -174,6 +178,7 @@ class PosColors {
 // ---------------------------------------------------------------------------
 class PosSpacing {
   static const double sp1 = 4;
+  static const double sp1p5 = 6;
   static const double sp2 = 8;
   static const double sp3 = 12;
   static const double sp4 = 16;
@@ -203,7 +208,7 @@ class PosDensity {
   static const double rowMin = 48;
 
   /// Menu/order-build grid tile mainAxisExtent (≥8 tiles per phone screen).
-  static const double tileMenu = 113;
+  static const double tileMenu = 103;
 
   /// FOH table tile childAspectRatio (square, packed with state data).
   static const double tileTableAspect = 1.0;

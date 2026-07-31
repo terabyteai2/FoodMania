@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession } from '../state/session';
 import { useMenu } from '../state/menu';
 import { usePos } from '../state/pos';
@@ -11,6 +11,7 @@ import { Billing } from './Billing';
 import { Tables } from './Tables';
 import { Orders } from './Orders';
 import { Ops } from './Ops';
+import { VoiceAgent } from './VoiceAgent';
 import { InstallToast } from '../components/InstallToast';
 import { Sidebar } from '../components/Sidebar';
 import './shell.css';
@@ -25,7 +26,9 @@ const NAV: { id: NavSection; icon: string; labelKey: string }[] = [
 export function Shell() {
   const { session, lang, setLang, logout } = useSession();
   const section = useNav((s) => s.section);
+  const opsPane = useNav((s) => s.opsPane);
   const go = useNav((s) => s.go);
+  const goOps = useNav((s) => s.goOps);
   const [online, setOnline] = useState(navigator.onLine);
   const loadMenu = useMenu((s) => s.load);
   const loadPos = usePos((s) => s.load);
@@ -33,8 +36,19 @@ export function Shell() {
   const orders = useOrders();
   const sync = useSync();
   const settings = usePos((s) => s.settings);
-  const autoPrint = useCart((s) => s.autoPrint);
   const isCounter = settings?.tableCount === 0;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const hoverTimer = useRef<number>();
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const sidebarVisible = sidebarOpen || sidebarHover;
+
+  const openHover = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    setSidebarHover(true);
+  };
+  const closeHover = () => {
+    hoverTimer.current = window.setTimeout(() => setSidebarHover(false), 200);
+  };
 
   useEffect(() => {
     const up = () => {
@@ -93,8 +107,13 @@ export function Shell() {
     <div className="shell-root">
       <header className="topbar">
         <div className="topbar-brand">
-          <span className="topbar-logo">{t('shell.quickbytes', lang)}</span>
-          <span className="topbar-outlet">{session.outletName}</span>
+          <button className="topbar-menu-btn" onClick={() => setSidebarOpen((o) => !o)}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M4 18h16c.55 0 1-.45 1-1s-.45-1-1-1H4c-.55 0-1 .45-1 1s.45 1 1 1zm0-5h16c.55 0 1-.45 1-1s-.45-1-1-1H4c-.55 0-1 .45-1 1s.45 1 1 1zM3 7c0 .55.45 1 1 1h16c.55 0 1-.45 1-1s-.45-1-1-1H4c-.55 0-1 .45-1 1z"/></svg>
+          </button>
+          <div className="topbar-brand-titles">
+            <span className="topbar-logo">{t('shell.quickbytes', lang)}</span>
+            <span className="topbar-restaurant">{session.restaurantName}</span>
+          </div>
         </div>
 
         <button className="btn btn-primary topbar-new-order" onClick={newOrder}>
@@ -120,15 +139,23 @@ export function Shell() {
           ))}
         </nav>
 
+        <button
+          className={`topbar-nav-btn${section === 'ops' && opsPane === 'printers' ? ' active' : ''}`}
+          title={t('ops.printers', lang)}
+          onClick={() => goOps('printers')}
+        >
+          <span className="topbar-nav-icon">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+          </span>
+          <span className="topbar-nav-label">{t('ops.printers', lang)}</span>
+        </button>
+
         <div className="topbar-right">
           {sync.queued > 0 && (
             <span className="topbar-sync" title={t('shell.writesQueued', lang)}>
               ⇅ {sync.queued}{sync.replaying ? '…' : ''}
             </span>
           )}
-          <button className="topbar-autoprint" onClick={() => useCart.getState().toggleAutoPrint()}>
-            🖨️ {autoPrint ? t('shell.autoPrintOn', lang) : t('shell.autoPrintOff', lang)}
-          </button>
           {sync.dead.length > 0 && (
             <button
               className="topbar-sync bad" title={t('shell.failedWrites', lang)}
@@ -149,12 +176,14 @@ export function Shell() {
       <InstallToast />
 
       <div className="shell-body-row">
-        <Sidebar />
+        <div className="sidebar-hover-zone" onMouseEnter={openHover} />
+        <Sidebar open={sidebarVisible} onMouseEnter={openHover} onMouseLeave={closeHover} />
         <main className="shell-body">
           {section === 'billing' && <Billing />}
           {section === 'tables' && !isCounter && <Tables />}
           {section === 'orders' && <Orders />}
-          {section === 'ops' && <Ops />}
+          {section === 'ops' && opsPane === 'voiceagent' && <VoiceAgent />}
+          {section === 'ops' && opsPane !== 'voiceagent' && <Ops />}
         </main>
       </div>
     </div>

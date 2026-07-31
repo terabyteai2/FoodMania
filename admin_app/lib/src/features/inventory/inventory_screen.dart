@@ -41,9 +41,7 @@ class InventoryScreen extends StatefulWidget {
 
 enum _StockSort { name, inOut, net, qty, status }
 
-class _InventoryScreenState extends State<InventoryScreen>
-    with SingleTickerProviderStateMixin {
-  bool _advanced = true;
+class _InventoryScreenState extends State<InventoryScreen> {
   _StockSort _sort = _StockSort.qty;
   int _dir = -1; // -1 desc, 1 asc
   bool _firstLoadKicked = false;
@@ -51,41 +49,6 @@ class _InventoryScreenState extends State<InventoryScreen>
   TfTimeframe _timeframe = TfTimeframe.today;
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
-
-  late final AnimationController _tfController;
-  late final Animation<double> _tfAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _tfController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _tfAnimation = CurvedAnimation(
-      parent: _tfController,
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _tfController.dispose();
-    super.dispose();
-  }
-
-  void _onToggleAdvanced(bool v) {
-    setState(() => _advanced = v);
-    if (v) {
-      _tfController.forward();
-    } else {
-      _tfController.reverse();
-      // Reset to today when turning off advanced
-      if (_timeframe != TfTimeframe.today) {
-        _updateTimeframe(TfTimeframe.today);
-      }
-    }
-  }
 
   void _updateTimeframe(TfTimeframe tf) {
     setState(() {
@@ -234,38 +197,36 @@ class _InventoryScreenState extends State<InventoryScreen>
     PosAppController app,
     InventorySummaryItem item,
   ) async {
-    if (_advanced) {
-      final full = _resolveItem(app, item.id);
-      if (full != null) {
-        await Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (detailCtx) => InventoryItemDetailScreen(
-              item: full,
-              onEdit: app.isOwner
-                  ? () async {
-                      final latest = _resolveItem(app, full.id) ?? full;
-                      final result = await Navigator.push<InventoryItem>(
-                        detailCtx,
-                        MaterialPageRoute(
-                          builder: (_) => _ItemFormSheet(
-                            text: app.strings,
-                            item: latest,
-                            fullScreen: true,
-                          ),
+    final full = _resolveItem(app, item.id);
+    if (full != null) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (detailCtx) => InventoryItemDetailScreen(
+            item: full,
+            onEdit: app.isOwner
+                ? () async {
+                    final latest = _resolveItem(app, full.id) ?? full;
+                    final result = await Navigator.push<InventoryItem>(
+                      detailCtx,
+                      MaterialPageRoute(
+                        builder: (_) => _ItemFormSheet(
+                          text: app.strings,
+                          item: latest,
+                          fullScreen: true,
                         ),
-                      );
-                      if (result != null) await app.saveInventoryItem(result);
-                    }
-                  : null,
-            ),
+                      ),
+                    );
+                    if (result != null) await app.saveInventoryItem(result);
+                  }
+                : null,
           ),
-        );
-        if (context.mounted) {
-          await AppScope.read(context).refreshInventorySummary();
-        }
-        return;
+        ),
+      );
+      if (context.mounted) {
+        await AppScope.read(context).refreshInventorySummary();
       }
+      return;
     }
     await _openStockIn(context, itemId: item.id);
   }
@@ -314,26 +275,22 @@ class _InventoryScreenState extends State<InventoryScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizeTransition(
-            sizeFactor: _tfAnimation,
-            alignment: Alignment.topCenter,
-            child: TfPeriodWithCalendar(
-              options: [
-                ('today', text.rangeToday),
-                ('week', text.range7Days),
-                ('month', text.range30Days),
-              ],
-              value: _timeframe.name,
-              start: _rangeStart,
-              end: _rangeEnd,
-              onChanged: (value, start, end) {
-                if (value == TfPeriodWithCalendar.customValue) {
-                  _onRangeChanged(start, end);
-                } else {
-                  _updateTimeframe(TfTimeframe.values.byName(value));
-                }
-              },
-            ),
+          TfPeriodWithCalendar(
+            options: [
+              ('today', text.rangeToday),
+              ('week', text.range7Days),
+              ('month', text.range30Days),
+            ],
+            value: _timeframe.name,
+            start: _rangeStart,
+            end: _rangeEnd,
+            onChanged: (value, start, end) {
+              if (value == TfPeriodWithCalendar.customValue) {
+                _onRangeChanged(start, end);
+              } else {
+                _updateTimeframe(TfTimeframe.values.byName(value));
+              }
+            },
           ),
           Expanded(
             child: Builder(
@@ -372,7 +329,6 @@ class _InventoryScreenState extends State<InventoryScreen>
                                         _StockTable(
                                           text: text,
                                           items: sorted,
-                                          advanced: _advanced,
                                           sort: _sort,
                                           dir: _dir,
                                           onSort: _toggleSort,
@@ -383,10 +339,8 @@ class _InventoryScreenState extends State<InventoryScreen>
                                           text: text,
                                           onPressed: () => _showAddItem(context),
                                         ),
-                                        if (_advanced) ...[
-                                          const SizedBox(height: 14),
-                                          _AdvancedDrilldowns(text: text),
-                                        ],
+                                        const SizedBox(height: 14),
+                                        _AdvancedDrilldowns(text: text),
                                       ],
                                     ),
                                   ),
@@ -455,24 +409,65 @@ class _SummaryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Shared KPI strip (one-language pass): same component as Analytics /
-    // Sales Summary / Live. "Below par" stays tappable (sorts worst-first).
-    return TfStatStrip(
-      columns: 2,
-      cells: [
-        TfStatCell(
-          label: text.stockValue,
-          value: tfFormatCurrency(context, stockValue),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(15, 10, 15, 10),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(PosRadii.card),
+        border: Border.all(color: PosColors.line),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _summaryCell(context, text.stockValue, tfFormatCurrency(context, stockValue), null, false, null)),
+            Container(width: 1, color: PosColors.line),
+            Expanded(
+              child: _summaryCell(
+                context,
+                text.itemsInShort,
+                tfFormatNumber(context, lowCount),
+                lowCount > 0 ? PosColors.warning : PosColors.text,
+                lowActive,
+                onTapLow,
+              ),
+            ),
+          ],
         ),
-        TfStatCell(
-          label: '${text.belowPar} · ${text.isBn ? 'আইটেম' : 'items'}',
-          value: tfFormatNumber(context, lowCount),
-          valueColor: lowCount > 0 ? PosColors.warning : PosColors.text,
-          active: lowActive,
-          onTap: onTapLow,
-        ),
-      ],
+      ),
     );
+  }
+
+  Widget _summaryCell(BuildContext context, String label, String value, Color? valueColor, bool active, VoidCallback? onTap) {
+    final body = Container(
+      color: active ? PosColors.primarySoft : null,
+      padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp2),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: TfText(
+              value,
+              maxLines: 1,
+              style: TfTextStyles.statNumber.copyWith(
+                color: valueColor ?? PosColors.text,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          TfText(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TfTextStyles.label.copyWith(color: PosColors.muted),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return body;
+    return InkWell(onTap: onTap, child: body);
   }
 }
 
@@ -482,7 +477,6 @@ class _StockTable extends StatelessWidget {
   const _StockTable({
     required this.text,
     required this.items,
-    required this.advanced,
     required this.sort,
     required this.dir,
     required this.onSort,
@@ -491,7 +485,6 @@ class _StockTable extends StatelessWidget {
 
   final AppStrings text;
   final List<InventorySummaryItem> items;
-  final bool advanced;
   final _StockSort sort;
   final int dir;
   final ValueChanged<_StockSort> onSort;
@@ -499,7 +492,7 @@ class _StockTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final heroW = advanced ? 64.0 : 88.0;
+    const heroW = 64.0;
     return Container(
       padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
       decoration: BoxDecoration(
@@ -526,24 +519,22 @@ class _StockTable extends StatelessWidget {
                   left: true,
                   onTap: () => onSort(_StockSort.name),
                 ),
-                if (advanced) ...[
-                  const SizedBox(width: 12),
-                  _HCell(
-                    label: text.colInOut,
-                    width: 68,
-                    active: sort == _StockSort.inOut,
-                    dir: dir,
-                    onTap: () => onSort(_StockSort.inOut),
-                  ),
-                  const SizedBox(width: 12),
-                  _HCell(
-                    label: text.colNet,
-                    width: 54,
-                    active: sort == _StockSort.net,
-                    dir: dir,
-                    onTap: () => onSort(_StockSort.net),
-                  ),
-                ],
+                const SizedBox(width: 12),
+                _HCell(
+                  label: text.colInOut,
+                  width: 68,
+                  active: sort == _StockSort.inOut,
+                  dir: dir,
+                  onTap: () => onSort(_StockSort.inOut),
+                ),
+                const SizedBox(width: 12),
+                _HCell(
+                  label: text.colNet,
+                  width: 54,
+                  active: sort == _StockSort.net,
+                  dir: dir,
+                  onTap: () => onSort(_StockSort.net),
+                ),
                 const SizedBox(width: 12),
                 _HCell(
                   label: text.colQty,
@@ -560,7 +551,6 @@ class _StockTable extends StatelessWidget {
               text: text,
               item: items[i],
               last: i == items.length - 1,
-              advanced: advanced,
               heroW: heroW,
               onTap: () => onRowTap(items[i]),
             ),
@@ -628,7 +618,6 @@ class _StockRow extends StatelessWidget {
     required this.text,
     required this.item,
     required this.last,
-    required this.advanced,
     required this.heroW,
     required this.onTap,
   });
@@ -636,7 +625,6 @@ class _StockRow extends StatelessWidget {
   final AppStrings text;
   final InventorySummaryItem item;
   final bool last;
-  final bool advanced;
   final double heroW;
   final VoidCallback onTap;
 
@@ -692,27 +680,14 @@ class _StockRow extends StatelessWidget {
                 children: [
                   TfText(
                     name,
-                    // Advanced packs 4 columns: give the name a second line
-                    // and drop the ৳value caption instead of truncating to
-                    // "Chinigur…" (one-language pass).
-                    maxLines: advanced ? 2 : 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TfTextStyles.rowTitle,
+style: TfTextStyles.rowMoney.copyWith(color: PosColors.text),
                   ),
-                  if (!advanced) ...[
-                    const SizedBox(height: 2),
-                    TfText(
-                      tfFormatCurrency(context, _itemValue(item)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TfTextStyles.bodyMuted,
-                    ),
-                  ],
                 ],
               ),
             ),
-            if (advanced) ...[
-              const SizedBox(width: 12),
+            const SizedBox(width: 12),
               SizedBox(
                 width: 68,
                 child: Column(
@@ -771,7 +746,6 @@ class _StockRow extends StatelessWidget {
                   },
                 ),
               ),
-            ],
             const SizedBox(width: 12),
             SizedBox(
               width: heroW,
@@ -1018,21 +992,21 @@ class _StockBottomBar extends StatelessWidget {
       children: [
         Expanded(
           child: TfButton(
-            label: text.countAction,
-            icon: Icons.fact_check_outlined,
+            label: text.stockIn,
+            icon: Icons.add_box_outlined,
             variant: TfButtonVariant.dark,
             size: TfButtonSize.lg,
-            onPressed: onCount,
+            onPressed: onStockIn,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: TfButton(
-            label: text.stockIn,
-            icon: Icons.add_box_outlined,
+            label: text.countAction,
+            icon: Icons.fact_check_outlined,
             variant: TfButtonVariant.primary,
             size: TfButtonSize.lg,
-            onPressed: onStockIn,
+            onPressed: onCount,
           ),
         ),
       ],

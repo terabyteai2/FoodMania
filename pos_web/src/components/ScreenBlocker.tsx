@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { BlockingNotice } from '../api/types';
+import type { BlockingNotice, UpgradeInfo } from '../api/types';
 import { useSession } from '../state/session';
 import { t, type StringKey } from '../i18n/strings';
 
@@ -12,6 +12,7 @@ const EYEBROW_ICONS: Record<string, string> = {
 
 interface ScreenBlockerProps {
   notice: BlockingNotice;
+  upgradeInfo?: UpgradeInfo | null;
   refreshing: boolean;
   error: string | null;
   onRetry: () => void;
@@ -19,10 +20,11 @@ interface ScreenBlockerProps {
   onDismiss?: () => void;
 }
 
-export function ScreenBlocker({ notice, refreshing, error, onRetry, onRespond }: ScreenBlockerProps) {
+export function ScreenBlocker({ notice, upgradeInfo, refreshing, error, onRetry, onRespond }: ScreenBlockerProps) {
   const { lang, logout, session } = useSession();
   const inputRef = useRef<HTMLInputElement>(null);
   const [responding, setResponding] = useState(false);
+  const [checkedAddons, setCheckedAddons] = useState(new Set<string>());
 
   const EYEBROW_KEYS: Record<string, string> = {
     subscription: 'screenBlocker.eyebrowSubscription',
@@ -53,6 +55,18 @@ export function ScreenBlocker({ notice, refreshing, error, onRetry, onRespond }:
   };
 
   const primaryLabel = notice.ctaLabel || t('refreshAccess', lang);
+
+  const basePrice = upgradeInfo
+    ? (upgradeInfo.subscriptionPrices[upgradeInfo.currentPackage] ?? 500)
+    : 0;
+  let addonTotal = 0;
+  if (upgradeInfo) {
+    for (const opt of upgradeInfo.addonOptions) {
+      if (opt.owned || checkedAddons.has(opt.key)) addonTotal += opt.price;
+    }
+  }
+  const grandTotal = basePrice + addonTotal;
+  const showPricing = upgradeInfo && (rawType === 'subscription');
 
   return (
     <div style={{
@@ -108,6 +122,69 @@ export function ScreenBlocker({ notice, refreshing, error, onRetry, onRespond }:
           }}>
             {notice.title}
           </h3>
+        )}
+
+        {showPricing && upgradeInfo.addonOptions.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 8 }}>
+              Add-ons
+            </p>
+            {upgradeInfo.addonOptions.map(opt => (
+              <label key={opt.key} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={opt.owned || checkedAddons.has(opt.key)}
+                  disabled={opt.owned}
+                  onChange={(e) => {
+                    const next = new Set(checkedAddons);
+                    if (e.target.checked) next.add(opt.key);
+                    else next.delete(opt.key);
+                    setCheckedAddons(next);
+                  }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+                  {opt.label} (৳{opt.price}/mo)
+                </span>
+                {opt.owned && (
+                  <span style={{ color: 'var(--success)', fontSize: 12 }}>
+                    Already owned
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+        )}
+
+        {showPricing && (
+          <>
+            <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '8px 0' }} />
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              fontSize: 13, color: 'var(--ink-2)', padding: '4px 0',
+            }}>
+              <span>Plan ({upgradeInfo.currentPackage.charAt(0).toUpperCase() + upgradeInfo.currentPackage.slice(1)})</span>
+              <span style={{ color: 'var(--heading)', fontWeight: 600 }}>৳{basePrice}/mo</span>
+            </div>
+            {addonTotal > 0 && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                fontSize: 13, color: 'var(--ink-2)', padding: '4px 0',
+              }}>
+                <span>Add-ons</span>
+                <span style={{ color: 'var(--heading)', fontWeight: 600 }}>৳{addonTotal}/mo</span>
+              </div>
+            )}
+            <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '8px 0' }} />
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              fontSize: 16, fontWeight: 700, color: 'var(--heading)', padding: '4px 0',
+            }}>
+              <span>Total</span>
+              <span style={{ color: 'var(--success)', fontWeight: 700 }}>৳{grandTotal}/mo</span>
+            </div>
+          </>
         )}
 
         <p style={{

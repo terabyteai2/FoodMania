@@ -21,7 +21,7 @@ from models import AdminAccount, MenuItem, Outlet
 from routers.ws import manager
 from schemas import ImageUploadRequest, MenuItemPayload, ok
 from services.menu_placeholders import resolve_placeholder_url
-from services.menu_scan import MenuScanError, extract_menu_page_texts, parse_menu_text
+from services.menu_scan import MenuScanError, scan_single_image_with_dedup
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -373,39 +373,67 @@ async def scan_menu_pages(
         [content_type for _, content_type in pages],
     )
 
-    try:
-        page_texts = await extract_menu_page_texts(pages)
-        logger.info(
-            "menu scan ocr complete outlet=%s pages=%s chars=%s",
-            outlet_id,
-            len(page_texts),
-            [len(text) for text in page_texts],
-        )
-        parsed = await parse_menu_text(page_texts)
-    except MenuScanError as error:
-        logger.warning("menu scan failed outlet=%s error=%s", outlet_id, error)
+    image_results: list[dict] = []
+    global_item_index = 0
+    for page_index, (image_bytes, content_type) in enumerate(pages):
+        try:
+            parsed = await scan_single_image_with_dedup(image_bytes, content_type)
+            for item in parsed.items:
+                if not item.imageUrl:
+                    item.imageUrl = resolve_placeholder_url(
+                        item.iconKey, global_item_index, request
+                    )
+                global_item_index += 1
+            image_results.append(
+                {
+                    "pageIndex": page_index,
+                    "items": [item.model_dump() for item in parsed.items],
+                    "provider": parsed.provider,
+                    "pageCount": 1,
+                    "warnings": parsed.warnings,
+                }
+            )
+            logger.info(
+                "menu scan page %s/%s ok provider=%s items=%s warnings=%s",
+                page_index + 1,
+                len(pages),
+                parsed.provider,
+                len(parsed.items),
+                len(parsed.warnings),
+            )
+        except MenuScanError as error:
+            logger.warning(
+                "menu scan page %s/%s failed error=%s",
+                page_index + 1,
+                len(pages),
+                error,
+            )
+            image_results.append(
+                {
+                    "pageIndex": page_index,
+                    "items": [],
+                    "provider": "",
+                    "pageCount": 1,
+                    "warnings": [str(error)],
+                }
+            )
+
+    if not image_results:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(error),
-        ) from error
-
-    for index, item in enumerate(parsed.items):
-        if not item.imageUrl:
-            item.imageUrl = resolve_placeholder_url(item.iconKey, index, request)
+            detail="All menu images failed to scan.",
+        )
 
     logger.info(
-        "menu scan parsed outlet=%s provider=%s items=%s warnings=%s",
+        "menu scan complete outlet=%s pages=%s/%s ok",
         outlet_id,
-        parsed.provider,
-        len(parsed.items),
-        len(parsed.warnings),
+        sum(1 for r in image_results if r["items"]),
+        len(pages),
     )
     return ok(
         {
-            "items": [item.model_dump() for item in parsed.items],
-            "provider": parsed.provider,
-            "pageCount": len(pages),
-            "warnings": parsed.warnings,
+            "images": image_results,
+            "totalPages": len(pages),
         }
     )
 

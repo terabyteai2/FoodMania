@@ -164,6 +164,7 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
       );
     }
     if (_controller.isOffline && _controller.isSubscriptionExpiredLocally) {
+      debugPrint('[SUB] _home — offline + locally expired, showing offline expiry blocker');
       return _buildOfflineExpiryBlocker();
     }
     if (_controller.pendingStaffInvite != null) {
@@ -280,13 +281,16 @@ class _LocalPosAppState extends State<LocalPosApp> with WidgetsBindingObserver {
   }
 
   Future<void> _retryOfflineExpiry() async {
+    debugPrint('[SUB] _retryOfflineExpiry');
     setState(() => _refreshingOffline = true);
     try {
       final hasInternet =
           await _controller.connectivityService.hasInternetAccess();
+      debugPrint('[SUB] _retryOfflineExpiry — hasInternet=$hasInternet');
       if (!mounted) return;
       if (hasInternet) {
         await _controller.syncSubscriptionAccessFromCloud(quiet: false);
+        debugPrint('[SUB] _retryOfflineExpiry — after sync, subState=${_controller.subscriptionState} isExpired=${_controller.isSubscriptionExpiredLocally}');
         if (mounted) setState(() {});
       }
     } finally {
@@ -332,8 +336,8 @@ const _ownerTabOrder = <_AppTab>[
 ];
 // Manager: Live (Control Tower) · Orders · Menu · Sales Summary · More
 const _managerTabOrder = <_AppTab>[
-  _AppTab.live,
   _AppTab.orders,
+  _AppTab.live,
   _AppTab.menu,
   _AppTab.salesSummary,
   _AppTab.more,
@@ -349,7 +353,8 @@ List<_AppTab> _tabOrderForRole(AccountRole role) {
 
 // Maps a nav tab to its label/icon pair. Shared by the bottom-less phone drawer,
 // the wide NavigationRail, and (historically) the bottom nav.
-_Destination _destinationFor(_AppTab tab, AppStrings text) {
+// [isBackoffice] renames Orders → Order History.
+_Destination _destinationFor(_AppTab tab, AppStrings text, {bool isBackoffice = false}) {
   return switch (tab) {
     _AppTab.analytics => _Destination(
       text.analyticsTab,
@@ -358,8 +363,8 @@ _Destination _destinationFor(_AppTab tab, AppStrings text) {
       Icons.insights,
     ),
     _AppTab.live => _Destination(
-      text.liveTab,
-      text.liveTab,
+      text.restaurantLive,
+      text.restaurantLive,
       Icons.monitor_heart_outlined,
       Icons.monitor_heart_rounded,
     ),
@@ -370,8 +375,8 @@ _Destination _destinationFor(_AppTab tab, AppStrings text) {
       Icons.table_restaurant,
     ),
     _AppTab.orders => _Destination(
-      text.orders,
-      text.orders,
+      isBackoffice ? text.orderHistory : text.orders,
+      isBackoffice ? text.orderHistory : text.orders,
       Icons.receipt_long_outlined,
       Icons.receipt_long,
     ),
@@ -491,7 +496,6 @@ class _MainShellState extends State<MainShell> {
                   content: TfText(
                     app.strings.menuScanImported(
                       result.createdCount,
-                      result.skippedDuplicateCount,
                     ),
                   ),
                 ),
@@ -572,8 +576,9 @@ class _MainShellState extends State<MainShell> {
     final visualIndex = tabOrder
         .indexOf(_selected)
         .clamp(0, tabOrder.length - 1);
+    final backoffice = tabOrder.contains(_AppTab.reports);
     final destinations = tabOrder
-        .map((t) => _destinationFor(t, text))
+        .map((t) => _destinationFor(t, text, isBackoffice: backoffice))
         .toList(growable: false);
 
     // Fixed page order matching _AppTab.index ordinals. Builders (not eager
@@ -691,10 +696,6 @@ class _MainShellState extends State<MainShell> {
                           padding: EdgeInsets.only(bottom: 8),
                           child: _RailLogo(extended: extended),
                         ),
-                        _QuickBillRailItem(
-                          extended: extended,
-                          onTap: () => _handleDrawerAction(_DrawerAction.quickBill),
-                        ),
                         SizedBox(height: 20),
                       ],
                     ),
@@ -778,14 +779,6 @@ class _MainShellState extends State<MainShell> {
   /// Drawer group-child actions: quick screens/sheets that don't map to a tab.
   void _handleDrawerAction(_DrawerAction action) {
     switch (action) {
-      case _DrawerAction.quickBill:
-        _selectTab(_AppTab.orders);
-        unawaited(openNewOrderForm(
-          context,
-          startAtMenu: true,
-          startWithCodeMode: true,
-        ));
-        break;
       case _DrawerAction.stockScan:
         unawaited(runStockScanFlow(
           context,
@@ -1204,55 +1197,9 @@ class _RailLogo extends StatelessWidget {
   }
 }
 
-class _QuickBillRailItem extends StatelessWidget {
-  const _QuickBillRailItem({required this.extended, required this.onTap});
-
-  final bool extended;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = AppScope.select(context, AppAspect.language).strings;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(PosRadii.md),
-        child: Container(
-          height: extended ? 48 : 56,
-          decoration: BoxDecoration(
-            border: Border.all(color: PosColors.line),
-            borderRadius: BorderRadius.circular(PosRadii.md),
-          ),
-          child: extended
-              ? Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.flash_on_rounded, size: 20, color: PosColors.warning),
-                      SizedBox(width: 10),
-                      Text(
-                        text.quickBill,
-                        style: TextStyle(
-                          color: PosColors.slate,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : Icon(Icons.flash_on_rounded, size: 22, color: PosColors.warning),
-        ),
-      ),
-    );
-  }
-}
-
 /// Quick actions reachable from drawer group children — screens/sheets that
 /// don't map to a nav tab. Handled by [_MainShellState._handleDrawerAction].
 enum _DrawerAction {
-  quickBill,
   stockScan,
   stockIn,
   stockCount,
@@ -1293,9 +1240,10 @@ class _AppNavDrawer extends StatelessWidget {
     ]);
     final text = app.strings;
     final isBn = text.isBn;
-    // Reports renders nested under Analytics, not as a flat row.
+    final bool isBackoffice = tabOrder.contains(_AppTab.reports);
+    // In backoffice, Reports is a flat row; in manage it is absent.
     final primary = tabOrder
-        .where((t) => t != _AppTab.more && t != _AppTab.reports)
+        .where((t) => t != _AppTab.more && (isBackoffice || t != _AppTab.reports))
         .toList(growable: false);
 
     void close() => Navigator.of(context).pop();
@@ -1316,24 +1264,6 @@ class _AppNavDrawer extends StatelessWidget {
 
     Widget rowFor(_AppTab tab) {
       switch (tab) {
-        case _AppTab.analytics when tabOrder.contains(_AppTab.reports):
-          return _DrawerNavGroup(
-            destination: _destinationFor(tab, text),
-            selected: tab == selected,
-            isBn: isBn,
-            onHeaderTap: () => goTab(tab),
-            initiallyExpanded:
-                tab == selected || selected == _AppTab.reports,
-            children: [
-              _DrawerNavRow.icon(
-                icon: Icons.assessment_outlined,
-                label: text.reports,
-                selected: selected == _AppTab.reports,
-                indented: true,
-                onTap: () => goTab(_AppTab.reports),
-              ),
-            ],
-          );
         case _AppTab.stock:
           return _DrawerNavGroup(
             destination: _destinationFor(tab, text),
@@ -1398,7 +1328,7 @@ class _AppNavDrawer extends StatelessWidget {
           );
         default:
           return _DrawerNavRow.destination(
-            destination: _destinationFor(tab, text),
+            destination: _destinationFor(tab, text, isBackoffice: isBackoffice),
             selected: tab == selected,
             isBn: isBn,
             onTap: () => goTab(tab),
@@ -1422,19 +1352,11 @@ class _AppNavDrawer extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: PosSpacing.sp2),
                 children: [
-                  for (final tab in primary) ...[
-                    if (tab == _AppTab.orders)
-                      _DrawerNavRow.icon(
-                        icon: Icons.flash_on_outlined,
-                        label: text.quickBill,
-                        selected: false,
-                        onTap: () => goAction(_DrawerAction.quickBill),
-                      ),
+                   for (final tab in primary)
                     rowFor(tab),
-                  ],
                   const _DrawerDivider(),
                   _DrawerNavRow.destination(
-                    destination: _destinationFor(_AppTab.more, text),
+                    destination: _destinationFor(_AppTab.more, text, isBackoffice: isBackoffice),
                     selected: selected == _AppTab.more,
                     isBn: isBn,
                     onTap: () => goTab(_AppTab.more),

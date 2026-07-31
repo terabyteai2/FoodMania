@@ -1577,7 +1577,7 @@ class TfChip extends StatelessWidget {
 
     return Material(
       color: fillColor,
-      borderRadius: BorderRadius.circular(PosRadii.md),
+      borderRadius: BorderRadius.circular(PosRadii.chip),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -1588,7 +1588,7 @@ class TfChip extends StatelessWidget {
             vertical: small ? PosSpacing.sp2 : PosDensity.cardPad,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.md),
+            borderRadius: BorderRadius.circular(PosRadii.chip),
             border: Border.all(color: borderColor, width: 1),
           ),
           child: Row(
@@ -1670,9 +1670,12 @@ class TfFilterChipRow extends StatelessWidget {
       height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(
+          horizontal: PosSpacing.sp4,
+          vertical: PosSpacing.sp1,
+        ),
         itemCount: chips.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: PosSpacing.sp2),
         itemBuilder: (context, index) {
           final chip = chips[index];
           return TfChip(
@@ -1680,6 +1683,7 @@ class TfFilterChipRow extends StatelessWidget {
             labelBn: chip.labelBn,
             count: chip.count,
             active: chip.active,
+            small: true,
             onTap: () => onSelected(index),
           );
         },
@@ -1777,7 +1781,7 @@ class AdvToggle extends StatelessWidget {
         padding: const EdgeInsets.only(left: 12, right: 6),
         decoration: BoxDecoration(
           color: value ? PosColors.primarySoft : PosColors.surface,
-          borderRadius: BorderRadius.circular(PosRadii.md),
+          borderRadius: BorderRadius.circular(PosRadii.chip),
           border: Border.all(
             color: value ? PosColors.primaryWash : PosColors.lineStrong,
             width: 1,

@@ -36,6 +36,10 @@ button.ops-tile:hover { border-color: var(--primary); color: var(--primary); }
 .printer-paper { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); }
 .printer-paper .input { width: 170px; height: 34px; }
 .printer-drawer { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); }
+.printer-ap-row { padding-top: 6px; border-top: 1px solid var(--line); }
+.printer-ap { display: flex; align-items: center; gap: 8px; font-size: var(--fs-14); font-weight: 600; cursor: pointer; }
+.printer-ap input { accent-color: var(--primary); width: 16px; height: 16px; }
+
 .printer-msg { font-size: var(--fs-13); font-weight: 600; color: var(--ink-2); }
 .printer-note { font-size: var(--fs-12); color: var(--muted); max-width: 640px; line-height: 1.5; }
 

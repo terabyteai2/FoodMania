@@ -7,8 +7,9 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/menu_image_view.dart';
+import '../../core/widgets/notification_center.dart';
+import '../../core/widgets/scanning_progress.dart';
 import '../../core/widgets/tf_design_system.dart';
-import '../../core/widgets/shell_nav_scope.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
@@ -77,7 +78,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         })
         .toList(growable: false);
     final paused = app.menuItems.where((item) => !item.isAvailable).length;
-    final realCategoryCount = app.categories.length;
     _selectedItemIds.removeWhere(
       (id) => !app.menuItems.any((item) => item.id == id),
     );
@@ -158,10 +158,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
       title: text.menu,
       headerWidget: TfGlobalTopBar(
         title: text.menu,
-        subtitle: text.menuItemsCategorySubtitle(
-          app.menuItems.length,
-          realCategoryCount,
-        ),
         onNavigateToOrders: widget.onNavigateToOrders,
         onNavigateToTarget: widget.onNavigateToTarget,
         // Delivery charge & Discounts moved to the drawer's Menu group — the
@@ -176,7 +172,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, PosDensity.sectionGap, 16, 0),
             child: TfSearchField(
               controller: _searchController,
               hintText: text.menuSearchHint,
@@ -185,7 +181,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
             ),
           ),
           if (app.menuItems.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: PosDensity.sectionGap),
             TfFilterChipRow(
               chips: categories
                   .map(
@@ -206,7 +202,17 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   setState(() => _selectedCategory = categories[index]),
             ),
           ],
-          const SizedBox(height: 16),
+          if (_scanBusy) ...[
+            SizedBox(height: PosDensity.sectionGap),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ScanningProgress(
+                message: text.menuScanningWait,
+              ),
+            ),
+            SizedBox(height: PosDensity.sectionGap),
+          ] else
+            SizedBox(height: PosDensity.sectionGap),
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -364,7 +370,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               isBn: text.isBn,
             ),
           ],
-          const SizedBox(height: 12),
+          SizedBox(height: PosDensity.sectionGap),
           Expanded(
             child: app.menuItems.isEmpty
                 ? Center(
@@ -498,26 +504,19 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     if (_scanBusy) return;
     final text = AppScope.of(context).strings;
     setState(() => _scanBusy = true);
-    final shellNav = ShellNavScope.maybeOf(context);
     await Navigator.push<MenuScanImportResult>(
       context,
       MaterialPageRoute(
         builder: (_) => MenuScanScreen(
           onScan: (uploads) async {
             final app = AppScope.read(context);
-            shellNav?.showScanOverlay(text.menuScanning);
             try {
               final result = await app.scanAndImportMenu(uploads);
               if (!mounted) return;
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(
-                  content: TfText(
-                    text.menuScanImported(
-                      result.createdCount,
-                      result.skippedDuplicateCount,
-                    ),
-                  ),
-                ),
+              showTopNotificationToast(
+                this.context,
+                title: text.menuScanImported(result.createdCount),
+                body: '',
               );
             } catch (error) {
               if (!mounted) return;
@@ -527,7 +526,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 ),
               );
             } finally {
-              shellNav?.hideScanOverlay();
               if (mounted) setState(() => _scanBusy = false);
             }
           },
@@ -1722,6 +1720,7 @@ class _MenuList extends StatelessWidget {
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(PosRadii.lg),
         border: Border.all(color: PosColors.line),
+        boxShadow: PosShadows.soft,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1772,7 +1771,7 @@ class _MenuListHeader extends StatelessWidget {
     final style = TfTextStyles.eyebrow.copyWith(color: PosColors.muted);
     return Container(
       color: PosColors.surfaceSunk,
-      padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+      padding: const EdgeInsets.fromLTRB(PosSpacing.sp2, PosSpacing.sp1p5, PosSpacing.sp3, PosSpacing.sp1p5),
       child: Row(
         children: [
           if (selectionMode) ...[
@@ -1783,14 +1782,21 @@ class _MenuListHeader extends StatelessWidget {
                 onChanged: (_) => onToggleAll(),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: PosSpacing.sp1),
           ],
-          Expanded(child: Text(text.menuColName.toUpperCase(), style: style)),
-          const SizedBox(width: 8),
           SizedBox(
             width: _kMenuColMarkAs,
             child: Center(
-              child: Text(text.menuColMarkAs.toUpperCase(), style: style),
+              child: Text(text.menuAvailable.toUpperCase(), style: style),
+            ),
+          ),
+          const SizedBox(width: PosSpacing.sp2),
+          Expanded(child: Text(text.menuColName.toUpperCase(), style: style)),
+          const SizedBox(width: PosSpacing.sp2),
+          SizedBox(
+            width: _kMenuColPrice,
+            child: Center(
+              child: Text(text.menuPrice.toUpperCase(), style: style),
             ),
           ),
         ],
@@ -1834,7 +1840,7 @@ class _MenuManageRow extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: PosDensity.rowMin),
           alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+          padding: const EdgeInsets.fromLTRB(PosSpacing.sp2, PosSpacing.sp1p5, PosSpacing.sp3, PosSpacing.sp1p5),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
@@ -1853,8 +1859,19 @@ class _MenuManageRow extends StatelessWidget {
                     onChanged: (_) => onToggleSelect(),
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: PosSpacing.sp1),
               ],
+              SizedBox(
+                width: _kMenuColMarkAs,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _MarkAsToggle(
+                    value: available,
+                    onChanged: onAvailabilityChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: PosSpacing.sp2),
               Expanded(
                 child: TfText(
                   item.localizedName(language),
@@ -1866,13 +1883,15 @@ class _MenuManageRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: PosSpacing.sp2),
               SizedBox(
-                width: _kMenuColMarkAs,
+                width: _kMenuColPrice,
                 child: Center(
-                  child: _MarkAsToggle(
-                    value: available,
-                    onChanged: onAvailabilityChanged,
+                  child: TfText(
+                    tfFormatCurrency(context, item.price),
+                    style: TfTextStyles.rowMoney.copyWith(
+                      color: PosColors.text,
+                    ),
                   ),
                 ),
               ),
@@ -1885,7 +1904,8 @@ class _MenuManageRow extends StatelessWidget {
 }
 
 const double _kMenuColCheckbox = 36;
-const double _kMenuColMarkAs = 58;
+const double _kMenuColPrice = 80;
+const double _kMenuColMarkAs = 72;
 
 /// Compact square checkbox used in the menu management table.
 class _MenuCheckbox extends StatelessWidget {
@@ -1946,7 +1966,7 @@ class _MarkAsToggle extends StatelessWidget {
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 5),
           decoration: BoxDecoration(
-            color: on ? PosColors.success : PosColors.surfaceSunk,
+            color: on ? PosColors.primary : PosColors.surfaceSunk,
             borderRadius: BorderRadius.circular(PosRadii.pill),
             border: Border.all(color: on ? Colors.transparent : PosColors.line),
           ),
@@ -2100,7 +2120,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
+const SizedBox(height: 12),
                           _EditorPhotoBlock(
                             busy: _imageBusy,
                             imageUrl: _imageController.text.trim(),

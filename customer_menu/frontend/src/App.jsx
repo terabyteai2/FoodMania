@@ -916,18 +916,19 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
       style={{
         background: T.bgCard, borderRadius: 14, overflow: 'hidden',
         border: `1px solid ${T.line}`,
-        display: 'flex', flexDirection: 'column',
+        display: 'flex', flexDirection: 'column', position: 'relative',
         minHeight: 0,
         animationDelay: `${Math.min(delay * 0.04, 0.3)}s`,
         cursor: 'pointer',
         WebkitTapHighlightColor: 'transparent',
       }}
-      onClick={onOpenDetail}
+      onClick={onAdd}
+      onContextMenu={e => { e.preventDefault(); onOpenDetail(); }}
     >
       {/* Image area */}
       <div style={{
-        width: '100%', aspectRatio: '1.28 / 1', maxHeight: 92, position: 'relative',
-        background: T.bgWarm,
+        width: '40%', alignSelf: 'center', aspectRatio: '1 / 1', maxHeight: 80, position: 'relative',
+        background: T.bgCard,
         ...(hasImage ? {
           backgroundImage: `url(${item.imageUrl})`,
           backgroundSize: 'cover', backgroundPosition: 'center',
@@ -956,29 +957,30 @@ function MenuCard({ item, qty, onAdd, onRemove, onOpenDetail, delay }) {
             </svg>
           </div>
         )}
-        {/* Add / qty control */}
-        <div style={{ position: 'absolute', top: 7, right: 7 }}
-          onClick={e => e.stopPropagation()}>
-          {qty === 0 ? (
-            <button onClick={onAdd} style={{
-              width: 28, height: 28, borderRadius: 14, border: 'none',
-              background: T.ember, color: '#1a0c08', fontSize: 20, lineHeight: 1,
-              cursor: 'pointer', fontWeight: 700, display: 'grid', placeItems: 'center',
-              WebkitTapHighlightColor: 'transparent',
-            }}>+</button>
-          ) : (
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              background: 'rgba(28,20,16,.88)', borderRadius: 8,
-              border: `1px solid ${T.line}`, height: 28,
-              fontFamily: T.display, fontSize: 13,
-            }}>
-              <span onClick={onRemove} style={{ padding: '0 7px', cursor: 'pointer', color: T.inkSoft, lineHeight: '28px' }}>−</span>
-              <span style={{ padding: '0 2px', color: '#fff', fontWeight: 700, lineHeight: '28px' }}>{qty}</span>
-              <span onClick={onAdd} style={{ padding: '0 7px', cursor: 'pointer', color: T.amber, lineHeight: '28px' }}>+</span>
-            </div>
-          )}
-        </div>
+      </div>
+
+      {/* Add / qty control */}
+      <div style={{ position: 'absolute', top: 7, right: 7 }}
+        onClick={e => e.stopPropagation()}>
+        {qty === 0 ? (
+          <button onClick={onAdd} style={{
+            width: 28, height: 28, borderRadius: 14, border: 'none',
+            background: T.ember, color: '#1a0c08', fontSize: 20, lineHeight: 1,
+            cursor: 'pointer', fontWeight: 700, display: 'grid', placeItems: 'center',
+            WebkitTapHighlightColor: 'transparent',
+          }}>+</button>
+        ) : (
+          <div onClick={e => e.stopPropagation()} style={{
+            display: 'flex', alignItems: 'center',
+            background: 'rgba(28,20,16,.88)', borderRadius: 8,
+            border: `1px solid ${T.line}`, height: 28,
+            fontFamily: T.display, fontSize: 13,
+          }}>
+            <span onClick={onRemove} style={{ padding: '0 7px', cursor: 'pointer', color: T.inkSoft, lineHeight: '28px' }}>−</span>
+            <span style={{ padding: '0 2px', color: '#fff', fontWeight: 700, lineHeight: '28px' }}>{qty}</span>
+            <span onClick={onAdd} style={{ padding: '0 7px', cursor: 'pointer', color: T.amber, lineHeight: '28px' }}>+</span>
+          </div>
+        )}
       </div>
 
       {/* Info */}
@@ -1242,7 +1244,7 @@ function CartScreen({ cart, items, note, onNote, delivery, onDelivery, onAdd, on
               backgroundColor: T.bgCard, position: 'relative', overflow: 'hidden',
               ...(item.imageUrl ? {
                 backgroundImage: `url(${item.imageUrl})`,
-                backgroundSize: 'cover', backgroundPosition: 'center',
+          backgroundSize: 'contain', backgroundPosition: 'center',
               } : {}),
             }}>
               {!item.imageUrl && <MenuFallbackIcon item={item} size={24} />}

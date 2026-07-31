@@ -235,11 +235,9 @@ async def test_receipt_scan_ocr_raises_when_every_page_fails(monkeypatch):
         )
 
 
-def test_receipt_scan_uses_json_object_mode_for_groq():
-    groq = next(provider for provider in receipt_scan._providers() if provider.name == "groq")
+def test_receipt_scan_uses_json_object_mode_for_deepseek():
+    deepseek = next(provider for provider in receipt_scan._providers() if provider.name == "deepseek")
 
-    payload = receipt_scan._request_payload(groq, ["Chicken 15kg 6300"])
+    payload = receipt_scan._request_payload(deepseek, ["Chicken 15kg 6300"])
 
     assert payload["response_format"] == {"type": "json_object"}
-    assert payload["reasoning_format"] == "hidden"
-    assert payload["reasoning_effort"] == "low"

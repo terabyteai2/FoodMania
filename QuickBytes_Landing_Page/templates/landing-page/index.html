@@ -3,6 +3,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>
+(function(){
+  if (location.pathname !== '/' && location.pathname !== '') return;
+  try { if (localStorage.getItem('qbpos.auth')) { location.replace('/app'); } } catch(e) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QuickBytes — Restaurant POS built in Rajshahi, for Rajshahi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,8 +29,8 @@
       <a href="#pricing" data-bn="প্রাইসিং">Pricing</a>
     </nav>
     <button class="lang-toggle" id="langToggle" type="button">বাংলা</button>
-    <a class="btn btn-ghost" href="/login" data-bn="সাইন ইন">Sign in</a>
-    <a class="btn btn-lime" href="/signup" data-bn="শুরু করুন">Get started</a>
+    <a class="btn btn-ghost" href="/app/" data-qb-role="auth-btn" data-bn="সাইন ইন">Sign in</a>
+    <a class="btn btn-lime" href="/app/" data-bn="শুরু করুন">Get started</a>
   </div>
 </header>
 
@@ -36,7 +42,7 @@
       <h1 data-bn="সেটআপে ৫ মিনিট। সব অর্ডার এক প্রিন্টারে।">Set up in 5 minutes. Every order to one printer.</h1>
       <p class="hero-sub" data-bn="কাউন্টার, ফেসবুক মেসেঞ্জার, নিজের ওয়েবসাইট, টেবিল QR, ওয়েটার — পাঁচ জায়গা থেকে অর্ডার আসে, <b>এক কিউতে জমা হয়, এক জায়গায় প্রিন্ট হয়</b> — আপনার কিচেনে।">Sell at the counter, on Facebook Messenger, your own website, table QR codes, and through waiters. Every order lands in <b>one queue and prints at one destination</b> — your kitchen.</p>
       <div class="hero-ctas">
-        <a class="btn btn-lime" href="/signup" data-bn="৭ দিন ফ্রি ট্রায়াল শুরু করুন">Start free trial</a>
+        <a class="btn btn-lime" href="/app/" data-bn="৭ দিন ফ্রি ট্রায়াল শুরু করুন">Start free trial</a>
         <a class="btn btn-ghost" href="https://wa.me/8801575873000" target="_blank" rel="noopener" data-bn="WhatsApp-এ কথা বলুন">WhatsApp us</a>
       </div>
       <div class="hero-meta">
@@ -212,7 +218,7 @@
           <li data-bn="সেলস সামারি সেকশন">Sales summary section</li>
           <li data-bn="অডিট ট্রেইল / এডিট হিস্টরি">Audit trail / Edit history</li>
         </ul>
-        <a class="btn btn-lime" href="/signup" data-bn="ট্রায়াল শুরু করুন">Start trial</a>
+        <a class="btn btn-lime" href="/app/" data-bn="ট্রায়াল শুরু করুন">Start trial</a>
       </div>
     </div>
     <div class="addon-section">
@@ -264,6 +270,19 @@
   </div>
 </footer>
 
+<script>
+(function () {
+  var authBtn = document.querySelector('[data-qb-role="auth-btn"]');
+  if (authBtn) {
+    try {
+      if (localStorage.getItem('qbpos.auth')) {
+        authBtn.innerHTML = 'Dashboard →';
+        authBtn.setAttribute('data-bn', 'ড্যাশবোর্ড →');
+      }
+    } catch(e) {}
+  }
+})();
+</script>
 <script>
 (function () {
   var bn = false;

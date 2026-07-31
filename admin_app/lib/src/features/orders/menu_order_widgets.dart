@@ -45,6 +45,8 @@ class MenuStep extends StatefulWidget {
     this.title,
     this.onBack,
     this.leadingIsClose = false,
+    this.quickBillMode = false,
+    this.onToggleQuickBill,
     super.key,
   });
 
@@ -81,6 +83,8 @@ class MenuStep extends StatefulWidget {
   final String? title;
   final VoidCallback? onBack;
   final bool leadingIsClose;
+  final bool quickBillMode;
+  final VoidCallback? onToggleQuickBill;
 
   @override
   State<MenuStep> createState() => _MenuStepState();
@@ -95,6 +99,8 @@ class _MenuStepState extends State<MenuStep> {
           title: widget.title,
           onLeading: widget.onBack,
           leadingIsClose: widget.leadingIsClose,
+          quickBillMode: widget.quickBillMode,
+          onToggleQuickBill: widget.onToggleQuickBill,
         ),
         const SizedBox(height: PosSpacing.sp1),
         _MenuSearchBar(
@@ -146,15 +152,20 @@ class _TopControls extends StatelessWidget {
     required this.title,
     required this.onLeading,
     required this.leadingIsClose,
+    this.quickBillMode = false,
+    this.onToggleQuickBill,
   });
 
   final String? title;
   final VoidCallback? onLeading;
   final bool leadingIsClose;
+  final bool quickBillMode;
+  final VoidCallback? onToggleQuickBill;
 
   @override
   Widget build(BuildContext context) {
     final hasTitle = title != null;
+    final text = AppScope.of(context).strings;
     return Container(
       color: PosColors.primary,
       padding: const EdgeInsets.fromLTRB(PosSpacing.sp4, PosSpacing.sp2, PosSpacing.sp4, PosSpacing.sp2),
@@ -188,6 +199,39 @@ class _TopControls extends StatelessWidget {
             )
           else
             const Spacer(),
+          if (onToggleQuickBill != null) ...[
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onToggleQuickBill,
+              child: Container(
+padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3, vertical: PosSpacing.sp2),
+                decoration: BoxDecoration(
+                  color: quickBillMode ? PosColors.stateOccupied : Colors.transparent,
+                  borderRadius: BorderRadius.circular(PosRadii.md),
+                  border: Border.all(
+                    color: quickBillMode ? PosColors.stateOccupied : Colors.white38,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.bolt_rounded,
+                      size: 20,
+                      color: quickBillMode ? PosColors.stateOccupiedInk : PosColors.accentInk,
+                    ),
+                    const SizedBox(width: 4),
+                    TfText(
+                      text.quickBill,
+                      style: TfTextStyles.cardTitle.copyWith(
+                        color: quickBillMode ? PosColors.stateOccupiedInk : PosColors.accentInk,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -287,7 +331,7 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
                 child: GestureDetector(
                   onTap: widget.onToggleCode,
                   child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3),
+padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3, vertical: PosSpacing.sp3),
                   decoration: BoxDecoration(
                     color: widget.codeMode ? PosColors.primary : PosColors.surface,
                     borderRadius: BorderRadius.only(
@@ -563,7 +607,7 @@ class _GridTile extends StatelessWidget {
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: inCart ? PosColors.surfaceSunk : PosColors.surface,
+            color: PosColors.surface,
             border: Border.all(color: PosColors.line),
             borderRadius: BorderRadius.circular(PosRadii.xl),
             boxShadow: PosShadows.soft,
@@ -573,70 +617,51 @@ class _GridTile extends StatelessWidget {
             children: [
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    PosSpacing.sp2,
-                    PosSpacing.sp2,
-                    PosSpacing.sp2,
-                    (inCart && !off) ? 0 : PosSpacing.sp2,
-                  ),
+                  padding: const EdgeInsets.all(PosSpacing.sp2),
                   child: Stack(
-                  children: [
-                    if (inCart && !off)
+                    children: [
                       Positioned(
-                        top: PosSpacing.sp1,
+                        top: 0,
                         left: 0,
-                        right: 36,
+                        right: inCart ? 38 : 0,
                         child: TfText(
                           item.localizedName(app.language),
                           textAlign: TextAlign.start,
-                          maxLines: 1,
+                          maxLines: inCart ? 1 : 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TfTextStyles.badgeText.copyWith(
-                            color: PosColors.primaryDark,
-        fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                        ),
-                      )
-                    else
-                      Positioned.fill(
-                        child: Center(
-                          child: Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              PosSpacing.sp1,
-                              PosSpacing.sp4,
-                              PosSpacing.sp1,
-                              PosSpacing.sp4,
-                            ),
-                            child: TfText(
-                              item.localizedName(app.language),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TfTextStyles.sectionStrip.copyWith(
-                                color: PosColors.primaryDark,
-                                height: 1.2,
-                              ),
-                            ),
-                          ),
+                          style: TfTextStyles.body.copyWith(color: PosColors.primaryDark, fontWeight: FontWeight.w600),
                         ),
                       ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: inCart
-                          ? _CountBadge(qty: qty)
-                          : _PriceTag(price: item.price),
-                    ),
-                    if (off)
-                      const Positioned(
-                        bottom: 0,
-                        left: 0,
-                        child: _OffBadge(),
-                      ),
-                  ],
+                      if (off)
+                        const Positioned(
+                          bottom: 0,
+                          left: 0,
+                          child: _OffBadge(),
+                        )
+                      else if (!inCart)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          child: _PriceTag(price: item.price),
+                        ),
+                      if (!inCart)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: _AddButton(
+                            onTap: off ? null : onTap,
+                            inCart: false,
+                          ),
+                        ),
+                      if (inCart)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: _CountBadge(qty: qty),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
               ),
               if (inCart && !off)
                 _TileStepper(
@@ -679,14 +704,14 @@ class _TileStepper extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onDecrement,
-              child: Container(
-                color: PosColors.secondary,
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.remove_rounded,
-                  size: 18,
-                  color: PosColors.onSecondary,
-                ),
+                child: Container(
+                  color: PosColors.secondary,
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.remove_rounded,
+                    size: 18,
+                    color: PosColors.onSecondary,
+                  ),
               ),
             ),
           ),
@@ -696,21 +721,48 @@ class _TileStepper extends StatelessWidget {
               onTap: onIncrement,
               child: Container(
                 decoration: const BoxDecoration(
-                  color: PosColors.surface,
-                  border: Border(
-                    right: BorderSide(color: PosColors.lineStrong),
-                  ),
+                  color: PosColors.addBlue,
                 ),
                 alignment: Alignment.center,
                 child: const Icon(
                   Icons.add_rounded,
                   size: 18,
-                  color: PosColors.secondary,
+                  color: Colors.white,
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Circular plus button, bottom-right of the item card.
+class _AddButton extends StatelessWidget {
+  const _AddButton({this.onTap, this.inCart = false});
+  final VoidCallback? onTap;
+  final bool inCart;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: inCart ? PosColors.addBlue : PosColors.addBg,
+          shape: BoxShape.circle,
+          border: inCart
+              ? null
+              : Border.all(color: PosColors.addBlue, width: 1.5),
+        ),
+        child: Icon(
+          Icons.add_rounded,
+          size: 20,
+          color: inCart ? Colors.white : PosColors.addBlue,
+        ),
       ),
     );
   }
@@ -730,7 +782,7 @@ class _CountBadge extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
       alignment: Alignment.center,
       decoration: const BoxDecoration(
-        color: PosColors.secondary,
+        color: PosColors.addBlue,
         borderRadius: BorderRadius.all(Radius.circular(999)),
       ),
       child: TfText(
@@ -746,7 +798,7 @@ class _CountBadge extends StatelessWidget {
   }
 }
 
-// Price label (top-left of the card, Petpooja tile layout).
+// Price label (bottom-left of the card).
 class _PriceTag extends StatelessWidget {
   const _PriceTag({required this.price});
   final double price;
@@ -754,13 +806,8 @@ class _PriceTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TfText(
-      tfFormatNumber(context, price),
-      style: TfTextStyles.badgeText.copyWith(
-        fontSize: 9,
-        fontWeight: FontWeight.w500,
-        color: PosColors.ink2,
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
+      tfFormatCurrency(context, price),
+      style: TfTextStyles.bodyMuted,
     );
   }
 }

@@ -169,8 +169,8 @@ class _MenuScanScreenState extends State<MenuScanScreen> {
         .toList(growable: false);
 
     if (widget.onScan != null) {
+      Navigator.of(context).pop();
       widget.onScan!(uploads);
-      if (mounted) Navigator.of(context).pop();
       return;
     }
 

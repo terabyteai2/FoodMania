@@ -509,6 +509,43 @@ class MenuScanResult {
     final data = json['data'] is Map
         ? Map<String, Object?>.from(json['data'] as Map)
         : json;
+
+    final rawImages = data['images'];
+    if (rawImages is List && rawImages.isNotEmpty) {
+      final rawTotalPages = data['totalPages'];
+      final totalPages = rawTotalPages is num
+          ? rawTotalPages.toInt()
+          : int.tryParse(rawTotalPages?.toString() ?? '') ?? 0;
+      final allItems = <MenuScanCandidate>[];
+      final allWarnings = <String>[];
+      String? firstProvider;
+      for (final raw in rawImages) {
+        if (raw is! Map) continue;
+        final image = Map<String, Object?>.from(raw);
+        final items = image['items'] is List
+            ? (image['items'] as List)
+                .map(MenuScanCandidate.fromJson)
+                .whereType<MenuScanCandidate>()
+                .toList(growable: false)
+            : const <MenuScanCandidate>[];
+        allItems.addAll(items);
+        firstProvider ??= image['provider']?.toString().trim();
+        final warns = image['warnings'];
+        if (warns is List) {
+          allWarnings.addAll(warns.map((w) => w.toString()));
+        }
+      }
+      if (allItems.isEmpty) {
+        throw CloudApiException('The menu scan did not return menu items.');
+      }
+      return MenuScanResult(
+        items: allItems,
+        provider: firstProvider ?? '',
+        pageCount: totalPages.clamp(0, 999),
+        warnings: allWarnings,
+      );
+    }
+
     final items = data['items'] is List
         ? (data['items'] as List)
               .map(MenuScanCandidate.fromJson)
@@ -887,6 +924,7 @@ class CloudApiService {
   /// Register monthly/annual plan choice so platform admin can activate the outlet.
   Future<void> registerOnboardingPlan({required String plan}) async {
     final uri = _uri('/admin/subscription/onboarding');
+    debugPrint('[SUB-API] registerOnboardingPlan uri=$uri plan=$plan');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
@@ -896,20 +934,26 @@ class CloudApiService {
   /// Server-side subscription gate (platform admin grants access).
   Future<AppAccessResult> fetchAppAccess() async {
     final uri = _uri('/admin/access');
+    debugPrint('[SUB-API] fetchAppAccess uri=$uri');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
     final response = await _sendJson('GET', uri);
-    return AppAccessResult.fromJson(response);
+    final result = AppAccessResult.fromJson(response);
+    debugPrint('[SUB-API] fetchAppAccess response hasAppAccess=${result.hasAppAccess} status=${result.subscriptionStatus} package=${result.subscriptionPackage} addons=${result.addons}');
+    return result;
   }
 
   /// Fetch subscription upgrade info: current plan, addon options, message for ScreenBlocker.
   Future<Map<String, dynamic>> fetchSubscriptionUpgrade() async {
     final uri = _uri('/admin/subscription/upgrade');
+    debugPrint('[SUB-API] fetchSubscriptionUpgrade uri=$uri');
     if (uri == null) {
       throw CloudApiException('Cloud API URL is empty or invalid.');
     }
-    return _sendJson('GET', uri);
+    final response = await _sendJson('GET', uri) as Map<String, dynamic>;
+    debugPrint('[SUB-API] fetchSubscriptionUpgrade response=$response');
+    return response;
   }
 
   Future<AppUpdateInfo> fetchAppUpdate() async {
@@ -1119,6 +1163,14 @@ class CloudApiService {
           'displayName': displayName!.trim(),
       },
     );
+  }
+
+  Future<void> deleteStaffAccount(String staffId) async {
+    final uri = _uri('/admin/staff/$staffId');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    await _sendJson('DELETE', uri);
   }
 
   Future<BkashPaymentSession> createBkashSandboxPayment({

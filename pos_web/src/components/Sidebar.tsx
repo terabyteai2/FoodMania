@@ -54,6 +54,12 @@ const PrintersIcon = () => (
   </svg>
 );
 
+const MicIcon = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+  </svg>
+);
+
 const ITEMS: SItem[] = [
   { pane: 'dashboard', label: 'Dashboard', icon: <DashboardIcon />, role: 'manager' },
   { pane: 'analytics', label: 'Analytics', icon: <AnalyticsIcon />, role: 'manager' },
@@ -62,9 +68,10 @@ const ITEMS: SItem[] = [
   { pane: 'inventory', label: 'Inventory', icon: <InventoryIcon />, role: 'owner' },
   { pane: 'dayend', label: 'Day End', icon: <DayEndIcon /> },
   { pane: 'printers', label: 'Printers', icon: <PrintersIcon /> },
+  { pane: 'voiceagent', label: 'Voice Agent', icon: <MicIcon /> },
 ];
 
-export function Sidebar() {
+export function Sidebar({ open, onMouseEnter, onMouseLeave }: { open: boolean; onMouseEnter?: React.MouseEventHandler; onMouseLeave?: React.MouseEventHandler }) {
   const lang = useSession((s) => s.lang);
   const section = useNav((s) => s.section);
   const go = useNav((s) => s.go);
@@ -76,40 +83,30 @@ export function Sidebar() {
   const visible = role ? ITEMS.filter((it) => !it.role || (it.role === 'owner' ? role === 'owner' : role === 'owner' || role === 'manager')) : ITEMS;
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' open' : ''}`} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <nav className="sidebar-nav">
-        {MAIN.map((it) => (
-          <button
-            key={it.id}
-            className={`sidebar-btn${section === it.id ? ' active' : ''}`}
-            onClick={() => go(it.id)}
-            title={t(('sidebar.' + it.id) as StringKey, lang)}
-          >
-            <span className="sidebar-icon">{it.icon}</span>
-            <span className="sidebar-label">{t(('sidebar.' + it.id) as StringKey, lang)}</span>
-            {section === it.id && (
-              <svg className="sidebar-chevron" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M9.29 6.71c-.39.39-.39 1.02 0 1.41L13.17 12l-3.88 3.88c-.39.39-.39 1.02 0 1.41s1.02.39 1.41 0l4.59-4.59c.39-.39.39-1.02 0-1.41L10.7 6.7c-.38-.38-1.02-.38-1.41.01z"/>
-              </svg>
-            )}
-          </button>
-        ))}
-        {visible.map((it) => (
-          <button
-            key={it.pane}
-            className={`sidebar-btn${opsPane === it.pane ? ' active' : ''}`}
-            onClick={() => goOps(it.pane)}
-            title={t(('sidebar.' + it.pane) as StringKey, lang)}
-          >
-            <span className="sidebar-icon">{it.icon}</span>
-            <span className="sidebar-label">{t(('sidebar.' + it.pane) as StringKey, lang)}</span>
-            {opsPane === it.pane && (
-              <svg className="sidebar-chevron" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M9.29 6.71c-.39.39-.39 1.02 0 1.41L13.17 12l-3.88 3.88c-.39.39-.39 1.02 0 1.41s1.02.39 1.41 0l4.59-4.59c.39-.39.39-1.02 0-1.41L10.7 6.7c-.38-.38-1.02-.38-1.41.01z"/>
-              </svg>
-            )}
-          </button>
-        ))}
+          {MAIN.map((it) => (
+            <button
+              key={it.id}
+              className={`sidebar-btn${section === it.id ? ' active' : ''}`}
+              onClick={() => go(it.id)}
+              title={t(('sidebar.' + it.id) as StringKey, lang)}
+            >
+              <span className="sidebar-icon">{it.icon}</span>
+              <span className="sidebar-label">{t(('sidebar.' + it.id) as StringKey, lang)}</span>
+            </button>
+          ))}
+          {visible.map((it) => (
+            <button
+              key={it.pane}
+              className={`sidebar-btn${opsPane === it.pane ? ' active' : ''}`}
+              onClick={() => goOps(it.pane)}
+              title={t(('sidebar.' + it.pane) as StringKey, lang)}
+            >
+              <span className="sidebar-icon">{it.icon}</span>
+              <span className="sidebar-label">{t(('sidebar.' + it.pane) as StringKey, lang)}</span>
+            </button>
+          ))}
       </nav>
 
       <div className="sidebar-user">

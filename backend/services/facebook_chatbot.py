@@ -34,13 +34,17 @@ FACEBOOK_OAUTH_CALLBACK_PATH = "/admin/chatbot/facebook/oauth/callback"
 GRAPH_TIMEOUT_SECONDS = 8.0
 GROQ_TIMEOUT_SECONDS = 30.0
 DEEPSEEK_TIMEOUT_SECONDS = 45.0
-MAX_CONTEXT_MENU_ITEMS = 80
 MAX_REPLY_CHARS = 1900
 BATCH_WAIT_SECONDS = 4.0
-BATCH_MAX_SIZE = 10
-BATCH_LLM_MAX_TOKENS = 4000
+BATCH_MAX_SIZE = 5
+BATCH_LLM_MAX_TOKENS = 6000
 CHAT_HISTORY_CONTEXT_LIMIT = 10
 CHAT_HISTORY_APP_LIMIT = 10
+
+# LLM session lifecycle — after this many batches, restart the context
+# to prevent the restaurant setup from getting lost in the window.
+SESSION_BATCH_LIMIT = 12
+MAX_HISTORY_FOR_NEW = 5
 
 
 _chatbot_queue: asyncio.Queue = asyncio.Queue()
@@ -888,18 +892,21 @@ async def _get_conversation(
     return conversation
 
 
-def _restaurant_context(
+def _build_restaurant_setup(
     outlet: Outlet,
     menu_items: list[MenuItem],
     ordering_enabled: bool,
 ) -> dict:
+    """Restaurant-only setup context — no chat history, no conversation state.
+
+    Sent once per LLM session to prime the model with restaurant details.
+    Subsequent batch messages omit this and only carry conversation data.
+    """
     return {
+        "type": "setup",
         "restaurantName": outlet.restaurant.name if outlet.restaurant else outlet.name,
         "outletName": outlet.name,
         "orderingEnabled": ordering_enabled,
-        # Pricing rules so the bot can quote an accurate total in its cart
-        # summary. The backend stays the source of truth at order creation
-        # (see delivery_order_totals / create_delivery_order).
         "vatRatePercent": 5.0,
         "deliveryCharge": float(outlet.delivery_charge or 0),
         "menu": [
@@ -910,7 +917,7 @@ def _restaurant_context(
                 "category": item.category_en or item.category or "General",
                 "price": float(item.price),
             }
-            for item in menu_items[:MAX_CONTEXT_MENU_ITEMS]
+            for item in menu_items
         ],
     }
 
@@ -925,7 +932,7 @@ async def _available_menu_items(db: AsyncSession, outlet_id: str) -> list[MenuIt
                 MenuItem.deleted_at == None,
             )
             .order_by(MenuItem.category, MenuItem.name)
-            .limit(MAX_CONTEXT_MENU_ITEMS)
+            .limit(300)
         )
     ).scalars().all()
 
@@ -1121,6 +1128,15 @@ def _normalize_state(value: Any) -> dict:
     }
 
 
+def _last_bot_message(history: Any) -> str | None:
+    """Return the last bot message from history, or None if never replied."""
+    entries = [e for e in _chat_history(history) if isinstance(e, dict) and e.get("role") == "bot"]
+    if not entries:
+        return None
+    last = entries[-1].get("text", "")
+    return str(last).strip() or None
+
+
 def _empty_state() -> dict:
     return {
         "items": [],
@@ -1224,6 +1240,20 @@ async def _process_batch(batch: list[dict]) -> None:
         for oid in outlet_ids:
             menu_map[oid] = await _available_menu_items(db, oid)
 
+        # ── Per-outlet session check ──────────────────────────────────────
+        # Track batch count per outlet for session refresh.
+        needs_reset_map: dict[str, bool] = {}
+        for conv in conversations:
+            if conv.integration is None:
+                continue
+            integration = conv.integration
+            if integration.outlet_id not in needs_reset_map:
+                needs_reset_map[integration.outlet_id] = (
+                    integration.llm_batch_count >= SESSION_BATCH_LIMIT
+                    or integration.llm_session_started_at is None
+                )
+
+        # ── Build per-conversation payload ────────────────────────────────
         llm_conversations: list[dict] = []
         for conv_id, item in grouped.items():
             conv = conv_map.get(conv_id)
@@ -1233,33 +1263,69 @@ async def _process_batch(batch: list[dict]) -> None:
             integration = conv.integration
             outlet = integration.outlet
             state = _normalize_state(conv.state_json)
-            history = recent_chat_history(
-                conv.history_json,
-                limit=CHAT_HISTORY_CONTEXT_LIMIT,
-            )
-            llm_conversations.append({
+
+            entry: dict = {
                 "id": conv_id,
-                "restaurant": _restaurant_context(
+                "customerMessage": item["text"],
+                "conversationState": state,
+                "setup": _build_restaurant_setup(
                     outlet, menu_map.get(outlet.id, []), integration.ordering_enabled
                 ),
-                "conversationState": state,
-                "history": history,
-                "customerMessage": item["text"],
-            })
+                "recentHistory": recent_chat_history(
+                    conv.history_json, limit=MAX_HISTORY_FOR_NEW
+                ),
+            }
+
+            llm_conversations.append(entry)
 
         if not llm_conversations:
             return
 
+        logger.info(
+            "LLM request: %d conversations, setup=%s",
+            len(llm_conversations),
+            any("setup" in c for c in llm_conversations),
+        )
+        logger.debug(
+            "LLM request payload: %s",
+            json.dumps({"conversations": llm_conversations}, ensure_ascii=False),
+        )
+
         try:
-            llm_response = await _call_batched_llm(llm_conversations, _batched_system_prompt())
+            llm_response = await _call_batched_llm(
+                llm_conversations, _batched_system_prompt()
+            )
         except ChatbotError:
-            logger.exception("batched LLM call failed for %d conversations", len(llm_conversations))
+            logger.exception(
+                "batched LLM call failed for %d conversations", len(llm_conversations)
+            )
             return
 
         responses = llm_response.get("responses") if isinstance(llm_response, dict) else []
+        logger.info("LLM response: %d responses", len(responses))
+        logger.debug(
+            "LLM response body: %s",
+            json.dumps(llm_response, ensure_ascii=False),
+        )
         if not isinstance(responses, list):
             logger.warning("batched LLM returned non-list responses: %r", responses)
             responses = []
+
+        # ── Persist session checkpoint per outlet ─────────────────────────
+        counted_outlets: set[str] = set()
+        for conv in conversations:
+            if conv.integration is None:
+                continue
+            oid = conv.integration.outlet_id
+            if oid in counted_outlets:
+                continue
+            counted_outlets.add(oid)
+            integration = conv.integration
+            if needs_reset_map.get(oid):
+                integration.llm_session_started_at = datetime.now(timezone.utc)
+                integration.llm_batch_count = 1
+            else:
+                integration.llm_batch_count = (integration.llm_batch_count or 0) + 1
 
         conversations_needing_final_reply = []
         conversations_with_immediate_replies = []
@@ -1276,12 +1342,10 @@ async def _process_batch(batch: list[dict]) -> None:
             state = _normalize_state(conv.state_json)
 
             reply = str(resp.get("reply") or "").strip()
+            reply_type = str(resp.get("replyType") or "chat").strip().lower()
             order_action = resp.get("order") if isinstance(resp.get("order"), dict) else {}
 
-            # Escalation takes precedence: hand the thread to a human manager.
-            # Set status='needs' (read by routers/chatbot.py _chat_status), post a
-            # 'system' marker, and send only the holding reply. The bot then stays
-            # silent for this customer (see _handle_event gate) until handback.
+            # Escalation takes precedence.
             escalate = resp.get("escalate") if isinstance(resp.get("escalate"), dict) else {}
             if bool(escalate.get("needed")):
                 reason_code = str(escalate.get("reason") or "other").strip().lower()
@@ -1302,17 +1366,17 @@ async def _process_batch(batch: list[dict]) -> None:
                 conversations_with_immediate_replies.append(conv)
                 continue
 
-            if integration.ordering_enabled and order_action:
+            # Only process order actions when replyType is "action".
+            if (
+                reply_type == "action"
+                and integration.ordering_enabled
+                and order_action
+            ):
                 state, system_event = await _apply_order_action(
                     db=db, outlet=outlet, state=state, action=order_action,
                 )
                 conv.state_json = state
 
-                # Only these two events need data the bot couldn't know when it
-                # wrote its reply (the real order number/total, or which item just
-                # went unavailable), so they get a history-aware final phrasing.
-                # For missing_details / needs_confirmation / order_cancelled the
-                # bot already wrote a natural reply with full context — use it.
                 if system_event and system_event.get("type") in (
                     "order_created", "validation_failed",
                 ):
@@ -1362,7 +1426,9 @@ async def _process_batch(batch: list[dict]) -> None:
             if conv is None or conv.integration is None:
                 continue
             try:
-                await _send_message(conv.integration, conv.psid, conv.last_bot_message or "")
+                await _send_message(
+                    conv.integration, conv.psid, conv.last_bot_message or ""
+                )
             except ChatbotError as exc:
                 logger.warning(
                     "batch send failed conv=%s psid=%s error=%s",
@@ -1379,22 +1445,25 @@ async def _generate_final_replies_batch(
 
     llm_payload = []
     for conv in conversations:
-        outlet = conv.integration.outlet
         state = conv.state_json
         system_event = state.get("systemEvent", {})
-        
-        llm_payload.append({
+        entry: dict = {
             "id": conv.id,
-            "restaurant": _restaurant_context(
-                outlet, menu_map.get(outlet.id, []), conv.integration.ordering_enabled
-            ),
             "systemEvent": system_event,
             "conversationState": state,
-            "history": recent_chat_history(
-                conv.history_json, limit=CHAT_HISTORY_CONTEXT_LIMIT
-            ),
-        })
-    
+        }
+        # Only include restaurant name (not full menu) for event reply context.
+        outlet = conv.integration.outlet
+        if outlet:
+            entry["restaurantName"] = outlet.restaurant.name if outlet.restaurant else outlet.name
+        llm_payload.append(entry)
+
+    logger.info("Final-reply LLM request: %d conversations", len(llm_payload))
+    logger.debug(
+        "Final-reply LLM payload: %s",
+        json.dumps({"conversations": llm_payload}, ensure_ascii=False),
+    )
+
     try:
         llm_response = await _call_batched_llm(llm_payload, _final_reply_system_prompt())
     except ChatbotError:
@@ -1407,39 +1476,20 @@ async def _generate_final_replies_batch(
         for resp in responses:
             if isinstance(resp, dict) and "id" in resp and "reply" in resp:
                 result[str(resp["id"])] = str(resp["reply"]).strip()
+    logger.info("Final-reply LLM response: %d replies", len(result))
+    logger.debug(
+        "Final-reply LLM response body: %s",
+        json.dumps(llm_response, ensure_ascii=False),
+    )
     return result
 
 
 async def _call_batched_llm(conversations: list[dict], system_prompt: str) -> dict:
-    deepseek_key = settings.DEEPSEEK_API_KEY.strip()
-    deepseek_model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
-    if deepseek_key and deepseek_model:
-        try:
-            return await _chat_batched_provider(conversations, system_prompt, "deepseek")
-        except ChatbotError:
-            logger.warning("DeepSeek batched chatbot failed, falling back to Groq")
-
-    return await _chat_batched_provider(conversations, system_prompt, "groq")
-
-
-async def _chat_batched_provider(conversations: list[dict], system_prompt: str, provider: str) -> dict:
-    if provider == "deepseek":
-        api_key = settings.DEEPSEEK_API_KEY.strip()
-        model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
-        url = "https://api.deepseek.com/v1/chat/completions"
-        timeout = DEEPSEEK_TIMEOUT_SECONDS
-        max_tokens_key = "max_tokens"
-        temp = 0.3
-    else:
-        api_key = settings.GROQ_API_KEY.strip()
-        model = settings.CHATBOT_GROQ_MODEL.strip()
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        timeout = GROQ_TIMEOUT_SECONDS
-        max_tokens_key = "max_completion_tokens"
-        temp = 0.2
-
+    api_key = settings.DEEPSEEK_API_KEY.strip()
+    model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
     if not api_key or not model:
-        raise ChatbotError(f"{provider} is not configured for batch.")
+        raise ChatbotError("DeepSeek is not configured for batch.")
+    url = "https://api.deepseek.com/v1/chat/completions"
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -1449,7 +1499,7 @@ async def _chat_batched_provider(conversations: list[dict], system_prompt: str, 
         },
     ]
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=DEEPSEEK_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 url,
                 headers={
@@ -1459,15 +1509,15 @@ async def _chat_batched_provider(conversations: list[dict], system_prompt: str, 
                 json={
                     "model": model,
                     "messages": messages,
-                    "temperature": temp,
-                    max_tokens_key: min(BATCH_LLM_MAX_TOKENS, 800 * max(len(conversations), 1)),
+                    "temperature": 0.3,
+                    "max_tokens": min(BATCH_LLM_MAX_TOKENS, 800 * max(len(conversations), 1)),
                     "response_format": {"type": "json_object"},
                 },
             )
             response.raise_for_status()
             payload = response.json()
     except httpx.HTTPError as error:
-        raise ChatbotError(f"{provider} batched chatbot request failed.") from error
+        raise ChatbotError("DeepSeek batched chatbot request failed.") from error
 
     content = (
         ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
@@ -1475,7 +1525,7 @@ async def _chat_batched_provider(conversations: list[dict], system_prompt: str, 
         else None
     )
     if not isinstance(content, str) or not content.strip():
-        raise ChatbotError(f"{provider} returned an empty batched chatbot response.")
+        raise ChatbotError("DeepSeek returned an empty batched chatbot response.")
     return _parse_json_object(content)
 
 
@@ -1484,18 +1534,19 @@ def _batched_system_prompt() -> str:
         "You are an advanced AI assistant processing multiple simultaneous Facebook Messenger "
         "conversations for a restaurant POS system. \n\n"
         "### CORE DIRECTIVES\n"
-        "1. LANGUAGE & TONE: You MUST reply in conversational Bangla using the Bangla alphabet. "
-        "Be brief, warm, friendly, and use common sense. \n"
+        "1. LANGUAGE & TONE: Write only in bangla language Match the customer's tone and style. "
+        " Be natural, brief, and conversational. \n"
         "2. BATCH PROCESSING: You will receive a JSON object containing an array of independent "
         "\"conversations\". You MUST process EVERY conversation in the array and return a response "
-        "for EACH one. Do not mix up the context between different conversations.\n"
-        "3. CONTEXT: For each conversation, you are provided with the \"restaurant\" (menu plus "
-        "vatRatePercent and deliveryCharge), the current \"conversationState\" (cart/details), the "
-        "\"history\" (last 10 messages), and the latest \"customerMessage\". Use the history to "
-        "understand the flow of the specific conversation.\n\n"
+        "for EACH one. Do not mix up the context between different conversations.\n\n"
+        "### FULL CONTEXT\n"
+        "Each conversation entry always includes:\n"
+        "- \"setup\": The restaurant's full context (name, menu with prices, delivery chargee). "
+        "Use this to answer menu questions and calculate totals.\n"
+        "- \"recentHistory\": The last few exchanges between the customer and the bot/manager. "
+        "Each entry has a \"role\": \"user\" (customer), \"bot\" (you), \"manager\" (human staff), "
+        "or \"system\" (internal notes).\n\n"
         "### HISTORY ROLES\n"
-        "- Each history entry has a \"role\": \"user\" (the customer), \"bot\" (you), \"manager\" "
-        "(a human staff member), or \"system\" (internal notes).\n"
         "- \"manager\" messages are AUTHORITATIVE human notes. Trust them completely and act on "
         "them: they tell you what is available, real prices, current offers/deals, and what an "
         "image or shared post the customer sent actually is. If a manager said something is "
@@ -1513,12 +1564,14 @@ def _batched_system_prompt() -> str:
         "answer and continue normally. Do NOT escalate again.\n"
         "- A pure sticker, emoji, or thumbs-up needs no escalation — just reply naturally.\n\n"
         "### MENU & GENERAL CHAT\n"
-        "- Answer questions about menu items, prices, categories, or the restaurant naturally.\n"
+        "- Answer questions about menu items, prices, categories, or the restaurant naturally. "
+        "The full menu with prices is always in the \"setup\" field — refer to it directly.\n"
         "- If the customer goes off-topic, respond naturally in Bangla while preserving their "
         "current order state.\n\n"
         "### ORDERING RULES (Delivery Only)\n"
-        "- You OWN the whole ordering conversation. Using the menu, conversationState, and history, "
-        "YOU collect everything and write every message yourself in \"reply\".\n"
+        "- You OWN the whole ordering conversation. Using the setup, conversationState, "
+        "and recentHistory, YOU collect everything and write every message yourself in "
+        "\"reply\".\n"
         "- Goal: Collect menu items (with quantities), customerName, mobileNumber, and "
         "deliveryAddress.\n"
         "- Items: Customers can add, remove, or change items freely. \n"
@@ -1528,14 +1581,25 @@ def _batched_system_prompt() -> str:
         "- Customer Details: Politely ask for any of the three details (name, mobile, address) "
         "that are still missing in conversationState. Ask naturally in your \"reply\".\n"
         "- Confirmation: Once you have AT LEAST ONE item AND all three customer details, "
-        "summarize the cart in Bangla in your \"reply\" and ask the customer to confirm. Compute "
+        "summarize the cart in your \"reply\" (in the customer's language) and ask them to confirm. Compute "
         "the total as (sum of price×qty) + vatRatePercent% VAT + deliveryCharge so it matches "
         "the final bill. \n"
         "- Affirmative: If they reply with an affirmative (e.g., \"হ্যাঁ\", \"yes\", \"confirm\", "
-        "\"ঠিক আছে\"), set order.intent to \"confirm\" and order.confirmed to true and write a warm "
-        "\"reply\" confirming you are placing it (the system adds the order number after).\n"
-        "- Cancellation: If they want to cancel, set order.intent to \"cancel\" and acknowledge it "
-        "in your \"reply\".\n\n"
+        "\"ঠিক আছে\"), set \"order\".\"intent\" to \"confirm\", \"order\".\"confirmed\" to true, "
+        "replyType to \"action\", and write a warm \"reply\" confirming you are placing it (the "
+        "system adds the order number after).\n"
+        "- Cancellation: If they want to cancel, set \"order\".\"intent\" to \"cancel\" and "
+        "acknowledge it in your \"reply\".\n\n"
+        "### replyType — TWO RESPONSE MODES\n"
+        "Every response MUST include a \"replyType\" field that tells the backend how to handle it:"
+        "\n\n"
+        "1. **\"chat\"** — Normal conversation. The LLM is just chatting. No backend order "
+        "processing needed. The \"order\" field should be null or empty.\n"
+        "   Use this for: greetings, answering questions, casual chat, declining to order.\n\n"
+        "2. **\"action\"** — The LLM wants the backend to DO something with the order. The "
+        "\"order\" field will be processed (create/update order, confirm, cancel).\n"
+        "   Use this for: adding items, confirming an order, cancelling, updating customer "
+        "details.\n\n"
         "### ESCALATION (hand off to a human manager)\n"
         "- Some requests you CANNOT reliably fulfill. When the customer asks for any of the "
         "following, you MUST escalate to a human instead of guessing or refusing:\n"
@@ -1546,7 +1610,7 @@ def _batched_system_prompt() -> str:
         "  3. Catering, bulk, event, or custom orders (large party, special menu) — reason "
         "\"catering\".\n"
         "- To escalate: set \"escalate\".\"needed\" to true with the matching \"reason\", and write a "
-        "short, warm holding \"reply\" in Bangla telling the customer you're checking with the team "
+        "short, warm holding \"reply\" (in the customer's language) telling them you're checking with the team "
         "and will get back shortly. Do NOT invent a photo, price, or promise.\n"
         "- For anything you can answer normally (including when a manager note already covers it), "
         "set \"escalate\".\"needed\" to false.\n\n"
@@ -1558,12 +1622,13 @@ def _batched_system_prompt() -> str:
         '  "responses": [\n'
         "    {\n"
         '      "id": "<EXACT conversation id from the input>",\n'
-        '      "reply": "<Your conversational Bangla reply string>",\n'
+        '      "replyType": "<chat | action>",\n'
+        '      "reply": "<Your natural reply matching the customer language>",\n'
         '      "escalate": {\n'
         '        "needed": <boolean>,\n'
         '        "reason": "<photo_request | delivery_quote | catering | other>"\n'
         "      },\n"
-        '      "order": {\n'
+        '      "order": <null or {\n'
         '        "intent": "<none | draft | confirm | cancel>",\n'
         '        "items": [\n'
         '          {"menuItemId": "<EXACT id from the restaurant menu>", "qty": <integer>}\n'
@@ -1572,7 +1637,7 @@ def _batched_system_prompt() -> str:
         '        "mobileNumber": "<string or empty>",\n'
         '        "deliveryAddress": "<string or empty>",\n'
         '        "confirmed": <boolean>\n'
-        "      }\n"
+        "      }>\n"
         "    }\n"
         "  ]\n"
         "}"
@@ -1583,12 +1648,12 @@ def _final_reply_system_prompt() -> str:
     return (
         "You are generating the final text reply for a Facebook Messenger restaurant bot. "
         "The system has processed the user's intent and updated the conversation state. "
-        "You MUST reply in conversational Bangla using the Bangla alphabet. Be warm, friendly, and brief.\n\n"
-        "Each input item includes the recent 'history' (last 10 messages, with roles "
-        "user/bot/manager/system). Match the tone and continue naturally from that history.\n\n"
+        "Write only in bangla language Match the customer's tone and style. "
+        " Be natural, brief, and conversational.\n\n"
+        "Each input item includes the 'systemEvent' and 'conversationState'. "
         "Based on the 'systemEvent' in the input, generate the appropriate message:\n"
         "- 'order_created': Congratulate the user, mention the order number (orderNumber) and total amount (totalAmount).\n"
         "- 'validation_failed': Inform the user that some items are unavailable (reason) and ask them to choose again.\n\n"
         "Return ONLY a JSON object with a 'responses' array: \n"
-        "{\"responses\": [{\"id\": \"<conversation id>\", \"reply\": \"<your Bangla reply>\"}]}"
+        "{\"responses\": [{\"id\": \"<conversation id>\", \"reply\": \"<your natural reply>\"}]}"
     )

@@ -72,24 +72,17 @@ class Settings(BaseSettings):
     SENTRY_ENVIRONMENT: str = ""
     GIT_COMMIT_SHA: str = ""
 
-    # Scan Menu: OCR.space JSON is parsed by Groq first, then other LLM fallbacks.
+    # Scan Menu: OCR.space JSON is parsed by DeepSeek LLM.
     OCR_SPACE_API_KEY: str = ""
     OCR_SPACE_API_URL: str = "https://api.ocr.space/parse/image"
     OCR_SPACE_ENGINE: str = "3"
     OCR_SPACE_LANGUAGE: str = "auto"
-    GROQ_API_KEY: str = ""
-    MENU_SCAN_GROQ_MODEL: str = "openai/gpt-oss-20b"
-    CHATBOT_GROQ_MODEL: str = "openai/gpt-oss-20b"
+    DEEPSEEK_API_KEY: str = ""
+    MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
     CHATBOT_DEEPSEEK_MODEL: str = "deepseek-chat"
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_API_KEYS: str = ""
     CHATBOT_OPENROUTER_MODEL: str = "openai/gpt-5-mini"
-    XAI_API_KEY: str = ""
-    DEEPSEEK_API_KEY: str = ""
-    OPENAI_API_KEY: str = ""
-    MENU_SCAN_XAI_MODEL: str = "grok-4.3"
-    MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
-    MENU_SCAN_OPENAI_MODEL: str = "gpt-4.1-mini"
 
     # Facebook Messenger chatbot
     FACEBOOK_APP_ID: str = ""
@@ -99,6 +92,13 @@ class Settings(BaseSettings):
     META_GRAPH_API_VERSION: str = "v24.0"
     FACEBOOK_LOGIN_SCOPES: str = "pages_show_list,pages_manage_metadata,pages_messaging"
     FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES: int = 15
+
+    # Voice agent — ElevenLabs
+    ELEVENLABS_API_KEY: str = ""
+    VOICE_ELEVENLABS_VOICE_ID: str = "SYVQhjMSUvWA1w0HkidA"
+
+    # Voice agent — Sarvam AI (primary TTS)
+    SARVAM_API_KEY: str = ""
 
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"

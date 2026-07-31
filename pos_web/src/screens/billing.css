@@ -4,6 +4,7 @@
   flex: 1; min-height: 0;
   display: grid;
   grid-template-columns: var(--rail-w) 1fr var(--cart-w);
+  grid-template-rows: 1fr;
 }
 
 /* ---------- category rail (dark slate, petpooja13 left) ---------- */
@@ -11,6 +12,7 @@
   background: var(--rail-bg);
   overflow-y: auto;
   display: flex; flex-direction: column;
+  min-height: 0;
 }
 .cat-item {
   background: var(--rail-item);
@@ -18,14 +20,12 @@
   color: #fff; text-align: left;
   padding: 14px 14px; font-size: var(--fs-14); font-weight: 600;
 }
-.cat-item:hover { filter: brightness(1.12); }
-.cat-item.active { background: var(--primary); }
-.cat-item.cat-fav { background: var(--favorite); }
-.cat-item.cat-fav.active { background: var(--primary); }
+.cat-item:hover { background: var(--primary); }
+.cat-item.active { background: var(--success); }
 
 /* ---------- item pane ---------- */
 .item-pane {
-  display: flex; flex-direction: column; min-width: 0;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--bg);
 }
@@ -39,7 +39,7 @@
 .item-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px; padding: 10px; overflow-y: auto; align-content: start;
+  gap: 12px 5px; padding: 10px; overflow-y: auto; align-content: start;
 }
 .item-tile {
   position: relative;
@@ -51,7 +51,7 @@
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
   text-align: left; cursor: pointer;
   height: 80px;
-  width: 140px;
+  width: 165px;
   box-sizing: border-box;
 }
 .item-tile:hover {
@@ -66,6 +66,23 @@
 .item-tile.unavailable { opacity: 0.45; cursor: not-allowed; }
 .item-name { font-size: var(--fs-12); font-weight: 600; color: var(--ink); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-fav-dot { position: absolute; top: 4px; right: 6px; font-size: 10px; color: var(--danger); }
+.item-minus-btn {
+  position: absolute; top: -5px; right: 20px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; border: 1.5px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 14px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer; z-index: 1;
+}
+.item-minus-btn:hover { background: var(--surface-sunk); }
+.item-count-badge {
+  position: absolute; top: -6px; right: -6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--primary); color: #fff;
+  font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
 .item-empty { margin: auto; color: var(--muted); font-size: var(--fs-14); padding: 30px; text-align: center; }
 
 /* ---------- cart pane ---------- */

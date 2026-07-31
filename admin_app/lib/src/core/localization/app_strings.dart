@@ -61,12 +61,14 @@ class AppStrings {
   String get home => isBn ? 'হোম' : 'Home';
   String get menu => isBn ? 'মেনু' : 'Menu';
   String get orders => isBn ? 'অর্ডার' : 'Orders';
+  String get orderHistory => isBn ? 'অর্ডার ইতিহাস' : 'Order History';
   String get reports => isBn ? 'রিপোর্ট' : 'Reports';
   String get sync => isBn ? 'সিঙ্ক' : 'Sync';
 
   // ── QuickBytes navigation + More hub ──────────────────────────────────────
   String get settingsTab => isBn ? 'সেটিংস' : 'Settings';
   String get liveTab => isBn ? 'লাইভ' : 'Live';
+  String get restaurantLive => isBn ? 'রেস্টুরেন্ট লাইভ' : 'Restaurant Live';
   String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
   // ── QS analytics (owner) ──────────────────────────────────────────────
   String get salesBreakdownTab => isBn ? 'সেলস ব্রেকডাউন' : 'Sales Breakdown';
@@ -397,6 +399,9 @@ class AppStrings {
       : 'Ticket printed for $seq';
   String billPrinted(String seq) =>
       isBn ? '${_digits(seq)}-এর বিল প্রিন্ট হয়েছে' : 'Bill printed for $seq';
+  String get noPrinterOrderCompleted => isBn
+      ? 'প্রিন্টার নেই, অর্ডার সম্পন্ন হয়েছে'
+      : 'No printer, Order completed';
   String get noPairedPrintersFound => isBn
       ? 'কাছে কোনো Bluetooth ডিভাইস পাওয়া যায়নি'
       : 'No Bluetooth devices found nearby';
@@ -788,7 +793,7 @@ class AppStrings {
   String get inventoryItemsTab => isBn ? 'আইটেম' : 'Items';
   String get todaySpend => isBn ? 'আজকের কেনাকাটা' : "Today's purchases";
   String get boughtStock => isBn ? 'কেনা স্টক' : 'Bought stock';
-  String get endOfDayCount => isBn ? 'দিন শেষ গণনা' : 'End of day count';
+  String get endOfDayCount => isBn ? 'স্টক অবশিষ্ট' : 'Stock Remaining';
   String get setCount => isBn ? 'গণনা' : 'Count';
   String get usedToday => isBn ? 'ব্যবহৃত' : 'Used';
   String get leftNow => isBn ? 'অবশিষ্ট' : 'Left';
@@ -1100,7 +1105,12 @@ class AppStrings {
   String get menuDeliveryOn => isBn ? 'ডেলিভারি চালু' : 'Delivery on';
   String get menuDeliveryOff => isBn ? 'ডেলিভারি বন্ধ' : 'Delivery off';
   String get menuScan => isBn ? 'AI স্ক্যান' : 'AI scan';
-  String get menuScanning => isBn ? 'স্ক্যান হচ্ছে...' : 'Scanning...';
+  String get menuScanning => isBn
+      ? 'আপনার মেনু স্ক্যান করা হচ্ছে। দয়া করে ১ মিনিট অপেক্ষা করুন।'
+      : 'Scanning your menu. Please give us 1 minute.';
+  String get menuScanningWait => isBn
+      ? 'আপনার মেনু স্ক্যান করা হচ্ছে। দয়া করে ১ মিনিট অপেক্ষা করুন।'
+      : 'Scanning your menu. Please give us 1 minute.';
   String get menuScanningShort => isBn ? 'স্ক্যান...' : 'Scanning...';
   String get menuScanPickPages => isBn
       ? 'এক বা একাধিক মেনু পেজ বেছে নিন।'
@@ -1125,9 +1135,9 @@ class AppStrings {
   String get menuScanAddPage => isBn ? 'পেজ যোগ করুন' : 'Add page';
   String get menuScanFailed =>
       isBn ? 'মেনু স্ক্যান করা যায়নি' : 'Could not scan menu';
-  String menuScanImported(int created, int skipped) => isBn
-      ? '${_n(created)} টি আইটেম যোগ হয়েছে, ${_n(skipped)} টি ডুপ্লিকেট বাদ গেছে।'
-      : '$created items added, $skipped duplicates skipped.';
+  String menuScanImported(int created) => isBn
+      ? 'মেনু আপডেট! আপনার ${_n(created)} টি নতুন আইটেম!'
+      : 'Menu Updated! You have $created new items!';
   String menuScanPages(int count) => isBn
       ? '${_n(count)} টি পৃষ্ঠা স্ক্যান করুন'
       : 'Scan $count page${count == 1 ? '' : 's'}';
@@ -1404,6 +1414,10 @@ class AppStrings {
   String get managerOwnerOnly => isBn
       ? 'শুধু মালিক ম্যানেজার যোগ করতে পারেন'
       : 'Only an owner can add a manager';
+  String get deleteStaff => isBn ? 'স্টাফ মুছুন' : 'Delete staff';
+  String get deleteStaffConfirm => isBn
+      ? 'এই স্টাফ সদস্যকে মুছে ফেলবেন?'
+      : 'Delete this staff member?';
 
   // Audit trail (spec §4.10)
   String get auditAllFilter => isBn ? 'সব' : 'All';
@@ -1489,6 +1503,7 @@ class AppStrings {
   String get belowPar => isBn ? 'পার-এর নিচে' : 'Below par';
   String belowParItems(int count) =>
       isBn ? '${_n(count)} টি আইটেম' : '$count items';
+  String get itemsInShort => isBn ? 'আইটেম শর্ট' : 'Items in Short';
   // Stock over time (spec §4.7 advanced)
   String get stockOverTime => isBn ? 'সময়ের সাথে স্টক' : 'Stock over time';
   String get wholeInventoryHealth =>
@@ -1505,8 +1520,11 @@ class AppStrings {
   String get colValue => isBn ? 'মূল্য' : 'VALUE';
   String get colQty => isBn ? 'পরিমাণ' : 'QTY';
   String get colCover => isBn ? 'কভার' : 'COVER';
-  String get countAction => isBn ? 'গণনা' : 'Count';
-  String get stockCountTitle => isBn ? 'স্টক গণনা' : 'Stock count';
+  String get countAction => isBn ? 'অবশিষ্ট' : 'Remaining';
+  String get stockCountTitle => isBn ? 'স্টক অবশিষ্ট' : 'Stock Remaining';
+  String get endOfDayCountInstruction => isBn
+      ? 'দিন শেষে অবশিষ্ট স্টক গণনা করুন'
+      : 'Count the remaining stock at the end of the day';
   String countedOf(int done, int total) =>
       isBn ? '$total টির মধ্যে $done গণনা হয়েছে' : '$done of $total counted';
   String finishCount(int done) => done > 0
@@ -1555,6 +1573,9 @@ class AppStrings {
 
   // Stock in flow
   String get stockInTitle => isBn ? 'স্টক ইন' : 'Stock in';
+  String get stockInInstruction => isBn
+      ? 'প্রাপ্ত স্টক ইনপুট করুন'
+      : 'Input the received stock';
   String get stockInSubtitle =>
       isBn ? 'প্রাপ্ত স্টক যোগ করুন' : 'Add received stock';
   String get stockInConfirmTitle =>

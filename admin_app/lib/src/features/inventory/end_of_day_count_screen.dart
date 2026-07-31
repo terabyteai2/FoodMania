@@ -180,7 +180,15 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TfText(
+                text.endOfDayCountInstruction,
+                style: TfTextStyles.bodyMuted.copyWith(
+                  color: PosColors.muted,
+                ),
+              ),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -298,13 +306,11 @@ class _CountLine extends StatefulWidget {
 }
 
 class _CountLineState extends State<_CountLine> {
-  String _text = '';
   bool _touched = false;
 
   @override
   void initState() {
     super.initState();
-    _text = widget.controller.text;
     widget.controller.addListener(_onChanged);
   }
 
@@ -315,7 +321,6 @@ class _CountLineState extends State<_CountLine> {
       oldWidget.controller.removeListener(_onChanged);
       widget.controller.addListener(_onChanged);
     }
-    _text = widget.controller.text;
   }
 
   @override
@@ -325,30 +330,24 @@ class _CountLineState extends State<_CountLine> {
   }
 
   void _onChanged() {
-    final text = widget.controller.text.trim();
     if (!_touched) {
-      final entered = double.tryParse(text);
+      final entered = double.tryParse(widget.controller.text.trim());
       if (entered != null && entered != widget.item.quantity) {
         _touched = true;
         widget.onTouched?.call();
       }
     }
-    setState(() => _text = text);
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
     final unit = InventoryUnits.displayLabel(item.unit, isBn: tfIsBn(context));
-    final entered = double.tryParse(_text.trim());
     final counted = _touched;
-    final variance = entered != null && _text.trim().isNotEmpty
-        ? entered - item.quantity
-        : null;
-    final system = item.quantity;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Container(
         decoration: BoxDecoration(
           color: PosColors.surface,
@@ -357,12 +356,12 @@ class _CountLineState extends State<_CountLine> {
             color: counted ? PosColors.primaryWash : PosColors.line,
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: counted ? PosColors.primary : PosColors.surfaceSunk,
                 borderRadius: BorderRadius.circular(8),
@@ -370,52 +369,24 @@ class _CountLineState extends State<_CountLine> {
               alignment: Alignment.center,
               child: Icon(
                 counted ? Icons.check_rounded : Icons.grid_on_rounded,
-                size: 18,
+                size: 16,
                 color: counted ? PosColors.accentInk : PosColors.inkSoft,
               ),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TfText(
-                    item.localizedName(AppScope.of(context).language),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TfTextStyles.rowTitle.copyWith(
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Row(
-                    children: [
-                      TfText(
-                        'System: ${_fmt(system)} $unit',
-                        style: TfTextStyles.bodyMuted.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (variance != null && variance != 0) ...[
-                        const SizedBox(width: 4),
-                        TfText(
-                            '· ${variance > 0 ? '+' : ''}${_fmt(variance)}',
-                          style: TfTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: variance > 0
-                                ? PosColors.success
-                                : PosColors.danger,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
+              child: TfText(
+                item.localizedName(AppScope.of(context).language),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TfTextStyles.rowTitle.copyWith(
+                  height: 1.2,
+                ),
               ),
             ),
             const SizedBox(width: 10),
             SizedBox(
-              width: 78,
+              width: 72,
               child: TextField(
                 controller: widget.controller,
                 textAlign: TextAlign.center,
@@ -428,7 +399,7 @@ class _CountLineState extends State<_CountLine> {
                 decoration: InputDecoration(
                   hintText: '—',
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   hintStyle: TfTextStyles.label.copyWith(
                     fontWeight: FontWeight.w700,
                     color: PosColors.mutedSoft,
@@ -441,9 +412,9 @@ class _CountLineState extends State<_CountLine> {
                 ),
               ),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 10),
             SizedBox(
-              width: 28,
+              width: 26,
               child: TfText(
                 unit,
                 maxLines: 1,
@@ -459,7 +430,4 @@ class _CountLineState extends State<_CountLine> {
     );
   }
 
-  static String _fmt(double value) => value == value.roundToDouble()
-      ? value.toInt().toString()
-      : value.toStringAsFixed(1);
 }

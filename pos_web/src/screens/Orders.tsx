@@ -303,13 +303,11 @@ function OngoingCard({
           <>
             <button className="order-btn order-btn-kot" onClick={onKot}>{t('orders.kot', lang)}</button>
             <button className="order-btn order-btn-bill" onClick={onPrintBill}>{t('orders.printBill', lang)}</button>
+            <button className="order-btn order-btn-open" onClick={onOpen}>{t('orders.edit', lang)}</button>
+            <button className="order-btn order-btn-void" onClick={onVoid}>{t('orders.delete', lang)}</button>
           </>
         )}
-        <button className="order-btn order-btn-open" onClick={onOpen}>{t('orders.open', lang)}</button>
         <button className="order-btn order-btn-reprint" onClick={onReprint}>{t('orders.reprint', lang)}</button>
-        {isManager && (
-          <button className="order-btn order-btn-void" onClick={onVoid}>{t('orders.void', lang)}</button>
-        )}
       </div>
     </div>
   );

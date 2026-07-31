@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSession } from '../state/session';
+import { useCart } from '../state/cart';
 import { t } from '../i18n/strings';
 import { printerCaps, usePrinters } from '../print/printManager';
 import { renderTestTicket } from '../print/ticketRenderer';
@@ -20,6 +21,9 @@ export function PrinterSettings() {
       .finally(() => setBusy(null));
   };
 
+  const autoPrint = useCart((s) => s.autoPrint);
+  const toggleAutoPrint = useCart((s) => s.toggleAutoPrint);
+
   return (
     <div className="printer-settings">
       <div className="card printer-card">
@@ -34,6 +38,13 @@ export function PrinterSettings() {
             {cfg.transport === 'system' && t('ps.systemDialog', lang)}
             {cfg.transport === 'none' && t('ps.notConfigured', lang)}
           </span>
+        </div>
+
+        <div className="printer-row printer-ap-row">
+          <label className="printer-ap">
+            <input type="checkbox" checked={autoPrint} onChange={toggleAutoPrint} />
+            <span>{t('ps.autoPrint', lang)}</span>
+          </label>
         </div>
 
         <div className="printer-row">

@@ -41,32 +41,11 @@ class _Provider:
 def _providers() -> list[_Provider]:
     return [
         _Provider(
-            name="groq",
-            api_key=settings.GROQ_API_KEY.strip(),
-            model=settings.MENU_SCAN_GROQ_MODEL.strip(),
-            url="https://api.groq.com/openai/v1/chat/completions",
-            supports_schema=False,
-        ),
-        _Provider(
-            name="xai",
-            api_key=settings.XAI_API_KEY.strip(),
-            model=settings.MENU_SCAN_XAI_MODEL.strip(),
-            url="https://api.x.ai/v1/chat/completions",
-            supports_schema=True,
-        ),
-        _Provider(
             name="deepseek",
             api_key=settings.DEEPSEEK_API_KEY.strip(),
             model=settings.MENU_SCAN_DEEPSEEK_MODEL.strip(),
             url="https://api.deepseek.com/chat/completions",
             supports_schema=False,
-        ),
-        _Provider(
-            name="openai",
-            api_key=settings.OPENAI_API_KEY.strip(),
-            model=settings.MENU_SCAN_OPENAI_MODEL.strip(),
-            url="https://api.openai.com/v1/chat/completions",
-            supports_schema=True,
         ),
     ]
 
@@ -374,6 +353,17 @@ def _validated_items(raw_content: str) -> list[MenuScanCandidate]:
     return items
 
 
+def _dedup_items(items: list[MenuScanCandidate]) -> list[MenuScanCandidate]:
+    seen: set[str] = set()
+    result: list[MenuScanCandidate] = []
+    for item in items:
+        key = item.nameEn.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(item)
+    return result
+
+
 def _split_bilingual(value: Any) -> tuple[str, str]:
     text = str(value or "").strip()
     if not text:
@@ -517,6 +507,34 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
                 warnings.append(f"{provider.name}: {error}")
 
     raise MenuScanError("All configured menu scan AI providers failed.")
+
+
+async def scan_single_image_with_dedup(
+    image_bytes: bytes, content_type: str
+) -> MenuScanParseResult:
+    """Run 2 independent OCR→LLM trips on one image, then deduplicate by nameEn."""
+    page_texts_1 = await extract_menu_page_texts([(image_bytes, content_type)])
+    result_1 = await parse_menu_text(page_texts_1)
+
+    page_texts_2 = await extract_menu_page_texts([(image_bytes, content_type)])
+    result_2 = await parse_menu_text(page_texts_2)
+
+    combined = result_1.items + result_2.items
+    deduped = _dedup_items(combined)
+
+    warnings = list(result_1.warnings) + list(result_2.warnings)
+    removed = len(combined) - len(deduped)
+    if removed:
+        warnings.append(
+            f"Deduplication removed {removed} duplicate item(s) "
+            f"across 2 scan passes."
+        )
+
+    return MenuScanParseResult(
+        items=deduped,
+        provider=result_1.provider,
+        warnings=warnings,
+    )
 
 
 def _suffix_for_content_type(content_type: str) -> str:

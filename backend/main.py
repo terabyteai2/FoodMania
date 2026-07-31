@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
-from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, software_downloads, tenants, ws
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, software_downloads, tenants, voice, ws
 from services.facebook_chatbot import start_batch_worker, stop_batch_worker
 from subscription_service import maybe_expire_subscription
 
@@ -118,6 +119,7 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.OUTLET_IMAGES_DIR, exist_ok=True)
     os.makedirs(settings.OUTLET_VIDEOS_DIR, exist_ok=True)
 
+    logging.basicConfig(level=logging.DEBUG)
     expiry_task = asyncio.create_task(_expire_stale_subscriptions_loop())
     start_batch_worker()
 
@@ -174,6 +176,7 @@ app.include_router(orders.router)
 app.include_router(pos.router)
 app.include_router(payments.router)
 app.include_router(platform.router)
+app.include_router(voice.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
 app.include_router(app_download.router)

@@ -284,22 +284,44 @@ class PosAppController extends ChangeNotifier {
   bool get isOffline => _lastInternetOnline == false;
 
   bool get isSubscriptionExpiredLocally {
-    if (subscriptionState == 'none') return true;
-    if (subscriptionState == 'trial') {
-      return trialEndsAt != null && trialEndsAt!.isBefore(DateTime.now());
+    if (subscriptionState == 'none') {
+      debugPrint('[SUB] isSubscriptionExpiredLocally — state=none → true');
+      return true;
     }
-    if (subscriptionExpiresAt == null || subscriptionExpiresAt!.isEmpty) return false;
+    if (subscriptionState == 'trial') {
+      final expired = trialEndsAt != null && trialEndsAt!.isBefore(DateTime.now());
+      debugPrint('[SUB] isSubscriptionExpiredLocally — state=trial trialEndsAt=$trialEndsAt now=${DateTime.now()} → $expired');
+      return expired;
+    }
+    if (subscriptionExpiresAt == null || subscriptionExpiresAt!.isEmpty) {
+      debugPrint('[SUB] isSubscriptionExpiredLocally — state=paid expiresAt=null → false');
+      return false;
+    }
     final parsed = DateTime.tryParse(subscriptionExpiresAt!);
-    return parsed != null && parsed.isBefore(DateTime.now());
+    final expired = parsed != null && parsed.isBefore(DateTime.now());
+    debugPrint('[SUB] isSubscriptionExpiredLocally — state=paid expiresAt=$subscriptionExpiresAt parsed=$parsed now=${DateTime.now()} → $expired');
+    return expired;
   }
 
   bool hasFeature(String feature) {
-    if (subscriptionState == 'trial') return true;
-    if (subscriptionState != 'paid') return false;
+    if (subscriptionState == 'trial') {
+      debugPrint('[SUB] hasFeature — feature=$feature state=trial → true');
+      return true;
+    }
+    if (subscriptionState != 'paid') {
+      debugPrint('[SUB] hasFeature — feature=$feature state=$subscriptionState → false');
+      return false;
+    }
     const baseFeatures = {
       'billing_foh', 'menu_management', 'analytics', 'sales_summary', 'live',
     };
-    return baseFeatures.contains(feature) || _addons.contains(feature);
+    if (baseFeatures.contains(feature)) {
+      debugPrint('[SUB] hasFeature — feature=$feature state=paid in base → true');
+      return true;
+    }
+    final result = _addons.contains(feature);
+    debugPrint('[SUB] hasFeature — feature=$feature state=paid addons=$_addons → $result');
+    return result;
   }
   AppLanguage language = AppLanguage.bn;
   AppThemePreference themePreference = AppThemePreference.white;
@@ -589,6 +611,7 @@ class PosAppController extends ChangeNotifier {
       subscriptionStatus = preferences.getString(_subscriptionStatusKey);
       subscriptionPackage = preferences.getString(_subscriptionPackageKey);
       subscriptionExpiresAt = preferences.getString(_subscriptionExpiresAtKey);
+      debugPrint('[SUB] initialize — loaded from prefs: state=$subscriptionState trialEndsAt=$trialEndsAt addons=$_addons status=$subscriptionStatus package=$subscriptionPackage expiresAt=$subscriptionExpiresAt');
       final deviceLanguage = AppLanguage.fromLocale(
         ui.PlatformDispatcher.instance.locale,
       );
@@ -912,6 +935,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> startFreeTrial() async {
+    debugPrint('[SUB] startFreeTrial — setting trial, ends in 10 days');
     final preferences = await SharedPreferences.getInstance();
     final ends = DateTime.now().add(const Duration(days: 10));
     subscriptionState = 'trial';
@@ -919,15 +943,18 @@ class PosAppController extends ChangeNotifier {
     pendingOnboardingLanding = true;
     await preferences.setString(_subscriptionStateKey, subscriptionState);
     await preferences.setInt(_trialEndsAtKey, ends.millisecondsSinceEpoch);
+    debugPrint('[SUB] startFreeTrial — state=$subscriptionState trialEndsAt=$ends');
     notifyListeners();
   }
 
   Future<void> markSubscriptionPaid() async {
+    debugPrint('[SUB] markSubscriptionPaid');
     final preferences = await SharedPreferences.getInstance();
     subscriptionState = 'paid';
     pendingOnboardingLanding = true;
     await preferences.setString(_subscriptionStateKey, subscriptionState);
     await clearOnboardingPaymentRequired();
+    debugPrint('[SUB] markSubscriptionPaid — state=paid');
     notifyListeners();
   }
 
@@ -939,6 +966,7 @@ class PosAppController extends ChangeNotifier {
 
   /// Fetch upgrade info from backend and store it for the ScreenBlocker.
   Future<void> requestSubscriptionUpgrade({String? feature}) async {
+    debugPrint('[SUB] requestSubscriptionUpgrade — feature=$feature upgradingSubscription=$upgradingSubscription hasDeviceToken=${cloudConfig.hasDeviceToken} hasValidBaseUrl=${cloudConfig.hasValidBaseUrl}');
     if (upgradingSubscription) return;
     upgradeInfo = null;
     upgradingSubscription = true;
@@ -950,13 +978,13 @@ class PosAppController extends ChangeNotifier {
           serverConfig: serverConfig,
         );
         upgradeInfo = await cloudApiService.fetchSubscriptionUpgrade();
-        debugPrint('[Sub] upgradeInfo received: $upgradeInfo');
+        debugPrint('[SUB] requestSubscriptionUpgrade — received upgradeInfo: $upgradeInfo');
       } else {
-        debugPrint('[Sub] cloud not configured — hasDeviceToken=${cloudConfig.hasDeviceToken} hasValidBaseUrl=${cloudConfig.hasValidBaseUrl}');
+        debugPrint('[SUB] requestSubscriptionUpgrade — cloud not configured');
       }
     } catch (error) {
       lastError = 'Failed to load subscription info.';
-      debugPrint('[Sub] requestSubscriptionUpgrade error: $error');
+      debugPrint('[SUB] requestSubscriptionUpgrade — error: $error');
     } finally {
       upgradingSubscription = false;
       notifyListeners();
@@ -965,6 +993,7 @@ class PosAppController extends ChangeNotifier {
 
   /// Clear stored upgrade info (e.g., after dialog is dismissed).
   void clearUpgradeInfo() {
+    debugPrint('[SUB] clearUpgradeInfo');
     upgradeInfo = null;
     notifyListeners();
   }
@@ -2000,6 +2029,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> _finishPhoneAuthenticatedLogin(AdminLoginResult result) async {
     final wasFreshTenant = serverConfig.outletId != result.outletId;
+    debugPrint('[SUB] finishPhoneAuthenticatedLogin — hasAppAccess=${result.hasAppAccess} status=${result.subscriptionStatus} package=${result.subscriptionPackage} wasFreshTenant=$wasFreshTenant');
     _applyAdminLoginResult(result);
     await _applyServerAppAccess(result.hasAppAccess);
     hasSeenIntro = true;
@@ -2397,10 +2427,12 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> syncSubscriptionAccessFromCloud({bool quiet = true}) async {
+    debugPrint('[SUB] syncSubscriptionAccessFromCloud — isLoggedIn=$isLoggedIn hasDeviceToken=${cloudConfig.hasDeviceToken} hasValidBaseUrl=${cloudConfig.hasValidBaseUrl} outletId=${serverConfig.outletId} quiet=$quiet');
     if (!isLoggedIn ||
         !cloudConfig.hasDeviceToken ||
         !cloudConfig.hasValidBaseUrl ||
         serverConfig.outletId.trim().isEmpty) {
+      debugPrint('[SUB] syncSubscriptionAccessFromCloud — guard blocked, returning');
       return;
     }
     try {
@@ -2409,6 +2441,7 @@ class PosAppController extends ChangeNotifier {
         serverConfig: serverConfig,
       );
       final access = await cloudApiService.fetchAppAccess();
+      debugPrint('[SUB] syncSubscriptionAccessFromCloud — response: hasAppAccess=${access.hasAppAccess} status=${access.subscriptionStatus} package=${access.subscriptionPackage} addons=${access.addons} expiresAt=${access.subscriptionExpiresAt}');
       await _applyServerAppAccess(
         access.hasAppAccess,
         addons: access.addons,
@@ -2421,7 +2454,7 @@ class PosAppController extends ChangeNotifier {
       );
     } catch (error) {
       if (!quiet) rethrow;
-      debugPrint('[QB-ACCESS] sync failed: $error');
+      debugPrint('[SUB] syncSubscriptionAccessFromCloud — sync failed: $error');
     }
   }
 
@@ -2435,7 +2468,53 @@ class PosAppController extends ChangeNotifier {
     String? plan,
     String? expiresAt,
   }) async {
-    if (!hasAccess) return;
+    debugPrint('[SUB] _applyServerAppAccess — hasAccess=$hasAccess status=$status package=$package plan=$plan expiresAt=$expiresAt addons=$addons (current local: state=$subscriptionState pkg=$subscriptionPackage addons=$_addons)');
+    if (!hasAccess) {
+      debugPrint('[SUB] _applyServerAppAccess — hasAccess=false: clearing local state');
+      subscriptionState = 'none';
+      needsOnboardingPayment = true;
+      pendingOnboardingLanding = true;
+      _addons = [];
+      subscriptionStatus = status;
+      subscriptionPackage = package;
+      subscriptionExpiresAt = expiresAt;
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(_subscriptionStateKey, 'none');
+      await preferences.setBool(_needsOnboardingPaymentKey, true);
+      await preferences.setStringList(_addonsKey, []);
+      await preferences.setString(_subscriptionStatusKey, status ?? '');
+      await preferences.setString(_subscriptionPackageKey, package ?? '');
+      await preferences.setString(_subscriptionExpiresAtKey, expiresAt ?? '');
+      debugPrint('[SUB] _applyServerAppAccess — after clear: state=$subscriptionState needsOnboardingPayment=$needsOnboardingPayment');
+      notifyListeners();
+      return;
+    }
+
+    final serverStatus = status;
+    if (serverStatus == 'trial') {
+      debugPrint('[SUB] _applyServerAppAccess — server says trial, keeping trial state');
+      subscriptionState = 'trial';
+      subscriptionStatus = serverStatus;
+      subscriptionPackage = package ?? subscriptionPackage;
+      subscriptionExpiresAt = expiresAt ?? subscriptionExpiresAt;
+      _addons = addons;
+      _subscriptionPrices = subscriptionPrices;
+      _addonPrices = addonPrices;
+      if (plan != null && plan.isNotEmpty) selectedSubscriptionPlan = plan;
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(_subscriptionStateKey, 'trial');
+      await preferences.setStringList(_addonsKey, addons);
+      await preferences.setString(_subscriptionStatusKey, subscriptionStatus ?? '');
+      await preferences.setString(_subscriptionPackageKey, subscriptionPackage ?? '');
+      await preferences.setString(_subscriptionExpiresAtKey, subscriptionExpiresAt ?? '');
+      if (plan != null && plan.isNotEmpty) {
+        await preferences.setString(_selectedPlanKey, plan);
+      }
+      notifyListeners();
+      return;
+    }
+
+    debugPrint('[SUB] _applyServerAppAccess — server has access, setting to paid');
     subscriptionState = 'paid';
     needsOnboardingPayment = false;
     pendingOnboardingLanding = true;
@@ -2461,18 +2540,23 @@ class PosAppController extends ChangeNotifier {
 
   /// Manual check from the plan screen — surfaces API errors to the user.
   Future<String?> refreshSubscriptionAccessFromCloud() async {
+    debugPrint('[SUB] refreshSubscriptionAccessFromCloud');
     if (!cloudConfig.hasDeviceToken) {
+      debugPrint('[SUB] refreshSubscriptionAccessFromCloud — no device token');
       return 'Not signed in yet. Wait a moment and try again.';
     }
     if (!cloudConfig.hasValidBaseUrl) {
+      debugPrint('[SUB] refreshSubscriptionAccessFromCloud — no valid base URL');
       return 'Cloud server URL is not set. Check Settings → Cloud sync.';
     }
     if (serverConfig.outletId.trim().isEmpty) {
+      debugPrint('[SUB] refreshSubscriptionAccessFromCloud — no outlet ID');
       return 'Restaurant setup is incomplete. Sign out and sign in again.';
     }
     try {
       await syncSubscriptionAccessFromCloud(quiet: false);
       if (subscriptionState == 'paid') {
+        debugPrint('[SUB] refreshSubscriptionAccessFromCloud — already paid after sync');
         return null;
       }
       cloudApiService.configure(
@@ -2480,6 +2564,7 @@ class PosAppController extends ChangeNotifier {
         serverConfig: serverConfig,
       );
       final access = await cloudApiService.fetchAppAccess();
+      debugPrint('[SUB] refreshSubscriptionAccessFromCloud — second fetch: hasAppAccess=${access.hasAppAccess} status=${access.subscriptionStatus} package=${access.subscriptionPackage}');
       if (access.hasAppAccess) {
         await _applyServerAppAccess(
           true,
@@ -2491,9 +2576,11 @@ class PosAppController extends ChangeNotifier {
           plan: access.subscriptionPlan,
           expiresAt: access.subscriptionExpiresAt,
         );
+        debugPrint('[SUB] refreshSubscriptionAccessFromCloud — applied access, returning null');
         return null;
       }
       final status = access.subscriptionStatus?.trim();
+      debugPrint('[SUB] refreshSubscriptionAccessFromCloud — no access, status=$status');
       if (status == null || status.isEmpty) {
         return 'Waiting for activation. In platform admin, open Activations and tap '
             'Activate for this restaurant (outlet ${serverConfig.outletId.substring(0, 8)}…).';
@@ -2502,6 +2589,7 @@ class PosAppController extends ChangeNotifier {
           'for outlet ${serverConfig.outletId.substring(0, 8)}…';
     } catch (error) {
       final message = error.toString().replaceFirst('Exception: ', '');
+      debugPrint('[SUB] refreshSubscriptionAccessFromCloud — error: $message');
       if (message.toLowerCase().contains('invalid token')) {
         return 'Session expired. Sign out, sign in with Google again, then tap Check activation status.';
       }
@@ -2548,6 +2636,7 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> _persistSubscriptionFields(AdminLoginResult result) async {
+    debugPrint('[SUB] _persistSubscriptionFields — from login: hasAppAccess=${result.hasAppAccess} status=${result.subscriptionStatus} package=${result.subscriptionPackage} expiresAt=${result.subscriptionExpiresAt} addons=${result.addons} plan=${result.subscriptionPlan}');
     subscriptionStatus = result.subscriptionStatus;
     subscriptionPackage = result.subscriptionPackage;
     subscriptionExpiresAt = result.subscriptionExpiresAt;
@@ -2565,6 +2654,7 @@ class PosAppController extends ChangeNotifier {
     if (result.subscriptionPlan != null && result.subscriptionPlan!.isNotEmpty) {
       await prefs.setString(_selectedPlanKey, result.subscriptionPlan!);
     }
+    debugPrint('[SUB] _persistSubscriptionFields — saved to prefs');
   }
 
   Future<void> logOut() async {
@@ -2602,6 +2692,7 @@ class PosAppController extends ChangeNotifier {
     await preferences.remove(_deviceTokenKey);
     await preferences.remove(_restaurantNameKey);
     await preferences.remove(_outletNameKey);
+    debugPrint('[SUB] logOut — clearing subscription state');
     await preferences.remove(_selectedPlanKey);
     await preferences.remove(_addonsKey);
     await preferences.remove(_subscriptionStatusKey);
@@ -2662,10 +2753,7 @@ class PosAppController extends ChangeNotifier {
         cloudConfig: cloudConfig,
         serverConfig: serverConfig,
       );
-      await cloudApiService.updateStaffAccount(
-        staffId: staffId,
-        isActive: false,
-      );
+      await cloudApiService.deleteStaffAccount(staffId);
     });
   }
 

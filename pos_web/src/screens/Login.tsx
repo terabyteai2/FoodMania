@@ -13,26 +13,22 @@ export function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // otp flow
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [otpInfo, setOtpInfo] = useState<string | null>(null);
   const [signupToken, setSignupToken] = useState('');
 
-  // setup flow (new restaurant)
   const [restaurantName, setRestaurantName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [outletName, setOutletName] = useState('');
   const [tableCount, setTableCount] = useState('10');
 
-  // invite flow
   const [inviteId, setInviteId] = useState('');
   const [inviteRestaurantName, setInviteRestaurantName] = useState('');
   const [inviteOutletName, setInviteOutletName] = useState('');
   const [inviteRole, setInviteRole] = useState('');
   const [invitedBy, setInvitedBy] = useState('');
 
-  // post-signup server ID display
   const [pendingPayload, setPendingPayload] = useState<AuthPayload | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -60,6 +56,7 @@ export function Login() {
       const res = await api.verifyPhoneOtp(phone.trim(), code.trim());
       if (res.status === 'authenticated') {
         login(res as unknown as AuthPayload);
+        window.location.replace('/app/');
       } else if (res.status === 'needs_restaurant_setup') {
         setSignupToken(res.signupToken ?? '');
         setStep('setup');
@@ -93,6 +90,7 @@ export function Login() {
     run(async () => {
       const result = await api.respondStaffInvite({ signupToken, inviteId, accept: true });
       login(result as unknown as AuthPayload);
+      window.location.replace('/app/');
     });
 
   const declineInvite = () =>
@@ -108,14 +106,13 @@ export function Login() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard API unavailable — the Server ID is still shown and selectable.
     }
   };
 
   const continueToDashboard = () => {
     if (!pendingPayload) return;
     login(pendingPayload);
-    window.location.href = '/';
+    window.location.replace('/app/');
   };
 
   function resetToPhone() {
@@ -134,25 +131,23 @@ export function Login() {
 
   return (
     <div className="login-root">
-      <div className="login-brand">
-        <div className="login-brand-inner">
-          <div className="login-logo">{t('appName', lang)}</div>
-          <div className="login-tagline">{t('tagline', lang)}</div>
+      <div className="login-nav">
+        <div className="login-wordmark">
+          <span className="login-wordmark-img">QB</span>
+          QuickBytes
         </div>
+        <div className="login-nav-filler" />
+        <button
+          className={`login-lang-toggle ${lang === 'en' ? 'active' : ''}`}
+          onClick={() => setLang('en')}
+        >EN</button>
+        <button
+          className={`login-lang-toggle ${lang === 'bn' ? 'active' : ''}`}
+          onClick={() => setLang('bn')}
+        >বাংলা</button>
       </div>
-
-      <div className="login-panel">
-        <div className="login-card card">
-          <div className="login-lang">
-            <button
-              className={`login-lang-btn ${lang === 'en' ? 'active' : ''}`}
-              onClick={() => setLang('en')}
-            >EN</button>
-            <button
-              className={`login-lang-btn ${lang === 'bn' ? 'active' : ''}`}
-              onClick={() => setLang('bn')}
-            >বাংলা</button>
-          </div>
+      <div className="login-body">
+        <div className="login-card">
 
           {step === 'phone' && (
             <>
@@ -169,16 +164,18 @@ export function Login() {
                     placeholder="01XXXXXXXXX" inputMode="tel" autoFocus
                   />
                 </div>
-                {error && <div className="error-text">{error}</div>}
+                {error && <div className="login-error">{error}</div>}
                 <button
-                  className="btn btn-primary login-submit" type="submit"
+                  className="login-btn login-btn-primary" type="submit"
                   disabled={busy || phone.trim().length < 8}
                 >
                   {busy ? t('loggingIn', lang) : t('sendCode', lang)}
                 </button>
               </form>
               {import.meta.env.DEV && (
-                <button className="btn btn-outline login-demo" onClick={() => void demo()} disabled={busy}>
+                <button className="login-btn login-btn-ghost" onClick={() => void demo()} disabled={busy}
+                  style={{ marginTop: 12 }}
+                >
                   {t('demoLogin', lang)}
                 </button>
               )}
@@ -205,17 +202,17 @@ export function Login() {
                   />
                 </div>
                 {otpInfo && <div className="login-otp-info">{otpInfo}</div>}
-                {error && <div className="error-text">{error}</div>}
+                {error && <div className="login-error">{error}</div>}
                 <button
-                  className="btn btn-primary login-submit" type="submit"
+                  className="login-btn login-btn-primary" type="submit"
                   disabled={busy || code.trim().length < 4}
                 >
                   {busy ? t('loggingIn', lang) : t('verify', lang)}
                 </button>
                 <button
-                  type="button" className="btn btn-outline login-demo"
+                  type="button" className="login-btn login-btn-ghost"
                   onClick={resetToPhone} disabled={busy}
-                  style={{ marginTop: 8 }}
+                  style={{ marginTop: 4 }}
                 >
                   {t('changePhone', lang)}
                 </button>
@@ -259,9 +256,9 @@ export function Login() {
                     value={tableCount} onChange={(e) => setTableCount(e.target.value)}
                   />
                 </div>
-                {error && <div className="error-text">{error}</div>}
+                {error && <div className="login-error">{error}</div>}
                 <button
-                  className="btn btn-primary login-submit" type="submit"
+                  className="login-btn login-btn-primary" type="submit"
                   disabled={busy || !restaurantName.trim()}
                 >
                   {busy ? t('creating', lang) : t('create', lang)}
@@ -274,40 +271,40 @@ export function Login() {
             <>
               <h2 className="login-title">{t('staffInvite', lang)}</h2>
               <div className="login-form">
-                <p style={{ marginBottom: 12, lineHeight: 1.5 }}>
+                <p style={{ marginBottom: 12, lineHeight: 1.5, color: '#878C79' }}>
                   {t('inviteDescription', lang)}
                 </p>
                 <div className="field">
                   <label>{t('restaurant', lang)}</label>
-                  <div className="input" style={{ fontWeight: 600 }}>{inviteRestaurantName}</div>
+                  <div className="input" style={{ fontWeight: 600, lineHeight: '48px' }}>{inviteRestaurantName}</div>
                 </div>
                 {inviteOutletName && (
                   <div className="field">
                     <label>{t('outlet', lang)}</label>
-                    <div className="input" style={{ fontWeight: 600 }}>{inviteOutletName}</div>
+                    <div className="input" style={{ fontWeight: 600, lineHeight: '48px' }}>{inviteOutletName}</div>
                   </div>
                 )}
                 <div className="field">
                   <label>{t('role', lang)}</label>
-                  <div className="input" style={{ fontWeight: 600 }}>{inviteRole}</div>
+                  <div className="input" style={{ fontWeight: 600, lineHeight: '48px' }}>{inviteRole}</div>
                 </div>
                 {invitedBy && (
                   <div className="field">
                     <label>{t('invitedBy', lang)}</label>
-                    <div className="input" style={{ fontWeight: 600 }}>{invitedBy}</div>
+                    <div className="input" style={{ fontWeight: 600, lineHeight: '48px' }}>{invitedBy}</div>
                   </div>
                 )}
-                {error && <div className="error-text">{error}</div>}
+                {error && <div className="login-error">{error}</div>}
                 <button
-                  className="btn btn-primary login-submit" type="button"
+                  className="login-btn login-btn-primary" type="button"
                   disabled={busy} onClick={() => void acceptInvite()}
                 >
                   {busy ? t('accepting', lang) : t('accept', lang)}
                 </button>
                 <button
-                  className="btn btn-outline login-demo" type="button"
+                  className="login-btn login-btn-ghost" type="button"
                   disabled={busy} onClick={() => void declineInvite()}
-                  style={{ marginTop: 8 }}
+                  style={{ marginTop: 4 }}
                 >
                   {t('decline', lang)}
                 </button>
@@ -323,16 +320,17 @@ export function Login() {
                   <label>{t('serverId', lang)}</label>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input
-                      className="input" value={pendingPayload.serverId} readOnly
-                      style={{ fontWeight: 700, letterSpacing: '1px' }}
+                      className="input login-server-id-input" value={pendingPayload.serverId} readOnly
                     />
-                    <button className="btn btn-outline" type="button" onClick={() => void copyServerId()}>
+                    <button className="login-btn login-btn-ghost" type="button" onClick={() => void copyServerId()}
+                      style={{ width: 'auto', padding: '0 18px', flex: 'none' }}
+                    >
                       {copied ? t('copied', lang) : t('copy', lang)}
                     </button>
                   </div>
                 </div>
                 <button
-                  className="btn btn-primary login-submit" type="button"
+                  className="login-btn login-btn-primary" type="button"
                   onClick={continueToDashboard}
                 >
                   {t('continueToDashboard', lang)}

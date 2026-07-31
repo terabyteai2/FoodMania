@@ -67,12 +67,9 @@ async def health():
         and _public_https_base_url()
     )
     chatbot_providers = {
-        "groq": _configured(settings.GROQ_API_KEY),
         "openrouter": _configured(settings.OPENROUTER_API_KEY)
         or _configured(settings.OPENROUTER_API_KEYS),
-        "xai": _configured(settings.XAI_API_KEY),
         "deepseek": _configured(settings.DEEPSEEK_API_KEY),
-        "openai": _configured(settings.OPENAI_API_KEY),
     }
     onecodesoft_configured = phone_otp.onecodesoft_configured()
     diagnostics = {

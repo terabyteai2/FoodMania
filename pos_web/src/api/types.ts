@@ -513,3 +513,21 @@ export interface MenuItemPayload {
   tags?: string[] | null;
   version?: number;
 }
+
+// ---------- subscription upgrade ----------
+export interface AddonOption {
+  key: string;
+  label: string;
+  price: number;
+  owned: boolean;
+}
+
+export interface UpgradeInfo {
+  title: string;
+  message: string;
+  inputField: boolean;
+  inputLabel: string | null;
+  currentPackage: string;
+  subscriptionPrices: Record<string, number>;
+  addonOptions: AddonOption[];
+}
