@@ -674,6 +674,12 @@ class SyncService {
         return;
       }
 
+      if (type == 'menu_scan_progress') {
+        _onRemoteEvent?.call(event);
+        _addLog('Cloud realtime menu scan progress received.');
+        return;
+      }
+
       if (type == 'menu_updated') {
         final item = _menuFromPayload(Map<String, Object?>.from(data));
         final applied = await _database.applyRemoteMenuItem(item);

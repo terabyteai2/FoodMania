@@ -15,6 +15,7 @@ import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
 import 'models/account_role.dart';
+import 'services/cloud_api_service.dart';
 import 'features/analytics/analytics_screen.dart';
 import 'features/desktop_pos/desktop_pos_shell.dart';
 import 'features/inventory/end_of_day_count_screen.dart';
@@ -482,38 +483,15 @@ class _MainShellState extends State<MainShell> {
     _scanOverlay = null;
   }
 
-  void _navigateOnboardingMenuScan(BuildContext context, PosAppController app) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MenuScanScreen(
-          onScan: (uploads) async {
-            _showScanOverlay(app.strings.menuScanning);
-            try {
-              final result = await app.scanAndImportMenu(uploads);
-              if (!mounted) return;
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(
-                  content: TfText(
-                    app.strings.menuScanImported(
-                      result.createdCount,
-                    ),
-                  ),
-                ),
-              );
-            } catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(
-                  content: TfText('${app.strings.menuScanFailed}: $error'),
-                ),
-              );
-            } finally {
-              _hideScanOverlay();
-            }
-          },
-        ),
-      ),
+  Future<void> _navigateOnboardingMenuScan(
+    BuildContext context,
+    PosAppController app,
+  ) async {
+    final uploads = await Navigator.of(context).push<List<MenuScanPageUpload>>(
+      MaterialPageRoute(builder: (_) => const MenuScanScreen()),
     );
+    if (!mounted || uploads == null || uploads.isEmpty) return;
+    unawaited(app.scanAndImportMenu(uploads));
   }
 
   @override

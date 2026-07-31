@@ -1111,6 +1111,12 @@ def _parse_json_object(content: str) -> dict:
     try:
         parsed = json.loads(clean)
     except json.JSONDecodeError as error:
+        logger.error(
+            "LLM returned invalid JSON (len=%d, pos=%d): %s",
+            len(clean),
+            error.pos,
+            clean[:600],
+        )
         raise ChatbotError("LLM returned invalid JSON.") from error
     if not isinstance(parsed, dict):
         raise ChatbotError("LLM response must be a JSON object.")
@@ -1485,11 +1491,16 @@ async def _generate_final_replies_batch(
 
 
 async def _call_batched_llm(conversations: list[dict], system_prompt: str) -> dict:
-    api_key = settings.DEEPSEEK_API_KEY.strip()
-    model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
+    base_url = settings.CHATBOT_LLM_BASE_URL.strip() or "https://api.deepseek.com/v1"
+    api_key = (
+        settings.CHATBOT_LLM_API_KEY.strip() or settings.DEEPSEEK_API_KEY.strip()
+    )
+    model = (
+        settings.CHATBOT_LLM_MODEL.strip() or settings.CHATBOT_DEEPSEEK_MODEL.strip()
+    )
     if not api_key or not model:
-        raise ChatbotError("DeepSeek is not configured for batch.")
-    url = "https://api.deepseek.com/v1/chat/completions"
+        raise ChatbotError("Chatbot LLM is not configured.")
+    url = f"{base_url.rstrip('/')}/chat/completions"
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -1510,14 +1521,19 @@ async def _call_batched_llm(conversations: list[dict], system_prompt: str) -> di
                     "model": model,
                     "messages": messages,
                     "temperature": 0.3,
-                    "max_tokens": min(BATCH_LLM_MAX_TOKENS, 800 * max(len(conversations), 1)),
+                    "max_tokens": min(
+                        BATCH_LLM_MAX_TOKENS,
+                        2500 * max(len(conversations), 1),
+                    ),
                     "response_format": {"type": "json_object"},
                 },
             )
             response.raise_for_status()
             payload = response.json()
     except httpx.HTTPError as error:
-        raise ChatbotError("DeepSeek batched chatbot request failed.") from error
+        raise ChatbotError(
+            f"Chatbot LLM request failed ({model}): {error}"
+        ) from error
 
     content = (
         ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
@@ -1525,7 +1541,13 @@ async def _call_batched_llm(conversations: list[dict], system_prompt: str) -> di
         else None
     )
     if not isinstance(content, str) or not content.strip():
-        raise ChatbotError("DeepSeek returned an empty batched chatbot response.")
+        logger.error(
+            "Chatbot LLM returned an empty response (model=%s status=%s): %s",
+            model,
+            response.status_code,
+            str(payload)[:500],
+        )
+        raise ChatbotError("Chatbot LLM returned an empty batched response.")
     return _parse_json_object(content)
 
 

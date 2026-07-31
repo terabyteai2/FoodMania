@@ -11,11 +11,52 @@ from sqlalchemy import select
 from auth import create_device_token, get_current_device_payload
 from database import AsyncSessionLocal, create_tables, get_db
 from main import app
-from models import AdminAccount, Outlet
+from models import AdminAccount, MenuItem, Outlet
 from phone_utils import phone_to_synthetic_email
 from routers import menu
 from schemas import MenuScanCandidate
 from services import menu_scan
+
+
+async def _bootstrap_scan_tenant(server_id: str, stored_role: str = "Manager") -> tuple[str, str]:
+    """Bootstrap a tenant with an active manager account; return (outlet_id, token)."""
+    await create_tables()
+    suffix = uuid.uuid4()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        boot = await client.post(
+            "/tenants/bootstrap",
+            json={
+                "serverId": server_id,
+                "restaurantName": "Scan Test",
+                "tableCount": 4,
+            },
+        )
+        outlet_id = boot.json()["data"]["outletId"]
+    async with AsyncSessionLocal() as db:
+        outlet = (
+            await db.execute(select(Outlet).where(Outlet.id == outlet_id))
+        ).scalar_one()
+        phone = f"+88017{suffix.int % 100_000_000:08d}"
+        account = AdminAccount(
+            id=str(uuid.uuid4()),
+            outlet_id=outlet.id,
+            email=phone_to_synthetic_email(phone),
+            username=phone_to_synthetic_email(phone),
+            password_hash=None,
+            role=stored_role,
+            display_name="Test Manager",
+            auth_provider="phone",
+            phone=phone,
+            phone_verified_at=datetime.now(timezone.utc),
+            invite_status="accepted",
+            is_active=True,
+        )
+        db.add(account)
+        await db.commit()
+        await db.refresh(account)
+        token = create_device_token(outlet.id, account.id)
+    return outlet_id, token
 
 
 def test_menu_scan_validation_accepts_generated_description_and_rejects_bad_price():
@@ -457,9 +498,9 @@ async def test_menu_scan_route_accepts_manager_access_variants(
     monkeypatch,
     stored_role,
 ):
-    await create_tables()
-    suffix = uuid.uuid4()
-    server_id = f"scan-role-{suffix}"
+    outlet_id, token = await _bootstrap_scan_tenant(
+        f"scan-role-{uuid.uuid4()}", stored_role
+    )
 
     async def fake_scan(image_bytes, content_type):
         assert content_type == "image/png"
@@ -484,36 +525,6 @@ async def test_menu_scan_route_accepts_manager_access_variants(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        boot = await client.post(
-            "/tenants/bootstrap",
-            json={
-                "serverId": server_id,
-                "restaurantName": "Scan Role",
-                "tableCount": 4,
-            },
-        )
-        outlet_id = boot.json()["data"]["outletId"]
-        async with AsyncSessionLocal() as db:
-            outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-            phone = f"+88017{suffix.hex[:8]}"
-            account = AdminAccount(
-                id=str(uuid.uuid4()),
-                outlet_id=outlet.id,
-                email=phone_to_synthetic_email(phone),
-                username=phone_to_synthetic_email(phone),
-                password_hash=None,
-                role=stored_role,
-                display_name="Test Manager",
-                auth_provider="phone",
-                phone=phone,
-                phone_verified_at=datetime.now(timezone.utc),
-                invite_status="accepted",
-                is_active=True,
-            )
-            db.add(account)
-            await db.commit()
-            await db.refresh(account)
-            token = create_device_token(outlet.id, account.id)
         response = await client.post(
             f"/outlets/{outlet_id}/menu/scan",
             headers={"Authorization": f"Bearer {token}"},
@@ -521,19 +532,131 @@ async def test_menu_scan_route_accepts_manager_access_variants(
         )
 
     assert response.status_code == 200
-    assert response.json()["data"]["images"][0]["items"][0]["nameEn"] == "Tea"
+    data = response.json()["data"]
+    assert data["createdCount"] == 1
+    assert data["skippedDuplicateCount"] == 0
+    assert data["totalPages"] == 1
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(select(MenuItem).where(MenuItem.outlet_id == outlet_id))
+        ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].name_en == "Tea"
+    assert rows[0].name_bn == "চা"
+    assert rows[0].category_en == "Drinks"
+    assert rows[0].price == 50
+    assert rows[0].is_available is True
+    assert rows[0].short_code == 1
+    assert rows[0].tags_json == '["icon:general"]'
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
+    outlet_id, token = await _bootstrap_scan_tenant(f"scan-pages-{uuid.uuid4()}")
     seen_calls: list[tuple[bytes, str]] = []
-
-    async def fake_manager_access(outlet_id, payload, db):
-        assert outlet_id == "outlet-1"
-        assert payload["account_id"] == "manager-1"
+    broadcast_calls: list[tuple[str, dict]] = []
 
     async def fake_scan(image_bytes, content_type):
         seen_calls.append((image_bytes, content_type))
+        if len(seen_calls) == 1:
+            item = MenuScanCandidate(
+                nameEn="Tea",
+                nameBn="চা",
+                descriptionEn="Fresh milk tea.",
+                descriptionBn="তাজা দুধ চা।",
+                categoryEn="Drinks",
+                categoryBn="ড্রিংকস",
+                price=50,
+                isAvailable=True,
+                iconKey="drink",
+            )
+        else:
+            item = MenuScanCandidate(
+                nameEn="Coffee",
+                nameBn="কফি",
+                descriptionEn="Black coffee.",
+                descriptionBn="ব্ল্যাক কফি।",
+                categoryEn="Drinks",
+                categoryBn="ড্রিংকস",
+                price=80,
+                isAvailable=True,
+                iconKey="drink",
+            )
+        return menu_scan.MenuScanParseResult(items=[item], provider="xai", warnings=[])
+
+    async def fake_broadcast(outlet_id, event):
+        broadcast_calls.append((outlet_id, event))
+
+    monkeypatch.setattr(menu, "scan_single_image_with_dedup", fake_scan)
+    monkeypatch.setattr(menu.manager, "broadcast", fake_broadcast)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/outlets/{outlet_id}/menu/scan",
+            headers={"Authorization": f"Bearer {token}"},
+            files=[
+                ("files", ("page-1.png", b"first", "image/png")),
+                ("files", ("page-2.jpg", b"second", "image/jpeg")),
+            ],
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["createdCount"] == 2
+    assert data["skippedDuplicateCount"] == 0
+    assert data["totalPages"] == 2
+    assert seen_calls == [(b"first", "image/png"), (b"second", "image/jpeg")]
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(MenuItem)
+                .where(MenuItem.outlet_id == outlet_id)
+                .order_by(MenuItem.short_code)
+            )
+        ).scalars().all()
+    assert len(rows) == 2
+    assert [row.name_en for row in rows] == ["Tea", "Coffee"]
+    assert [row.short_code for row in rows] == [1, 2]
+
+    progress_events = [
+        event for _, event in broadcast_calls if event["type"] == "menu_scan_progress"
+    ]
+    assert len(progress_events) == 2
+    assert [event["data"]["pageIndex"] for event in progress_events] == [1, 2]
+    assert [event["data"]["createdCount"] for event in progress_events] == [1, 1]
+    menu_events = [
+        event for _, event in broadcast_calls if event["type"] == "menu_updated"
+    ]
+    assert len(menu_events) == 2
+    assert {event["data"]["nameEn"] for event in menu_events} == {"Tea", "Coffee"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_menu_scan_route_skips_duplicate_of_existing_item(monkeypatch):
+    outlet_id, token = await _bootstrap_scan_tenant(f"scan-dup-{uuid.uuid4()}")
+
+    async with AsyncSessionLocal() as db:
+        db.add(
+            MenuItem(
+                id=str(uuid.uuid4()),
+                outlet_id=outlet_id,
+                name="Tea",
+                name_en="Tea",
+                category="Drinks",
+                category_en="Drinks",
+                price=50,
+                is_available=True,
+                short_code=1,
+                version=1,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        await db.commit()
+
+    async def fake_scan(image_bytes, content_type):
         return menu_scan.MenuScanParseResult(
             items=[
                 MenuScanCandidate(
@@ -545,41 +668,44 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
                     categoryBn="ড্রিংকস",
                     price=50,
                     isAvailable=True,
-                )
+                ),
+                MenuScanCandidate(
+                    nameEn="Coffee",
+                    nameBn="কফি",
+                    descriptionEn="Black coffee.",
+                    descriptionBn="ব্ল্যাক কফি।",
+                    categoryEn="Drinks",
+                    categoryBn="ড্রিংকস",
+                    price=80,
+                    isAvailable=True,
+                ),
             ],
             provider="xai",
             warnings=[],
         )
 
-    async def fake_db():
-        yield object()
-
-    app.dependency_overrides[get_current_device_payload] = lambda: {
-        "sub": "outlet-1",
-        "account_id": "manager-1",
-    }
-    app.dependency_overrides[get_db] = fake_db
-    monkeypatch.setattr(menu, "_require_manager_scan_access", fake_manager_access)
     monkeypatch.setattr(menu, "scan_single_image_with_dedup", fake_scan)
 
-    try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/outlets/outlet-1/menu/scan",
-                files=[
-                    ("files", ("page-1.png", b"first", "image/png")),
-                    ("files", ("page-2.jpg", b"second", "image/jpeg")),
-                ],
-            )
-    finally:
-        app.dependency_overrides.clear()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/outlets/{outlet_id}/menu/scan",
+            headers={"Authorization": f"Bearer {token}"},
+            files=[("files", ("menu.png", b"image", "image/png"))],
+        )
 
     assert response.status_code == 200
-    assert seen_calls == [(b"first", "image/png"), (b"second", "image/jpeg")]
-    assert len(response.json()["data"]["images"]) == 2
-    assert response.json()["data"]["images"][0]["items"][0]["nameEn"] == "Tea"
-    assert response.json()["data"]["images"][0]["items"][0]["nameBn"] == "চা"
+    data = response.json()["data"]
+    assert data["createdCount"] == 1
+    assert data["skippedDuplicateCount"] == 1
+    assert data["totalPages"] == 1
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(select(MenuItem).where(MenuItem.outlet_id == outlet_id))
+        ).scalars().all()
+    assert len(rows) == 2
+    assert {row.name_en for row in rows} == {"Tea", "Coffee"}
 
 
 @pytest.mark.asyncio

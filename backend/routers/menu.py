@@ -3,6 +3,7 @@ import binascii
 import io
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -19,7 +20,7 @@ from config import settings
 from database import get_db
 from models import AdminAccount, MenuItem, Outlet
 from routers.ws import manager
-from schemas import ImageUploadRequest, MenuItemPayload, ok
+from schemas import ImageUploadRequest, MenuItemPayload, MenuScanCandidate, ok
 from services.menu_placeholders import resolve_placeholder_url
 from services.menu_scan import MenuScanError, scan_single_image_with_dedup
 
@@ -324,6 +325,42 @@ async def upload_menu_image(
     return ok({"publicUrl": public_url})
 
 
+def _fmt_scan_price(value: float) -> str:
+    if value == round(value):
+        return str(int(value))
+    return f"{value:.2f}"
+
+
+def _scan_duplicate_key(name: str, category: str) -> str:
+    def normalize(value: str) -> str:
+        return re.sub(r"\s+", " ", value.strip().lower())
+
+    return f"{normalize(name)}|{normalize(category or 'General')}"
+
+
+def _scan_item_tags(item: MenuScanCandidate) -> list[str]:
+    """Menu item tags with parity to the app's MenuItemExtras.toTags()."""
+    tags: list[str] = []
+    icon_key = item.iconKey.strip()
+    if icon_key:
+        tags.append(f"icon:{icon_key}")
+    for sub in item.subItems:
+        name = sub.nameEn.strip()
+        if name:
+            tags.append(f"inc:{name}")
+    for addon in item.addOns:
+        name = addon.nameEn.strip()
+        if name:
+            tags.append(f"addon:{_fmt_scan_price(addon.price)}:{name}")
+    for variant in item.sizeVariants:
+        name = variant.nameEn.strip()
+        if not name:
+            continue
+        delta = variant.price - item.price
+        tags.append(f"option:{name}:{_fmt_scan_price(delta)}")
+    return tags
+
+
 @router.post("/outlets/{outlet_id}/menu/scan")
 async def scan_menu_pages(
     outlet_id: str,
@@ -373,67 +410,124 @@ async def scan_menu_pages(
         [content_type for _, content_type in pages],
     )
 
-    image_results: list[dict] = []
+    existing_items = (
+        await db.execute(select(MenuItem).where(MenuItem.outlet_id == outlet_id))
+    ).scalars()
+    seen_keys = {
+        _scan_duplicate_key(
+            item.name_en or item.name,
+            item.category_en or item.category or "General",
+        )
+        for item in existing_items
+    }
+    next_short_code = await _next_short_code(db, outlet_id)
+
+    total_created = 0
+    total_skipped = 0
+    total_pages = len(pages)
     global_item_index = 0
     for page_index, (image_bytes, content_type) in enumerate(pages):
+        created = 0
+        skipped = 0
         try:
             parsed = await scan_single_image_with_dedup(image_bytes, content_type)
+            new_items: list[MenuItem] = []
             for item in parsed.items:
-                if not item.imageUrl:
-                    item.imageUrl = resolve_placeholder_url(
-                        item.iconKey, global_item_index, request
-                    )
+                image_url = item.imageUrl or resolve_placeholder_url(
+                    item.iconKey, global_item_index, request
+                )
                 global_item_index += 1
-            image_results.append(
-                {
-                    "pageIndex": page_index,
-                    "items": [item.model_dump() for item in parsed.items],
-                    "provider": parsed.provider,
-                    "pageCount": 1,
-                    "warnings": parsed.warnings,
-                }
-            )
+                key = _scan_duplicate_key(item.nameEn, item.categoryEn)
+                if key in seen_keys:
+                    skipped += 1
+                    continue
+                seen_keys.add(key)
+                tags = _scan_item_tags(item)
+                row = MenuItem(
+                    id=str(uuid.uuid4()),
+                    outlet_id=outlet_id,
+                    name=item.nameEn,
+                    name_en=item.nameEn,
+                    name_bn=item.nameBn or None,
+                    description=item.descriptionEn,
+                    description_en=item.descriptionEn,
+                    description_bn=item.descriptionBn or None,
+                    price=item.price,
+                    is_available=item.isAvailable,
+                    category=item.categoryEn,
+                    category_en=item.categoryEn,
+                    category_bn=item.categoryBn or None,
+                    image_url=image_url,
+                    tags_json=json.dumps(tags, ensure_ascii=False) if tags else None,
+                    version=1,
+                    updated_at=datetime.now(timezone.utc),
+                )
+                row.short_code = next_short_code
+                next_short_code += 1
+                db.add(row)
+                new_items.append(row)
+                created += 1
+            await db.commit()
+            for row in new_items:
+                await manager.broadcast(
+                    outlet_id, {"type": "menu_updated", "data": _item_to_dict(row)}
+                )
             logger.info(
-                "menu scan page %s/%s ok provider=%s items=%s warnings=%s",
+                "menu scan page %s/%s ok provider=%s created=%s skipped=%s warnings=%s",
                 page_index + 1,
-                len(pages),
+                total_pages,
                 parsed.provider,
-                len(parsed.items),
+                created,
+                skipped,
                 len(parsed.warnings),
+            )
+            await manager.broadcast(
+                outlet_id,
+                {
+                    "type": "menu_scan_progress",
+                    "data": {
+                        "pageIndex": page_index + 1,
+                        "totalPages": total_pages,
+                        "createdCount": created,
+                        "skippedDuplicateCount": skipped,
+                    },
+                },
             )
         except MenuScanError as error:
             logger.warning(
                 "menu scan page %s/%s failed error=%s",
                 page_index + 1,
-                len(pages),
+                total_pages,
                 error,
             )
-            image_results.append(
+            await manager.broadcast(
+                outlet_id,
                 {
-                    "pageIndex": page_index,
-                    "items": [],
-                    "provider": "",
-                    "pageCount": 1,
-                    "warnings": [str(error)],
-                }
+                    "type": "menu_scan_progress",
+                    "data": {
+                        "pageIndex": page_index + 1,
+                        "totalPages": total_pages,
+                        "createdCount": 0,
+                        "skippedDuplicateCount": 0,
+                        "error": str(error),
+                    },
+                },
             )
-
-    if not image_results:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="All menu images failed to scan.",
-        )
+        total_created += created
+        total_skipped += skipped
 
     logger.info(
-        "menu scan complete outlet=%s pages=%s/%s ok",
+        "menu scan complete outlet=%s pages=%s created=%s skipped=%s",
         outlet_id,
-        sum(1 for r in image_results if r["items"]),
-        len(pages),
+        total_pages,
+        total_created,
+        total_skipped,
     )
     return ok(
         {
-            "images": image_results,
-            "totalPages": len(pages),
+            "createdCount": total_created,
+            "skippedDuplicateCount": total_skipped,
+            "totalPages": total_pages,
         }
     )
 

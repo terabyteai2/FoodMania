@@ -74,18 +74,6 @@ class StaffInvitePending {
   final String? invitedBy;
 }
 
-class MenuScanImportResult {
-  const MenuScanImportResult({
-    required this.createdCount,
-    required this.skippedDuplicateCount,
-    required this.scanResult,
-  });
-
-  final int createdCount;
-  final int skippedDuplicateCount;
-  final MenuScanResult scanResult;
-}
-
 enum AppThemePreference {
   black('black'),
   white('white'),
@@ -2209,6 +2197,34 @@ class PosAppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (type == 'menu_scan_progress' && data is Map) {
+      final progress = Map<String, Object?>.from(data);
+      final page = (progress['pageIndex'] as num?)?.toInt() ?? 0;
+      final total = (progress['totalPages'] as num?)?.toInt() ?? 0;
+      final created = (progress['createdCount'] as num?)?.toInt() ?? 0;
+      final error = progress['error']?.toString().trim();
+      if (error != null && error.isNotEmpty) {
+        unawaited(
+          addNotification(
+            type: PosNotificationType.system,
+            actionTarget: 'menu',
+            title: strings.menuScanFailed,
+            body: strings.menuScanPageFailed(page, total),
+          ),
+        );
+      } else {
+        unawaited(
+          addNotification(
+            type: PosNotificationType.system,
+            actionTarget: 'menu',
+            title: strings.menuScanPageDone(page, total, created),
+            body: '',
+          ),
+        );
+      }
+      unawaited(_syncWithFreshTenantToken());
+      return;
+    }
     if (type != 'app_update_available' || data is! Map) return;
     unawaited(
       _considerAppUpdate(
@@ -2806,92 +2822,38 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
-  Future<MenuScanImportResult> scanAndImportMenu(
-    List<MenuScanPageUpload> pages,
-  ) async {
+  /// Fire-and-forget menu scan. The backend scans every image, inserts the
+  /// items, and pushes `menu_scan_progress` events over the realtime socket —
+  /// each event shows a notification and triggers a sync in
+  /// [_handleRemoteSyncEvent]. The HTTP response is intentionally ignored;
+  /// only request-level failures surface here as a notification.
+  Future<void> scanAndImportMenu(List<MenuScanPageUpload> pages) async {
     if (!cloudConfig.canSync) {
-      throw Exception('Menu scan needs an online cloud connection.');
+      await addNotification(
+        type: PosNotificationType.system,
+        actionTarget: 'menu',
+        title: strings.menuScanFailed,
+        body: 'Cloud sync is not configured.',
+      );
+      return;
     }
     cloudApiService.configure(
       cloudConfig: cloudConfig,
       serverConfig: serverConfig,
     );
-    final scanResult = await cloudApiService.scanMenuPages(pages);
-    if (kDebugMode) {
-      debugPrint(
-        '[MENU_SCAN] import start candidates=${scanResult.items.length}',
+    try {
+      await cloudApiService.scanMenuPages(pages);
+      if (kDebugMode) {
+        debugPrint('[MENU_SCAN] upload accepted — awaiting realtime events');
+      }
+    } catch (error) {
+      await addNotification(
+        type: PosNotificationType.system,
+        actionTarget: 'menu',
+        title: strings.menuScanFailed,
+        body: error.toString(),
       );
     }
-    final seenKeys = menuItems
-        .map((item) => _menuScanDuplicateKey(item.nameEn, item.categoryEn))
-        .toSet();
-    var created = 0;
-    var skipped = 0;
-
-    for (final candidate in scanResult.items) {
-      final key = _menuScanDuplicateKey(candidate.nameEn, candidate.categoryEn);
-      if (!seenKeys.add(key)) {
-        skipped += 1;
-        continue;
-      }
-      final tags = <String>[];
-      if (candidate.iconKey.trim().isNotEmpty) {
-        tags.add('icon:${candidate.iconKey.trim()}');
-      }
-      for (final sub in candidate.subItems) {
-        tags.add('inc:${sub.nameEn.trim()}');
-      }
-      for (final addon in candidate.addOns) {
-        final priceStr = addon.price == addon.price.roundToDouble()
-            ? addon.price.toInt().toString()
-            : addon.price.toStringAsFixed(2);
-        tags.add('addon:$priceStr:${addon.nameEn.trim()}');
-      }
-      for (final variant in candidate.sizeVariants) {
-        final delta = variant.price - candidate.price;
-        final deltaStr = delta == delta.roundToDouble()
-            ? delta.toInt().toString()
-            : delta.toStringAsFixed(2);
-        tags.add('option:${variant.nameEn.trim()}:$deltaStr');
-      }
-      await saveMenuItem(
-        name: candidate.nameEn,
-        nameEn: candidate.nameEn,
-        nameBn: candidate.nameBn,
-        description: candidate.descriptionEn,
-        descriptionEn: candidate.descriptionEn,
-        descriptionBn: candidate.descriptionBn,
-        category: candidate.categoryEn,
-        categoryEn: candidate.categoryEn,
-        categoryBn: candidate.categoryBn,
-        price: candidate.price,
-        imageUrl: candidate.imageUrl,
-        isAvailable: candidate.isAvailable,
-        tags: tags,
-        syncAfterSave: false,
-      );
-      created += 1;
-    }
-    if (created > 0) {
-      await _syncWithFreshTenantToken();
-    }
-    await reloadData();
-    if (kDebugMode) {
-      debugPrint(
-        '[MENU_SCAN] import complete created=$created skippedDuplicates=$skipped',
-      );
-    }
-    return MenuScanImportResult(
-      createdCount: created,
-      skippedDuplicateCount: skipped,
-      scanResult: scanResult,
-    );
-  }
-
-  String _menuScanDuplicateKey(String name, String category) {
-    String normalize(String value) =>
-        value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-    return '${normalize(name)}|${normalize(category.isEmpty ? 'General' : category)}';
   }
 
   Future<String> uploadMenuImageDataUrl(String dataUrl) async {

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
+import '../../services/cloud_api_service.dart';
 import '../menu/menu_scan_screen.dart';
 
 class TenantSetupScreen extends StatefulWidget {
@@ -100,14 +103,12 @@ class _TenantSetupScreenState extends State<TenantSetupScreen> {
 
     // Logged-in users already have a cloud token — scan directly.
     if (app.cloudConfig.canSync) {
-      final result = await Navigator.of(context).push(
+      final uploads = await Navigator.of(context).push<List<MenuScanPageUpload>>(
         MaterialPageRoute(builder: (_) => const MenuScanScreen()),
       );
       if (!mounted) return;
-      if (result != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: TfText('Menu scanned! Items added to your menu.')),
-        );
+      if (uploads != null && uploads.isNotEmpty) {
+        unawaited(app.scanAndImportMenu(uploads));
       }
       _finish();
       return;

@@ -6,21 +6,12 @@ import 'package:image/image.dart' as img;
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/scanning_progress.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 
 class MenuScanScreen extends StatefulWidget {
-  const MenuScanScreen({
-    this.onScan,
-    super.key,
-  });
-
-  /// When provided, the screen pops immediately after capturing images and
-  /// delegates the async scan to this callback. When null, the original
-  /// blocking-dialog behaviour is used (e.g. tenant setup).
-  final Future<void> Function(List<MenuScanPageUpload> uploads)? onScan;
+  const MenuScanScreen({super.key});
 
   @override
   State<MenuScanScreen> createState() => _MenuScanScreenState();
@@ -155,9 +146,10 @@ class _MenuScanScreenState extends State<MenuScanScreen> {
 
   Future<void> _scanAll() async {
     if (_pages.isEmpty) return;
-    final app = AppScope.read(context);
-    final text = app.strings;
 
+    // Fire-and-forget: pop immediately with the captured pages. The caller
+    // launches the upload in the background; the backend streams progress via
+    // realtime events.
     final uploads = _pages
         .map(
           (page) => MenuScanPageUpload(
@@ -167,30 +159,7 @@ class _MenuScanScreenState extends State<MenuScanScreen> {
           ),
         )
         .toList(growable: false);
-
-    if (widget.onScan != null) {
-      Navigator.of(context).pop();
-      widget.onScan!(uploads);
-      return;
-    }
-
-    final closeOverlay = ScanningProgressOverlay.show(
-      context,
-      message: text.menuScanning,
-    );
-
-    try {
-      final result = await app.scanAndImportMenu(uploads);
-      closeOverlay();
-      if (!mounted) return;
-      Navigator.of(context).pop(result);
-    } catch (error) {
-      closeOverlay();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: TfText('${text.menuScanFailed}: $error')),
-      );
-    }
+    Navigator.of(context).pop(uploads);
   }
 
   @override

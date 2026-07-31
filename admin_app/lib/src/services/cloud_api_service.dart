@@ -305,271 +305,6 @@ class MenuScanPageUpload {
   final String mimeType;
 }
 
-class MenuScanSubItem {
-  const MenuScanSubItem({required this.nameEn, this.nameBn = ''});
-
-  final String nameEn;
-  final String nameBn;
-}
-
-class MenuScanAddOn {
-  const MenuScanAddOn({
-    required this.nameEn,
-    this.nameBn = '',
-    required this.price,
-  });
-
-  final String nameEn;
-  final String nameBn;
-  final double price;
-}
-
-class MenuScanSizeVariant {
-  const MenuScanSizeVariant({
-    required this.nameEn,
-    this.nameBn = '',
-    required this.price,
-  });
-
-  final String nameEn;
-  final String nameBn;
-  final double price;
-}
-
-class MenuScanCandidate {
-  const MenuScanCandidate({
-    required this.nameEn,
-    required this.nameBn,
-    required this.descriptionEn,
-    required this.descriptionBn,
-    required this.categoryEn,
-    required this.categoryBn,
-    required this.price,
-    required this.isAvailable,
-    this.iconKey = 'general',
-    this.imageUrl,
-    this.subItems = const [],
-    this.addOns = const [],
-    this.sizeVariants = const [],
-  });
-
-  final String nameEn;
-  final String nameBn;
-  final String descriptionEn;
-  final String descriptionBn;
-  final String categoryEn;
-  final String categoryBn;
-  final double price;
-  final bool isAvailable;
-  final String iconKey;
-  final String? imageUrl;
-  final List<MenuScanSubItem> subItems;
-  final List<MenuScanAddOn> addOns;
-  final List<MenuScanSizeVariant> sizeVariants;
-
-  static MenuScanCandidate? fromJson(Object? value) {
-    if (value is! Map) return null;
-    final json = Map<String, Object?>.from(value);
-    final (legacyNameEn, legacyNameBn) = _splitBilingual(json['name']);
-    final (legacyDescriptionEn, legacyDescriptionBn) = _splitBilingual(
-      json['description'],
-    );
-    final (legacyCategoryEn, legacyCategoryBn) = _splitBilingual(
-      json['category'],
-    );
-    final nameEn = _text(json['nameEn']) ?? legacyNameEn;
-    final nameBn = _text(json['nameBn']) ?? legacyNameBn;
-    final descriptionEn = _text(json['descriptionEn']) ?? legacyDescriptionEn;
-    final descriptionBn = _text(json['descriptionBn']) ?? legacyDescriptionBn;
-    final categoryEn = _text(json['categoryEn']) ?? legacyCategoryEn;
-    final categoryBn = _text(json['categoryBn']) ?? legacyCategoryBn;
-    final rawPrice = json['price'];
-    final price = rawPrice is num
-        ? rawPrice.toDouble()
-        : double.tryParse(rawPrice?.toString() ?? '');
-    if (nameEn.isEmpty ||
-        nameBn.isEmpty ||
-        descriptionEn.isEmpty ||
-        descriptionBn.isEmpty ||
-        price == null ||
-        price <= 0) {
-      return null;
-    }
-    final rawIcon = _text(json['iconKey'])?.toLowerCase() ?? 'general';
-    return MenuScanCandidate(
-      nameEn: nameEn,
-      nameBn: nameBn,
-      descriptionEn: descriptionEn,
-      descriptionBn: descriptionBn,
-      categoryEn: categoryEn.isEmpty ? 'General' : categoryEn,
-      categoryBn: categoryBn.isEmpty ? 'সাধারণ' : categoryBn,
-      price: price,
-      isAvailable: json['isAvailable'] is bool
-          ? json['isAvailable'] as bool
-          : true,
-      iconKey: rawIcon.isEmpty ? 'general' : rawIcon,
-      imageUrl: _text(json['imageUrl']),
-      subItems: _parseSubItems(json['subItems']),
-      addOns: _parseAddOns(json['addOns']),
-      sizeVariants: _parseSizeVariants(json['sizeVariants']),
-    );
-  }
-
-  static List<MenuScanSubItem> _parseSubItems(Object? raw) {
-    if (raw is! List) return const [];
-    final out = <MenuScanSubItem>[];
-    for (final entry in raw) {
-      if (entry is! Map) continue;
-      final m = Map<String, Object?>.from(entry);
-      final nameEn = _text(m['nameEn']) ?? '';
-      if (nameEn.isEmpty) continue;
-      out.add(
-        MenuScanSubItem(nameEn: nameEn, nameBn: _text(m['nameBn']) ?? ''),
-      );
-    }
-    return out;
-  }
-
-  static List<MenuScanAddOn> _parseAddOns(Object? raw) {
-    if (raw is! List) return const [];
-    final out = <MenuScanAddOn>[];
-    for (final entry in raw) {
-      if (entry is! Map) continue;
-      final m = Map<String, Object?>.from(entry);
-      final nameEn = _text(m['nameEn']) ?? '';
-      if (nameEn.isEmpty) continue;
-      final rawPrice = m['price'];
-      final price = rawPrice is num
-          ? rawPrice.toDouble()
-          : double.tryParse(rawPrice?.toString() ?? '') ?? 0;
-      if (price <= 0) continue;
-      out.add(
-        MenuScanAddOn(
-          nameEn: nameEn,
-          nameBn: _text(m['nameBn']) ?? '',
-          price: price,
-        ),
-      );
-    }
-    return out;
-  }
-
-  static List<MenuScanSizeVariant> _parseSizeVariants(Object? raw) {
-    if (raw is! List) return const [];
-    final out = <MenuScanSizeVariant>[];
-    for (final entry in raw) {
-      if (entry is! Map) continue;
-      final m = Map<String, Object?>.from(entry);
-      final nameEn = _text(m['nameEn']) ?? '';
-      if (nameEn.isEmpty) continue;
-      final rawPrice = m['price'];
-      final price = rawPrice is num
-          ? rawPrice.toDouble()
-          : double.tryParse(rawPrice?.toString() ?? '') ?? 0;
-      if (price <= 0) continue;
-      out.add(
-        MenuScanSizeVariant(
-          nameEn: nameEn,
-          nameBn: _text(m['nameBn']) ?? '',
-          price: price,
-        ),
-      );
-    }
-    return out;
-  }
-
-  static String? _text(Object? value) {
-    final text = value?.toString().trim() ?? '';
-    return text.isEmpty ? null : text;
-  }
-
-  static (String, String) _splitBilingual(Object? value) {
-    final text = value?.toString().trim() ?? '';
-    if (text.isEmpty) return ('', '');
-    if (!text.contains('/')) return (text, '');
-    final parts = text.split('/');
-    return (parts.first.trim(), parts.skip(1).join('/').trim());
-  }
-}
-
-class MenuScanResult {
-  const MenuScanResult({
-    required this.items,
-    required this.provider,
-    required this.pageCount,
-    required this.warnings,
-  });
-
-  final List<MenuScanCandidate> items;
-  final String provider;
-  final int pageCount;
-  final List<String> warnings;
-
-  factory MenuScanResult.fromJson(Map<String, Object?> json) {
-    final data = json['data'] is Map
-        ? Map<String, Object?>.from(json['data'] as Map)
-        : json;
-
-    final rawImages = data['images'];
-    if (rawImages is List && rawImages.isNotEmpty) {
-      final rawTotalPages = data['totalPages'];
-      final totalPages = rawTotalPages is num
-          ? rawTotalPages.toInt()
-          : int.tryParse(rawTotalPages?.toString() ?? '') ?? 0;
-      final allItems = <MenuScanCandidate>[];
-      final allWarnings = <String>[];
-      String? firstProvider;
-      for (final raw in rawImages) {
-        if (raw is! Map) continue;
-        final image = Map<String, Object?>.from(raw);
-        final items = image['items'] is List
-            ? (image['items'] as List)
-                .map(MenuScanCandidate.fromJson)
-                .whereType<MenuScanCandidate>()
-                .toList(growable: false)
-            : const <MenuScanCandidate>[];
-        allItems.addAll(items);
-        firstProvider ??= image['provider']?.toString().trim();
-        final warns = image['warnings'];
-        if (warns is List) {
-          allWarnings.addAll(warns.map((w) => w.toString()));
-        }
-      }
-      if (allItems.isEmpty) {
-        throw CloudApiException('The menu scan did not return menu items.');
-      }
-      return MenuScanResult(
-        items: allItems,
-        provider: firstProvider ?? '',
-        pageCount: totalPages.clamp(0, 999),
-        warnings: allWarnings,
-      );
-    }
-
-    final items = data['items'] is List
-        ? (data['items'] as List)
-              .map(MenuScanCandidate.fromJson)
-              .whereType<MenuScanCandidate>()
-              .toList(growable: false)
-        : const <MenuScanCandidate>[];
-    if (items.isEmpty) {
-      throw CloudApiException('The menu scan did not return menu items.');
-    }
-    final rawWarnings = data['warnings'];
-    final rawPageCount = data['pageCount'];
-    final parsedPageCount = rawPageCount is num
-        ? rawPageCount.toInt()
-        : int.tryParse(rawPageCount?.toString() ?? '');
-    return MenuScanResult(
-      items: items,
-      provider: data['provider']?.toString().trim() ?? '',
-      pageCount: (parsedPageCount ?? 0).clamp(0, 999),
-      warnings: rawWarnings is List
-          ? rawWarnings.map((item) => item.toString()).toList(growable: false)
-          : const [],
-    );
-  }
-}
 
 class OrderHistoryImportResult {
   const OrderHistoryImportResult({
@@ -1360,7 +1095,7 @@ class CloudApiService {
     return publicUrl;
   }
 
-  Future<MenuScanResult> scanMenuPages(List<MenuScanPageUpload> pages) async {
+  Future<void> scanMenuPages(List<MenuScanPageUpload> pages) async {
     final config = _requireServerConfig();
     if (pages.isEmpty) {
       throw CloudApiException('Select at least one menu image.');
@@ -1398,7 +1133,12 @@ class CloudApiService {
       );
     }
 
-    final streamed = await request.send().timeout(const Duration(seconds: 180));
+    // The backend scans every page sequentially (2 OCR->LLM trips per page)
+    // and pushes menu_scan_progress events over the realtime socket as each
+    // page lands. The HTTP response carries no payload the app needs.
+    final streamed = await request
+        .send()
+        .timeout(const Duration(minutes: 15));
     final body = await streamed.stream.bytesToString();
     if (kDebugMode) {
       debugPrint(
@@ -1406,11 +1146,11 @@ class CloudApiService {
         'bodyChars=${body.length}',
       );
     }
-    final decoded = _decodeCloudJsonBody(body, uri);
-    final payload = decoded is Map
-        ? Map<String, Object?>.from(decoded)
-        : <String, Object?>{'data': decoded};
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      final decoded = _decodeCloudJsonBody(body, uri);
+      final payload = decoded is Map
+          ? Map<String, Object?>.from(decoded)
+          : <String, Object?>{'data': decoded};
       final detail = payload['detail'];
       final message =
           payload['error']?.toString() ??
@@ -1428,15 +1168,6 @@ class CloudApiService {
       }
       throw CloudApiException(message);
     }
-    final result = MenuScanResult.fromJson(payload);
-    if (kDebugMode) {
-      debugPrint(
-        '[MENU_SCAN] response parsed provider=${result.provider} '
-        'pages=${result.pageCount} items=${result.items.length} '
-        'warnings=${result.warnings.length}',
-      );
-    }
-    return result;
   }
 
   Future<List<String>> uploadOutletImage(String dataUrl) async {

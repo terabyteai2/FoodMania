@@ -15,7 +15,6 @@ import 'package:local_pos/src/features/menu/square_image_cropper.dart';
 import 'package:local_pos/src/features/setup/tenant_setup_screen.dart';
 import 'package:local_pos/src/models/account_role.dart';
 import 'package:local_pos/src/models/pos_notification.dart';
-import 'package:local_pos/src/services/cloud_api_service.dart';
 import 'package:local_pos/src/services/menu_image_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -85,73 +84,6 @@ void main() {
       ).target,
       PosNotificationTarget.none,
     );
-  });
-
-  test('menu scan response keeps valid import candidates and table count', () {
-    final result = MenuScanResult.fromJson({
-      'data': {
-        'images': [
-          {
-            'pageIndex': 0,
-            'items': [
-              {
-                'nameEn': 'Chicken Roll',
-                'nameBn': 'চিকেন রোল',
-                'descriptionEn': 'Warm chicken roll.',
-                'descriptionBn': 'গরম চিকেন রোল।',
-                'categoryEn': 'Snacks',
-                'categoryBn': 'স্ন্যাকস',
-                'price': 180,
-                'isAvailable': true,
-                'iconKey': 'chicken',
-                'imageUrl':
-                    'https://api.example.com/uploads/menu_placeholders/chicken-1.png',
-                'subItems': [
-                  {'nameEn': 'Sauce', 'nameBn': 'সস'},
-                ],
-                'addOns': [
-                  {'nameEn': 'Cheese', 'nameBn': 'চিজ', 'price': 30},
-                  {'nameEn': 'Free salad', 'nameBn': 'সালাদ', 'price': 0},
-                ],
-                'sizeVariants': [],
-              },
-              {
-                'nameEn': 'Broken price',
-                'nameBn': 'ভাঙা দাম',
-                'descriptionEn': 'Skip this one.',
-                'descriptionBn': 'এটি বাদ দিন।',
-                'categoryEn': 'General',
-                'categoryBn': 'সাধারণ',
-                'price': 0,
-              },
-            ],
-            'provider': 'deepseek',
-            'pageCount': 1,
-            'warnings': [],
-          },
-        ],
-        'totalPages': 2,
-      },
-    });
-    final tenant = TenantBootstrapResult.fromJson({
-      'data': {
-        'serverId': 'server',
-        'restaurantId': 'restaurant',
-        'outletId': 'outlet',
-        'restaurantName': 'Scan Cafe',
-        'outletName': 'Main',
-        'deviceToken': 'token',
-        'tableCount': 42,
-      },
-    });
-
-    expect(result.provider, 'deepseek');
-    expect(result.pageCount, 2);
-    expect(result.items.map((item) => item.nameEn), ['Chicken Roll']);
-    expect(result.items.single.iconKey, 'chicken');
-    expect(result.items.single.subItems.single.nameEn, 'Sauce');
-    expect(result.items.single.addOns.single.nameEn, 'Cheese');
-    expect(tenant.tableCount, 42);
   });
 
   testWidgets('scan menu floating action is manager only', (tester) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,12 +9,11 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/menu_image_view.dart';
-import '../../core/widgets/notification_center.dart';
-import '../../core/widgets/scanning_progress.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
+import '../../services/cloud_api_service.dart';
 import '../../services/menu_image_service.dart';
 import '../desktop_pos/widgets/pc_theme.dart';
 import '../desktop_pos/widgets/pc_widgets.dart';
@@ -41,7 +42,6 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   final TextEditingController _searchController = TextEditingController();
   final MenuImageService _scanImageService = MenuImageService();
   final Set<String> _selectedItemIds = <String>{};
-  bool _scanBusy = false;
 
   @override
   void dispose() {
@@ -202,17 +202,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   setState(() => _selectedCategory = categories[index]),
             ),
           ],
-          if (_scanBusy) ...[
-            SizedBox(height: PosDensity.sectionGap),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ScanningProgress(
-                message: text.menuScanningWait,
-              ),
-            ),
-            SizedBox(height: PosDensity.sectionGap),
-          ] else
-            SizedBox(height: PosDensity.sectionGap),
+          SizedBox(height: PosDensity.sectionGap),
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -230,7 +220,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                       icon: Icons.document_scanner_outlined,
                       variant: TfButtonVariant.dark,
                       size: TfButtonSize.lg,
-                      onPressed: _scanBusy ? null : () => _scanMenu(context),
+                      onPressed: () => _scanMenu(context),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -293,10 +283,10 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     onTap: () => _openMenuForm(context),
                   ),
                   PcBtn(
-                    label: _scanBusy ? text.menuScanningShort : text.menuScan,
+                    label: text.menuScan,
                     icon: 'upload',
                     variant: PcVariant.dark,
-                    onTap: _scanBusy ? null : () => _scanMenu(context),
+                    onTap: () => _scanMenu(context),
                   ),
                   PcBtn(
                     label: text.isBn ? 'সেটিংস' : 'Settings',
@@ -501,37 +491,13 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
   }
 
   Future<void> _scanMenu(BuildContext context) async {
-    if (_scanBusy) return;
-    final text = AppScope.of(context).strings;
-    setState(() => _scanBusy = true);
-    await Navigator.push<MenuScanImportResult>(
+    final uploads = await Navigator.push<List<MenuScanPageUpload>>(
       context,
-      MaterialPageRoute(
-        builder: (_) => MenuScanScreen(
-          onScan: (uploads) async {
-            final app = AppScope.read(context);
-            try {
-              final result = await app.scanAndImportMenu(uploads);
-              if (!mounted) return;
-              showTopNotificationToast(
-                this.context,
-                title: text.menuScanImported(result.createdCount),
-                body: '',
-              );
-            } catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(
-                  content: TfText('${text.menuScanFailed}: $error'),
-                ),
-              );
-            } finally {
-              if (mounted) setState(() => _scanBusy = false);
-            }
-          },
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const MenuScanScreen()),
     );
+    if (!context.mounted || uploads == null || uploads.isEmpty) return;
+    final app = AppScope.read(context);
+    unawaited(app.scanAndImportMenu(uploads));
   }
 
   Future<void> _applyBulkDiscount(BuildContext context) async {

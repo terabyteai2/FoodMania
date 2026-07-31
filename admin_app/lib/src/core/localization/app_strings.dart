@@ -1105,13 +1105,6 @@ class AppStrings {
   String get menuDeliveryOn => isBn ? 'ডেলিভারি চালু' : 'Delivery on';
   String get menuDeliveryOff => isBn ? 'ডেলিভারি বন্ধ' : 'Delivery off';
   String get menuScan => isBn ? 'AI স্ক্যান' : 'AI scan';
-  String get menuScanning => isBn
-      ? 'আপনার মেনু স্ক্যান করা হচ্ছে। দয়া করে ১ মিনিট অপেক্ষা করুন।'
-      : 'Scanning your menu. Please give us 1 minute.';
-  String get menuScanningWait => isBn
-      ? 'আপনার মেনু স্ক্যান করা হচ্ছে। দয়া করে ১ মিনিট অপেক্ষা করুন।'
-      : 'Scanning your menu. Please give us 1 minute.';
-  String get menuScanningShort => isBn ? 'স্ক্যান...' : 'Scanning...';
   String get menuScanPickPages => isBn
       ? 'এক বা একাধিক মেনু পেজ বেছে নিন।'
       : 'Choose one or more menu pages.';
@@ -1135,9 +1128,12 @@ class AppStrings {
   String get menuScanAddPage => isBn ? 'পেজ যোগ করুন' : 'Add page';
   String get menuScanFailed =>
       isBn ? 'মেনু স্ক্যান করা যায়নি' : 'Could not scan menu';
-  String menuScanImported(int created) => isBn
-      ? 'মেনু আপডেট! আপনার ${_n(created)} টি নতুন আইটেম!'
-      : 'Menu Updated! You have $created new items!';
+  String menuScanPageDone(int page, int total, int created) => isBn
+      ? 'মেনু স্ক্যান: পৃষ্ঠা ${_n(page)}/${_n(total)} — ${_n(created)} টি আইটেম যোগ হয়েছে'
+      : 'Menu scan: page $page of $total — $created item${created == 1 ? '' : 's'} added';
+  String menuScanPageFailed(int page, int total) => isBn
+      ? 'মেনু স্ক্যান: পৃষ্ঠা ${_n(page)}/${_n(total)} পড়া যায়নি'
+      : 'Menu scan: page $page of $total could not be read';
   String menuScanPages(int count) => isBn
       ? '${_n(count)} টি পৃষ্ঠা স্ক্যান করুন'
       : 'Scan $count page${count == 1 ? '' : 's'}';

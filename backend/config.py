@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
     CHATBOT_DEEPSEEK_MODEL: str = "deepseek-chat"
+    # Chatbot LLM provider override. Empty = DeepSeek (DEEPSEEK_API_KEY +
+    # CHATBOT_DEEPSEEK_MODEL against https://api.deepseek.com/v1). Set all three
+    # to route the Facebook chatbot through another OpenAI-compatible gateway
+    # (e.g. OpenCode Zen: https://opencode.ai/zen/v1 + deepseek-v4-flash-free).
+    CHATBOT_LLM_BASE_URL: str = ""
+    CHATBOT_LLM_API_KEY: str = ""
+    CHATBOT_LLM_MODEL: str = ""
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_API_KEYS: str = ""
     CHATBOT_OPENROUTER_MODEL: str = "openai/gpt-5-mini"
