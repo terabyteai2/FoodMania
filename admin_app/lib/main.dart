@@ -1,13 +1,11 @@
 import 'dart:io' show Platform;
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'src/app.dart';
-import 'src/services/background_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,18 +26,7 @@ Future<void> main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Initialise Firebase for push notifications (FCM).
-  // On non-Android platforms where Firebase is not configured, the call
-  // throws; catching it allows the app to start without Firebase there.
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('[QB-FCM] Firebase init skipped: $e');
-  }
-
-  // Register the background isolate callback used by the foreground-service
-  // WebSocket fallback on devices without Google Play Services (e.g. Huawei).
-  await configureBackgroundService();
-
+  // Firebase and the background-service isolate are configured post-boot in
+  // PosAppController._deferredStartup so the first frame renders sooner.
   runApp(LocalPosApp());
 }

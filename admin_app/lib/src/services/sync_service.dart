@@ -113,6 +113,9 @@ class SyncService {
     autoSyncIntervalSeconds: 30,
   );
   bool _online = false;
+  /// Latest known internet state (set during [initialize] and kept fresh by
+  /// the connectivity stream).
+  bool get online => _online;
   DateTime? _lastCloudPullAt;
   ServerConfig _serverConfig = ServerConfig(
     serverId: '',

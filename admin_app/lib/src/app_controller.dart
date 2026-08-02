@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
@@ -664,7 +665,8 @@ class PosAppController extends ChangeNotifier {
         autoSyncIntervalSeconds: preferences.getInt(_autoSyncIntervalKey) ?? 30,
       );
       await _loadCachedAdminBlockingNotice(preferences);
-      await refreshAdminBlockingNotice();
+      // The network refresh is deferred to post-boot; the cached notice above
+      // still gates the UI immediately and a 30s poller keeps it fresh.
       _startAdminBlockingNoticePolling();
       accountId = preferences.getString(_accountIdKey) ?? '';
       accountDisplayName = preferences.getString(_accountDisplayNameKey) ?? '';
@@ -695,42 +697,6 @@ class PosAppController extends ChangeNotifier {
       final unprinted = preferences.getStringList(_unprintedKotOrderIdsKey);
       if (unprinted != null) _unprintedKotOrderIds.addAll(unprinted);
 
-      // The printer probe (USB/Bluetooth scan) is the heaviest startup step and
-      // isn't needed before the first frame — it's deferred to a post-frame
-      // callback below so the splash clears sooner. `printerState` keeps its
-      // default (disconnected) value until the stateStream subscription
-      // delivers the real state once the probe completes.
-      await systemNotifications.initialize();
-      unawaited(systemNotifications.requestNotificationAccess());
-      // Existing installs may have stored either an app-private file path or
-      // a file:// URI to external storage. Neither plays through the system
-      // notification process. Upgrade to a content:// URI by registering with
-      // MediaStore — that's the only URI form the system reliably plays.
-      if (notificationSoundPath.isNotEmpty &&
-          !notificationSoundPath.startsWith('content://')) {
-        try {
-          final mirrored = await _mirrorSoundToSharedLocation(
-            notificationSoundPath,
-          );
-          final contentUri = await systemNotifications.registerSoundWithSystem(
-            mirrored,
-          );
-          if (contentUri != notificationSoundPath) {
-            notificationSoundPath = contentUri;
-            await preferences.setString(
-              _notificationSoundPathKey,
-              notificationSoundPath,
-            );
-          }
-        } catch (_) {
-          // Source likely missing (cache was cleared). Leave as-is; channel
-          // will fall back to the system default sound.
-        }
-      }
-      await systemNotifications.configureSound(
-        enabled: notificationSoundEnabled,
-        soundPath: notificationSoundPath,
-      );
       _subscriptions.add(
         database.changes.listen((_) {
           _scheduleDatabaseChanged();
@@ -806,12 +772,13 @@ class PosAppController extends ChangeNotifier {
       // Reclaim old synced sync_events (full JSON payloads kept indefinitely);
       // fire-and-forget so it never delays startup.
       unawaited(database.pruneSyncedEvents());
-      _lastInternetOnline = await connectivityService.hasInternetAccess();
       await syncService.initialize(
         cloudConfig: cloudConfig,
         serverConfig: serverConfig,
       );
-      unawaited(_startPushNotifications());
+      // Single connectivity probe — syncService.initialize already did the
+      // route + DNS check; reuse its result instead of probing twice.
+      _lastInternetOnline = syncService.online;
       // One-time heal for installs that copied another outlet's SQLite file
       // into this tenant's DB before the isolation fix shipped.
       await _healTenantDataIfNeeded(preferences);
@@ -828,6 +795,12 @@ class PosAppController extends ChangeNotifier {
         unawaited(syncSubscriptionAccessFromCloud());
         unawaited(checkForAppUpdate());
       }
+      // Everything that doesn't feed the first frame (Firebase/FCM, the
+      // background-service isolate, notification channel + sound, blocking
+      // notice refresh) runs after the booted screen renders.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_deferredStartup()),
+      );
       initialized = true;
       lastError = null;
     } catch (error) {
@@ -835,6 +808,68 @@ class PosAppController extends ChangeNotifier {
     } finally {
       notifyListeners();
     }
+  }
+
+  /// Post-boot initialization that must not block the first frame:
+  /// notification channel setup (incl. the one-time MediaStore sound mirror),
+  /// Firebase/FCM, the background-service isolate, and the admin
+  /// blocking-notice network refresh. The cached blocking notice is already
+  /// applied during boot, and the 30s poller is the fallback for this fetch.
+  Future<void> _deferredStartup() async {
+    // Surface an admin block as soon as possible after the first frame.
+    unawaited(refreshAdminBlockingNotice());
+    try {
+      await systemNotifications.initialize();
+    } catch (error) {
+      debugPrint('[QB-NOTIF] notification init failed: $error');
+    }
+    unawaited(systemNotifications.requestNotificationAccess());
+    // Existing installs may have stored either an app-private file path or
+    // a file:// URI to external storage. Neither plays through the system
+    // notification process. Upgrade to a content:// URI by registering with
+    // MediaStore — that's the only URI form the system reliably plays.
+    if (notificationSoundPath.isNotEmpty &&
+        !notificationSoundPath.startsWith('content://')) {
+      try {
+        final mirrored = await _mirrorSoundToSharedLocation(
+          notificationSoundPath,
+        );
+        final contentUri = await systemNotifications.registerSoundWithSystem(
+          mirrored,
+        );
+        if (contentUri != notificationSoundPath) {
+          notificationSoundPath = contentUri;
+          final preferences = await SharedPreferences.getInstance();
+          await preferences.setString(
+            _notificationSoundPathKey,
+            notificationSoundPath,
+          );
+        }
+      } catch (_) {
+        // Source likely missing (cache was cleared). Leave as-is; channel
+        // will fall back to the system default sound.
+      }
+    }
+    await systemNotifications.configureSound(
+      enabled: notificationSoundEnabled,
+      soundPath: notificationSoundPath,
+    );
+    // Firebase first — FCM registration below requires it.
+    // On non-Android platforms where Firebase is not configured, the call
+    // throws; catching it allows the app to start without Firebase there.
+    try {
+      await Firebase.initializeApp();
+    } catch (e) {
+      debugPrint('[QB-FCM] Firebase init skipped: $e');
+    }
+    // Register the background isolate callback used by the foreground-service
+    // WebSocket fallback on devices without Google Play Services (e.g. Huawei).
+    try {
+      await configureBackgroundService();
+    } catch (error) {
+      debugPrint('[QB-BG] background service configure failed: $error');
+    }
+    await _startPushNotifications();
   }
 
   DashboardMetrics get metrics {
@@ -1201,12 +1236,30 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<void> reloadData() async {
-    menuItems = await database.getMenuItems();
+    // All seven queries are independent — run them concurrently so a large
+    // local DB doesn't serialize the boot load.
+    final (
+      loadedMenu,
+      loadedOrders,
+      loadedSyncEvents,
+      loadedInventory,
+      loadedSuppliers,
+      loadedSpend,
+      loadedNotifications,
+    ) = await (
+      database.getMenuItems(),
+      database.getOrders(limit: kOrdersMaxInMemory),
+      database.getSyncEvents(statuses: null, limit: 100),
+      database.getInventoryItems(),
+      database.getInventorySuppliers(),
+      database.getInventoryPurchaseTotalForDate(DateTime.now()),
+      database.getNotifications(),
+    ).wait;
+    menuItems = loadedMenu;
     // Load a generous slice so open orders (pending/accepted) with low
     // sequence numbers are not cut off by kOrdersInitialPage.  The slice is
     // a single contiguous sort from the DB, so offset-based loadMoreOrders
     // still works correctly.
-    final loadedOrders = await database.getOrders(limit: kOrdersMaxInMemory);
     orders = loadedOrders;
     _hasMoreOrders = loadedOrders.length >= kOrdersMaxInMemory;
     {
@@ -1241,13 +1294,11 @@ class PosAppController extends ChangeNotifier {
         '${_ordersDiagSummary(orders)}',
       );
     }
-    syncEvents = await database.getSyncEvents(statuses: null, limit: 100);
-    inventoryItems = await database.getInventoryItems();
-    inventorySuppliers = await database.getInventorySuppliers();
-    inventoryTodaySpend = await database.getInventoryPurchaseTotalForDate(
-      DateTime.now(),
-    );
-    notifications = await database.getNotifications();
+    syncEvents = loadedSyncEvents;
+    inventoryItems = loadedInventory;
+    inventorySuppliers = loadedSuppliers;
+    inventoryTodaySpend = loadedSpend;
+    notifications = loadedNotifications;
     // Kick off popularity fetch in the background — UI renders with local
     // data immediately, then re-sorts when the map arrives.
     _loadPopularity();
