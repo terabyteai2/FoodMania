@@ -60,8 +60,13 @@ android {
             // Phone builds ship only for modern arm64 devices. The legacy
             // POS-terminal build (POS_TERMINAL_BUILD=true) keeps the full ABI
             // set for old 32-bit SUNMI/iMin/PAX hardware.
+            //
+            // Clear + addAll (not +=): the Flutter Gradle plugin pre-populates
+            // abiFilters with all supported ABIs during apply(); we must
+            // replace that list, not append to it.
             if (!isPosTerminalBuild) {
-                abiFilters += "arm64-v8a"
+                abiFilters.clear()
+                abiFilters.addAll(listOf("arm64-v8a"))
             }
         }
     }

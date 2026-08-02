@@ -1541,6 +1541,9 @@ class TfChip extends StatelessWidget {
     this.small = false,
     this.tint = false,
     this.leading,
+    this.customFill,
+    this.customText,
+    this.customBorder,
     super.key,
   });
 
@@ -1551,6 +1554,11 @@ class TfChip extends StatelessWidget {
   final bool small;
   final bool tint;
   final Widget? leading;
+
+  /// Inactive-state overrides (per-category chip colors); ignored when active.
+  final Color? customFill;
+  final Color? customText;
+  final Color? customBorder;
   final VoidCallback onTap;
 
   @override
@@ -1570,9 +1578,9 @@ class TfChip extends StatelessWidget {
       textColor = PosColors.accentInk;
       borderColor = PosColors.primary;
     } else {
-      fillColor = PosColors.surface;
-      textColor = PosColors.primaryDark;
-      borderColor = PosColors.lineStrong;
+      fillColor = customFill ?? PosColors.surface;
+      textColor = customText ?? PosColors.primaryDark;
+      borderColor = customBorder ?? PosColors.lineStrong;
     }
 
     return Material(
@@ -1582,7 +1590,6 @@ class TfChip extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
           padding: EdgeInsets.symmetric(
             horizontal: PosSpacing.sp3,
             vertical: small ? PosSpacing.sp2 : PosDensity.cardPad,
