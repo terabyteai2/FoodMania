@@ -61,7 +61,7 @@ def delivery_order_totals(
     lines: list[DeliveryOrderLine], *, delivery_charge: float = 0
 ) -> dict:
     subtotal = round(sum(line.price * line.qty for line in lines), 2)
-    vat_rate_percent = 5.0
+    vat_rate_percent = 0.0
     vat_amount = round(subtotal * vat_rate_percent / 100, 2)
     clean_delivery_charge = round(max(0, delivery_charge), 2)
     total = round(subtotal + vat_amount + clean_delivery_charge, 2)

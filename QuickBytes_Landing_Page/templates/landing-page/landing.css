@@ -6,6 +6,7 @@
   --qb-ink-on-lime: #FFFFFF;
   --qb-accent-wash: #E8EBFD;
   --qb-accent-strong: #1E3A8A;
+  --qb-whatsapp: #25D366;
 }
 
 * { box-sizing: border-box; }
@@ -46,6 +47,7 @@ p { margin: 0; text-wrap: pretty; }
 .btn-lime:hover { background: #2640C0; }
 .btn-ghost { background: var(--qb-surface); color: var(--qb-ink); border-color: var(--qb-hairline); }
 .btn-ghost:hover { border-color: var(--qb-muted); }
+.wa-icon { width: 18px; height: 18px; flex: none; fill: var(--qb-whatsapp); }
 
 /* ---------- nav ---------- */
 .nav {

@@ -6,7 +6,6 @@ import asyncio
 import json
 import secrets
 import time
-from collections import defaultdict
 from dataclasses import dataclass
 from threading import Lock
 
@@ -16,12 +15,9 @@ from fastapi import HTTPException, status
 from config import settings
 from phone_utils import normalize_bd_phone
 
-MAX_SENDS_PER_HOUR = 3
 OTP_TTL_SECONDS = 600  # 10 minutes
 OTP_LENGTH = 6
 
-_send_lock = Lock()
-_send_log: dict[str, list[float]] = defaultdict(list)
 _otp_lock = Lock()
 _otp_store: dict[str, _OtpEntry] = {}
 
@@ -42,6 +38,27 @@ def onecodesoft_configured() -> bool:
 def dev_otp_bypass_enabled() -> bool:
     raw = settings.DEV_OTP_BYPASS_ENABLED.strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def dev_otp_bypass_phones() -> set[str]:
+    raw = (settings.DEV_OTP_BYPASS_PHONES or "").strip()
+    if not raw:
+        return set()
+    return {
+        normalize_bd_phone(part)
+        for part in raw.split(",")
+        if part.strip()
+    }
+
+
+def dev_otp_bypass_allowed(phone: str) -> bool:
+    """Dev bypass applies to ALL phones unless DEV_OTP_BYPASS_PHONES is set."""
+    if not dev_otp_bypass_enabled():
+        return False
+    phones = dev_otp_bypass_phones()
+    if not phones:
+        return True
+    return normalize_bd_phone(phone) in phones
 
 
 def dev_otp_bypass_code() -> str:
@@ -93,20 +110,6 @@ def _store_otp(phone: str, code: str) -> None:
     expires_at = time.time() + OTP_TTL_SECONDS
     with _otp_lock:
         _otp_store[normalize_bd_phone(phone)] = _OtpEntry(code=code, expires_at=expires_at)
-
-
-def _check_rate_limit(phone: str) -> None:
-    key = normalize_bd_phone(phone)
-    now = time.time()
-    with _send_lock:
-        window = [t for t in _send_log[key] if now - t < 3600]
-        if len(window) >= MAX_SENDS_PER_HOUR:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many OTP requests. Try again later.",
-            )
-        window.append(now)
-        _send_log[key] = window
 
 
 def _send_onecodesoft_sms(phone: str, message: str) -> None:
@@ -169,8 +172,7 @@ def _onecodesoft_error_detail(response: httpx.Response) -> str:
 
 
 async def send_verification(phone: str, *, app_signature: str | None = None) -> None:
-    _check_rate_limit(phone)
-    if dev_otp_bypass_enabled() or dev_otp_allowed():
+    if dev_otp_bypass_allowed(phone) or dev_otp_allowed():
         _store_otp(phone, dev_otp_bypass_code())
         return
 
@@ -199,7 +201,7 @@ async def check_verification(phone: str, code: str) -> None:
     normalized_code = (code or "").strip()
     bypass_code = dev_otp_bypass_code()
 
-    if dev_otp_bypass_enabled() and normalized_code == bypass_code:
+    if dev_otp_bypass_allowed(phone) and normalized_code == bypass_code:
         return
 
     key = normalize_bd_phone(phone)

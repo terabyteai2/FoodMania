@@ -17,6 +17,7 @@ val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
 }
 val posTerminalMinSdk = 23
+val phoneMinSdk = 29
 val isPosTerminalBuild =
     providers.gradleProperty("posTerminalBuild").orNull.toBoolean() ||
         System.getenv("POS_TERMINAL_BUILD").orEmpty().let {
@@ -50,10 +51,19 @@ android {
 
     defaultConfig {
         applicationId = "com.terabyteai.foodmania.posadmin"
-        minSdk = if (isPosTerminalBuild) posTerminalMinSdk else flutter.minSdkVersion
+        minSdk = if (isPosTerminalBuild) posTerminalMinSdk else phoneMinSdk
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            // Phone builds ship only for modern arm64 devices. The legacy
+            // POS-terminal build (POS_TERMINAL_BUILD=true) keeps the full ABI
+            // set for old 32-bit SUNMI/iMin/PAX hardware.
+            if (!isPosTerminalBuild) {
+                abiFilters += "arm64-v8a"
+            }
+        }
     }
 
     signingConfigs {

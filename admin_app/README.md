@@ -57,6 +57,11 @@ Build release APK:
 flutter build apk --release
 ```
 
+The phone APK targets **Android 10 (API 29)+ and arm64 devices only** (`ndk.abiFilters`
+in `android/app/build.gradle.kts`). This drops pre-2019 phones, 32-bit devices, and
+x86_64 emulators — the resulting APK is ~33 MB instead of ~82 MB. For development on
+an emulator, use an arm64 (API 29+) system image; debug builds use the same ABI filter.
+
 Build POS-terminal release APK:
 
 ```sh
@@ -64,9 +69,10 @@ tool/build_terminal_apk.sh
 ```
 
 The terminal APK targets Android 5.1/API 22 for older SUNMI, iMin, and PAX POS
-devices. Normal Android builds keep Flutter's default minSdk; only terminal
-builds use the lower SDK floor and compatible AndroidX dependency pins. The
-helper copies the result to `build/app/outputs/flutter-apk/app-terminal-release.apk`.
+devices (full ABI set, no ABI filter, minSdk 23 via `POS_TERMINAL_BUILD=true`). Normal
+phone builds use minSdk 29; only terminal builds use the lower SDK floor and
+compatible AndroidX dependency pins. The helper copies the result to
+`build/app/outputs/flutter-apk/app-terminal-release.apk`.
 
 The Flutter POS ships with compile‑defaults targeting **`backend/.env`**: **`POS_CLOUD_API_URL`** (HTTPS ngrok base, optional override).
 

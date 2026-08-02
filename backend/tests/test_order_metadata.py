@@ -213,9 +213,9 @@ async def test_customer_delivery_order_persists_contact_info():
     assert body["mobileNumber"] == "01711223344"
     assert body["notes"] == "Ring the doorbell twice"
     assert body["subtotal"] == 600
-    assert body["vatAmount"] == 30
+    assert body["vatAmount"] == 0
     assert body["deliveryCharge"] == 60
-    assert body["total"] == 690
+    assert body["total"] == 660
 
     assert pulled.status_code == 200
     pulled_order = next(

@@ -229,6 +229,7 @@ const dict = {
   'sidebar.dayend': { en: 'Day End', bn: 'ডে এন্ড' },
   'sidebar.printers': { en: 'Printers', bn: 'প্রিন্টার' },
   'sidebar.voiceagent': { en: 'Voice Agent', bn: 'ভয়েস এজেন্ট' },
+  'sidebar.sarvamvoice': { en: 'Sarvam Voice', bn: 'সারভাম ভয়েস' },
   // ---- Customize Modal ----
   'cm.addToOrder': { en: 'Add to order', bn: 'অর্ডারে যোগ করুন' },
   'cm.size': { en: 'Size', bn: 'সাইজ' },

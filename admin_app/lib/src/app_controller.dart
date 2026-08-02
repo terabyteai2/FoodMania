@@ -423,8 +423,8 @@ class PosAppController extends ChangeNotifier {
   /// Settings is owner-only (spec §RBAC).
   bool get canManageSettings => isOwner;
 
-  /// Stock & inventory — owner only (managers & waiters blocked entirely).
-  bool get canManageStock => isOwner;
+  /// Stock & inventory — owner & manager (waiters blocked entirely).
+  bool get canManageStock => isManager;
 
   /// True when the owner/manager "view as" switch (top-bar avatar dropdown)
   /// should be offered. Stays true while a genuine owner previews the manager
@@ -747,6 +747,9 @@ class PosAppController extends ChangeNotifier {
           if (state.connected &&
               !_isInfrastructurePrintError(state.lastError)) {
             _autoPrintInfrastructureBlocked = null;
+            // Printer is reachable again — drain any KOTs queued while it
+            // was unavailable.
+            unawaited(_retryUnprintedKotPrints());
           }
           notifyListeners();
         }),
@@ -3081,6 +3084,35 @@ class PosAppController extends ChangeNotifier {
     return updated;
   }
 
+  Future<InventoryItem> setInventoryQuantity({
+    required String inventoryItemId,
+    required double newQuantity,
+    String note = 'Manual edit',
+  }) async {
+    if (!isManager) throw Exception('Only managers can adjust stock quantities.');
+    if (newQuantity < 0) throw Exception('Quantity cannot be negative.');
+    final current = inventoryItems
+        .where((row) => row.id == inventoryItemId)
+        .firstOrNull;
+    if (current == null) throw Exception('Inventory item not found.');
+    final delta = newQuantity - current.quantity;
+    if (delta.abs() < 0.0001) return current;
+    final updated = await database.adjustStock(
+      inventoryItemId: inventoryItemId,
+      delta: delta,
+      type: AdjustmentType.correction.value,
+      note: note,
+      reason: 'manual',
+      createdByAccountId: accountId.isEmpty ? null : accountId,
+      createdByRole: accountRole.value,
+    );
+    await refreshInventory();
+    await refreshInventorySummary();
+    await _pushLatestInventoryAdjustment(inventoryItemId);
+    await _pushInventoryItemToCloud(updated);
+    return updated;
+  }
+
   Future<double?> yesterdayClosingQuantity(String inventoryItemId) async {
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
     return database.getDailyStockQuantity(
@@ -3593,6 +3625,7 @@ class PosAppController extends ChangeNotifier {
     printerState = printerService.state;
     if (ok) {
       await refreshPairedPrinters();
+      unawaited(_retryUnprintedKotPrints());
     } else {
       notifyListeners();
     }
@@ -3610,6 +3643,13 @@ class PosAppController extends ChangeNotifier {
     if (!isManager) return;
     await printerService.setAutoPrintEnabled(value);
     printerState = printerService.state;
+    if (value) {
+      // Turning auto-print ON restarts the pipeline from a clean slate and
+      // retries any KOTs that were queued while it was off/unavailable.
+      _autoPrintInfrastructureBlocked = null;
+      _alertedPrintFailureReasons.clear();
+      unawaited(_retryUnprintedKotPrints());
+    }
     notifyListeners();
   }
 
@@ -3632,9 +3672,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   Future<bool> printOrderTicket(OrderModel order) {
-    if (printerService.hasPrintedOrder(order.id)) {
-      return Future<bool>.value(true);
-    }
     final existing = _orderPrintFutures[order.id];
     if (existing != null) return existing;
 
@@ -3655,6 +3692,7 @@ class PosAppController extends ChangeNotifier {
             final fromAuto = _autoPrintInFlight.contains(order.id);
             if (fromAuto && _isInfrastructurePrintError(err)) {
               _autoPrintInfrastructureBlocked ??= err;
+              await _addUnprintedKotOrderId(order.id);
               await _notifyPrintInfrastructureOnce(err!);
               _markAcceptedOrdersPrintAlerted();
               return ok;
@@ -3729,8 +3767,7 @@ class PosAppController extends ChangeNotifier {
     bool playSound = true,
   }) async {
     if (type == PosNotificationType.printFailed) {
-      debugPrint('[QB-NOTIF] printer failure notification suppressed');
-      return;
+      debugPrint('[QB-NOTIF] printer failure notification queued');
     }
     final isPrinterAlert =
         type == PosNotificationType.printSuccess ||
@@ -4269,34 +4306,60 @@ class PosAppController extends ChangeNotifier {
     // Only the manager device auto-prints. Staff devices forward to manager
     // via cloud sync; the manager app then receives the order and prints.
     if (!isManager) return;
-    if (_autoPrintInfrastructureBlocked != null) {
-      await _addUnprintedKotOrderId(order.id);
-      return;
-    }
-    final status = order.status.adminStatus;
-    final isAccepted = status == OrderStatus.accepted;
-    if (isAccepted &&
-        printerState.autoPrintEnabled &&
-        !printerState.hasSelectedPrinter) {
+    if (!printerState.autoPrintEnabled) return;
+    if (order.status.adminStatus != OrderStatus.accepted) return;
+    if (printerService.hasPrintedOrder(order.id)) return;
+    if (_autoPrintInFlight.contains(order.id)) return;
+    // Every attempt re-probes the printer stack. A transient failure (e.g.
+    // Bluetooth off for a moment) must never latch into a permanent block:
+    // the probe refreshes connection state and clears the latch as soon as
+    // the printer is reachable again.
+    try {
       final reason = await printerService.preflightBlockReason();
       printerState = printerService.state;
-      if (reason != null) return;
-      notifyListeners();
-    }
-    if (!isAccepted ||
-        !printerState.autoPrintEnabled ||
-        !printerState.hasSelectedPrinter ||
-        printerService.hasPrintedOrder(order.id) ||
-        _unprintedKotOrderIds.contains(order.id) ||
-        _autoPrintInFlight.contains(order.id)) {
+      if (reason != null) {
+        _autoPrintInfrastructureBlocked = reason;
+        await _addUnprintedKotOrderId(order.id);
+        await _notifyPrintInfrastructureOnce(reason);
+        return;
+      }
+    } catch (error) {
+      _autoPrintInfrastructureBlocked = '$error';
+      await _addUnprintedKotOrderId(order.id);
+      debugPrint('[QB-ALWAYS] auto-print preflight failed for '
+          '${order.id}: $error');
       return;
     }
+    _autoPrintInfrastructureBlocked = null;
     _autoPrintInFlight.add(order.id);
     try {
       await printOrderTicket(order);
     } finally {
       _autoPrintInFlight.remove(order.id);
     }
+  }
+
+  /// Re-attempts KOT auto-print for every order whose earlier attempt was
+  /// blocked (no printer, Bluetooth off, …). Called when the printer becomes
+  /// available (connection emit, explicit connect, toggle switched ON).
+  Future<void> _retryUnprintedKotPrints() async {
+    if (_unprintedKotOrderIds.isEmpty) return;
+    for (final id in List<String>.from(_unprintedKotOrderIds)) {
+      final order = orders.where((o) => o.id == id).firstOrNull;
+      if (order == null) {
+        _unprintedKotOrderIds.remove(id);
+        continue;
+      }
+      if (order.status.adminStatus != OrderStatus.accepted) {
+        _unprintedKotOrderIds.remove(id);
+        continue;
+      }
+      await _printAcceptedOrderIfNeeded(order);
+      if (printerService.hasPrintedOrder(id)) {
+        _unprintedKotOrderIds.remove(id);
+      }
+    }
+    await _persistUnprintedKotOrderIds();
   }
 
   List<OrderModel> ordersFor({OrderStatus? status, OrderSource? source}) {

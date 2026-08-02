@@ -50,6 +50,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
 
+  Future<void> _onQtyCommit(InventorySummaryItem item, double qty) async {
+    final app = AppScope.read(context);
+    try {
+      await app.setInventoryQuantity(
+        inventoryItemId: item.id,
+        newQuantity: qty,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: TfText(error.toString())),
+      );
+    }
+  }
+
   void _updateTimeframe(TfTimeframe tf) {
     setState(() {
       _timeframe = tf;
@@ -204,7 +219,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         MaterialPageRoute(
           builder: (detailCtx) => InventoryItemDetailScreen(
             item: full,
-            onEdit: app.isOwner
+            onEdit: app.canManageStock
                 ? () async {
                     final latest = _resolveItem(app, full.id) ?? full;
                     final result = await Navigator.push<InventoryItem>(
@@ -331,8 +346,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                           items: sorted,
                                           sort: _sort,
                                           dir: _dir,
+                                          canEdit: app.canManageStock,
                                           onSort: _toggleSort,
-                                          onRowTap: (item) => _openRow(context, app, item),
+                                          onRowTap: (item) =>
+                                              _openRow(context, app, item),
+                                          onQtyCommit: _onQtyCommit,
                                         ),
                                         const SizedBox(height: 12),
                                         _AddItemButton(
@@ -479,20 +497,25 @@ class _StockTable extends StatelessWidget {
     required this.items,
     required this.sort,
     required this.dir,
+    required this.canEdit,
     required this.onSort,
     required this.onRowTap,
+    required this.onQtyCommit,
   });
 
   final AppStrings text;
   final List<InventorySummaryItem> items;
   final _StockSort sort;
   final int dir;
+  final bool canEdit;
   final ValueChanged<_StockSort> onSort;
   final ValueChanged<InventorySummaryItem> onRowTap;
+  final Future<void> Function(InventorySummaryItem item, double qty)
+  onQtyCommit;
 
   @override
   Widget build(BuildContext context) {
-    const heroW = 64.0;
+    const heroW = 72.0;
     return Container(
       padding: const EdgeInsets.fromLTRB(15, 4, 15, 10),
       decoration: BoxDecoration(
@@ -552,7 +575,9 @@ class _StockTable extends StatelessWidget {
               item: items[i],
               last: i == items.length - 1,
               heroW: heroW,
+              canEdit: canEdit,
               onTap: () => onRowTap(items[i]),
+              onQtyCommit: onQtyCommit,
             ),
         ],
       ),
@@ -619,14 +644,19 @@ class _StockRow extends StatelessWidget {
     required this.item,
     required this.last,
     required this.heroW,
+    required this.canEdit,
     required this.onTap,
+    required this.onQtyCommit,
   });
 
   final AppStrings text;
   final InventorySummaryItem item;
   final bool last;
   final double heroW;
+  final bool canEdit;
   final VoidCallback onTap;
+  final Future<void> Function(InventorySummaryItem item, double qty)
+  onQtyCommit;
 
   @override
   Widget build(BuildContext context) {
@@ -643,114 +673,287 @@ class _StockRow extends StatelessWidget {
         ? PosColors.warning
         : PosColors.text;
 
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: last ? Colors.transparent : PosColors.line,
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: last ? Colors.transparent : PosColors.line,
           ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 10,
-              child: Center(
-                child: kind == 'ok'
-                    ? const SizedBox.shrink()
-                    : Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: kind == 'low'
-                              ? PosColors.warning
-                              : PosColors.danger,
-                        ),
-                      ),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TfText(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-style: TfTextStyles.rowMoney.copyWith(color: PosColors.text),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-              SizedBox(
-                width: 68,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (item.todayIn > 0)
-                      TfText(
-                        '+${tfFormatNumber(context, item.todayIn)}',
-                        style: TfTextStyles.label.copyWith(
-                          color: PosColors.success,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                    SizedBox(
+                      width: 10,
+                      child: Center(
+                        child: kind == 'ok'
+                            ? const SizedBox.shrink()
+                            : Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: kind == 'low'
+                                      ? PosColors.warning
+                                      : PosColors.danger,
+                                ),
+                              ),
                       ),
-                    if (item.todayOut > 0)
-                      TfText(
-                        '-${tfFormatNumber(context, item.todayOut)}',
-                        style: TfTextStyles.label.copyWith(
-                          color: PosColors.muted,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TfText(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TfTextStyles.rowMoney.copyWith(
+                              color: PosColors.text,
+                            ),
+                          ),
+                        ],
                       ),
-                    if (item.todayIn == 0 && item.todayOut == 0)
-                      TfText(
-                        '—',
-                        style: TfTextStyles.bodyMuted.copyWith(
-                          color: PosColors.mutedSoft,
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 68,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (item.todayIn > 0)
+                            TfText(
+                              '+${tfFormatNumber(context, item.todayIn)}',
+                              style: TfTextStyles.label.copyWith(
+                                color: PosColors.success,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          if (item.todayOut > 0)
+                            TfText(
+                              '-${tfFormatNumber(context, item.todayOut)}',
+                              style: TfTextStyles.label.copyWith(
+                                color: PosColors.muted,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          if (item.todayIn == 0 && item.todayOut == 0)
+                            TfText(
+                              '—',
+                              style: TfTextStyles.bodyMuted.copyWith(
+                                color: PosColors.mutedSoft,
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 54,
+                      child: Builder(
+                        builder: (context) {
+                          final net = item.todayIn - item.todayOut;
+                          if (net == 0) {
+                            return TfText(
+                              '—',
+                              textAlign: TextAlign.right,
+                              style: TfTextStyles.bodyMuted.copyWith(
+                                color: PosColors.mutedSoft,
+                              ),
+                            );
+                          }
+                          return TfText(
+                            '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
+                            textAlign: TextAlign.right,
+                            style: TfTextStyles.body.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                              color: net > 0
+                                  ? PosColors.success
+                                  : PosColors.danger,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 54,
-                child: Builder(
-                  builder: (context) {
-                    final net = item.todayIn - item.todayOut;
-                    if (net == 0) {
-                      return TfText(
-                        '—',
-                        textAlign: TextAlign.right,
-                        style: TfTextStyles.bodyMuted.copyWith(
-                          color: PosColors.mutedSoft,
-                        ),
-                      );
-                    }
-                    return TfText(
-                      '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
-                      textAlign: TextAlign.right,
-                      style: TfTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        color: net > 0 ? PosColors.success : PosColors.danger,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(width: 12),
-            SizedBox(
+            ),
+          ),
+          const SizedBox(width: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            child: _EditableQtyCell(
+              key: ValueKey('qty-${item.id}'),
+              item: item,
+              unit: unit,
+              qtyColor: qtyColor,
+              canEdit: canEdit,
               width: heroW,
-              child: Align(
-                alignment: Alignment.centerRight,
+              onCommit: onQtyCommit,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatQty(BuildContext context, double value) {
+    if (value == value.roundToDouble()) return tfFormatNumber(context, value);
+    return tfFormatNumber(context, value, decimalDigits: 1);
+  }
+}
+
+/// Tap-to-edit quantity cell: tap the value to switch to an inline numeric
+/// field (no modal); commit on keyboard Done or tap-away.
+class _EditableQtyCell extends StatefulWidget {
+  const _EditableQtyCell({
+    required this.item,
+    required this.unit,
+    required this.qtyColor,
+    required this.canEdit,
+    required this.width,
+    required this.onCommit,
+    super.key,
+  });
+
+  final InventorySummaryItem item;
+  final String unit;
+  final Color qtyColor;
+  final bool canEdit;
+  final double width;
+  final Future<void> Function(InventorySummaryItem item, double qty) onCommit;
+
+  @override
+  State<_EditableQtyCell> createState() => _EditableQtyCellState();
+}
+
+class _EditableQtyCellState extends State<_EditableQtyCell> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  bool _editing = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+    _focusNode = FocusNode()..addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (!_focusNode.hasFocus && _editing) {
+      _commit();
+    }
+  }
+
+  void _startEdit() {
+    if (!widget.canEdit || _busy || _editing) return;
+    final current = _StockRow._formatQty(context, widget.item.onHand);
+    setState(() {
+      _editing = true;
+      _controller.text = current;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _focusNode.requestFocus();
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+  }
+
+  Future<void> _commit() async {
+    if (!_editing || _busy) return;
+    final qty = double.tryParse(_controller.text.trim());
+    _editing = false;
+    setState(() {});
+    if (qty == null) return;
+    _busy = true;
+    try {
+      await widget.onCommit(widget.item, qty);
+    } finally {
+      _busy = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: widget.width,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: _editing
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  SizedBox(
+                    width: widget.width - 30,
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textInputAction: TextInputAction.done,
+                      autofocus: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                      ],
+                      onSubmitted: (_) => _commit(),
+                      onTapOutside: (_) => _commit(),
+                      style: TfTextStyles.rowMoney.copyWith(
+                        color: widget.qtyColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        fontSize: 14,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  TfText(
+                    widget.unit,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TfTextStyles.label.copyWith(
+                      color: PosColors.muted,
+                    ),
+                  ),
+                ],
+              )
+            : GestureDetector(
+                onTap: _startEdit,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Row(
@@ -759,35 +962,27 @@ style: TfTextStyles.rowMoney.copyWith(color: PosColors.text),
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TfText(
-                        _formatQty(context, item.onHand),
+                        _StockRow._formatQty(context, widget.item.onHand),
                         style: TfTextStyles.rowMoney.copyWith(
-                          color: qtyColor,
+                          color: widget.qtyColor,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       const SizedBox(width: 3),
                       TfText(
-                        unit,
+                        widget.unit,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                      style: TfTextStyles.label.copyWith(
-                        color: PosColors.muted,
-                      ),
+                        style: TfTextStyles.label.copyWith(
+                          color: PosColors.muted,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
       ),
     );
-  }
-
-  static String _formatQty(BuildContext context, double value) {
-    if (value == value.roundToDouble()) return tfFormatNumber(context, value);
-    return tfFormatNumber(context, value, decimalDigits: 1);
   }
 }
 

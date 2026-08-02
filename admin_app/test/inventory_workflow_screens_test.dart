@@ -55,7 +55,7 @@ void main() {
     await tester.pumpWidget(_scoped(controller, const EndOfDayCountScreen()));
     await tester.pump();
 
-    expect(find.text('Stock count'), findsOneWidget);
+    expect(find.text('Stock Remaining'), findsOneWidget);
     expect(find.text('Rice'), findsOneWidget);
     expect(find.text('Finish count'), findsOneWidget);
     expect(tester.takeException(), isNull);

@@ -53,7 +53,7 @@ class _InventoryItemDetailScreenState extends State<InventoryItemDetailScreen> {
           style: TfTextStyles.appBarTitle,
         ),
         actions: [
-          if (app.isOwner && widget.onEdit != null)
+          if (app.canManageStock && widget.onEdit != null)
             IconButton(
               onPressed: widget.onEdit,
               icon: const Icon(Icons.edit_outlined),

@@ -212,6 +212,9 @@ class PosDensity {
 
   /// FOH table tile childAspectRatio (square, packed with state data).
   static const double tileTableAspect = 1.0;
+
+  /// Menu item editor photo block size (square thumbnail + add-photo button).
+  static const double editorPhoto = 80;
 }
 
 // ---------------------------------------------------------------------------

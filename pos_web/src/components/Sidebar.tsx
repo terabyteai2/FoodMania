@@ -69,6 +69,7 @@ const ITEMS: SItem[] = [
   { pane: 'dayend', label: 'Day End', icon: <DayEndIcon /> },
   { pane: 'printers', label: 'Printers', icon: <PrintersIcon /> },
   { pane: 'voiceagent', label: 'Voice Agent', icon: <MicIcon /> },
+  { pane: 'sarvamvoice', label: 'Sarvam Voice', icon: <MicIcon /> },
 ];
 
 export function Sidebar({ open, onMouseEnter, onMouseLeave }: { open: boolean; onMouseEnter?: React.MouseEventHandler; onMouseLeave?: React.MouseEventHandler }) {

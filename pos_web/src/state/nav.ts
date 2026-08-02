@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type NavSection = 'billing' | 'tables' | 'orders' | 'ops';
-export type OpsPane = 'home' | 'dashboard' | 'analytics' | 'reports' | 'menu' | 'inventory' | 'dayend' | 'printers' | 'restaurant' | 'tablesettings' | 'voiceagent';
+export type OpsPane = 'home' | 'dashboard' | 'analytics' | 'reports' | 'menu' | 'inventory' | 'dayend' | 'printers' | 'restaurant' | 'tablesettings' | 'voiceagent' | 'sarvamvoice';
 
 interface NavState {
   section: NavSection;

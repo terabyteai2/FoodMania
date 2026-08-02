@@ -64,7 +64,7 @@ void main() {
     expect(tester.takeException(), isNull);
     // Summary strip.
     expect(find.text('Stock value'), findsOneWidget);
-    expect(find.text('Below par'), findsOneWidget);
+    expect(find.text('Items in Short'), findsOneWidget);
     // Advanced view toggle lives in the top bar (no INVENTORY eyebrow row).
     expect(find.text('Advanced'), findsOneWidget);
     // Ranked table headers — simple view is ITEM + QTY (no VALUE column).

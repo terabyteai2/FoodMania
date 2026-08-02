@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # When true, verify-otp accepts DEV_OTP_BYPASS_CODE even if Twilio is configured.
     DEV_OTP_BYPASS_ENABLED: str = ""
     DEV_OTP_BYPASS_CODE: str = "000000"
+    # Comma-separated phone numbers (01xxx or +8801xxx) allowed to use the bypass.
+    # Empty = every phone number uses the bypass while DEV_OTP_BYPASS_ENABLED is on.
+    DEV_OTP_BYPASS_PHONES: str = ""
 
     # One-tap demo manager login (no Twilio). Empty = auto (on in development only).
     DEMO_MANAGER_LOGIN_ENABLED: str = ""
@@ -104,8 +107,16 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: str = ""
     VOICE_ELEVENLABS_VOICE_ID: str = "SYVQhjMSUvWA1w0HkidA"
 
-    # Voice agent — Sarvam AI (primary TTS)
+    # Voice agent — Sarvam AI (STT + LLM + TTS)
     SARVAM_API_KEY: str = ""
+    SARVAM_STT_MODEL: str = "saaras:v3"
+    SARVAM_STT_LANGUAGE: str = "bn-IN"
+    SARVAM_LLM_MODEL: str = "sarvam-105b"
+    SARVAM_LLM_TEMPERATURE: float = 0.3
+    SARVAM_LLM_MAX_TOKENS: int = 1024
+    SARVAM_TTS_MODEL: str = "bulbul:v3"
+    SARVAM_TTS_SPEAKER: str = "ishita"
+    SARVAM_TTS_LANGUAGE: str = "bn-IN"
 
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"

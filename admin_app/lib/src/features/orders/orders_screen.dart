@@ -97,15 +97,6 @@ Future<void> openNewOrderForm(
                 mobileNumber: result.mobileNumber,
               );
             }
-            final shouldPrint =
-                app.orderPrinterSideEffectsEnabled &&
-                app.isManager &&
-                !app.printerState.autoPrintEnabled &&
-                app.printerState.hasSelectedPrinter &&
-                !app.printerService.hasPrintedOrder(order.id);
-            if (shouldPrint) {
-              await app.printOrderTicket(order);
-            }
             return order;
           },
         ),

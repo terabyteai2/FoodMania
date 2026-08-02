@@ -91,6 +91,32 @@ class MenuStep extends StatefulWidget {
 }
 
 class _MenuStepState extends State<MenuStep> {
+  // Search collapses to a top-bar icon; the field mounts while open, while a
+  // query is active (so a typed query can't vanish), or in code mode where
+  // the field is the short-code entry.
+  bool _searchOpen = false;
+
+  bool get _showSearchBar =>
+      _searchOpen || widget.codeMode || widget.query.isNotEmpty;
+
+  void _toggleSearch() {
+    setState(() {
+      if (widget.codeMode) {
+        widget.searchCtrl.clear();
+        widget.onSearchChanged('');
+        return;
+      }
+      if (_searchOpen || widget.query.isNotEmpty) {
+        _searchOpen = false;
+        widget.searchCtrl.clear();
+        widget.onSearchChanged('');
+        FocusManager.instance.primaryFocus?.unfocus();
+      } else {
+        _searchOpen = true;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -101,16 +127,21 @@ class _MenuStepState extends State<MenuStep> {
           leadingIsClose: widget.leadingIsClose,
           quickBillMode: widget.quickBillMode,
           onToggleQuickBill: widget.onToggleQuickBill,
+          searchOpen: _showSearchBar,
+          onToggleSearch: _toggleSearch,
         ),
-        const SizedBox(height: PosSpacing.sp1),
-        _MenuSearchBar(
-          searchCtrl: widget.searchCtrl,
-          query: widget.query,
-          codeMode: widget.codeMode,
-          onSearchChanged: widget.onSearchChanged,
-          onCodeSubmit: widget.onCodeSubmit,
-          onToggleCode: widget.onToggleCodeMode,
-        ),
+        // Rendered conditionally — no animation on show/hide.
+        if (_showSearchBar) ...[
+          const SizedBox(height: PosSpacing.sp1),
+          _MenuSearchBar(
+            searchCtrl: widget.searchCtrl,
+            query: widget.query,
+            codeMode: widget.codeMode,
+            onSearchChanged: widget.onSearchChanged,
+            onCodeSubmit: widget.onCodeSubmit,
+            onToggleCode: widget.onToggleCodeMode,
+          ),
+        ],
         if (!widget.codeMode) ...[
           const SizedBox(height: PosSpacing.sp1),
           CategoryChips(
@@ -154,6 +185,8 @@ class _TopControls extends StatelessWidget {
     required this.leadingIsClose,
     this.quickBillMode = false,
     this.onToggleQuickBill,
+    this.searchOpen = false,
+    this.onToggleSearch,
   });
 
   final String? title;
@@ -161,6 +194,10 @@ class _TopControls extends StatelessWidget {
   final bool leadingIsClose;
   final bool quickBillMode;
   final VoidCallback? onToggleQuickBill;
+
+  /// Whether the search field is visible; drives the icon's boxed state.
+  final bool searchOpen;
+  final VoidCallback? onToggleSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -228,6 +265,34 @@ padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp3, vertical: PosSpa
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          ],
+          // Search toggle: bare glyph when idle, dark box while active —
+          // same treatment as the app bar's icon buttons.
+          if (onToggleSearch != null) ...[
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onToggleSearch,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: searchOpen
+                      ? PosColors.primaryDark
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(PosRadii.md),
+                  border: Border.all(
+                    color: searchOpen
+                        ? PosColors.primaryDark
+                        : Colors.white38,
+                  ),
+                ),
+                child: Icon(
+                  searchOpen ? TfNavIcon.close : TfNavIcon.search,
+                  size: 22,
+                  color: searchOpen ? Colors.white : PosColors.accentInk,
                 ),
               ),
             ),

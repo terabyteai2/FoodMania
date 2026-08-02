@@ -335,10 +335,11 @@ const _ownerTabOrder = <_AppTab>[
   _AppTab.reports,
   _AppTab.more,
 ];
-// Manager: Live (Control Tower) · Orders · Menu · Sales Summary · More
+// Manager: Live (Control Tower) · Orders · Stock · Menu · Sales Summary · More
 const _managerTabOrder = <_AppTab>[
   _AppTab.orders,
   _AppTab.live,
+  _AppTab.stock,
   _AppTab.menu,
   _AppTab.salesSummary,
   _AppTab.more,

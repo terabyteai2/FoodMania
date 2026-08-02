@@ -306,7 +306,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: search),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: PosSpacing.sp3),
                   actions,
                 ],
               );
@@ -470,7 +470,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                       color: selected ? Pc.onInk : Pc.text,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: PosSpacing.sp2),
                   Text(
                     '${countOf(category)}',
                     style: TextStyle(
@@ -854,7 +854,7 @@ class _DesktopBulkToolbar extends StatelessWidget {
             variant: PcVariant.surface,
             onTap: onDiscount,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: PosSpacing.sp2),
           PcBtn(
             label: isBn ? 'মুছুন' : 'Delete',
             icon: 'close',
@@ -862,7 +862,7 @@ class _DesktopBulkToolbar extends StatelessWidget {
             variant: PcVariant.danger,
             onTap: onDelete,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: PosSpacing.sp2),
           PcBtn(
             label: isBn ? 'ক্লিয়ার' : 'Clear',
             icon: 'close',
@@ -1081,7 +1081,7 @@ class _DesktopMenuCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: PosSpacing.sp2),
               Text(
                 item.localizedName(language),
                 maxLines: 2,
@@ -1136,7 +1136,7 @@ class _DesktopMenuCard extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: PosSpacing.sp2),
               Row(
                 children: [
                   if (showDiscount) ...[
@@ -1286,7 +1286,7 @@ class _MenuSettingsSheet extends StatelessWidget {
                           size: 20,
                           color: PosColors.muted,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: PosSpacing.sp3),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1315,7 +1315,7 @@ class _MenuSettingsSheet extends StatelessWidget {
                             color: PosColors.slate,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: PosSpacing.sp1),
                         const Icon(
                           Icons.chevron_right_rounded,
                           size: 20,
@@ -1525,7 +1525,7 @@ class _BulkMenuToolbar extends StatelessWidget {
             size: TfButtonSize.sm,
             onPressed: onDiscount,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: PosSpacing.sp2),
           TfButton(
             label: text.deleteAction,
             icon: Icons.delete_outline,
@@ -1534,7 +1534,7 @@ class _BulkMenuToolbar extends StatelessWidget {
             variant: TfButtonVariant.paper,
             onPressed: onDelete,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: PosSpacing.sp2),
           TfIconButton(
             icon: Icons.close_rounded,
             tooltip: text.isBn ? 'বন্ধ' : 'Clear',
@@ -2086,7 +2086,7 @@ class _MenuItemFormState extends State<_MenuItemForm> {
                               ),
                             ],
                           ),
-const SizedBox(height: 12),
+                          const SizedBox(height: PosSpacing.sp3),
                           _EditorPhotoBlock(
                             busy: _imageBusy,
                             imageUrl: _imageController.text.trim(),
@@ -2119,7 +2119,7 @@ const SizedBox(height: 12),
                               },
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: PosSpacing.sp4),
                           _EditorField(
                             label: text.menuPrice,
                             child: TextFormField(
@@ -2149,7 +2149,7 @@ const SizedBox(height: 12),
                               },
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: PosSpacing.sp4),
                           _EditorField(
                             label: text.shortCodeLabel,
                             child: TextFormField(
@@ -2167,12 +2167,12 @@ const SizedBox(height: 12),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: PosSpacing.sp4),
                           _EditorField(
                             label: text.menuCategory,
                             child: _buildCategoryField(text),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: PosSpacing.sp4),
                           _AdvancedMenuOptions(
                             text: text,
                             descriptionController: _descriptionController,
@@ -2405,7 +2405,7 @@ class _EditorField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TfMicroLabel(label.toUpperCase()),
-        const SizedBox(height: 8),
+        const SizedBox(height: PosSpacing.sp2),
         child,
       ],
     );
@@ -2439,8 +2439,8 @@ class _EditorPhotoBlock extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(PosRadii.lg),
           child: Container(
-            width: 80,
-            height: 80,
+            width: PosDensity.editorPhoto,
+            height: PosDensity.editorPhoto,
             decoration: BoxDecoration(
               color: PosColors.surfaceSunk,
               borderRadius: BorderRadius.circular(PosRadii.lg),
@@ -2452,10 +2452,10 @@ class _EditorPhotoBlock extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: PosSpacing.sp3),
         Expanded(
           child: SizedBox(
-            height: 80,
+            height: PosDensity.editorPhoto,
             child: OutlinedButton(
               onPressed: busy ? null : onPick,
               style: OutlinedButton.styleFrom(
@@ -2490,7 +2490,7 @@ class _EditorPhotoBlock extends StatelessWidget {
           ),
         ),
         if (hasImage) ...[
-          const SizedBox(width: 8),
+          const SizedBox(width: PosSpacing.sp2),
           TfIconButton(
             icon: Icons.clear_rounded,
             tooltip: clearLabel,
@@ -2589,7 +2589,7 @@ class _AdvancedMenuOptions extends StatelessWidget {
             ),
             const SizedBox(height: PosSpacing.sp3),
             _SectionLabel(text.menuSizeOptionsTitle),
-            const SizedBox(height: 8),
+            const SizedBox(height: PosSpacing.sp2),
             ...options.asMap().entries.map(
               (e) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -2605,7 +2605,7 @@ class _AdvancedMenuOptions extends StatelessWidget {
             ),
             const SizedBox(height: PosSpacing.sp3),
             _SectionLabel(text.menuIncludesTitle),
-            const SizedBox(height: 8),
+            const SizedBox(height: PosSpacing.sp2),
             ...includes.asMap().entries.map(
               (e) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -2621,7 +2621,7 @@ class _AdvancedMenuOptions extends StatelessWidget {
             ),
             const SizedBox(height: PosSpacing.sp3),
             _SectionLabel(text.menuAddOnsTitle),
-            const SizedBox(height: 8),
+            const SizedBox(height: PosSpacing.sp2),
             ...addOns.asMap().entries.map(
               (e) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -2649,11 +2649,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return TfText(
       label,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: PosColors.inkSoft,
-      ),
+      style: TfTextStyles.sectionStrip.copyWith(color: PosColors.inkSoft),
     );
   }
 }
@@ -2670,7 +2666,7 @@ class _AddRowButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onTap,
         icon: const Icon(Icons.add_rounded, size: 16),
-        label: TfText(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        label: TfText(label, style: TfTextStyles.rowTitle),
         style: OutlinedButton.styleFrom(
           foregroundColor: PosColors.accentStrong,
           side: const BorderSide(color: PosColors.lineStrong),
@@ -2697,7 +2693,7 @@ class _OptionRowWidget extends StatelessWidget {
             decoration: InputDecoration(hintText: text.menuOptionNameHint),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: PosSpacing.sp2),
         Expanded(
           flex: 2,
           child: TextFormField(
@@ -2707,15 +2703,12 @@ class _OptionRowWidget extends StatelessWidget {
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
           ),
         ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: Icon(Icons.close_rounded, size: 16, color: PosColors.muted),
-            onPressed: onRemove,
-          ),
+        const SizedBox(width: PosSpacing.sp1),
+        TfIconButton(
+          bare: true,
+          icon: Icons.close_rounded,
+          tooltip: text.remove,
+          onPressed: onRemove,
         ),
       ],
     );
@@ -2737,15 +2730,12 @@ class _IncludeRowWidget extends StatelessWidget {
             decoration: InputDecoration(hintText: text.menuIncludeNameHint),
           ),
         ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: Icon(Icons.close_rounded, size: 16, color: PosColors.muted),
-            onPressed: onRemove,
-          ),
+        const SizedBox(width: PosSpacing.sp1),
+        TfIconButton(
+          bare: true,
+          icon: Icons.close_rounded,
+          tooltip: text.remove,
+          onPressed: onRemove,
         ),
       ],
     );
@@ -2768,7 +2758,7 @@ class _AddOnRowWidget extends StatelessWidget {
             decoration: InputDecoration(hintText: text.menuAddOnNameHint),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: PosSpacing.sp2),
         Expanded(
           flex: 2,
           child: TextFormField(
@@ -2778,15 +2768,12 @@ class _AddOnRowWidget extends StatelessWidget {
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
           ),
         ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: Icon(Icons.close_rounded, size: 16, color: PosColors.muted),
-            onPressed: onRemove,
-          ),
+        const SizedBox(width: PosSpacing.sp1),
+        TfIconButton(
+          bare: true,
+          icon: Icons.close_rounded,
+          tooltip: text.remove,
+          onPressed: onRemove,
         ),
       ],
     );

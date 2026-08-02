@@ -15,7 +15,7 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
-from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, software_downloads, tenants, voice, ws
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, tenants, voice, ws
 from services.facebook_chatbot import start_batch_worker, stop_batch_worker
 from subscription_service import maybe_expire_subscription
 
@@ -177,6 +177,7 @@ app.include_router(pos.router)
 app.include_router(payments.router)
 app.include_router(platform.router)
 app.include_router(voice.router)
+app.include_router(sarvam_voice.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
 app.include_router(app_download.router)

@@ -12,6 +12,7 @@ import { Tables } from './Tables';
 import { Orders } from './Orders';
 import { Ops } from './Ops';
 import { VoiceAgent } from './VoiceAgent';
+import { SarvamVoiceAgent } from './SarvamVoiceAgent';
 import { InstallToast } from '../components/InstallToast';
 import { Sidebar } from '../components/Sidebar';
 import './shell.css';
@@ -183,7 +184,8 @@ export function Shell() {
           {section === 'tables' && !isCounter && <Tables />}
           {section === 'orders' && <Orders />}
           {section === 'ops' && opsPane === 'voiceagent' && <VoiceAgent />}
-          {section === 'ops' && opsPane !== 'voiceagent' && <Ops />}
+          {section === 'ops' && opsPane === 'sarvamvoice' && <SarvamVoiceAgent />}
+          {section === 'ops' && opsPane !== 'voiceagent' && opsPane !== 'sarvamvoice' && <Ops />}
         </main>
       </div>
     </div>

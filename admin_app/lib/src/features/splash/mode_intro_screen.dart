@@ -119,10 +119,6 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
         _otpVerified = false;
         _autoVerifyScheduled = false;
       });
-
-      if (app.showDevOtpHint) {
-        _applyOtpCode(app.devOtpCodeHint);
-      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = _humanizeError(error));
@@ -181,7 +177,6 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final compact = bottomInset > 0 || _otpSent;
 
@@ -215,9 +210,7 @@ class _ModeIntroScreenState extends State<ModeIntroScreen> {
                       const SizedBox(height: 10),
                       TfText(
                         _otpSent
-                            ? (app.showDevOtpHint
-                                  ? 'SMS was not sent (dev mode).\nEnter code ${app.devOtpCodeHint} or tap Verify.'
-                                  : 'We sent a code to your phone.\nIt may fill in automatically, or enter it and tap Verify.')
+                            ? 'We sent a code to your phone.\nIt may fill in automatically, or enter it and tap Verify.'
                             : 'Sign in with your Bangladesh\nmobile number.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
