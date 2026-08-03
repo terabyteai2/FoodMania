@@ -15,6 +15,7 @@ class OrderItem {
     this.note,
     this.kotBatchId,
     this.kotSentAt,
+    this.parcel = false,
   });
 
   final String id;
@@ -30,6 +31,7 @@ class OrderItem {
   final String? note;
   final String? kotBatchId;
   final DateTime? kotSentAt;
+  final bool parcel;
 
   Map<String, Object?> toMap() {
     return {
@@ -46,6 +48,7 @@ class OrderItem {
       'note': note,
       'kotBatchId': kotBatchId,
       'kotSentAt': kotSentAt?.toIso8601String(),
+      'parcel': parcel ? 1 : 0,
     };
   }
 
@@ -64,6 +67,7 @@ class OrderItem {
       'note': note,
       'kotBatchId': kotBatchId,
       'kotSentAt': kotSentAt?.toIso8601String(),
+      'parcel': parcel,
     };
   }
 
@@ -84,6 +88,7 @@ class OrderItem {
       note: _text(map['note']),
       kotBatchId: _text(map['kotBatchId']),
       kotSentAt: DateTime.tryParse(map['kotSentAt']?.toString() ?? ''),
+      parcel: map['parcel'] == true || map['parcel'] == 1,
     );
   }
 
@@ -124,6 +129,7 @@ class OrderRequestItem {
     this.nameOverride,
     this.nameEnOverride,
     this.nameBnOverride,
+    this.parcel,
   });
 
   final String menuItemId;
@@ -136,6 +142,9 @@ class OrderRequestItem {
   final String? nameOverride;
   final String? nameEnOverride;
   final String? nameBnOverride;
+
+  /// True = pack to go; false = dine-in line; null = keep the existing flag.
+  final bool? parcel;
 
   factory OrderRequestItem.fromJson(Map<String, Object?> json) {
     final rawId = json['menuItemId'] ?? json['id'];
@@ -157,6 +166,7 @@ class OrderRequestItem {
       nameOverride: json['name']?.toString(),
       nameEnOverride: json['nameEn']?.toString(),
       nameBnOverride: json['nameBn']?.toString(),
+      parcel: json['parcel'] is bool ? json['parcel'] as bool : null,
     );
   }
 

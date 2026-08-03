@@ -782,6 +782,9 @@ class LocalDatabaseService {
     String? customerName,
     String? deliveryAddress,
     String? mobileNumber,
+    String? discountLabel,
+    double? discountAmount,
+    bool clearDiscount = false,
     bool createSyncEvent = true,
   }) async {
     final db = await _db;
@@ -815,6 +818,13 @@ class LocalDatabaseService {
         customerName: nextCustomer,
         deliveryAddress: nextAddress,
         mobileNumber: nextMobile,
+        discountLabel: clearDiscount
+            ? null
+            : (discountLabel != null ? clean(discountLabel) : null),
+        clearDiscountLabel: clearDiscount,
+        discountAmount: clearDiscount
+            ? 0
+            : (discountAmount ?? current.discountAmount),
         clearTableNo: nextTable == null,
         clearNote: nextNote == null,
         clearCustomerName: nextCustomer == null,
@@ -947,6 +957,7 @@ class LocalDatabaseService {
             note: _cleanNullable(request.note) ?? existing?.note,
             kotBatchId: existing?.kotBatchId,
             kotSentAt: existing?.kotSentAt,
+            parcel: request.parcel ?? existing?.parcel ?? false,
           ),
         );
       }
@@ -1472,6 +1483,7 @@ class LocalDatabaseService {
       ('note', 'note TEXT'),
       ('kotBatchId', 'kotBatchId TEXT'),
       ('kotSentAt', 'kotSentAt TEXT'),
+      ('parcel', 'parcel INTEGER NOT NULL DEFAULT 0'),
     ]) {
       await _addColumnIfMissing(db, 'order_items', entry.$1, entry.$2);
     }

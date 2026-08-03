@@ -161,7 +161,7 @@ class _OrderCreatedPageState extends State<OrderCreatedPage> {
               child: _OrderCreatedStep(
                 order: widget.order,
                 serviceLabel: widget.serviceLabel,
-                total: widget.order.total,
+                total: widget.order.totalAfterDiscount,
                 onNewOrder: () => Navigator.pop(context),
                 onDone: () => Navigator.pop(context),
               ),
@@ -409,7 +409,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           return '${order.id}#${order.sequenceNo}:'
               '${order.status.name}/${order.status.adminStatus.name} '
               '${order.source.name}/${order.serviceType?.name ?? 'none'} '
-              '৳${order.total.toStringAsFixed(0)} '
+              '৳${order.totalAfterDiscount.toStringAsFixed(0)} '
               'c=${order.createdAt.toIso8601String()} '
               'u=${order.updatedAt.toIso8601String()}';
         })
@@ -794,6 +794,9 @@ Future<void> openEditOrderSheet(BuildContext context, OrderModel order) async {
     customerName: result.customerName,
     deliveryAddress: result.deliveryAddress,
     mobileNumber: result.mobileNumber,
+    discountLabel: result.discountChanged ? result.discountLabel : null,
+    discountAmount: result.discountChanged ? result.discountAmount : null,
+    clearDiscount: result.discountChanged && result.discountAmount <= 0,
   );
   if (result.itemsChanged && result.items != null && result.items!.isNotEmpty) {
     try {
@@ -814,6 +817,14 @@ Future<void> openEditOrderSheet(BuildContext context, OrderModel order) async {
   }
   if (result.changedItems != null && result.changedItems!.isNotEmpty) {
     reasons.add('Changed: ${result.changedItems!.join(', ')}');
+  }
+  if (result.discountChanged) {
+    reasons.add(
+      result.discountAmount > 0
+          ? 'Discount: ${result.discountLabel ?? ''} '
+                '−৳${result.discountAmount.toStringAsFixed(2)}'
+          : 'Discount removed',
+    );
   }
   final hasDetailEdit =
       result.serviceType != (order.serviceType ?? OrderServiceType.dineIn) ||
@@ -1646,7 +1657,7 @@ class _OrderCardState extends State<_OrderCard> {
             ],
             const SizedBox(width: 12),
             TfText(
-              tfFormatCurrency(context, order.total),
+              tfFormatCurrency(context, order.totalAfterDiscount),
               style: TfTextStyles.rowTitle.copyWith(
                 fontFamily: tfFontFamily(context),
                 color: PosColors.text,
@@ -1981,7 +1992,7 @@ class _OrderCardState extends State<_OrderCard> {
               ),
             ),
             TfText(
-              tfFormatCurrency(context, order.total),
+              tfFormatCurrency(context, order.totalAfterDiscount),
               style: TfTextStyles.rowTitle.copyWith(
                 fontFamily: tfFontFamily(context),
                 color: PosColors.text,
@@ -2079,6 +2090,9 @@ class _OrderEditResult {
     this.addedItems,
     this.removedItems,
     this.changedItems,
+    this.discountLabel,
+    this.discountAmount = 0,
+    this.discountChanged = false,
   });
 
   final OrderServiceType serviceType;
@@ -2093,7 +2107,12 @@ class _OrderEditResult {
   final List<String>? addedItems;
   final List<String>? removedItems;
   final List<String>? changedItems;
+  final String? discountLabel;
+  final double discountAmount;
+  final bool discountChanged;
 }
+
+enum _EditDiscountKind { none, flat, percent }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pending order detail sheet — read-only, all roles; manager sees Accept/Reject.
@@ -2301,10 +2320,21 @@ class _PendingOrderDetailSheet extends StatelessWidget {
                           label: isBn ? 'সাবটোটাল' : 'Subtotal',
                           value: tfFormatCurrency(context, subtotal),
                         ),
+                        if (order.discountAmount > 0) ...[
+                          const SizedBox(height: 6),
+                          _AmountLine(
+                            label: isBn ? 'ডিসকাউন্ট' : 'Discount',
+                            value:
+                                '−${tfFormatCurrency(context, order.discountAmount)}',
+                          ),
+                        ],
                         const SizedBox(height: 6),
                         _AmountLine(
                           label: isBn ? 'মোট' : 'Total',
-                          value: tfFormatCurrency(context, order.total),
+                          value: tfFormatCurrency(
+                            context,
+                            order.totalAfterDiscount,
+                          ),
                         ),
                       ],
                     ),
@@ -2421,6 +2451,8 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _addressCtrl;
   late final TextEditingController _phoneCtrl;
+  late final TextEditingController _discountCtrl;
+  _EditDiscountKind _discountKind = _EditDiscountKind.none;
 
   // Working copy of the order's items, keyed by menuItemId.
   final Map<String, int> _itemQty = <String, int>{};
@@ -2428,7 +2460,10 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   // is no longer available (e.g. deleted) so we can still show the line.
   final Map<String, ({String name, double price})> _itemMeta =
       <String, ({String name, double price})>{};
+  // Per-line parcel (packed to go) flag, keyed by menuItemId.
+  final Map<String, bool> _itemParcel = <String, bool>{};
   late final Map<String, int> _originalItemQty;
+  late final Map<String, bool> _originalItemParcel;
   bool _itemsDirty = false;
 
   @override
@@ -2441,11 +2476,26 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
     _nameCtrl = TextEditingController(text: order.customerName ?? '');
     _addressCtrl = TextEditingController(text: order.deliveryAddress ?? '');
     _phoneCtrl = TextEditingController(text: order.mobileNumber ?? '');
+    final discountLabel = (order.discountLabel ?? '').trim();
+    if (order.discountAmount > 0) {
+      _discountKind = discountLabel.endsWith('%')
+          ? _EditDiscountKind.percent
+          : _EditDiscountKind.flat;
+      _discountCtrl = TextEditingController(
+        text: _discountKind == _EditDiscountKind.percent
+            ? discountLabel.replaceFirst(RegExp(r'%$'), '')
+            : _moneyText(order.discountAmount),
+      );
+    } else {
+      _discountCtrl = TextEditingController();
+    }
     for (final item in order.items) {
       _itemQty[item.menuItemId] = (_itemQty[item.menuItemId] ?? 0) + item.qty;
       _itemMeta[item.menuItemId] = (name: item.name, price: item.price);
+      if (item.parcel) _itemParcel[item.menuItemId] = true;
     }
     _originalItemQty = Map<String, int>.from(_itemQty);
+    _originalItemParcel = Map<String, bool>.from(_itemParcel);
   }
 
   @override
@@ -2455,6 +2505,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
+    _discountCtrl.dispose();
     super.dispose();
   }
 
@@ -2468,7 +2519,29 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
     for (final entry in _itemQty.entries) {
       if (_originalItemQty[entry.key] != entry.value) return true;
     }
+    for (final entry in _itemParcel.entries) {
+      if ((_originalItemParcel[entry.key] ?? false) != entry.value) {
+        return true;
+      }
+    }
+    for (final key in _originalItemParcel.keys) {
+      if (!_itemParcel.containsKey(key) && _originalItemParcel[key] == true) {
+        return true;
+      }
+    }
     return false;
+  }
+
+  void _toggleParcel(String menuItemId) {
+    setState(() {
+      final current = _itemParcel[menuItemId] ?? false;
+      if (current) {
+        _itemParcel.remove(menuItemId);
+      } else {
+        _itemParcel[menuItemId] = true;
+      }
+      _itemsDirty = _detectItemsDirty();
+    });
   }
 
   void _changeQty(String menuItemId, int delta) {
@@ -2527,6 +2600,41 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
       sum += meta.price * entry.value;
     }
     return sum;
+  }
+
+  static String _moneyText(double value) {
+    final text = value.toStringAsFixed(2);
+    return text.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  double get _discountValue =>
+      double.tryParse(_discountCtrl.text.replaceAll(',', '')) ?? 0;
+
+  double get _computedDiscount {
+    if (_discountKind == _EditDiscountKind.none || _discountValue <= 0) {
+      return 0;
+    }
+    final subtotal = _runningTotal;
+    final value = _discountKind == _EditDiscountKind.percent
+        ? subtotal * _discountValue / 100
+        : _discountValue;
+    return double.parse(value.clamp(0, subtotal).toStringAsFixed(2));
+  }
+
+  String? _discountError(AppStrings text) {
+    if (_discountKind == _EditDiscountKind.none) return null;
+    if (_discountValue < 0) {
+      return text.isBn ? 'ঋণাত্মক নয়' : "Can't be negative";
+    }
+    if (_discountKind == _EditDiscountKind.percent && _discountValue > 100) {
+      return text.isBn ? 'সর্বোচ্চ ১০০%' : 'Maximum 100%';
+    }
+    if (_discountKind == _EditDiscountKind.flat &&
+        _runningTotal > 0 &&
+        _discountValue > _runningTotal) {
+      return text.isBn ? 'মোটের বেশি নয়' : "Can't exceed the total";
+    }
+    return null;
   }
 
   @override
@@ -2599,7 +2707,71 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                   maxLines: 3,
                 ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: PosSpacing.sp4),
+              Row(
+                children: [
+                  Expanded(
+                    child: TfText(
+                      text.isBn ? 'ডিসকাউন্ট' : 'Discount',
+                      style: TfTextStyles.sectionHeader.copyWith(
+                        fontFamily: tfFontFamily(context),
+                        color: PosColors.slate,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: PosDensity.gridGap),
+              Row(
+                children: [
+                  Expanded(
+                    child: TfChip(
+                      label: text.isBn ? '৳ ফ্ল্যাট' : '৳ Flat',
+                      active: _discountKind == _EditDiscountKind.flat,
+                      onTap: () => setState(() {
+                        _discountKind = _discountKind == _EditDiscountKind.flat
+                            ? _EditDiscountKind.none
+                            : _EditDiscountKind.flat;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: PosDensity.gridGap),
+                  Expanded(
+                    child: TfChip(
+                      label: text.isBn ? '% শতাংশ' : '% Percent',
+                      active: _discountKind == _EditDiscountKind.percent,
+                      onTap: () => setState(() {
+                        _discountKind =
+                            _discountKind == _EditDiscountKind.percent
+                            ? _EditDiscountKind.none
+                            : _EditDiscountKind.percent;
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+              if (_discountKind != _EditDiscountKind.none) ...[
+                const SizedBox(height: PosDensity.sectionGap),
+                TfField(
+                  label: text.isBn ? 'ছাড়ের পরিমাণ' : 'Discount value',
+                  controller: _discountCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  hint: _discountKind == _EditDiscountKind.percent
+                      ? '10'
+                      : '50',
+                  hintBn: _discountKind == _EditDiscountKind.percent
+                      ? '১০'
+                      : '৫০',
+                  errorText: _discountError(text),
+                  hintHelper: _computedDiscount > 0
+                      ? '−${tfFormatCurrency(context, _computedDiscount, decimalDigits: 2)}'
+                      : null,
+                ),
+              ],
+              const SizedBox(height: PosSpacing.sp4),
               Row(
                 children: [
                   Expanded(
@@ -2659,6 +2831,15 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                           ],
                         ),
                       ),
+                      const SizedBox(width: PosSpacing.sp2),
+                      TfChip(
+                        label: text.takeaway,
+                        small: true,
+                        active: _itemParcel[entry.key] ?? false,
+                        leading: const Icon(Icons.shopping_bag_outlined),
+                        onTap: () => _toggleParcel(entry.key),
+                      ),
+                      const SizedBox(width: PosSpacing.sp1),
                       IconButton(
                         icon: const Icon(Icons.remove_circle_outline),
                         onPressed: () => _changeQty(entry.key, -1),
@@ -2682,25 +2863,91 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
               if (_itemQty.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 6, bottom: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TfText(
-                        text.isBn ? 'মোট' : 'Total',
-                        style: TfTextStyles.rowTitle,
-                      ),
-                      TfText(
-                        tfFormatCurrency(
-                          context,
-                          _runningTotal,
-                          decimalDigits: 2,
+                  child: _computedDiscount > 0
+                      ? Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                TfText(
+                                  text.isBn ? 'সাবটোটাল' : 'Subtotal',
+                                  style: TfTextStyles.bodyMuted,
+                                ),
+                                TfText(
+                                  tfFormatCurrency(
+                                    context,
+                                    _runningTotal,
+                                    decimalDigits: 2,
+                                  ),
+                                  style: TfTextStyles.rowMoney.copyWith(
+                                    fontFamily: tfFontFamily(context),
+                                    fontWeight: FontWeight.w400,
+                                    color: PosColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: PosDensity.gridGap),
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                TfText(
+                                  text.isBn ? 'ডিসকাউন্ট' : 'Discount',
+                                  style: TfTextStyles.bodyMuted,
+                                ),
+                                TfText(
+                                  '−${tfFormatCurrency(context, _computedDiscount, decimalDigits: 2)}',
+                                  style: TfTextStyles.rowMoney.copyWith(
+                                    fontFamily: tfFontFamily(context),
+                                    color: PosColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: PosDensity.gridGap),
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                TfText(
+                                  text.isBn ? 'মোট' : 'Total',
+                                  style: TfTextStyles.rowTitle,
+                                ),
+                                TfText(
+                                  tfFormatCurrency(
+                                    context,
+                                    _runningTotal - _computedDiscount,
+                                    decimalDigits: 2,
+                                  ),
+                                  style: TfTextStyles.price.copyWith(
+                                    fontFamily: tfFontFamily(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TfText(
+                              text.isBn ? 'মোট' : 'Total',
+                              style: TfTextStyles.rowTitle,
+                            ),
+                            TfText(
+                              tfFormatCurrency(
+                                context,
+                                _runningTotal,
+                                decimalDigits: 2,
+                              ),
+                              style: TfTextStyles.price.copyWith(
+                                fontFamily: tfFontFamily(context),
+                              ),
+                            ),
+                          ],
                         ),
-                        style: TfTextStyles.price.copyWith(
-                          fontFamily: tfFontFamily(context),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               const SizedBox(height: 6),
               Row(
@@ -2731,9 +2978,20 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                     (e) => OrderRequestItem(
                                       menuItemId: e.key,
                                       qty: e.value,
+                                      parcel: _itemParcel[e.key] ?? false,
                                     ),
                                   )
                                   .toList(growable: false);
+                              final discount = _computedDiscount;
+                              final discountLabel = discount > 0
+                                  ? (_discountKind == _EditDiscountKind.percent
+                                        ? '${_moneyText(_discountValue)}%'
+                                        : '৳${_moneyText(_discountValue)}')
+                                  : null;
+                              final discountChanged =
+                                  discount != widget.order.discountAmount ||
+                                      discountLabel !=
+                                          widget.order.discountLabel;
 
                               final added = <String>[];
                               final removed = <String>[];
@@ -2747,6 +3005,10 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                   changed.add(
                                     '${meta.name} ($orig\u2192${entry.value})',
                                   );
+                                } else if ((_originalItemParcel[entry.key] ??
+                                        false) !=
+                                    (_itemParcel[entry.key] ?? false)) {
+                                  changed.add('${meta.name} (parcel)');
                                 }
                               }
                               for (final entry in _originalItemQty.entries) {
@@ -2775,6 +3037,9 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                       : null,
                                   items: items,
                                   itemsChanged: _itemsDirty,
+                                  discountLabel: discountLabel,
+                                  discountAmount: discount,
+                                  discountChanged: discountChanged,
                                   addedItems: added.isEmpty ? null : added,
                                   removedItems: removed.isEmpty
                                       ? null
@@ -3139,6 +3404,27 @@ class _OrderCreatedSheet extends StatelessWidget {
                             ),
                           ),
                         Divider(color: PosColors.line, height: 22),
+                        if (order.discountAmount > 0) ...[
+                          Row(
+                            children: [
+                              TfText(
+                                'DISCOUNT',
+                                style: TfTextStyles.eyebrow.copyWith(
+                                  color: PosColors.slate,
+                                ),
+                              ),
+                              const Spacer(),
+                              TfText(
+                                '−${tfFormatCurrency(context, order.discountAmount)}',
+                                style: TfTextStyles.rowMoney.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: PosColors.slate,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                         Row(
                           children: [
                             TfText(
@@ -3149,7 +3435,10 @@ class _OrderCreatedSheet extends StatelessWidget {
                             ),
                             const Spacer(),
                             TfText(
-                              tfFormatCurrency(context, order.total),
+                              tfFormatCurrency(
+                                context,
+                                order.totalAfterDiscount,
+                              ),
                               style: TfTextStyles.statNumber.copyWith(
                                 color: PosColors.slate,
                               ),
@@ -5038,7 +5327,7 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
   double get _paid => double.tryParse(_paidCtrl.text.trim()) ?? 0;
 
   double get _returnAmount {
-    final change = _paid - widget.order.total;
+    final change = _paid - widget.order.totalAfterDiscount;
     return change > 0 ? change : 0;
   }
 
@@ -5121,7 +5410,7 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
                   ),
                 ),
                 TfText(
-                  tfFormatCurrency(context, widget.order.total),
+                  tfFormatCurrency(context, widget.order.totalAfterDiscount),
                   style: TfTextStyles.rowTitle.copyWith(
                     fontWeight: FontWeight.w800,
                     color: PosColors.slate,
@@ -5211,7 +5500,11 @@ class _ModeTile extends StatelessWidget {
             const SizedBox(width: PosSpacing.sp2),
             Expanded(
               child: TfText(
-                isBn ? method.banglaLabel : method.label,
+                isBn
+                    ? (method == OrderPaymentMethod.cash
+                        ? 'ক্যাশ'
+                        : method.banglaLabel)
+                    : method.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TfTextStyles.rowTitle.copyWith(

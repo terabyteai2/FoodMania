@@ -330,7 +330,7 @@ class _OrderTypeList extends StatelessWidget {
                 ),
                 const SizedBox(width: PosSpacing.sp3),
                 TfText(
-                  tfFormatCurrency(context, o.total),
+                  tfFormatCurrency(context, o.totalAfterDiscount),
                   style: TfTextStyles.price.copyWith(
                     fontWeight: FontWeight.w800,
                     color: PosColors.text,

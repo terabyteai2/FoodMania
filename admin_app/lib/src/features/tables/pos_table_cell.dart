@@ -126,7 +126,7 @@ class PosTableCell extends StatelessWidget {
                   bottom: 0,
                   left: 0,
                   child: TfText(
-                    tfFormatCurrency(context, order!.total),
+                    tfFormatCurrency(context, order!.totalAfterDiscount),
                     style: TfTextStyles.label.copyWith(
                       fontWeight: FontWeight.w800,
                       color: ink,

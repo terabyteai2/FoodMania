@@ -3527,6 +3527,9 @@ class PosAppController extends ChangeNotifier {
     String? customerName,
     String? deliveryAddress,
     String? mobileNumber,
+    String? discountLabel,
+    double? discountAmount,
+    bool clearDiscount = false,
   }) async {
     await database.updateOrderDetails(
       id,
@@ -3536,6 +3539,9 @@ class PosAppController extends ChangeNotifier {
       customerName: customerName,
       deliveryAddress: deliveryAddress,
       mobileNumber: mobileNumber,
+      discountLabel: discountLabel,
+      discountAmount: discountAmount,
+      clearDiscount: clearDiscount,
     );
     unawaited(syncService.syncNow());
   }

@@ -282,6 +282,7 @@ class OrderLineItemPayload(BaseModel):
     note: str | None = None
     kotBatchId: str | None = None
     kotSentAt: str | None = None
+    parcel: bool | None = None
 
 
 class OrderPayload(BaseModel):

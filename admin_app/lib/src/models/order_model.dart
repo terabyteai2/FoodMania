@@ -102,6 +102,15 @@ class OrderModel {
   String get displaySequence =>
       sequenceNo > 0 ? '#$_serialPrefix$sequenceNo' : '#-';
 
+  /// Net payable for display. `total` already includes the discount only for
+  /// desktop-POS settlements, which fold the discount into `total` and stamp
+  /// [settledAt]; every other writer (mobile wizard, cloud, Bill-button
+  /// completion) stores the discount separately, so it is subtracted here.
+  double get totalAfterDiscount {
+    if (discountAmount <= 0 || settledAt != null) return total;
+    return double.parse((total - discountAmount).toStringAsFixed(2));
+  }
+
   OrderModel copyWith({
     String? id,
     String? orderNo,
@@ -142,6 +151,7 @@ class OrderModel {
     bool clearNote = false,
     bool clearDeliveryAddress = false,
     bool clearMobileNumber = false,
+    bool clearDiscountLabel = false,
   }) {
     return OrderModel(
       id: id ?? this.id,
@@ -160,7 +170,7 @@ class OrderModel {
       createdByAccountId: createdByAccountId ?? this.createdByAccountId,
       createdByRole: createdByRole ?? this.createdByRole,
       shiftId: shiftId ?? this.shiftId,
-      discountLabel: discountLabel ?? this.discountLabel,
+      discountLabel: clearDiscountLabel ? null : (discountLabel ?? this.discountLabel),
       discountAmount: discountAmount ?? this.discountAmount,
       serviceChargeRatePercent:
           serviceChargeRatePercent ?? this.serviceChargeRatePercent,
