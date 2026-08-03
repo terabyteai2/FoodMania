@@ -68,7 +68,8 @@ class AppStrings {
   // ── QuickBytes navigation + More hub ──────────────────────────────────────
   String get settingsTab => isBn ? 'সেটিংস' : 'Settings';
   String get liveTab => isBn ? 'লাইভ' : 'Live';
-  String get restaurantLive => isBn ? 'রেস্টুরেন্ট লাইভ' : 'Restaurant Live';
+  String get restaurantLive =>
+      isBn ? 'লাইভ রেস্টুরেন্ট পর্যালোচনা' : 'Restaurant Live';
   String get analyticsTab => isBn ? 'অ্যানালিটিক্স' : 'Analytics';
   // ── QS analytics (owner) ──────────────────────────────────────────────
   String get salesBreakdownTab => isBn ? 'সেলস ব্রেকডাউন' : 'Sales Breakdown';
@@ -81,7 +82,7 @@ class AppStrings {
   String get discountByStaff => isBn ? 'স্টাফ ডিসকাউন্ট' : 'Discount by Staff';
   String get netSales => isBn ? 'নেট সেলস' : 'Net Sales';
   String get totalCollection => isBn ? 'মোট কালেকশন' : 'Total Collection';
-  String get salesSummary => isBn ? 'সেলস সারাংশ' : 'Sales Summary';
+  String get salesSummary => isBn ? 'আজকের সেলস' : 'Sales Summary';
   String get collectionSummary =>
       isBn ? 'কালেকশন সারাংশ' : 'Collection Summary';
   String get serviceWiseSales =>
@@ -161,7 +162,7 @@ class AppStrings {
   String get serviceMode => isBn ? 'সার্ভিস মোড' : 'Service mode';
   String get fullService => isBn ? 'ফুল' : 'Full';
   String get counterService => isBn ? 'কাউন্টার' : 'Counter';
-  String get backofficeLabel => isBn ? 'ব্যাকঅফিস' : 'Backoffice';
+  String get backofficeLabel => isBn ? 'মালিক' : 'Owner';
   String get managerRole => isBn ? 'ম্যানেজার' : 'Manager';
   String get switchRoleDemo =>
       isBn ? 'রোল পরিবর্তন (ডেমো)' : 'Switch role (demo)';
@@ -1230,6 +1231,8 @@ class AppStrings {
       isBn ? 'অ্যাড-অন যোগ করুন' : 'Add add-on';
   String get menuOptionNameHint => isBn ? 'নাম' : 'Name';
   String get menuOptionPriceHint => isBn ? 'দাম' : 'Price';
+  String get menuOptionTotalPriceHint =>
+      isBn ? 'মোট দাম (ঐচ্ছিক)' : 'Total price (optional)';
   String get menuIncludeNameHint => isBn ? 'আইটেমের নাম' : 'Item name';
   String get menuAddOnNameHint => isBn ? 'নাম' : 'Name';
   String get menuAddOnPriceHint => isBn ? 'দাম' : 'Price';

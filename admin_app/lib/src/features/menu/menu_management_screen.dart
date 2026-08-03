@@ -1995,7 +1995,13 @@ class _MenuItemFormState extends State<_MenuItemForm> {
     _isAvailable = item?.isAvailable ?? true;
     _initialExtras = item == null ? const MenuItemExtras() : item.extras;
     _options.addAll(
-      _initialExtras.options.map((o) => _OptionRow(name: o.name, priceDelta: o.priceDelta)),
+      _initialExtras.options.map(
+        (o) => _OptionRow(
+          name: o.name,
+          priceDelta: o.priceDelta,
+          basePrice: item?.price ?? 0,
+        ),
+      ),
     );
     _includes.addAll(
       _initialExtras.includes.map((i) => _IncludeRow(i)),
@@ -2352,11 +2358,13 @@ class _MenuItemFormState extends State<_MenuItemForm> {
         .map((r) => r.nameCtrl.text.trim())
         .where((n) => n.isNotEmpty)
         .toList(growable: false);
+    final basePrice = double.tryParse(_priceController.text.trim()) ?? 0;
     final options = _options
         .map((r) {
           final name = r.nameCtrl.text.trim();
-          final price = double.tryParse(r.priceCtrl.text.trim()) ?? 0;
-          return MenuOption(name: name, priceDelta: price);
+          final total = double.tryParse(r.priceCtrl.text.trim());
+          final priceDelta = total == null ? 0.0 : total - basePrice;
+          return MenuOption(name: name, priceDelta: priceDelta);
         })
         .where((o) => o.name.isNotEmpty)
         .toList(growable: false);
@@ -2698,7 +2706,9 @@ class _OptionRowWidget extends StatelessWidget {
           flex: 2,
           child: TextFormField(
             controller: controller.priceCtrl,
-            decoration: InputDecoration(hintText: text.menuOptionPriceHint),
+            decoration: InputDecoration(
+              hintText: text.menuOptionTotalPriceHint,
+            ),
             keyboardType: TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
           ),
@@ -2781,16 +2791,15 @@ class _AddOnRowWidget extends StatelessWidget {
 }
 
 class _OptionRow {
-  _OptionRow({String name = '', double priceDelta = 0})
+  _OptionRow({String name = '', double priceDelta = 0, double basePrice = 0})
     : nameCtrl = TextEditingController(text: name),
-      priceCtrl = TextEditingController(
-        text: priceDelta == priceDelta.roundToDouble()
-            ? priceDelta.toInt().toString()
-            : priceDelta.toStringAsFixed(2),
-      );
+      priceCtrl = TextEditingController(text: _fmt(basePrice + priceDelta));
   final TextEditingController nameCtrl;
   final TextEditingController priceCtrl;
   void dispose() { nameCtrl.dispose(); priceCtrl.dispose(); }
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
 }
 
 class _IncludeRow {

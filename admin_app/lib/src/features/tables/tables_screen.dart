@@ -626,6 +626,7 @@ class _CounterModeState extends State<_CounterMode> {
           child: MenuStep(
             visibleItems: _visibleItems(menuItems),
             categories: _categories(menuItems),
+            categoryLabels: categoryLabelsFor(menuItems),
             selectedCategory: _selectedCategory,
             cart: cartQty,
             lineCount: _cartLines.length,

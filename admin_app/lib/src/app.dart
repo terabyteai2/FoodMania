@@ -335,12 +335,12 @@ const _ownerTabOrder = <_AppTab>[
   _AppTab.reports,
   _AppTab.more,
 ];
-// Manager: Live (Control Tower) · Orders · Stock · Menu · Sales Summary · More
+// Manager: Orders · Menu · Stock · Live (Control Tower) · Sales Summary · More
 const _managerTabOrder = <_AppTab>[
   _AppTab.orders,
-  _AppTab.live,
-  _AppTab.stock,
   _AppTab.menu,
+  _AppTab.stock,
+  _AppTab.live,
   _AppTab.salesSummary,
   _AppTab.more,
 ];
@@ -880,6 +880,7 @@ class _MainShellState extends State<MainShell> {
   void _maybeShowAppUpdatePrompt(PosAppController app) {
     final update = app.pendingAppUpdate;
     if (update == null || app.appUpdateBusy) return;
+    if (app.appUpdatePhase != AppUpdatePhase.ready) return;
     if (_appUpdateDialogShowing) return;
     if (!update.required &&
         _lastShownAppUpdateVersionCode == update.versionCode) {

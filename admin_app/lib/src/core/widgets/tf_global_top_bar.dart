@@ -119,15 +119,19 @@ class TfGlobalTopBar extends StatelessWidget {
         ),
       );
     } else if (shellNav != null) {
+      // 54px hit box (+10 over the 44px visual box) — icon stays 24px.
       leading = GestureDetector(
         onTap: shellNav.openDrawer,
+        behavior: HitTestBehavior.opaque,
         child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(
-            Icons.menu_rounded,
-            size: 24,
-            color: isBlue ? PosColors.accentInk : PosColors.slate,
+          width: 54,
+          height: 54,
+          child: Center(
+            child: Icon(
+              Icons.menu_rounded,
+              size: 24,
+              color: isBlue ? PosColors.accentInk : PosColors.slate,
+            ),
           ),
         ),
       );

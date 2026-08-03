@@ -511,7 +511,6 @@ class _MenuLineCustomizerDialogState extends State<_MenuLineCustomizerDialog> {
 
   String _optionLabel(MenuLineOption option) {
     if (!option.hasPriceDelta) return option.label;
-    final sign = option.priceDelta > 0 ? '+' : '';
-    return '${option.label} $sign${menuLineMoney(option.priceDelta)}';
+    return '${option.label} ${menuLineMoney(widget.item.price + option.priceDelta)}';
   }
 }

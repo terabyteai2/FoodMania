@@ -40,6 +40,7 @@ class MenuStep extends StatefulWidget {
     required this.onToggleFavorite,
     required this.onSetShortCode,
     this.categoryCounts,
+    this.categoryLabels,
     this.onSubmit,
     this.onResetFilters,
     this.title,
@@ -64,6 +65,10 @@ class MenuStep extends StatefulWidget {
   /// switches from the card grid to the short-code list (the ⚡ quick-pick mode).
   final bool codeMode;
   final Map<String, int>? categoryCounts;
+
+  /// Bilingual (en/bn) display names per category — chips show the active
+  /// language's name instead of the raw English category.
+  final Map<String, ({String en, String bn})>? categoryLabels;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onToggleCodeMode;
   final ValueChanged<String> onCodeSubmit;
@@ -125,15 +130,16 @@ class _MenuStepState extends State<MenuStep> {
           ),
         ],
         if (!widget.codeMode) ...[
-          const SizedBox(height: PosSpacing.sp2),
+          const SizedBox(height: PosSpacing.sp3),
           CategoryChips(
             categories: widget.categories,
             selected: widget.selectedCategory,
             counts: widget.categoryCounts,
+            categoryLabels: widget.categoryLabels,
             onSelected: widget.onCategorySelected,
           ),
         ],
-        const SizedBox(height: PosSpacing.sp2),
+        const SizedBox(height: PosSpacing.sp3),
         Expanded(
           child: widget.codeMode
               ? _ShortCodeList(
@@ -152,7 +158,7 @@ class _MenuStepState extends State<MenuStep> {
                   onResetFilters: widget.onResetFilters,
                 ),
         ),
-        CartFooter(onSubmit: widget.onSubmit),
+        CartFooter(total: widget.total, onSubmit: widget.onSubmit),
       ],
     );
   }
@@ -344,18 +350,40 @@ class _MenuSearchBarState extends State<_MenuSearchBar> {
 
 // ── Category segmented bar ──
 
+/// Bilingual display names for every distinct category present in [items],
+/// keyed by the canonical category string. Follows the same fallback chain as
+/// [MenuItem.localizedCategory] so chips show Bengali in bn mode.
+Map<String, ({String en, String bn})> categoryLabelsFor(
+  List<MenuItem> items,
+) {
+  final labels = <String, ({String en, String bn})>{};
+  for (final item in items) {
+    final key = item.category;
+    if (labels.containsKey(key)) continue;
+    final en = item.categoryEn.trim();
+    final bn = item.categoryBn.trim();
+    labels[key] = (
+      en: en.isNotEmpty ? en : (bn.isNotEmpty ? bn : key),
+      bn: bn.isNotEmpty ? bn : (en.isNotEmpty ? en : key),
+    );
+  }
+  return labels;
+}
+
 class CategoryChips extends StatelessWidget {
   const CategoryChips({
     required this.categories,
     required this.selected,
     required this.onSelected,
     this.counts,
+    this.categoryLabels,
     super.key,
   });
 
   final List<String> categories;
   final String selected;
   final Map<String, int>? counts;
+  final Map<String, ({String en, String bn})>? categoryLabels;
   final ValueChanged<String> onSelected;
 
   @override
@@ -369,7 +397,9 @@ class CategoryChips extends StatelessWidget {
           for (var i = 0; i < categories.length; i++) ...[
             if (i > 0) const SizedBox(width: PosSpacing.sp2),
             TfChip(
-              label: categories[i] == 'All' ? text.categoryAll : categories[i],
+              label: categories[i] == 'All'
+                  ? text.categoryAll
+                  : _chipLabel(categories[i], text.isBn),
               count: counts?[categories[i]],
               active: categories[i] == selected,
               small: true,
@@ -382,6 +412,12 @@ class CategoryChips extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _chipLabel(String key, bool isBn) {
+    final entry = categoryLabels?[key];
+    if (entry == null) return key;
+    return isBn ? entry.bn : entry.en;
   }
 }
 
@@ -445,7 +481,7 @@ class _MenuContent extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
             PosSpacing.sp4,
-            PosSpacing.sp1,
+            0,
             PosSpacing.sp4,
             PosDensity.sectionGap,
           ),
@@ -967,8 +1003,9 @@ class ItemImage extends StatelessWidget {
 // ── Cart footer (white bar, single "Review order" primary button) ──
 
 class CartFooter extends StatelessWidget {
-  const CartFooter({this.onSubmit, super.key});
+  const CartFooter({required this.total, this.onSubmit, super.key});
 
+  final double total;
   final VoidCallback? onSubmit;
 
   @override
@@ -976,8 +1013,7 @@ class CartFooter extends StatelessWidget {
     final text = AppScope.of(context).strings;
     return TfStickyCTA(
       child: TfButton(
-        label: text.reviewOrder,
-        icon: TfNavIcon.check,
+        label: '${text.reviewOrder} · ${tfFormatCurrency(context, total)}',
         size: TfButtonSize.lg,
         onPressed: onSubmit,
       ),
@@ -1203,6 +1239,8 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                       _OptionBtn(
                         label: _options[i].name,
                         priceDelta: _options[i].priceDelta,
+                        totalPrice:
+                            widget.item.price + _options[i].priceDelta,
                         selected: _selectedOptionIdx == i,
                         isRadio: true,
                         onTap: () => setState(() => _selectedOptionIdx = i),
@@ -1371,10 +1409,12 @@ class _OptionBtn extends StatelessWidget {
     required this.selected,
     required this.isRadio,
     required this.onTap,
+    this.totalPrice,
   });
 
   final String label;
   final double priceDelta;
+  final double? totalPrice;
   final bool selected;
   final bool
   isRadio; // true = circular radio indicator, false = square checkbox
@@ -1430,7 +1470,15 @@ class _OptionBtn extends StatelessWidget {
                 ),
               ),
             ),
-            if (priceDelta > 0.005) ...[
+            if (totalPrice != null) ...[
+              const SizedBox(width: 8),
+              TfText(
+                tfFormatCurrency(context, totalPrice!),
+                style: TfTextStyles.rowMoney.copyWith(
+                  color: PosColors.accentStrong,
+                ),
+              ),
+            ] else if (priceDelta > 0.005) ...[
               const SizedBox(width: 8),
               TfText(
                 '+${tfFormatCurrency(context, priceDelta)}',

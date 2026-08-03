@@ -15,6 +15,7 @@ import 'package:uuid/uuid.dart';
 import 'core/constants/cloud_defaults.dart';
 import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
+import 'core/theme/category_tints.dart';
 import 'core/utils/bounded_string_set.dart';
 import 'models/account_role.dart';
 import 'models/admin_blocking_notice.dart';
@@ -86,6 +87,16 @@ enum AppThemePreference {
   static AppThemePreference parse(String? _) {
     return AppThemePreference.white;
   }
+}
+
+/// Where the in-app update stands relative to its silent background download.
+/// The update prompt is only shown once the APK has been fully downloaded
+/// (phase == [AppUpdatePhase.ready]).
+enum AppUpdatePhase {
+  idle,
+  downloading,
+  ready,
+  failed,
 }
 
 /// Initial slice of orders pulled into memory on reload — newest first.
@@ -368,11 +379,13 @@ class PosAppController extends ChangeNotifier {
   bool appUpdateBusy = false;
   String appUpdateStatus = '';
   String? appUpdateError;
+  AppUpdatePhase appUpdatePhase = AppUpdatePhase.idle;
   FacebookChatbotConfig? facebookChatbotConfig;
   bool facebookChatbotLoading = false;
   String? facebookChatbotError;
   int _dismissedAppUpdateVersionCode = 0;
   AppUpdateInfo? _appUpdateWaitingForPermission;
+  String? _cachedApkPath;
   bool _checkingForAppUpdate = false;
   bool _checkingAdminBlockingNotice = false;
   AdminBlockingNotice? adminBlockingNotice;
@@ -539,6 +552,10 @@ class PosAppController extends ChangeNotifier {
       if (_appUpdateWaitingForPermission != null) {
         unawaited(_resumeAppUpdateAfterPermission());
       }
+      final pending = pendingAppUpdate;
+      if (pending != null && appUpdatePhase == AppUpdatePhase.failed) {
+        unawaited(_predownloadAppUpdate(pending));
+      }
       unawaited(syncService.syncNow());
       unawaited(syncSubscriptionAccessFromCloud());
       unawaited(checkForAppUpdate());
@@ -580,6 +597,9 @@ class PosAppController extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       final preferences = await SharedPreferences.getInstance();
+      // Random category palette assignments must be in memory before the
+      // first frame so the add-items tints don't flash the name-keyed colors.
+      await CategoryPaletteAssigner.instance.ensureLoaded();
       hasSeenIntro = preferences.getBool(_seenIntroKey) ?? false;
       bkashPaymentVerified =
           preferences.getBool(_bkashPaymentVerifiedKey) ??
@@ -2248,6 +2268,8 @@ class PosAppController extends ChangeNotifier {
       pendingAppUpdate = null;
       appUpdateError = null;
       appUpdateStatus = '';
+      appUpdatePhase = AppUpdatePhase.idle;
+      unawaited(_clearCachedApk());
       notifyListeners();
       return;
     }
@@ -2415,6 +2437,8 @@ class PosAppController extends ChangeNotifier {
       if (pendingAppUpdate?.versionCode == update.versionCode ||
           !update.enabled) {
         pendingAppUpdate = null;
+        appUpdatePhase = AppUpdatePhase.idle;
+        unawaited(_clearCachedApk());
         notifyListeners();
       }
       return;
@@ -2424,10 +2448,69 @@ class PosAppController extends ChangeNotifier {
       return;
     }
     if (pendingAppUpdate?.versionCode == update.versionCode) return;
+    final hadPending = pendingAppUpdate != null;
     pendingAppUpdate = update;
     appUpdateError = null;
     appUpdateStatus = '';
     notifyListeners();
+    if (hadPending) {
+      await _clearCachedApk();
+    }
+    unawaited(_predownloadAppUpdate(update));
+  }
+
+  /// Silently downloads the APK for a pending update. The prompt is only shown
+  /// once the file is fully on disk; failures retry on the next app resume.
+  Future<void> _predownloadAppUpdate(AppUpdateInfo update) async {
+    if (appUpdatePhase == AppUpdatePhase.downloading ||
+        appUpdateBusy ||
+        pendingAppUpdate?.versionCode != update.versionCode) {
+      return;
+    }
+    appUpdatePhase = AppUpdatePhase.downloading;
+    notifyListeners();
+    try {
+      final existing = File(
+        '${(await getTemporaryDirectory()).path}/'
+        'quickbites-admin-${update.versionCode}.apk',
+      );
+      final path =
+          await existing.exists() ? existing.path : await appUpdateInstaller
+              .downloadApk(update);
+      if (pendingAppUpdate?.versionCode != update.versionCode) return;
+      _cachedApkPath = path;
+      appUpdatePhase = AppUpdatePhase.ready;
+      notifyListeners();
+      debugPrint('[QB-UPDATE] background download ready: $path');
+    } catch (error) {
+      if (pendingAppUpdate?.versionCode != update.versionCode) return;
+      appUpdatePhase = AppUpdatePhase.failed;
+      notifyListeners();
+      debugPrint('[QB-UPDATE] background download failed: $error');
+    }
+  }
+
+  Future<void> _clearCachedApk() async {
+    final cached = _cachedApkPath;
+    _cachedApkPath = null;
+    if (cached != null) {
+      try {
+        await File(cached).delete();
+      } catch (_) {}
+    }
+    final directory = await getTemporaryDirectory();
+    final stale = Directory(directory.path)
+        .listSync()
+        .whereType<File>()
+        .where((file) =>
+            file.path.startsWith('quickbites-admin-') &&
+            file.path.endsWith('.apk'))
+        .toList();
+    for (final file in stale) {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
   }
 
   Future<void> dismissAppUpdate(AppUpdateInfo update) async {
@@ -2436,6 +2519,8 @@ class PosAppController extends ChangeNotifier {
     pendingAppUpdate = null;
     appUpdateError = null;
     appUpdateStatus = '';
+    appUpdatePhase = AppUpdatePhase.idle;
+    await _clearCachedApk();
     final preferences = await SharedPreferences.getInstance();
     await preferences.setInt(
       _dismissedAppUpdateVersionCodeKey,
@@ -2460,7 +2545,7 @@ class PosAppController extends ChangeNotifier {
         await appUpdateInstaller.openInstallPermissionSettings();
         return;
       }
-      await _downloadAndOpenAppUpdate(update);
+      await _openAppUpdateInstaller(update);
     } catch (error) {
       appUpdateError = error.toString().replaceFirst('Exception: ', '');
       appUpdateStatus = '';
@@ -2483,7 +2568,21 @@ class PosAppController extends ChangeNotifier {
     await startAppUpdate(update);
   }
 
-  Future<void> _downloadAndOpenAppUpdate(AppUpdateInfo update) async {
+  Future<void> _openAppUpdateInstaller(AppUpdateInfo update) async {
+    final cached = _cachedApkPath;
+    if (cached != null &&
+        cached.endsWith('-${update.versionCode}.apk') &&
+        await File(cached).exists()) {
+      appUpdateStatus = strings.appUpdateOpeningInstaller;
+      notifyListeners();
+      await appUpdateInstaller.installApk(cached);
+      pendingAppUpdate = null;
+      appUpdateStatus = '';
+      appUpdateBusy = false;
+      appUpdatePhase = AppUpdatePhase.idle;
+      notifyListeners();
+      return;
+    }
     appUpdateStatus = strings.appUpdateDownloading;
     notifyListeners();
     final path = await appUpdateInstaller.downloadApk(update);
@@ -2737,6 +2836,8 @@ class PosAppController extends ChangeNotifier {
     _appUpdateWaitingForPermission = null;
     appUpdateError = null;
     appUpdateStatus = '';
+    appUpdatePhase = AppUpdatePhase.idle;
+    unawaited(_clearCachedApk());
     _registeredFcmToken = null;
     _registeredPushOutletId = null;
     _clearOrderAlertTracking();

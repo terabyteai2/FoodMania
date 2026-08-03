@@ -3434,13 +3434,14 @@ class _NewOrderPageState extends State<_NewOrderPage> {
 
   // ── Menu memo ──────────────────────────────────────────────────────────
   // The menu only changes when the controller replaces the list wholesale
-  // (same identity signal the AppModel uses), so the favourite/popularity sort,
-  // the category list, and the per-item lowercased search blob are computed
-  // once per menu identity instead of on every build/keystroke.
+  // (same identity signal the AppModel uses), so the grid popularity/category
+  // sort, the category list, and the per-item lowercased search blob are
+  // computed once per menu identity instead of on every build/keystroke.
   List<MenuItem>? _menuMemoKey;
   Map<String, int>? _popularityMemoKey;
   List<MenuItem> _sortedMenu = const [];
   List<String> _categoriesMemo = const ['All'];
+  Map<String, ({String en, String bn})> _categoryLabelsMemo = const {};
   Map<String, String> _searchBlobs = const {};
 
   void _ensureMenuMemo() {
@@ -3450,23 +3451,40 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     }
     _menuMemoKey = widget.menuItems;
     _popularityMemoKey = widget.itemPopularity;
-    // Favourites float to the top, then by all-time popularity. Filtering
-    // below preserves this order, so we never re-sort per keystroke.
-    _sortedMenu = [...widget.menuItems]
+    // Grid order: favourites first, then the 10 most popular items (by
+    // all-time score), then everything else grouped by category (alphabetical,
+    // popularity within each category). Filtering below preserves this order,
+    // so we never re-sort per keystroke.
+    final popularitySorted = [...widget.menuItems]
       ..sort((a, b) {
-        if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+        final byPop =
+            (widget.itemPopularity[b.id] ?? 0)
+                .compareTo(widget.itemPopularity[a.id] ?? 0);
+        if (byPop != 0) return byPop;
+        return a.name.compareTo(b.name);
+      });
+    final nonFavorites = popularitySorted
+        .where((i) => !i.isFavorite)
+        .toList(growable: false);
+    final top10 = nonFavorites.take(10).map((i) => i.id).toSet();
+    final rest = [...nonFavorites]
+      ..sort((a, b) {
+        final byCategory = a.category.compareTo(b.category);
+        if (byCategory != 0) return byCategory;
         final aPop = widget.itemPopularity[a.id] ?? 0;
         final bPop = widget.itemPopularity[b.id] ?? 0;
-        return bPop.compareTo(aPop);
+        if (aPop != bPop) return bPop.compareTo(aPop);
+        return a.name.compareTo(b.name);
       });
-    final catPopularity = <String, int>{};
-    for (final item in widget.menuItems) {
-      catPopularity[item.category] =
-          (catPopularity[item.category] ?? 0) + (widget.itemPopularity[item.id] ?? 0);
-    }
+    _sortedMenu = [
+      ...popularitySorted.where((i) => i.isFavorite),
+      ...popularitySorted.where((i) => top10.contains(i.id)),
+      ...rest.where((i) => !top10.contains(i.id)),
+    ];
     final cats = widget.menuItems.map((i) => i.category).toSet().toList()
-      ..sort((a, b) => (catPopularity[b] ?? 0).compareTo(catPopularity[a] ?? 0));
+      ..sort((a, b) => a.compareTo(b));
     _categoriesMemo = ['All', ...cats];
+    _categoryLabelsMemo = categoryLabelsFor(widget.menuItems);
     // A stale category selection (menu edited/synced since) would filter
     // EVERYTHING out and leave an inexplicably empty grid — fall back to All.
     if (_selectedCategory != '' &&
@@ -3797,6 +3815,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                   MenuStep(
                     visibleItems: _visibleItems,
                     categories: _categories,
+                    categoryLabels: _categoryLabelsMemo,
                     selectedCategory: _selectedCategory,
                     cart: cartQtyByItemId,
                     lineCount: _cartLines.length,
@@ -4420,7 +4439,6 @@ class _ReviewStep extends StatelessWidget {
               final hasDiscount = discount > 0.005;
               final action = TfButton(
                 label: creating ? '...' : text.sendToKitchen,
-                icon: creating ? null : TfNavIcon.check,
                 size: TfButtonSize.lg,
                 onPressed: creating ? null : () => onCreate(),
               );
