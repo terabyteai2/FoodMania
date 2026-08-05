@@ -2453,6 +2453,8 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _discountCtrl;
   _EditDiscountKind _discountKind = _EditDiscountKind.none;
+  bool _discountRevealed = false;
+  bool _discountAutofocus = false;
 
   // Working copy of the order's items, keyed by menuItemId.
   final Map<String, int> _itemQty = <String, int>{};
@@ -2478,6 +2480,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
     _phoneCtrl = TextEditingController(text: order.mobileNumber ?? '');
     final discountLabel = (order.discountLabel ?? '').trim();
     if (order.discountAmount > 0) {
+      _discountRevealed = true;
       _discountKind = discountLabel.endsWith('%')
           ? _EditDiscountKind.percent
           : _EditDiscountKind.flat;
@@ -2719,56 +2722,69 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                       ),
                     ),
                   ),
+                  if (!_discountRevealed)
+                    TextButton.icon(
+                      onPressed: () => setState(() {
+                        _discountRevealed = true;
+                        _discountKind = _EditDiscountKind.flat;
+                        _discountAutofocus = true;
+                      }),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: TfText(
+                        text.isBn ? 'ছাড় যোগ করুন' : 'Add discount',
+                      ),
+                    ),
                 ],
               ),
-              const SizedBox(height: PosDensity.gridGap),
-              Row(
-                children: [
-                  Expanded(
-                    child: TfChip(
-                      label: text.isBn ? '৳ ফ্ল্যাট' : '৳ Flat',
-                      active: _discountKind == _EditDiscountKind.flat,
-                      onTap: () => setState(() {
-                        _discountKind = _discountKind == _EditDiscountKind.flat
-                            ? _EditDiscountKind.none
-                            : _EditDiscountKind.flat;
-                      }),
+              if (_discountRevealed) ...[
+                const SizedBox(height: PosDensity.gridGap),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TfField(
+                        label: text.isBn ? 'ছাড়ের পরিমাণ' : 'Discount value',
+                        controller: _discountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        autofocus: _discountAutofocus,
+                        onChanged: (_) => setState(() {}),
+                        hint: _discountKind == _EditDiscountKind.percent
+                            ? '10'
+                            : '50',
+                        hintBn: _discountKind == _EditDiscountKind.percent
+                            ? '১০'
+                            : '৫০',
+                        errorText: _discountError(text),
+                        hintHelper: _computedDiscount > 0
+                            ? '−${tfFormatCurrency(context, _computedDiscount, decimalDigits: 2)}'
+                            : null,
+                        suffix: _DiscountKindMenu(
+                          kind: _discountKind,
+                          onSelected: (kind) =>
+                              setState(() => _discountKind = kind),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: PosDensity.gridGap),
-                  Expanded(
-                    child: TfChip(
-                      label: text.isBn ? '% শতাংশ' : '% Percent',
-                      active: _discountKind == _EditDiscountKind.percent,
-                      onTap: () => setState(() {
-                        _discountKind =
-                            _discountKind == _EditDiscountKind.percent
-                            ? _EditDiscountKind.none
-                            : _EditDiscountKind.percent;
-                      }),
+                    const SizedBox(width: PosSpacing.sp1),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 26),
+                      child: IconButton(
+                        onPressed: () => setState(() {
+                          _discountRevealed = false;
+                          _discountAutofocus = false;
+                          _discountKind = _EditDiscountKind.none;
+                          _discountCtrl.clear();
+                        }),
+                        icon: const Icon(Icons.close_rounded),
+                        color: PosColors.muted,
+                        tooltip: text.isBn
+                            ? 'ডিসকাউন্ট সরান'
+                            : 'Remove discount',
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              if (_discountKind != _EditDiscountKind.none) ...[
-                const SizedBox(height: PosDensity.sectionGap),
-                TfField(
-                  label: text.isBn ? 'ছাড়ের পরিমাণ' : 'Discount value',
-                  controller: _discountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                  hint: _discountKind == _EditDiscountKind.percent
-                      ? '10'
-                      : '50',
-                  hintBn: _discountKind == _EditDiscountKind.percent
-                      ? '১০'
-                      : '৫০',
-                  errorText: _discountError(text),
-                  hintHelper: _computedDiscount > 0
-                      ? '−${tfFormatCurrency(context, _computedDiscount, decimalDigits: 2)}'
-                      : null,
+                  ],
                 ),
               ],
               const SizedBox(height: PosSpacing.sp4),
@@ -3056,6 +3072,56 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Discount kind dropdown (inline suffix of the edit-order discount field)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DiscountKindMenu extends StatelessWidget {
+  const _DiscountKindMenu({required this.kind, required this.onSelected});
+
+  final _EditDiscountKind kind;
+  final ValueChanged<_EditDiscountKind> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    final isPercent = kind == _EditDiscountKind.percent;
+    return PopupMenuButton<_EditDiscountKind>(
+      tooltip: text.isBn ? 'ছাড়ের ধরন' : 'Discount type',
+      onSelected: onSelected,
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: _EditDiscountKind.flat,
+          child: TfText(text.isBn ? '৳ ফ্ল্যাট (টাকা)' : '৳ Flat (BDT)'),
+        ),
+        PopupMenuItem(
+          value: _EditDiscountKind.percent,
+          child: TfText(text.isBn ? '% শতাংশ' : '% Percent off'),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TfText(
+              isPercent ? '%' : '৳',
+              style: TfTextStyles.label.copyWith(
+                fontFamily: tfFontFamily(context),
+                color: PosColors.primary,
+              ),
+            ),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              color: PosColors.primary,
+            ),
+          ],
         ),
       ),
     );

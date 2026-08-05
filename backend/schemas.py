@@ -330,6 +330,9 @@ class OrderDetailsUpdate(BaseModel):
     customerName: str | None = None
     deliveryAddress: str | None = None
     mobileNumber: str | None = None
+    discountLabel: str | None = None
+    discountAmount: float | None = Field(default=None, ge=0)
+    clearDiscount: bool = False
     updatedAt: str | None = None
 
 

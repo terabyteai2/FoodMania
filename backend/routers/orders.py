@@ -412,6 +412,12 @@ async def update_order_details(
         order.delivery_address = (body.deliveryAddress or "").strip() or None
     if body.mobileNumber is not None:
         order.mobile_number = (body.mobileNumber or "").strip() or None
+    if body.clearDiscount:
+        order.discount_label = None
+        order.discount_amount = 0
+    elif body.discountAmount is not None:
+        order.discount_label = (body.discountLabel or "").strip() or None
+        order.discount_amount = body.discountAmount
     order.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(order)

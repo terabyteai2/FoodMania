@@ -53,3 +53,6 @@ yarn-debug.log*
 yarn-error.log*
 cloudflared.log
 ngrok.log
+
+# ---------- Tooling scratch (local scripts & outputs) ----------
+tools/
