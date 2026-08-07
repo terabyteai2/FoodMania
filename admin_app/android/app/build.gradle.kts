@@ -17,7 +17,7 @@ val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
 }
 val posTerminalMinSdk = 23
-val phoneMinSdk = 29
+val phoneMinSdk = 24
 val isPosTerminalBuild =
     providers.gradleProperty("posTerminalBuild").orNull.toBoolean() ||
         System.getenv("POS_TERMINAL_BUILD").orEmpty().let {
