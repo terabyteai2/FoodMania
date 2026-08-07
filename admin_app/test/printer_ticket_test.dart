@@ -110,6 +110,91 @@ void main() {
     },
   );
 
+  test(
+    'receipt total reflects a discount on an unsettled mobile order',
+    () async {
+      final order = OrderModel(
+        id: 'order-discount-mobile',
+        orderNo: 'ORD-DISC',
+        sequenceNo: 32,
+        status: OrderStatus.accepted,
+        source: OrderSource.manual,
+        subtotal: 700,
+        vatRatePercent: 0,
+        vatAmount: 0,
+        discountLabel: 'Staff 50',
+        discountAmount: 50,
+        total: 700,
+        createdAt: DateTime(2026, 5, 24, 14, 0),
+        updatedAt: DateTime(2026, 5, 24, 14, 0),
+        items: [
+          OrderItem(
+            id: 'line-disc',
+            orderId: 'order-discount-mobile',
+            menuItemId: 'burger-disc',
+            name: 'Discount Burger',
+            nameEn: 'Discount Burger',
+            qty: 1,
+            price: 700,
+            lineTotal: 700,
+          ),
+        ],
+      );
+
+      final ticket = await PrinterService().previewTicket(
+        order,
+        restaurantName: 'Helium',
+        language: AppLanguage.en,
+      );
+
+      expect(ticket, contains('Discount'));
+      expect(ticket, contains('-50/-'));
+      expect(ticket, contains('700/-'));
+      expect(ticket, contains('650/-'));
+    },
+  );
+
+  test('receipt keeps the folded total of a settled desktop order', () async {
+    final order = OrderModel(
+      id: 'order-discount-settled',
+      orderNo: 'ORD-SETTLED',
+      sequenceNo: 33,
+      status: OrderStatus.served,
+      source: OrderSource.desktopPos,
+      subtotal: 700,
+      vatRatePercent: 0,
+      vatAmount: 0,
+      discountLabel: 'Staff 50',
+      discountAmount: 50,
+      total: 650,
+      settledAt: DateTime(2026, 5, 24, 14, 30),
+      createdAt: DateTime(2026, 5, 24, 14, 0),
+      updatedAt: DateTime(2026, 5, 24, 14, 30),
+      items: [
+        OrderItem(
+          id: 'line-settled',
+          orderId: 'order-discount-settled',
+          menuItemId: 'burger-settled',
+          name: 'Settled Burger',
+          nameEn: 'Settled Burger',
+          qty: 1,
+          price: 700,
+          lineTotal: 700,
+        ),
+      ],
+    );
+
+    final ticket = await PrinterService().previewTicket(
+      order,
+      restaurantName: 'Helium',
+      language: AppLanguage.en,
+    );
+
+    expect(ticket, contains('Discount'));
+    expect(ticket, contains('-50/-'));
+    expect(ticket, contains('650/-'));
+  });
+
   test('bitmap renderer targets 58mm printable width', () {
     expect(TicketBitmapRenderer.debugPrintableWidth, 384);
   });

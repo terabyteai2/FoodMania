@@ -23,6 +23,10 @@ from services.push_notifications import send_order_push
 
 router = APIRouter()
 
+# Orders are grouped by the restaurant's local (Bangladesh) business day,
+# matching the convention used by the dashboard.
+BDT_OFFSET = timedelta(hours=6)
+
 
 def _ensure_outlet(current_outlet: str, outlet_id: str) -> None:
     if current_outlet != outlet_id:
@@ -116,6 +120,18 @@ def _parse_since(value: str) -> datetime:
     return dt
 
 
+def _parse_client_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # Older Flutter builds send local ISO strings without timezone; treat
+    # them as UTC to keep comparisons deterministic.
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+
 @router.get("/outlets/{outlet_id}/orders")
 async def pull_orders(
     outlet_id: str,
@@ -196,7 +212,17 @@ async def push_order(
             )
 
     now = datetime.now(timezone.utc)
-    today = now.date()
+    # Offline devices sync queued orders in a burst once they reconnect. The
+    # client-supplied createdAt carries the true local creation time; honor it
+    # so synced history keeps its real timestamps instead of the sync moment.
+    created_at = _parse_client_iso(body.createdAt)
+    if created_at is None:
+        created_at = now
+    elif created_at > now + timedelta(seconds=30):
+        # Guard against client clock skew / future timestamps.
+        created_at = now
+    # Order is billed under the restaurant's local (Bangladesh) business day.
+    today = (created_at + BDT_OFFSET).date()
     # Effective role is the desktop account's role when present (desktop POS),
     # otherwise the client-supplied role. Used for source-aware serial grouping.
     effective_role = desktop_account.role if desktop_account else created_by_role
@@ -244,12 +270,8 @@ async def push_order(
         service_charge_amount=body.serviceChargeAmount or 0,
         billing_snapshot=body.billingSnapshot or {},
         kot_batches=body.kotBatches or [],
-        settled_at=(
-            datetime.fromisoformat(body.settledAt.replace("Z", "+00:00"))
-            if body.settledAt
-            else None
-        ),
-        created_at=now,
+        settled_at=_parse_client_iso(body.settledAt),
+        created_at=created_at,
         updated_at=now,
     )
     db.add(order)

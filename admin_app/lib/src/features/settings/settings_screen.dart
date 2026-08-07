@@ -12,6 +12,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/shell_nav_scope.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/subscription_gate_card.dart';
 import '../../models/facebook_chatbot_config.dart';
@@ -128,6 +129,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.groups_outlined,
                   onTap: _openStaff,
                 ),
+                _SettingActionData(
+                  title: 'Help & Guide',
+                  subtitle: 'Replay the app walkthrough',
+                  icon: Icons.tour_outlined,
+                  onTap: () =>
+                      ShellNavScope.maybeOf(context)?.startGuidedTour.call(),
+                ),
               ],
             ),
             _SettingsGroupData(
@@ -228,6 +236,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? text.connected
                       : text.connect,
                   onTap: _openReceiptPrinter,
+                ),
+                _SettingActionData(
+                  title: 'Help & Guide',
+                  subtitle: 'Replay the app walkthrough',
+                  icon: Icons.tour_outlined,
+                  onTap: () =>
+                      ShellNavScope.maybeOf(context)?.startGuidedTour.call(),
                 ),
               ],
             ),

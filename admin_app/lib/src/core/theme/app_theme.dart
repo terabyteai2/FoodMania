@@ -77,6 +77,10 @@ class PosColors {
   static const Color track = Color(0xFFF1F3F6);
   static const Color trackInk = Color(0x241B2330);
 
+  // ── Guided-tour overlay (DESIGN.md §5.11) ──────────────────────────────
+  // Navy scrim at ~80% behind the spotlight cutout.
+  static const Color tourScrim = Color(0xCC1E2A44);
+
   // ── Secondary text ──────────────────────────────────────────────────────
   static const Color ink2 = Color(0xFF5A6475); // ink-2 (labels)
   static const Color muted = Color(0xFF8A93A3); // muted

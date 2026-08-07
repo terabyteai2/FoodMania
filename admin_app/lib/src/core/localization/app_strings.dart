@@ -1129,6 +1129,10 @@ class AppStrings {
   String get menuScanAddPage => isBn ? 'পেজ যোগ করুন' : 'Add page';
   String get menuScanFailed =>
       isBn ? 'মেনু স্ক্যান করা যায়নি' : 'Could not scan menu';
+  String get menuScanSubmittedTitle => isBn ? 'ধন্যবাদ!' : 'Thanks!';
+  String get menuScanSubmittedBody => isBn
+      ? 'আপনার মেনুর ছবি পেয়েছি। প্রায় এক মিনিটের মধ্যে আপনার মেনু প্রস্তুত হয়ে যাবে।'
+      : 'Your menu photos are in. We\'ll have your menu ready in about a minute.';
   String menuScanPageDone(int page, int total, int created) => isBn
       ? 'মেনু স্ক্যান: পৃষ্ঠা ${_n(page)}/${_n(total)} — ${_n(created)} টি আইটেম যোগ হয়েছে'
       : 'Menu scan: page $page of $total — $created item${created == 1 ? '' : 's'} added';

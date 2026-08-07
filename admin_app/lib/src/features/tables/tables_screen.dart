@@ -8,6 +8,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/menu_item.dart';
@@ -228,36 +229,39 @@ class _DineInGrid extends StatelessWidget {
         ),
         const SizedBox(height: PosDensity.gridGap),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.only(bottom: PosSpacing.sp2),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: PosDensity.gridGap,
-              crossAxisSpacing: PosDensity.gridGap,
-              childAspectRatio: PosDensity.tileTableAspect,
+          child: TourSpot(
+            name: 'tables.grid',
+            child: GridView.builder(
+              padding: const EdgeInsets.only(bottom: PosSpacing.sp2),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: PosDensity.gridGap,
+                crossAxisSpacing: PosDensity.gridGap,
+                childAspectRatio: PosDensity.tileTableAspect,
+              ),
+              itemCount: tableCount,
+              itemBuilder: (_, i) {
+                final label = 'T${i + 1}';
+                final order = byTable[label];
+                return PosTableCell(
+                  label: label,
+                  order: order,
+                  onTap: () {
+                    if (order != null) {
+                      openEditOrderSheet(context, order);
+                    } else {
+                      openNewOrderForm(
+                        context,
+                        onCreated: onNavigateToOrders,
+                        initialServiceType: OrderServiceType.dineIn,
+                        initialTableNo: '${i + 1}',
+                        startAtMenu: true,
+                      );
+                    }
+                  },
+                );
+              },
             ),
-            itemCount: tableCount,
-            itemBuilder: (_, i) {
-              final label = 'T${i + 1}';
-              final order = byTable[label];
-              return PosTableCell(
-                label: label,
-                order: order,
-                onTap: () {
-                  if (order != null) {
-                    openEditOrderSheet(context, order);
-                  } else {
-                    openNewOrderForm(
-                      context,
-                      onCreated: onNavigateToOrders,
-                      initialServiceType: OrderServiceType.dineIn,
-                      initialTableNo: '${i + 1}',
-                      startAtMenu: true,
-                    );
-                  }
-                },
-              );
-            },
           ),
         ),
       ],

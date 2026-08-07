@@ -11,10 +11,12 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/notification_center.dart';
 import 'core/widgets/screen_blocker.dart';
 import 'core/widgets/shell_nav_scope.dart';
+import 'core/widgets/guided_tour.dart';
 import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
 import 'models/account_role.dart';
+import 'models/order_status.dart';
 import 'services/cloud_api_service.dart';
 import 'features/analytics/analytics_screen.dart';
 import 'features/desktop_pos/desktop_pos_shell.dart';
@@ -425,6 +427,161 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
+// Guided-tour copy and step builder. The walkthrough adapts to the account's
+// state at launch: an empty menu gets a sidebar → Menu → Scan-menu-card pass,
+// 20+ completed orders add a Sales Summary pointer, and the backoffice surface
+// gets Analytics/Reports pointers. Steps are only added for destinations the
+// role's sidebar actually contains; enter actions (open drawer / switch tab)
+// make every target reachable.
+const String _tourMenuTitle = 'Open the navigation menu';
+const String _tourMenuBody =
+    'Tap the menu icon to open the drawer — Menu, Stock, Reports, and '
+    'settings all live there.';
+const String _tourBellTitle = 'Notifications';
+const String _tourBellBody =
+    'New orders from Messenger and your website arrive here as '
+    'notifications, so you never miss a sale.';
+const String _tourAvatarTitle = 'Your profile & settings';
+const String _tourAvatarBody =
+    'Switch language, open printer settings, and sign out from your '
+    'profile menu.';
+
+/// Builds the adaptive guided-tour step list (English only — matches the
+/// existing walkthrough). [tabs] holds the role's sidebar destinations as
+/// [_AppTab] names; [actions] supplies per-step enter callbacks (open the
+/// drawer / switch tabs) so the overlay auto-navigates to each target.
+@visibleForTesting
+List<TourStep> buildTourSteps({
+  required List<String> tabs,
+  required bool noMenu,
+  required int completedOrders,
+  required bool canCreateOrders,
+  required Map<String, VoidCallback> actions,
+}) {
+  bool has(String tab) => tabs.contains(tab);
+  final ownerSurface = has('reports');
+  final waiterSurface = has('tables') && !has('stock');
+
+  // The intro points at the surface's landing content so every step has a
+  // cutout; a manager whose menu has no creatable items gets the hamburger
+  // (the FAB spot does not exist then).
+  final introSpot = ownerSurface
+      ? 'analytics.stats'
+      : waiterSurface
+          ? 'tables.grid'
+          : canCreateOrders
+              ? 'orders.newOrderFab'
+              : 'header.menu';
+
+  final steps = <TourStep>[
+    TourStep.spot(
+      spot: introSpot,
+      title: ownerSurface
+          ? 'Your day at a glance'
+          : waiterSurface
+              ? 'Your floor at a glance'
+              : 'Your orders, live',
+      body: ownerSurface
+          ? 'This is the analytics dashboard — gross sales, discounts, net '
+              'sales, collection, prep cost, and profit on one screen. The '
+              'headline cards show today\'s numbers first — tap any card to '
+              'drill into the detail.'
+          : waiterSurface
+              ? 'Tables shows every table in the restaurant. Tap a free table '
+                  'to seat guests and take their order.'
+              : 'Every new order appears here the moment it is placed — from '
+                  'tables, Messenger, or your website. Tap + to build an '
+                  'order: pick dine-in, parcel, or delivery, choose the '
+                  'items, and send it to the kitchen.',
+      shape: introSpot == 'orders.newOrderFab'
+          ? TourSpotlightShape.circle
+          : TourSpotlightShape.roundedRect,
+      onEnter: ownerSurface
+          ? actions['selectAnalytics']
+          : waiterSurface
+              ? actions['selectTables']
+              : canCreateOrders
+                  ? actions['selectOrders']
+                  : null,
+    ),
+    if (introSpot != 'header.menu')
+      TourStep.spot(
+        spot: 'header.menu',
+        title: _tourMenuTitle,
+        body: _tourMenuBody,
+      ),
+    TourStep.spot(
+      spot: 'header.bell',
+      title: _tourBellTitle,
+      body: _tourBellBody,
+    ),
+    TourStep.spot(
+      spot: 'header.avatar',
+      title: _tourAvatarTitle,
+      body: _tourAvatarBody,
+    ),
+  ];
+
+  // No menu yet → walk from the sidebar to the scan button.
+  if (noMenu && has('menu')) {
+    steps.add(
+      TourStep.spot(
+        spot: 'nav.menu',
+        title: 'Add your menu',
+        body: 'Your menu is empty. Open the Menu page to add your first '
+            'items.',
+        onEnter: actions['openDrawer'],
+      ),
+    );
+    steps.add(
+      TourStep.spot(
+        spot: 'menu.scanCta',
+        title: 'Scan menu card',
+        body: 'The fastest way to build a menu: photograph your printed card '
+            'and the app imports every item automatically.',
+        onEnter: actions['selectMenu'],
+      ),
+    );
+  }
+
+  // Backoffice surface → Analytics and Reports.
+  if (ownerSurface) {
+    steps.add(
+      TourStep.spot(
+        spot: 'nav.analytics',
+        title: 'Analytics',
+        body: 'Your day at a glance — gross sales, discounts, net sales, '
+            'collection, prep cost, and profit on one screen.',
+        onEnter: actions['openDrawer'],
+      ),
+    );
+    steps.add(
+      TourStep.spot(
+        spot: 'nav.reports',
+        title: 'Reports',
+        body: 'Download your performance report for any period — daily '
+            'sales, orders, and per-item totals.',
+        onEnter: actions['openDrawer'],
+      ),
+    );
+  }
+
+  // A full Completed tab → point at Sales Summary.
+  if (has('salesSummary') &&
+      completedOrders >= PosAppController.kGuidedTourCompletedThreshold) {
+    steps.add(
+      TourStep.spot(
+        spot: 'nav.salesSummary',
+        title: 'Sales Summary',
+        body: 'You have $completedOrders completed orders — review today\'s '
+            'takings in Sales Summary.',
+        onEnter: actions['openDrawer'],
+      ),
+    );
+  }
+  return steps;
+}
+
 class _MainShellState extends State<MainShell> {
   late _AppTab _selected;
   List<_AppTab> _currentTabOrder = _ownerTabOrder;
@@ -436,6 +593,60 @@ class _MainShellState extends State<MainShell> {
   int _receiptPrinterOpenRequest = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   OverlayEntry? _scanOverlay;
+  OverlayEntry? _tourOverlay;
+  AccountRole? _tourRole;
+  List<String> _tourCohorts = const [];
+  bool _useRail = false;
+
+  void _startGuidedTour() {
+    final app = AppScope.read(context);
+    _dismissGuidedTour();
+    _tourRole = app.accountRole;
+    _tourCohorts = app.pendingTourCohorts;
+    _tourOverlay = OverlayEntry(
+      builder: (_) => GuidedTourOverlay(
+        steps: _tourSteps(app),
+        onFinished: () {
+          unawaited(app.markGuidedTourDoneFor(_tourCohorts));
+          _scaffoldKey.currentState?.closeDrawer();
+          _dismissGuidedTour();
+        },
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_tourOverlay!);
+  }
+
+  /// Builds the adaptive step list from the current sidebar and domain state.
+  /// The enter actions auto-navigate: open the drawer on the phone surface
+  /// (the rail always shows the destinations), and select the tab each
+  /// screen-level target lives on.
+  List<TourStep> _tourSteps(PosAppController app) => buildTourSteps(
+    tabs: _currentTabOrder.map((t) => t.name).toList(growable: false),
+    noMenu: app.menuItems.isEmpty,
+    completedOrders: app.ordersFor(status: OrderStatus.completed).length,
+    canCreateOrders: app.menuItems.any((i) => i.isAvailable),
+    actions: {
+      'openDrawer': () {
+        if (!_useRail) _scaffoldKey.currentState?.openDrawer();
+      },
+      'selectMenu': () {
+        _scaffoldKey.currentState?.closeDrawer();
+        _selectTab(_AppTab.menu);
+      },
+      'selectAnalytics': () {
+        _scaffoldKey.currentState?.closeDrawer();
+        _selectTab(_AppTab.analytics);
+      },
+      'selectOrders': () => _selectTab(_AppTab.orders),
+      'selectTables': () => _selectTab(_AppTab.tables),
+    },
+  );
+
+  void _dismissGuidedTour() {
+    _tourOverlay?.remove();
+    _tourOverlay = null;
+    _tourRole = null;
+  }
 
   void _showScanOverlay(String message) {
     _hideScanOverlay();
@@ -502,6 +713,10 @@ class _MainShellState extends State<MainShell> {
     _selected = _ownerTabOrder[vi];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final app = AppScope.read(context);
+      // Snapshot the onboarding flags BEFORE onMounted consumes the landing
+      // flag — the tour must not stack on the onboarding-landing flow.
+      final onboardingLandingPending = app.pendingOnboardingLanding;
+      final onboardingMenuScanPending = app.pendingOnboardingMenuScan;
       app.systemNotifications.requestNotificationAccess();
       widget.onMounted?.call();
       // Handle FCM notification that launched the app (killed state).
@@ -514,6 +729,13 @@ class _MainShellState extends State<MainShell> {
       if (app.pendingOnboardingMenuScan) {
         app.pendingOnboardingMenuScan = false;
         _navigateOnboardingMenuScan(context, app);
+      }
+      // Auto-start the guided tour for every applicable, not-yet-shown pass
+      // (replayable from More hub).
+      if (!onboardingLandingPending &&
+          !onboardingMenuScanPending &&
+          app.pendingTourCohorts.isNotEmpty) {
+        _startGuidedTour();
       }
     });
   }
@@ -530,6 +752,7 @@ class _MainShellState extends State<MainShell> {
   @override
   void dispose() {
     _hideScanOverlay();
+    _dismissGuidedTour();
     _notificationToastDebounce?.cancel();
     super.dispose();
   }
@@ -548,6 +771,10 @@ class _MainShellState extends State<MainShell> {
     _currentTabOrder = _tabOrderForRole(app.accountRole);
     if (!_currentTabOrder.contains(_selected)) {
       _selected = _currentTabOrder.first;
+    }
+    // A role switch (More → demo role switcher) invalidates the active tour.
+    if (_tourOverlay != null && _tourRole != app.accountRole) {
+      _dismissGuidedTour();
     }
     _maybeShowNotification(app);
     _consumeFcmNavigation(app);
@@ -607,8 +834,21 @@ class _MainShellState extends State<MainShell> {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        final useRail = constraints.maxWidth >= 760;
-        if (!useRail) {
+        // Width changes (foldable resize, breakpoint crossings) remount the
+        // shell tree; re-resolve the tour's spotlight targets next frame so
+        // the cutout/tooltip follow the new header. Deferred post-frame: the
+        // overlay entry lives in the root overlay (not under this
+        // LayoutBuilder), so marking it dirty during the build phase would
+        // violate the framework's markNeedsBuild contract.
+        if (_tourOverlay != null && _tourOverlay!.mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_tourOverlay != null && _tourOverlay!.mounted) {
+              _tourOverlay!.markNeedsBuild();
+            }
+          });
+        }
+        _useRail = constraints.maxWidth >= 760;
+        if (!_useRail) {
           // Phone surface: Petpooja-style left drawer opened by a hamburger in
           // the shared header (the bottom nav has been retired). The drawer
           // lives on this outer Scaffold so it overlays every inner screen
@@ -628,6 +868,7 @@ class _MainShellState extends State<MainShell> {
               openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
               showScanOverlay: _showScanOverlay,
               hideScanOverlay: _hideScanOverlay,
+              startGuidedTour: _startGuidedTour,
               child: body,
             ),
           );
@@ -683,17 +924,21 @@ class _MainShellState extends State<MainShell> {
                     padding: EdgeInsets.fromLTRB(12, 18, 12, 22),
                     child: _RailFooter(extended: extended),
                   ),
-                  destinations: destinations
-                      .map((destination) {
-                        return NavigationRailDestination(
-                          icon: Icon(destination.icon),
-                          selectedIcon: Icon(destination.selectedIcon),
-                          label: Text(
-                            text.isBn ? destination.bnLabel : destination.label,
-                          ),
-                        );
-                      })
-                      .toList(growable: false),
+                  destinations: [
+                    for (var i = 0; i < tabOrder.length; i++)
+                      NavigationRailDestination(
+                        icon: TourSpot(
+                          name: 'nav.${tabOrder[i].name}',
+                          child: Icon(destinations[i].icon),
+                        ),
+                        selectedIcon: Icon(destinations[i].selectedIcon),
+                        label: Text(
+                          text.isBn
+                              ? destinations[i].bnLabel
+                              : destinations[i].label,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               Expanded(
@@ -701,6 +946,7 @@ class _MainShellState extends State<MainShell> {
                   openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                   showScanOverlay: _showScanOverlay,
                   hideScanOverlay: _hideScanOverlay,
+                  startGuidedTour: _startGuidedTour,
                   child: body,
                 ),
               ),
@@ -1281,6 +1527,7 @@ class _AppNavDrawer extends StatelessWidget {
             selected: tab == selected,
             isBn: isBn,
             onHeaderTap: () => goTab(tab),
+            spotName: 'nav.${tab.name}',
             initiallyExpanded: tab == selected,
             children: [
               _DrawerNavRow.icon(
@@ -1307,11 +1554,14 @@ class _AppNavDrawer extends StatelessWidget {
             ],
           );
         default:
-          return _DrawerNavRow.destination(
-            destination: _destinationFor(tab, text, isBackoffice: isBackoffice),
-            selected: tab == selected,
-            isBn: isBn,
-            onTap: () => goTab(tab),
+          return TourSpot(
+            name: 'nav.${tab.name}',
+            child: _DrawerNavRow.destination(
+              destination: _destinationFor(tab, text, isBackoffice: isBackoffice),
+              selected: tab == selected,
+              isBn: isBn,
+              onTap: () => goTab(tab),
+            ),
           );
       }
     }
@@ -1344,29 +1594,29 @@ class _AppNavDrawer extends StatelessWidget {
                 ],
               ),
             ),
-            // Owner-only Backoffice/Counter view switch at the bottom.
-            if (app.demoOwnerAccess)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  PosSpacing.sp4,
-                  PosSpacing.sp2,
-                  PosSpacing.sp4,
-                  PosSpacing.sp4,
-                ),
-                child: TfCompactRoleToggle(
-                  expand: true,
-                  role: app.accountRole.isOwner ? 'owner' : 'manager',
-                  options: [
-                    (text.managerRole, 'manager'),
-                    (text.backofficeLabel, 'owner'),
-                  ],
-                  onChanged: (value) => app.setAccountRoleDemo(
-                    value == 'owner'
-                        ? AccountRole.owner
-                        : AccountRole.manager,
-                  ),
+            // Manager/Owner "view as" switch — always available so any role
+            // can demo the backoffice/counter view.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                PosSpacing.sp4,
+                PosSpacing.sp2,
+                PosSpacing.sp4,
+                PosSpacing.sp4,
+              ),
+              child: TfCompactRoleToggle(
+                expand: true,
+                role: app.accountRole.isOwner ? 'owner' : 'manager',
+                options: [
+                  (text.managerRole, 'manager'),
+                  (text.backofficeLabel, 'owner'),
+                ],
+                onChanged: (value) => app.setAccountRoleDemo(
+                  value == 'owner'
+                      ? AccountRole.owner
+                      : AccountRole.manager,
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -1384,6 +1634,7 @@ class _DrawerNavGroup extends StatefulWidget {
     required this.isBn,
     required this.onHeaderTap,
     required this.children,
+    this.spotName,
     this.initiallyExpanded = false,
   });
 
@@ -1392,6 +1643,10 @@ class _DrawerNavGroup extends StatefulWidget {
   final bool isBn;
   final VoidCallback onHeaderTap;
   final List<Widget> children;
+
+  /// Optional guided-tour target name for the group's header row (e.g.
+  /// `nav.menu`); null disables the spot.
+  final String? spotName;
   final bool initiallyExpanded;
 
   @override
@@ -1411,38 +1666,41 @@ class _DrawerNavGroupState extends State<_DrawerNavGroup> {
 
   @override
   Widget build(BuildContext context) {
+    final header = Stack(
+      children: [
+        _DrawerNavRow.destination(
+          destination: widget.destination,
+          selected: widget.selected,
+          isBn: widget.isBn,
+          onTap: widget.onHeaderTap,
+        ),
+        Positioned(
+          right: PosSpacing.sp2,
+          top: 0,
+          bottom: 0,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _open = !_open),
+            child: SizedBox(
+              width: 44,
+              child: Icon(
+                _open
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 22,
+                color: PosColors.muted,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Stack(
-          children: [
-            _DrawerNavRow.destination(
-              destination: widget.destination,
-              selected: widget.selected,
-              isBn: widget.isBn,
-              onTap: widget.onHeaderTap,
-            ),
-            Positioned(
-              right: PosSpacing.sp2,
-              top: 0,
-              bottom: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _open = !_open),
-                child: SizedBox(
-                  width: 44,
-                  child: Icon(
-                    _open
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 22,
-                    color: PosColors.muted,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        widget.spotName == null
+            ? header
+            : TourSpot(name: widget.spotName!, child: header),
         AnimatedSize(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOutCubic,

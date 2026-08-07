@@ -2180,7 +2180,7 @@ class PrinterService {
       0,
       (total, item) => total + _lineTotalFor(item),
     );
-    if (order.total > 0) return order.total;
+    if (order.total > 0) return order.totalAfterDiscount;
     if (order.subtotal > 0 || order.vatAmount > 0) {
       return order.subtotal +
           order.vatAmount +

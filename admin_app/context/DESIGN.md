@@ -207,6 +207,28 @@ hidden when its data is absent). No dimming, no shift/terminal chips, no
 the inline field row mounts only while open or while a query is active. Active
 search/filter icons render as dark boxed squares.
 
+### 5.11 Guided tour (first-run coach marks)
+
+One-time-per-account spotlight overlay (replayable from More hub → Help & Guide).
+Implemented in `core/widgets/guided_tour.dart`; screens expose targets via the
+zero-visual `TourSpot(name:)` wrapper (registered in `TourSpotRegistry`, resolved
+to a global rect at show time; unmounted spots are skipped silently).
+
+- **Scrim:** `tourScrim` (navy ~80%) over the whole shell; cutout = target
+  rounded-rect (radius `md`) or circle (FABs), inflated 8px, 2px `primary` border.
+- **Tooltip card:** `surface`, radius `card`, `line` border, `soft` shadow,
+  `cardPad`-ish padding; title `rowTitle`, body `body`/`ink2`, `label`-muted
+  "n/total" counter, `sm` ghost **Skip** + `sm` primary **Next/Done**, progress
+  dots (`primary` active / `surface3` idle). Positioned below the target when
+  its top half is clear, above otherwise; overview steps bottom-anchor the card.
+- **Interaction:** scrim taps are absorbed (advance only via Next — no
+  accidental dismissals); Skip and Done both persist the per-account completion
+  flag (`guided_tour_v1_done_accounts` in SharedPreferences).
+- **Step sets:** role-keyed on the landing tab — owner (Analytics overview +
+  stats grid), manager (Orders overview + `+` FAB), waiter (Tables grid); shared
+  header spots (`header.menu` / `header.bell` / `header.avatar`) in
+  `TfGlobalTopBar`. Never navigates tabs mid-tour; role switch dismisses it.
+
 ## 6. Screen acceptance (phone ≈ 410×880)
 
 | Surface | Target | Too airy if |

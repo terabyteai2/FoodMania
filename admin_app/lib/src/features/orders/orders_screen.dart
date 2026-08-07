@@ -10,6 +10,7 @@ import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../models/account_role.dart';
 import '../../models/menu_item.dart';
 import '../../models/order_item.dart';
@@ -276,10 +277,13 @@ class _OrdersScreenState extends State<OrdersScreen>
     return Scaffold(
       backgroundColor: PosColors.background,
       floatingActionButton: canCreate
-          ? TfFab(
-              tooltip: text.newOrder,
-              onPressed: () =>
-                  openNewOrderForm(context, onCreated: () => _tabs.index = 0),
+          ? TourSpot(
+              name: 'orders.newOrderFab',
+              child: TfFab(
+                tooltip: text.newOrder,
+                onPressed: () =>
+                    openNewOrderForm(context, onCreated: () => _tabs.index = 0),
+              ),
             )
           : null,
       body: SafeArea(

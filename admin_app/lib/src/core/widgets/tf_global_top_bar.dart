@@ -4,6 +4,7 @@ import '../../app_scope.dart';
 import '../../models/pos_notification.dart';
 import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
+import 'guided_tour.dart';
 import 'notification_center.dart';
 import 'shell_nav_scope.dart';
 import 'tf_design_system.dart';
@@ -120,17 +121,20 @@ class TfGlobalTopBar extends StatelessWidget {
       );
     } else if (shellNav != null) {
       // 54px hit box (+10 over the 44px visual box) — icon stays 24px.
-      leading = GestureDetector(
-        onTap: shellNav.openDrawer,
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 54,
-          height: 54,
-          child: Center(
-            child: Icon(
-              Icons.menu_rounded,
-              size: 24,
-              color: isBlue ? PosColors.accentInk : PosColors.slate,
+      leading = TourSpot(
+        name: 'header.menu',
+        child: GestureDetector(
+          onTap: shellNav.openDrawer,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 54,
+            height: 54,
+            child: Center(
+              child: Icon(
+                Icons.menu_rounded,
+                size: 24,
+                color: isBlue ? PosColors.accentInk : PosColors.slate,
+              ),
             ),
           ),
         ),
@@ -150,14 +154,20 @@ class TfGlobalTopBar extends StatelessWidget {
         trailing: [
           ...extraActions,
           if (showTrailing) ...[
-            HeaderNotificationBell(
-              onNavigateToOrders: onNavigateToOrders ?? () {},
-              onNavigateToTarget: onNavigateToTarget,
-              color: isBlue ? PosColors.accentInk : null,
+            TourSpot(
+              name: 'header.bell',
+              child: HeaderNotificationBell(
+                onNavigateToOrders: onNavigateToOrders ?? () {},
+                onNavigateToTarget: onNavigateToTarget,
+                color: isBlue ? PosColors.accentInk : null,
+              ),
             ),
-            _AvatarDropdown(
-              onNavigateToTarget: onNavigateToTarget,
-              color: isBlue ? PosColors.accentInk : null,
+            TourSpot(
+              name: 'header.avatar',
+              child: _AvatarDropdown(
+                onNavigateToTarget: onNavigateToTarget,
+                color: isBlue ? PosColors.accentInk : null,
+              ),
             ),
           ],
         ],

@@ -9,6 +9,7 @@ import '../../core/widgets/report_section.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../core/widgets/tf_timeframe_selector.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../models/analytics_summary_data.dart';
 import '../../models/pos_notification.dart';
 import '../reports/report_export.dart';
@@ -236,9 +237,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           _RevenueChartCard(trend: d.trend, text: text),
           const SizedBox(height: PosSpacing.sp3),
         ],
-        _analyticsKpiGrid(context, text, d),
-        if (d.otherIncome != 0)
-          Padding(
+        TourSpot(
+          name: 'analytics.stats',
+          child: _analyticsKpiGrid(context, text, d),
+        ),
+        if (d.otherIncome != 0)          Padding(
             padding: const EdgeInsets.only(top: PosSpacing.sp2),
             child: TfText(
               text.otherIncomeNote,

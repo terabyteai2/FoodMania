@@ -11,6 +11,7 @@ import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../models/menu_item.dart';
 import '../../models/pos_notification.dart';
 import '../../services/cloud_api_service.dart';
@@ -215,12 +216,15 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TfButton(
-                      label: text.menuScanCardButton,
-                      icon: Icons.document_scanner_outlined,
-                      variant: TfButtonVariant.dark,
-                      size: TfButtonSize.lg,
-                      onPressed: () => _scanMenu(context),
+                    child: TourSpot(
+                      name: 'menu.scanCta',
+                      child: TfButton(
+                        label: text.menuScanCardButton,
+                        icon: Icons.document_scanner_outlined,
+                        variant: TfButtonVariant.dark,
+                        size: TfButtonSize.lg,
+                        onPressed: () => _scanMenu(context),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -282,11 +286,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                     variant: PcVariant.surface,
                     onTap: () => _openMenuForm(context),
                   ),
-                  PcBtn(
-                    label: text.menuScan,
-                    icon: 'upload',
-                    variant: PcVariant.dark,
-                    onTap: () => _scanMenu(context),
+                  TourSpot(
+                    name: 'menu.scanCta',
+                    child: PcBtn(
+                      label: text.menuScan,
+                      icon: 'upload',
+                      variant: PcVariant.dark,
+                      onTap: () => _scanMenu(context),
+                    ),
                   ),
                   PcBtn(
                     label: text.isBn ? 'সেটিংস' : 'Settings',

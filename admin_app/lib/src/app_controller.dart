@@ -261,6 +261,13 @@ class PosAppController extends ChangeNotifier {
   String? verifiedPhoneDisplay;
   StaffInvitePending? pendingStaffInvite;
 
+  /// Account ids that already completed the guided tour. Auto-start skips
+  /// them; the More hub Help/Guide entry always allows a replay.
+  /// Guided-tour passes ("cohorts") already shown for this account, as
+  /// `'<accountKey>:<cohort>'` entries. Cohorts are independent so a pass
+  /// that became relevant later (e.g. 20+ completed orders) still auto-starts.
+  final Set<String> _guidedTourDoneCohorts = <String>{};
+
   /// New manager sign-up must pay before using the app (survives app restarts).
   bool needsOnboardingPayment = false;
   String selectedSubscriptionPlan = '';
@@ -417,6 +424,45 @@ class PosAppController extends ChangeNotifier {
   bool get mustCompleteOnboardingPayment =>
       isManager && needsOnboardingPayment && subscriptionState != 'paid';
 
+  /// Completed-order count at which the Sales Summary tour pass is offered.
+  static const int kGuidedTourCompletedThreshold = 20;
+
+  /// Guided-tour passes ("cohorts") that apply to the current account state
+  /// and have not been shown yet: `base` (always, once), `menu` (empty menu —
+  /// point at the sidebar Menu and the Scan menu card button), `sales` (20+
+  /// completed orders — point at Sales Summary), `owner` (backoffice surface —
+  /// point at Analytics and Reports). Each launch auto-starts one merged pass
+  /// covering every applicable cohort.
+  List<String> get pendingTourCohorts {
+    if (!isLoggedIn) return const [];
+    final shown = _guidedTourDoneCohorts;
+    final key = _guidedTourAccountKey;
+    return [
+      if (!shown.contains('$key:base')) 'base',
+      if (!shown.contains('$key:menu') && menuItems.isEmpty) 'menu',
+      if (!shown.contains('$key:sales') &&
+          ordersFor(status: OrderStatus.completed).length >=
+              kGuidedTourCompletedThreshold)
+        'sales',
+      if (!shown.contains('$key:owner') && accountRole.isOwner) 'owner',
+    ];
+  }
+
+  String get _guidedTourAccountKey =>
+      accountId.isEmpty ? 'device' : accountId;
+
+  /// Persists the shown cohorts so their passes do not auto-start again.
+  Future<void> markGuidedTourDoneFor(List<String> cohorts) async {
+    if (cohorts.isEmpty) return;
+    final preferences = await SharedPreferences.getInstance();
+    final key = _guidedTourAccountKey;
+    _guidedTourDoneCohorts.addAll(cohorts.map((c) => '$key:$c'));
+    await preferences.setStringList(
+      _guidedTourDoneKey,
+      _guidedTourDoneCohorts.toList()..sort(),
+    );
+  }
+
   // App is ready to use as soon as the restaurant has a name.
   // Cloud sync is optional and configured separately.
   bool get isTenantReady {
@@ -458,8 +504,17 @@ class PosAppController extends ChangeNotifier {
     // stays reachable (demoOwnerAccess) to return to the owner view.
     _ownerViewPreview = role.isManager;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_accountRoleKey, role.value);
-    await preferences.setBool(_ownerViewPreviewKey, _ownerViewPreview);
+    // Order the writes so an app kill between them can never leave
+    // role=manager + preview=false persisted — that would hide the switch on
+    // next boot and strand the user in the manager view. Previewing the
+    // manager surface needs only the preview flag: the persisted role stays
+    // 'owner', which initialize() maps back to the manager view.
+    if (role.isManager) {
+      await preferences.setBool(_ownerViewPreviewKey, true);
+    } else {
+      await preferences.setBool(_ownerViewPreviewKey, false);
+      await preferences.setString(_accountRoleKey, role.value);
+    }
     notifyListeners();
   }
 
@@ -601,6 +656,15 @@ class PosAppController extends ChangeNotifier {
       // first frame so the add-items tints don't flash the name-keyed colors.
       await CategoryPaletteAssigner.instance.ensureLoaded();
       hasSeenIntro = preferences.getBool(_seenIntroKey) ?? false;
+      // v2 cohorts (`account:cohort`) supersede the v1 once-per-account flag:
+      // any account that already finished the v1 tour has its base pass done.
+      _guidedTourDoneCohorts
+          .addAll(preferences.getStringList(_guidedTourDoneKey) ?? const []);
+      for (final account in preferences
+          .getStringList(_guidedTourV1DoneKey) ??
+          const []) {
+        _guidedTourDoneCohorts.add('$account:base');
+      }
       bkashPaymentVerified =
           preferences.getBool(_bkashPaymentVerifiedKey) ??
           !PaymentDefaults.requireBkashGate;
@@ -2996,6 +3060,12 @@ class PosAppController extends ChangeNotifier {
       cloudConfig: cloudConfig,
       serverConfig: serverConfig,
     );
+    await addNotification(
+      type: PosNotificationType.system,
+      actionTarget: 'menu',
+      title: strings.menuScanSubmittedTitle,
+      body: strings.menuScanSubmittedBody,
+    );
     try {
       await cloudApiService.scanMenuPages(pages);
       if (kDebugMode) {
@@ -4644,6 +4714,10 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> _persistAccountAuth() async {
     final preferences = await SharedPreferences.getInstance();
+    // Preview flag first: a kill between the two writes then leaves
+    // preview=true with the previous role, which initialize() maps to the
+    // owner's manager view — never a hidden switch.
+    await preferences.setBool(_ownerViewPreviewKey, _ownerViewPreview);
     await preferences.setString(_accountIdKey, accountId);
     await preferences.setString(_accountDisplayNameKey, accountDisplayName);
     await preferences.setString(_accountRoleKey, accountRole.value);
@@ -4772,6 +4846,8 @@ class PosAppController extends ChangeNotifier {
   }
 
   static final String _seenIntroKey = 'local_pos_seen_intro';
+  static final String _guidedTourDoneKey = 'guided_tour_v2_done_accounts';
+  static final String _guidedTourV1DoneKey = 'guided_tour_v1_done_accounts';
   static final String _restaurantNameKey = 'local_pos_restaurant_name';
   static final String _outletNameKey = 'local_pos_outlet_name';
   static final String _serverIdKey = 'local_pos_server_id';
