@@ -37,6 +37,7 @@ class StatusBadge extends StatelessWidget {
       color: switch (source) {
         OrderSource.cloud => PosColors.info,
         OrderSource.facebookMessenger => PosColors.success,
+        OrderSource.whatsapp => const Color(0xFF128C7E),
         OrderSource.desktopPos => PosColors.primaryDark,
         OrderSource.manual => PosColors.warning,
         OrderSource.localLan => PosColors.primary,
@@ -44,6 +45,7 @@ class StatusBadge extends StatelessWidget {
       icon: switch (source) {
         OrderSource.cloud => Icons.cloud_outlined,
         OrderSource.facebookMessenger => Icons.chat_bubble_outline_rounded,
+        OrderSource.whatsapp => Icons.chat_outlined,
         OrderSource.desktopPos => Icons.desktop_windows_outlined,
         OrderSource.manual => Icons.edit_note,
         OrderSource.localLan => Icons.router_outlined,

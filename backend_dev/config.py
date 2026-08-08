@@ -1,0 +1,182 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost/rastarant"
+    SECRET_KEY: str = "change-me"
+    IMAGES_DIR: str = "./uploads/menu_images"
+    # Unified hero media folder. Per-outlet subfolders are created at upload time:
+    #   uploads/hero_media/{outlet_id}/video/   → welcome-screen video
+    #   uploads/hero_media/{outlet_id}/images/  → menu-page slider images (max 5)
+    HERO_MEDIA_DIR: str = "./uploads/hero_media"
+    # Legacy paths kept for backward compatibility while existing files exist.
+    OUTLET_IMAGES_DIR: str = "./uploads/outlet_images"
+    OUTLET_VIDEOS_DIR: str = "./uploads/outlet_videos"
+    VIDEO_MAX_BYTES: int = 50 * 1024 * 1024  # 50 MB
+    BASE_URL: str = "http://localhost:8000"
+    GOOGLE_CLIENT_IDS: str = ""
+    MAPBOX_ACCESS_TOKEN: str = ""
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
+    FIREBASE_SERVICE_ACCOUNT_FILE: str = ""
+
+    NGROK_AUTHTOKEN: str = ""
+    NGROK_STATIC_DOMAIN: str = ""
+
+    # Cloudflare R2 (S3-compatible). Leave empty to use local filesystem.
+    R2_ENDPOINT: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET: str = ""
+    R2_PUBLIC_BASE_URL: str = ""  # e.g. https://pub-xxxx.r2.dev or custom domain
+
+    PORT: int = 8000
+
+    # UddoktaPay — live: https://pay.uddoktapay.com or your Paymently brand URL
+    UDDOKTAPAY_BASE_URL: str = ""
+    UDDOKTAPAY_API_KEY: str = ""
+    UDDOKTAPAY_SANDBOX: bool = False
+
+    # Platform admin panel — first login is seeded on startup if no admins exist
+    PLATFORM_ADMIN_EMAIL: str = ""
+    PLATFORM_ADMIN_PASSWORD: str = ""
+
+    # Non-empty enables POST /admin/staff/dev-bypass-login (no Google) for local testing only.
+    STAFF_DEV_BYPASS_SECRET: str = ""
+
+    # OneCodeSoft SMS (Bangladesh) — phone OTP for manager/staff onboarding
+    ONECODESOFT_API_KEY: str = ""
+    ONECODESOFT_SENDER_ID: str = ""
+    ONECODESOFT_API_URL: str = "https://sms.onecodesoft.com/api/send-sms"
+
+    # Legacy Twilio (unused when OneCodeSoft is configured)
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_VERIFY_SERVICE_SID: str = ""
+
+    # development | production — dev allows OTP 000000 when Twilio is unset
+    APP_ENV: str = "development"
+
+    # When true, verify-otp accepts DEV_OTP_BYPASS_CODE even if Twilio is configured.
+    DEV_OTP_BYPASS_ENABLED: str = ""
+    DEV_OTP_BYPASS_CODE: str = "000000"
+    # Comma-separated phone numbers (01xxx or +8801xxx) allowed to use the bypass.
+    # Empty = every phone number uses the bypass while DEV_OTP_BYPASS_ENABLED is on.
+    DEV_OTP_BYPASS_PHONES: str = ""
+
+    # One-tap demo manager login (no Twilio). Empty = auto (on in development only).
+    DEMO_MANAGER_LOGIN_ENABLED: str = ""
+    DEMO_MANAGER_SERVER_ID: str = "DEMO-MANAGER"
+
+    # Optional Sentry error reporting
+    SENTRY_DSN: str = ""
+    SENTRY_ENVIRONMENT: str = ""
+    GIT_COMMIT_SHA: str = ""
+
+    # Scan Menu: OCR.space JSON is parsed by DeepSeek LLM.
+    OCR_SPACE_API_KEY: str = ""
+    OCR_SPACE_API_URL: str = "https://api.ocr.space/parse/image"
+    OCR_SPACE_ENGINE: str = "3"
+    OCR_SPACE_LANGUAGE: str = "auto"
+    DEEPSEEK_API_KEY: str = ""
+    MENU_SCAN_DEEPSEEK_MODEL: str = "deepseek-chat"
+    CHATBOT_DEEPSEEK_MODEL: str = "deepseek-chat"
+    # Chatbot LLM provider override. Empty = DeepSeek (DEEPSEEK_API_KEY +
+    # CHATBOT_DEEPSEEK_MODEL against https://api.deepseek.com/v1). Set all three
+    # to route the Facebook chatbot through another OpenAI-compatible gateway
+    # (e.g. OpenCode Zen: https://opencode.ai/zen/v1 + deepseek-v4-flash-free).
+    CHATBOT_LLM_BASE_URL: str = ""
+    CHATBOT_LLM_API_KEY: str = ""
+    CHATBOT_LLM_MODEL: str = ""
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_API_KEYS: str = ""
+    CHATBOT_OPENROUTER_MODEL: str = "openai/gpt-5-mini"
+
+    # In-app support assistant (Volt Assistant). Independent LLM route from the
+    # Facebook chatbot: empty overrides fall back to DeepSeek (DEEPSEEK_API_KEY
+    # + CHATBOT_DEEPSEEK_MODEL against https://api.deepseek.com/v1).
+    SUPPORT_CHAT_LLM_BASE_URL: str = ""
+    SUPPORT_CHAT_LLM_API_KEY: str = ""
+    SUPPORT_CHAT_LLM_MODEL: str = ""
+
+    # Facebook Messenger chatbot
+    FACEBOOK_APP_ID: str = ""
+    FACEBOOK_APP_SECRET: str = ""
+    FACEBOOK_ANDROID_CLIENT_TOKEN: str = ""
+    FACEBOOK_WEBHOOK_VERIFY_TOKEN: str = ""
+    META_GRAPH_API_VERSION: str = "v24.0"
+    FACEBOOK_LOGIN_SCOPES: str = "pages_show_list,pages_manage_metadata,pages_messaging"
+    FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES: int = 15
+
+    # Voice agent — ElevenLabs
+    ELEVENLABS_API_KEY: str = ""
+    VOICE_ELEVENLABS_VOICE_ID: str = "SYVQhjMSUvWA1w0HkidA"
+
+    # Voice agent — Sarvam AI (STT + LLM + TTS)
+    SARVAM_API_KEY: str = ""
+    # Realtime STT (saaras:v3-realtime, event protocol). False = legacy /speech-to-text/ws.
+    SARVAM_STT_USE_REALTIME: bool = True
+    SARVAM_STT_STREAM_TYPE: str = "fast"
+    SARVAM_STT_ENDPOINTING: str = "vad"
+    SARVAM_STT_SILENCE_MS: int = 500
+    SARVAM_STT_THRESHOLD: float = 0.3
+    SARVAM_STT_MODEL: str = "saaras:v3"
+    SARVAM_STT_LANGUAGE: str = "bn-IN"
+    SARVAM_LLM_MODEL: str = "sarvam-105b"
+    SARVAM_LLM_TEMPERATURE: float = 0.6
+    SARVAM_LLM_MAX_TOKENS: int = 1024
+    # TTS over WebSocket (incremental, sentence-level). False = REST convert_stream.
+    SARVAM_TTS_USE_WS: bool = True
+    SARVAM_TTS_MODEL: str = "bulbul:v3"
+    SARVAM_TTS_SPEAKER: str = "suhani"
+    SARVAM_TTS_LANGUAGE: str = "bn-IN"
+    SARVAM_TTS_PACE: float = 1.12
+    SARVAM_TTS_TEMPERATURE: float = 0.8
+    SARVAM_TTS_SAMPLE_RATE: int = 24000
+    SARVAM_TTS_MIN_BUFFER: int = 40
+    SARVAM_TTS_MAX_CHUNK: int = 150
+
+
+UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"
+UDDOKTAPAY_LIVE_DEFAULT = "https://pay.uddoktapay.com"
+
+
+def resolved_uddokta_base_url() -> str:
+    """Gateway root URL without /api or checkout path suffixes."""
+    custom = settings.UDDOKTAPAY_BASE_URL.strip()
+    if custom:
+        return custom
+    return UDDOKTAPAY_SANDBOX_DEFAULT if settings.UDDOKTAPAY_SANDBOX else UDDOKTAPAY_LIVE_DEFAULT
+
+
+def _normalize_db_url(url: str) -> str:
+    # Render / Heroku-style URLs come as postgres:// or postgresql:// — async
+    # SQLAlchemy needs the asyncpg driver. Add it if missing.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    return url
+
+
+def _normalize_ngrok_domain(value: str) -> str:
+    """Bare hostname only, e.g. mysite.ngrok-free.app (matches pyngrok `domain=`)."""
+    raw = value.strip()
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.startswith("https://"):
+        raw = raw[8:]
+    elif lower.startswith("http://"):
+        raw = raw[7:]
+    host = raw.split("/")[0].split("?")[0].strip()
+    if host.endswith("/"):
+        host = host.rstrip("/")
+    return host
+
+
+settings = Settings()
+settings.DATABASE_URL = _normalize_db_url(settings.DATABASE_URL)
+settings.NGROK_STATIC_DOMAIN = _normalize_ngrok_domain(settings.NGROK_STATIC_DOMAIN)

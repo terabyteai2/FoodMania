@@ -1,0 +1,819 @@
+QUICKBYTES POS — PRODUCT SPECIFICATION
+For LLM consumption: landing page design context
+Updated: 2026-06-12
+======================================================================
+
+
+----------------------------------------------------------------------
+1. PRODUCT OVERVIEW
+----------------------------------------------------------------------
+
+QuickBytes is a complete restaurant point-of-sale platform built for
+small and medium restaurants in Bangladesh. It runs on three surfaces —
+a phone app, a desktop counter station, and a dedicated POS terminal
+device — all syncing to a single cloud backend. Every order from every
+channel (website, Facebook Messenger chatbot, table QR code, waiter,
+counter, or manager) flows into one unified queue with a single
+lifecycle: pending → accepted → completed. Kitchen tickets print the
+moment an order is accepted. Owners get real analytics — not
+simplified summaries, but actual COGS, cohort LTV, prime cost, and
+contribution margin. Managers get a live ops dashboard. Waiters get a
+clean, fast order flow in Bengali or English.
+
+Domain: quickbytes.buzz
+Currency: ৳ Taka (BDT), integer amounts
+Languages: English + বাংলা (Bengali), switchable at runtime
+Market: Bangladesh (Dhaka and beyond)
+
+
+----------------------------------------------------------------------
+2. TARGET AUDIENCE
+----------------------------------------------------------------------
+
+QuickBytes is designed for two distinct literacy tiers that coexist in
+every restaurant. Both must feel at home in the same app.
+
+TIER 1 — RESTAURANT OWNERS
+  Profile: BBA graduates from English-medium private universities
+  (NSU, BRAC, IUB and similar). Comfortable with business analytics
+  terminology — COGS, prime cost, contribution margin, cohort analysis,
+  LTV, attach rate, and daypart optimization. They chose to run a
+  restaurant as a business, not just a passion project. They want
+  numbers they can act on, not pretty charts with no depth.
+  What they need: Honest analytics, ownership controls, subscription
+  and settings gating, staff oversight, audit trail.
+
+TIER 2 — MANAGERS AND WAITERS
+  Profile: High-school graduates or current university students who
+  are not necessarily English-proficient but are fluent with social
+  apps (Facebook, WhatsApp, bKash, Pathao). They know how to swipe,
+  tap, and chat. They don't want to read labels — they want icons,
+  familiar patterns, and the Bengali toggle.
+  What they need: Fast order entry, clear table status, chat takeover,
+  quick stock check — all in Bangla if needed.
+
+RESTAURANT TYPES SERVED
+  - Sit-down restaurants: 5–30 seats, 1–5 waiters, dine-in + delivery
+  - Food carts and counters: no tables, counter-only quick-sell mode
+  - Cafés and quick-service restaurants (QSR): fast throughput,
+    high modifier complexity (add-ons, options, sizes)
+  - Small chains: multiple outlets, shared menu, per-outlet analytics
+
+
+----------------------------------------------------------------------
+3. THE THREE SURFACES
+----------------------------------------------------------------------
+
+QuickBytes is not a single app. It is three purpose-built surfaces
+that share one backend, one menu, one order queue, and one analytics
+engine. A restaurant can run all three simultaneously.
+
+
+  3A. QUICKBYTES MOBILE — THE FLOOR APP
+  -------------------------------------
+  Form factor: Android or iOS phone, portrait, 410 px wide
+  Who uses it: Owner, manager, waiter — on the floor, moving around
+
+  The phone app is the daily driver for the entire team. Role-aware
+  navigation means everyone sees only what they need.
+
+  Owner navigation: Analytics · Tables · Orders · Stock · More
+  Manager navigation: Live · Tables · Orders · Stock · More
+  Waiter navigation: Tables · Orders · More
+
+  The active tab shows a lime pill. Primary actions are always in the
+  bottom bar, never the top. The design is calm — mostly white, with
+  lime used only for the one thing that matters most on each screen.
+
+  Key capabilities:
+  - Six-channel order queue with unified inbox (website, Messenger,
+    table QR, waiter entry, counter, manager)
+  - Table and floor management: dine-in grid, parcel, delivery
+  - Multi-step order build wizard: service type → menu → modifiers
+    → review with discount presets → confirm → success with token
+  - Delivery flow starts with the customer form (name, phone,
+    address, area) before the menu — area selection sets the charge
+  - Modifier groups: single-choice, multi-choice, required or optional,
+    with individual price deltas per option
+  - Owner analytics dashboard: net sales, trend, category breakdown,
+    product performance, channel and payment donuts, daypart heatmap
+  - Advanced analytics toggle: forecast, cohort (online channels only),
+    unit economics (COGS, prime cost, contribution margin), discount
+    impact, wastage, basket analysis
+  - Control Tower for managers: live attention alerts, quick stats,
+    channel-load visualization; Advanced adds pace-to-target and
+    per-waiter performance metrics
+  - Facebook Messenger chatbot handoff: inbox + thread view with
+    bot bubbles, manager replies, context-aware quick replies,
+    hand-back-to-bot
+  - Inventory: ranked stock table, stock-in receipts, physical count
+    with live variance, suppliers, cover-days column (Advanced)
+  - Menu management: item CRUD, availability toggle, photo upload,
+    OCR scan-import from paper menus, universal delivery toggle
+  - Staff management: OTP invite flow, role assignment, active toggle,
+    audit trail
+  - Notification center: bell dropdown with pending orders, low stock,
+    escalations, long-seated tables, shift reminders
+  - Counter mode (service mode toggle): converts Tables tab into a
+    tap-to-ring quick-sell grid for food carts and high-volume counters
+  - Full bilingual: every label, nav item, action, and error message
+    is available in English and Bengali; toggle is always one tap away
+
+
+  3B. QUICKBYTES DESKTOP — THE COUNTER STATION
+  ---------------------------------------------
+  Form factor: Windows, macOS, or Linux desktop; fixed 1280×800 canvas
+  centered on screen with a dark backdrop
+  Who uses it: Counter staff at the register, owner at the desk
+
+  The desktop app is a full POS counter station. It is keyboard and
+  pointer optimized. The layout never scrolls — everything is visible
+  at once through a persistent left rail and a content area that fills
+  the remaining space.
+
+  Navigation: 92 px vertical icon rail with brand mark at top,
+  five tab buttons (Register, Tables, Orders, Stock, Dashboard),
+  and a footer with notifications popover and account menu.
+
+  The Register screen is unique to the desktop and is the heart of
+  counter operations. The left 60% is the menu grid with category
+  chips and search. The right 40% is a persistent live order ticket
+  with line items, qty steppers, modifier badges, and a running total
+  (subtotal, VAT, service charge, delivery charge). Nothing leaves
+  the screen until the order is settled.
+
+  Key capabilities:
+  - Full POS register: menu grid + persistent order ticket sidebar,
+    all on one screen with no navigation required
+  - Item modifier dialog: opens inline, closes on confirm — never
+    interrupts the flow
+  - Payment entry: cash (large-digit numpad), card, bKash mobile
+  - KOT print on accept, receipt print on settle — auto-print
+    configurable in Ordering Settings
+  - Daily Z-report: end-of-session settlement summary to printer
+  - Tables floor plan: full-screen grid with configurable layout
+    from settings; occupied tables shown in calm slate wash
+  - Orders queue: real-time pending list with aging display and
+    color-coded channel indicators
+  - Stock screen: inventory status at a glance, low/out highlights
+  - Owner dashboard: KPI cards (net sales, order count, AOV, margin
+    vs prior period), weekly bar chart, channel donut, top items table
+  - Manager dashboard (Control Tower): attention row for late orders
+    and low-stock items, pending badge, quick stats, pace-to-target
+    if daily sales target is configured
+  - Notifications popover (anchored bottom-left of rail)
+  - Account popover: role switcher for demo, language toggle, sign-out
+  - Dense multi-column layout: 4-column KPI cards, 2-column chart +
+    list, full-width sortable tables
+  - Print preview before physical output; font size and paper width
+    configurable in Ordering Settings
+  - Receipt printer auto-discovery on boot; USB or Bluetooth pairing
+    in Settings
+
+
+  3C. QUICKBYTES TERMINAL — THE HARDWARE APP
+  -------------------------------------------
+  Form factor: Android POS terminal (Sunmi VS2, iMin D1/D4, PAX A920
+  and similar); portrait, API level 22+ (Android 5.1 and above)
+  Who uses it: Manager and waiter at a fixed kitchen or counter
+  terminal device
+
+  The terminal app is the lean, hardware-native edition. It runs on
+  the cheap Android terminals already sitting on counters across
+  Dhaka. It does not require a new device purchase. It works without
+  an internet connection.
+
+  Unlike the phone app which is carried around, the terminal is fixed
+  hardware. It is always on, always connected to a thermal printer
+  (built-in or Bluetooth), and always showing the order queue.
+
+  Key capabilities:
+  - Offline-first architecture: all data lives in a local SQLite
+    database; the app works fully without WiFi and syncs automatically
+    when the connection returns; no data loss on disconnect
+  - Auto-sync on a configurable interval (default every ~15 seconds)
+    plus WebSocket for real-time order and notification events
+  - Auto-print KOT the moment an order is accepted — no extra tap
+    required; this is the core workflow that speeds up kitchen ops
+  - Print deduplication: tracks printed order IDs so re-accepting
+    an order never double-prints a kitchen ticket
+  - Built-in Sunmi printer driver plus Bluetooth and USB serial for
+    external thermal printers; ESC/POS command generation; QR code
+    on every ticket
+  - Counter quick-sell grid: manager toggles service mode to convert
+    the Tables tab into a tap-to-ring item grid for food carts and
+    busy counters — no table management, no delivery form, just fast
+  - Full order lifecycle: pending → Accept (prints KOT) → Print Bill
+    (marks completed); Reject removes the order
+  - Delivery order flow: form-first (recipient, phone, address, area
+    → sets charge) then menu, then review
+  - Modifier wizard: category chips, item grid or list toggle,
+    modifier sheet for option groups, qty steppers
+  - Facebook Messenger chat takeover: same inbox and thread UI as
+    mobile; manager replies route back to the customer via Messenger
+  - Sync status screen: last sync time, pending count, event log,
+    manual sync button
+  - In-app APK update: downloads new build and triggers system
+    installer without leaving the app
+  - Works on old hardware: API 22 minimum — reaches Sunmi and PAX
+    terminals still running Android 5.1 that phone-first POS apps
+    have dropped
+  - No Firebase Cloud Messaging dependency: system notifications
+    used instead, keeping the APK compatible with low-API devices
+  - Business-tier feature locking: Simple tier disables tables and
+    inventory at the app level so counter-only restaurants never see
+    features they do not need and cannot accidentally use them
+  - First-run setup wizard: business tier selection (Simple/Standard/
+    Plus), restaurant name, outlet name, table count — calls the
+    cloud bootstrap endpoint and provisions the outlet in one flow
+
+
+----------------------------------------------------------------------
+4. CORE FEATURE MODULES
+----------------------------------------------------------------------
+
+These features are shared across surfaces (with surface-appropriate
+UI) and represent the full capability set of the QuickBytes platform.
+
+
+  4.1 ORDER MANAGEMENT
+  --------------------
+  Six order channels funnel into one real-time queue:
+    1. Website storefront (<slug>.quickbytes.buzz) — customer orders
+       online; arrives as pending with customer name + delivery address
+    2. Facebook Messenger chatbot — bot takes the order; arrives as
+       pending; customer name and details attached
+    3. Table QR code — customer scans and orders from their phone;
+       arrives as pending linked to the table
+    4. Waiter entry — staff creates the order in the app on the floor
+    5. Counter — created at the counter station (desktop or terminal)
+    6. Manager — created manually by a manager (phone orders, etc.)
+
+  All orders share one lifecycle:
+    PENDING → (Accept) → ACCEPTED → (Print Bill) → COMPLETED
+    PENDING → (Reject) → REMOVED
+
+  Accepting prints a KOT (auto or manual, configurable). Printing the
+  bill marks the order complete and moves it to the archive. Reject
+  removes the order immediately — it does not linger.
+
+  Order card anatomy (consistent across surfaces):
+  - Order serial number is the hero (#24) — the short daily counter
+  - Service type replaces the customer name: "Delivery", "Table 5",
+    "Parcel" — because on a busy floor, type matters more than name
+  - Channel icon: website globe, Messenger icon, QR badge, etc.
+  - Age in minutes (shows how long the order has been waiting)
+  - Item count and a one-line preview of the first items
+  - Pending state: lime-wash Accept button + small Reject ✕
+  - Accepted state: Print KOT + Print Bill buttons
+
+  Search and filter: full-text search across serial, customer name,
+  item names; filter sheet by date range (today through 12 months)
+  and by source channel.
+
+  Order detail: editable line items (qty, remove, add), modifier
+  display, customer and channel info card, running summary with
+  subtotal/VAT/charge, state transition buttons.
+
+  Discount presets: set by owner in Settings (flat ৳ or percentage);
+  appear as chips in the Review step of order creation; no free-form
+  override in the waiter flow.
+
+
+  4.2 TABLE AND FLOOR MANAGEMENT
+  --------------------------------
+  Tables screen has three segments: Dine-in, Parcel, Delivery.
+
+  Dine-in: a grid of table tiles (T1, T2, T3 …). Occupied tables
+  are shown in a calm slate wash — never lime, because occupied should
+  read as neutral state, not an action to take. Vacant tables are plain
+  white. Tapping an occupied table opens the existing order for that
+  table. Tapping a vacant table starts a new dine-in order pre-assigned
+  to that table.
+
+  Parcel (takeaway): no table required; tapping opens the menu
+  directly with service type set to takeaway. Same build flow as
+  dine-in otherwise.
+
+  Delivery: the customer details form comes FIRST before the menu.
+  Step 1 is name, phone number, address, and area selection. Areas are
+  configured in Settings; each area has a delivery charge (e.g.,
+  Dhanmondi ৳60, Banani ৳100). Only after the form is filled and
+  validated does the menu open. This prevents incomplete delivery
+  orders from reaching the kitchen.
+
+  Counter mode: toggled in More → Service mode (manager and above).
+  When active, the Tables tab becomes a tap-to-ring quick-sell grid
+  — large tiles, one tap adds a quantity, no form, no table selection.
+  Built for food carts and high-volume counter positions.
+
+
+  4.3 MENU MANAGEMENT
+  --------------------
+  Item fields: name (English + Bengali), description, category,
+  price (৳), cost price (for margin calculation), availability toggle,
+  photo, and modifier groups.
+
+  Modifier groups encode options and add-ons per item. Each group has
+  a label, a type (single-choice or multi-choice), a required flag,
+  and a list of options each with a price delta in ৳. Examples:
+  size (Small/Regular/Large with +৳0/+৳40/+৳80) or extras
+  (extra cheese +৳30, extra sauce +৳20).
+
+  Availability toggle: pause an item instantly if it is sold out
+  without deleting it. Paused items do not appear in customer-facing
+  channels or the waiter order-build screen.
+
+  Universal delivery toggle: one switch enables or disables an item
+  for the website and Messenger delivery channels. Items that are
+  dine-in only or too fragile to deliver can be excluded without
+  removing them from the in-house menu.
+
+  OCR scan-import: manager points the camera at a paper menu or a
+  supplier invoice image. The backend OCR service extracts item
+  names, categories, and prices and pre-fills the menu editor.
+  Staff reviews and confirms before saving — no blind imports.
+
+  Category management: free-text category names (Burgers, Rice &
+  Curry, Kebab, Sides, Beverages, Desserts, etc.). Items grouped
+  under category headers in order-build list view.
+
+
+  4.4 INVENTORY AND STOCK
+  ------------------------
+  The stock screen is a ranked table — not a card grid, not a
+  dashboard — because managers care about relative position (what
+  costs the most, what is running low) more than absolute cards.
+
+  Columns: rank #, item name, value (qty × cost), quantity with unit.
+  A single fixed-width status dot column sits to the left of the
+  item name: amber = low stock (below par threshold), red = out of
+  stock, blank = fine. Rows are comfortably spaced — not dense.
+
+  Advanced toggle (minimal label + switch in top-right corner):
+  reveals the Cover (days) column, enables row taps to open item
+  detail, and shows drill-down cards for Variance and Suppliers.
+
+  Stock-in: multi-line receipt entry. Manager selects supplier,
+  adds items with quantities, units, and costs, and saves. The
+  backend updates on-hand quantities. Scan bill button triggers
+  OCR on a photo of the supplier invoice to prefill the lines.
+
+  Physical count: progress bar through all items; manager enters
+  the actual counted quantity for each. Live variance shows the
+  difference between system quantity and counted quantity in real
+  time. Finish count locks the count and logs the variance.
+
+  Item detail (Advanced): cover days (current qty divided by 7-day
+  average usage × 7), 7-day usage sparkline, full adjustment history
+  (stock-in, usage, wastage, count adjustments, staff meals).
+
+  Variance screen: system quantity versus counted quantity, loss
+  value, sorted by largest discrepancy.
+
+  Suppliers: contact list with last order date; each supplier linked
+  to the items they supply; used in stock-in flow.
+
+  Stock alerts: items below par threshold generate a notification and
+  appear as attention items in the Control Tower. The "Below par"
+  summary tile at the top of the Stock screen shows the count at a
+  glance.
+
+
+  4.5 OWNER ANALYTICS
+  --------------------
+  Analytics is for restaurant owners. The language is not simplified.
+  Owners from English-medium business schools will find the
+  terminology familiar and the depth useful.
+
+  Time range selector: Today, 7 days, 30 days, Custom (date picker).
+  Filters sheet: channel (all / website / Messenger / QR / counter /
+  manager) and daypart (breakfast / lunch / afternoon / dinner / late).
+
+  Net sales hero: the period total in a large accent-wash card with
+  delta vs prior period (value and percentage).
+
+  Sales trend: line chart with area fill, daily or hourly granularity
+  depending on range.
+
+  Revenue by category: horizontal bar chart with percentage share and
+  revenue value per category. "See all" expands to a full screen with
+  sort chips: Revenue, Share, Margin, Growth, Units. Per-category card
+  shows bar, share %, gross margin %, WoW growth, and unit count.
+  Export to CSV.
+
+  Product performance: ranked item table. Sort dimensions: Revenue,
+  Units Sold, Order Count, Gross Margin, Average Order Value, Growth.
+  Dynamic metric column changes based on active sort chip. "See all"
+  expands to the full table with search. Export to CSV.
+
+  Channel donut: percentage breakdown of revenue by channel.
+  Payments donut: percentage breakdown of revenue by payment method
+  (cash, card, bKash, Nagad, UddoktaPay).
+
+  Daypart bars: revenue split by meal period.
+
+  Peak hours heatmap: average revenue by hour of day across the week
+  (demoted to Advanced — only visible with the toggle on).
+
+  Advanced analytics toggle: one switch, top-right, no description.
+  When on, the following cards appear (only if underlying data exists
+  — null data hides the card, never zero-fills):
+
+    Forecast: projected revenue for the next 7 or 30 days based on
+    historical trend and seasonal patterns.
+
+    Unit economics: COGS, gross profit, gross margin %, prime cost
+    (COGS + labor as % of revenue), contribution margin per order.
+    Labor cost input is manual (set in Settings or prompted inline).
+
+    Cohort analysis (online channels only): repeat customer rate,
+    average LTV by cohort month, retention curve. Cohort data is
+    derived from customer_name + mobile_number on website and
+    Messenger orders only — walk-in FOH orders contribute nothing
+    to cohort and are never forced to provide identity.
+
+    Discounts impact: total discount given, discount as % of gross
+    revenue, which preset was used most, revenue foregone.
+
+    Wastage: total waste value from inventory adjustments tagged as
+    wastage, as % of COGS.
+
+    Basket analysis: items most frequently ordered together, attach
+    rate (how often item B is ordered when item A is in the basket).
+
+
+  4.6 CONTROL TOWER (MANAGER LIVE OPS)
+  --------------------------------------
+  The Control Tower is the manager's home tab. It is not analytics —
+  it is right now. The goal is to catch problems before they become
+  complaints.
+
+  Attention row (always visible): cards for any late pending orders
+  (waiting more than 3 minutes without being accepted), low-stock
+  and out-of-stock items, and chatbot escalations awaiting reply.
+  Tapping a card navigates directly to the source (Orders screen,
+  Stock screen, Messages screen).
+
+  Quick stats (always visible): open order count, tables currently
+  seated (occupied table count), average accept time in minutes,
+  live revenue for the current shift or day.
+
+  Channel-load bars (always visible): visual horizontal bars showing
+  the percentage of active orders coming from each channel. Useful
+  for identifying whether a delivery spike or a Messenger surge is
+  causing the backlog.
+
+  Current time display: large clock for quick reference without
+  unlocking a phone.
+
+  Advanced toggle: minimal label + switch.
+  When on, reveals:
+
+    Pace-to-target: if the owner has set a daily sales target in
+    Settings, shows actual revenue vs expected pace (a line
+    indicating what revenue should be at the current time of day
+    if the day finishes on target). Only shown if a target is set
+    — null target hides this card entirely.
+
+    Per-waiter metrics: orders handled, average accept time,
+    tables served, for each active waiter in the current shift.
+
+
+  4.7 FACEBOOK MESSENGER CHATBOT AND MANAGER TAKEOVER
+  ----------------------------------------------------
+  QuickBytes includes a built-in Facebook Messenger chatbot. The
+  bot is not a third-party plugin — it is part of the platform and
+  its conversations are stored in the same database as everything
+  else.
+
+  The bot automatically answers customer questions about the menu,
+  takes delivery orders, quotes delivery charges for configured
+  areas, and confirms order placement.
+
+  When the bot cannot resolve a customer request — typically a photo
+  request for a specific dish, a delivery quote for an area not in
+  the configured list, or a catering or bulk order inquiry — it
+  escalates. The conversation status changes to "Needs you" and an
+  escalation notification is sent to the manager.
+
+  The Messages inbox (accessible via the top-bar icon or More menu)
+  shows two segments: "Needs you" (unresolved escalations) and "All
+  chats" (full inbox). Each row shows the customer avatar (initials),
+  name, last message, time, unread badge, and an amber reason tag
+  (e.g., "Photo requested", "Delivery quote", "Catering ask").
+
+  Thread view:
+  - Customer messages: left-aligned, neutral bubble
+  - Bot messages: right-aligned, lime-wash background with a
+    "BYTES BOT" label above
+  - Manager messages: right-aligned, dark ink bubble
+  - Escalation banners: amber, centered, describing the reason the
+    bot handed off (e.g., "Customer requested a photo of the dish")
+
+  Composer: text input, send button, image send button (sends a
+  photo of a menu item to the customer via Messenger), context-aware
+  quick-reply chips (e.g., "Send Kacchi photo", "Quote ৳130 delivery
+  to Uttara"), and a hand-back-to-bot button. Replies posted in the
+  QuickBytes UI route to the customer via the Facebook Messenger
+  bridge — the manager never opens Facebook.
+
+  Setup: Facebook page OAuth in Settings; owner connects their
+  Facebook Business page to the outlet in one flow.
+
+
+  4.8 STAFF MANAGEMENT
+  ----------------------
+  Three roles: Owner > Manager > Waiter.
+
+  Owner can invite anyone (Owner, Manager, Waiter).
+  Manager can only invite Waiters.
+
+  Invite flow: staff list → Invite button (bottom-bar primary) →
+  select role → enter name and phone number → system sends OTP SMS →
+  invitee opens app → enters OTP → accepted and added to the outlet.
+
+  Staff list: each member shows role badge (color-coded), active
+  toggle, and for waiters: performance metrics (orders handled,
+  tables served — visible in Advanced mode of Control Tower).
+
+  Active toggle: deactivate a staff member without deleting them.
+  Deactivated accounts cannot log in. Audit trail records remain.
+
+  The audit trail logs every void, refund, complimentary item,
+  and discount override with: who made the change, their role,
+  timestamp, amount, and a required reason. Owners and managers can
+  filter by action type (void / refund / comp / discount).
+
+
+  4.9 THERMAL PRINTING
+  ----------------------
+  Printing is not optional on the terminal and desktop surfaces —
+  it is the handoff mechanism between front-of-house and kitchen.
+
+  Three ticket types:
+    KOT (Kitchen Order Ticket): item names, quantities, modifiers,
+    special notes, order serial, service type (table/parcel/delivery),
+    order channel, time. Printed when an order is accepted.
+
+    Customer bill (receipt): all items with individual prices,
+    modifier labels and deltas, subtotal, VAT, delivery charge,
+    service charge if applicable, total, payment method, order serial,
+    customer token number, restaurant name and address.
+
+    Customer token: the large pickup number shown on the success
+    screen after order creation. Can also be printed on a small
+    slip for counter pickup operations.
+
+  Hardware supported:
+    Built-in Sunmi thermal printer: direct driver via system SDK
+    Bluetooth serial: device discovery, pairing, auto-reconnect
+    USB serial: auto-detect on boot; configurable in Settings
+
+  Auto-print: when enabled in Settings, KOT prints automatically
+  on accept without any staff action. This is the recommended mode
+  for kitchen terminals.
+
+  Print deduplication: the app tracks every printed order ID. If an
+  order is rejected and re-accepted (edge case), a second KOT will
+  not print. Manual re-print buttons are always available on order
+  detail.
+
+  Paper width: 58 mm and 80 mm thermal roll sizes supported;
+  configurable in Settings.
+
+  QR codes are embedded in every ticket for order traceability.
+
+
+  4.10 NOTIFICATION CENTER
+  -------------------------
+  The bell icon in the top-right of every home screen opens an
+  in-app dropdown — not a separate screen. It never takes the user
+  away from what they were doing.
+
+  Header: "Mark all read" action.
+  Rows: color-coded icon + title + body text + relative time +
+  unread dot. Tapping routes to the source.
+
+  Five notification types:
+    Pending order: a new order has arrived (any channel)
+    Low stock / stockout: an inventory item crossed its par threshold
+    Chatbot escalation: a Messenger conversation needs manager reply
+    Long-seated / bill pending: a table has been occupied for
+    longer than the configured threshold without a bill being printed
+    Shift and day-end reminders: time to run the Z-report, shift
+    close, or daily count
+
+
+  4.11 STOREFRONT AND SETTINGS
+  ------------------------------
+  Each outlet has a public website at <slug>.quickbytes.buzz.
+  The storefront is a customer-facing web menu — not managed from
+  within this spec but driven by the menu and settings below.
+
+  Owner settings (Settings screen, pushed from More):
+
+    STOREFRONT
+    - Public URL slug: the subdomain customers access
+      (e.g., spicegarden.quickbytes.buzz)
+    - Hero media: upload a banner photo or promo video for the
+      customer-facing storefront
+    - Logo: restaurant logo image
+    - Menu theme: 6 visual theme swatches that style the public menu
+      (color palette of the customer-facing web menu)
+
+    ORDERING
+    - Delivery areas: list of named areas each with a delivery charge
+      in ৳; drives area picker in delivery order flow
+    - Discount presets: named presets as percentage or flat ৳ amount;
+      appear as chips in the order Review step
+    - VAT: percentage rate applied to all orders (stepper input)
+    - Service charge: optional percentage (e.g., for formal dining)
+    - Auto-print: toggle; when on, KOT prints automatically on accept
+
+    APP
+    - Language: English / বাংলা (persisted per device)
+    - Daily sales target: optional ৳ target; drives pace-to-target
+      in Control Tower when set (null = hidden, never zero-filled)
+    - About, privacy policy links
+
+
+----------------------------------------------------------------------
+5. KEY DIFFERENTIATORS
+----------------------------------------------------------------------
+
+These are the points that distinguish QuickBytes from generic POS
+software available in Bangladesh and regionally. Each one is worth
+a dedicated section or callout on the landing page.
+
+
+  1. BUILT FOR BANGLADESH FROM THE GROUND UP
+     QuickBytes is not a Western POS adapted for Bangladesh — it was
+     designed for Bangladesh. Prices are always in ৳ Taka. bKash and
+     UddoktaPay are first-class payment methods, not afterthoughts.
+     The entire UI is available in Bengali with a single tap. Delivery
+     areas are Dhaka neighborhoods with real street-level pricing.
+     The chatbot speaks to customers in the same way they message a
+     restaurant on Facebook today.
+
+  2. THREE SURFACES, ONE BACKEND
+     Most restaurants need more than one device. The cashier at the
+     counter uses a desktop. The waiter takes orders on a phone. The
+     kitchen has a fixed terminal. With QuickBytes all three sync to
+     the same outlet — the same menu, the same order queue, the same
+     analytics. There is no separate setup, no manual menu duplication,
+     no sync conflicts to resolve.
+
+  3. OFFLINE-FIRST TERMINAL — WORKS WITHOUT WIFI
+     The terminal app keeps a full copy of the order queue, menu, and
+     inventory on the device. When the router goes down or the mobile
+     data cuts out, staff keep working. Orders created offline are
+     queued and synced automatically when the connection returns.
+     Not a single order is lost to a connectivity hiccup.
+
+  4. MESSENGER CHATBOT BUILT INTO THE POS
+     The QuickBytes chatbot handles customer orders on Facebook
+     Messenger automatically — no human needed for routine orders.
+     When a customer asks for a dish photo, requests delivery to an
+     unusual area, or places a catering inquiry, the bot escalates
+     to the manager inside the POS app. The manager replies, sends
+     a photo, quotes a price, and hands back to the bot — all without
+     opening Facebook. Other POS systems treat chatbots as a
+     third-party add-on. QuickBytes treats it as a core channel.
+
+  5. OWNER ANALYTICS THAT RESPECT OWNER INTELLIGENCE
+     Most POS analytics show revenue, orders, and a bar chart. That
+     is not enough for a restaurant owner running a business.
+     QuickBytes shows COGS, prime cost, contribution margin, cohort
+     LTV, attachment rates, and wastage impact — the numbers that
+     actually drive profitability decisions. The Advanced analytics
+     toggle reveals forecast curves, repeat-customer retention, and
+     basket analysis. None of it is simplified or hidden behind a
+     "coming soon" label.
+
+  6. KOT PRINTS THE MOMENT YOU ACCEPT — NOT WHEN YOU REMEMBER TO
+     The kitchen should start cooking the moment an order is accepted.
+     On other systems, printing the KOT is a separate step that staff
+     forget or delay. On QuickBytes, accepting an order and printing
+     the KOT are one action. The kitchen never waits for a missed tap.
+
+  7. COUNTER MODE FOR FOOD CARTS AND FAST COUNTERS
+     Food carts, stall operators, and busy counter positions do not
+     have time for a table grid and a delivery form. Counter mode
+     converts the floor screen into a large tap-to-ring item grid.
+     One tap adds an item, another adds another — no menus to browse,
+     no forms to fill. This mode is designed specifically for the
+     tens of thousands of small food businesses in Bangladesh that
+     most POS software overlooks.
+
+  8. WORKS ON THE TERMINALS YOU ALREADY OWN
+     Sunmi VS2, iMin D1, PAX A920 — the terminals that thousands of
+     Bangladeshi businesses already own and run on Android 5.1.
+     QuickBytes supports them. There is no forced hardware upgrade,
+     no "minimum Android 10 required" message. The terminal APK
+     is built specifically for these devices with the built-in
+     Sunmi printer driver, low API target, and no Firebase
+     dependency to avoid version conflicts.
+
+
+----------------------------------------------------------------------
+6. SUBSCRIPTION TIERS
+----------------------------------------------------------------------
+
+Three tiers match the size and complexity of the restaurant.
+
+SIMPLE
+  Who: food carts, kiosks, counter-only QSR, small tea stalls
+  What: counter quick-sell grid, order management (no tables),
+  FAcebook Messenger chatbot, Bluetooth printing
+  Not included: dine-in tables, inventory, advanced analytics
+
+STANDARD
+  Who: sit-down restaurants, cafes, mid-size QSR
+  What: everything in Simple, plus dine-in floor management,
+  parcel and delivery flows, inventory management, stock-in and
+  count, supplier tracking, Messenger chat takeover,
+  owner analytics (basic), staff management, audit trail
+  Not included: advanced analytics (forecast, cohort, unit economics)
+
+PLUS / ADVANCED
+  Who: serious operators who run by the numbers, small chains
+  What: everything in Standard, plus advanced analytics (forecast,
+  cohort LTV, unit economics, prime cost, discount impact, wastage,
+  basket analysis), per-staff performance metrics in Control Tower,
+  pace-to-target, multi-outlet visibility (chain view)
+
+All tiers include: three surfaces (mobile + desktop + terminal),
+bilingual EN/Bengali UI, bKash and UddoktaPay integration, thermal
+printing, real-time order sync, Facebook Messenger bot, and the
+customer-facing storefront at <slug>.quickbytes.buzz.
+
+
+----------------------------------------------------------------------
+7. TECH CONTEXT (for LLM understanding — not for landing page prose)
+----------------------------------------------------------------------
+
+Stack:
+  Frontend: Flutter (Dart), Android + iOS + Windows + macOS + Linux
+  Backend: FastAPI + SQLAlchemy (async) + PostgreSQL (asyncpg)
+  Auth: JWT; email+password, Google OAuth, phone OTP
+  Realtime: WebSocket (Supabase Realtime broadcast), topic per outlet
+  Offline: SQLite (sqflite) on device; two-way REST sync; last-write-wins
+  Printing: ESC/POS over Bluetooth serial, USB serial, Sunmi SDK
+  Payments: bKash (checkout API), UddoktaPay
+  Storage: CDN for menu images and hero media
+  Chatbot: Facebook Messenger Webhook; conversations stored in Postgres
+
+Data model highlights:
+  - Orders carry full JSONB item snapshots so menu changes never
+    corrupt historical orders
+  - Modifiers are encoded as tags in MenuItem.tags_json (not a
+    separate ModGroup table) — option:name:delta and addon:price:name
+  - Cohort analysis is derived only from online-channel orders
+    (website + Messenger) that carry customer_name + mobile_number;
+    walk-in FOH orders never contribute cohort data
+  - Every new DB column defaults NULL/unset; null = "not configured"
+    and the UI hides the card rather than showing zeroes
+  - Wastage and daily sales target are nullable; their analytics
+    cards appear only when data exists
+
+Deployment:
+  Production: quickbytes.buzz, VPS at 160.187.130.80
+  Deploy: rsync + systemd service "rastarant"
+  DB migrations: ALTER TABLE IF NOT EXISTS on startup (no Alembic)
+  Terminal APK: built and distributed as a sideload to Sunmi devices
+
+
+----------------------------------------------------------------------
+8. BRAND AND VISUAL SYSTEM (for landing page design reference)
+----------------------------------------------------------------------
+
+Primary accent: #99FF47 (electric lime — "go", "positive", "active")
+Ink on lime: #14180E (never white text on lime)
+Accent-wash: #F0FADF (soft lime tint — emphasis, accept action,
+  owner analytics cards, bot chat bubbles)
+Accent-strong: #3E7E14 (lime text on white backgrounds)
+
+Neutrals: white surfaces, #F7F8F4 background, #1A1E14 ink,
+  #878C79 muted, #EDEEE8 hairline borders
+
+Signals: success #498F18, warning #B0760A, danger #D43A3F,
+  info #3E6FE0
+
+Occupied table: slate #EDF1F7 / border #D5DEEC / ink #4C679C
+  (deliberately not lime — occupied is neutral, not positive)
+
+Typography: Inter; tabular numerals for all money and quantities
+Corners: ≤12 px; only toggles are fully round
+Elevation: hairline borders preferred over box shadows
+Touch targets: ≥44 px on mobile; ≥40 px on desktop
+
+Design philosophy in one sentence: mostly white with one electric-lime
+moment per screen — calm enough for a busy kitchen, sharp enough to
+feel modern.
+
+
+----------------------------------------------------------------------
+END OF PRODUCT SPEC
+QuickBytes POS — quickbytes.buzz
+----------------------------------------------------------------------

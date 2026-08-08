@@ -28,6 +28,7 @@ import 'models/dashboard_metrics.dart';
 import 'models/dashboard_summary.dart';
 import 'models/desktop_pos.dart';
 import 'models/facebook_chatbot_config.dart';
+import 'models/whatsapp_chatbot_config.dart';
 import 'models/inventory_item.dart';
 import 'models/inventory_summary.dart';
 import 'models/inventory_supplier.dart';
@@ -390,6 +391,9 @@ class PosAppController extends ChangeNotifier {
   FacebookChatbotConfig? facebookChatbotConfig;
   bool facebookChatbotLoading = false;
   String? facebookChatbotError;
+  WhatsAppChatbotConfig? whatsappChatbotConfig;
+  bool whatsappChatbotLoading = false;
+  String? whatsappChatbotError;
   int _dismissedAppUpdateVersionCode = 0;
   AppUpdateInfo? _appUpdateWaitingForPermission;
   String? _cachedApkPath;
@@ -1995,6 +1999,57 @@ class PosAppController extends ChangeNotifier {
     });
   }
 
+  Future<void> loadWhatsappChatbotConfig() async {
+    if (!cloudConfig.canSync) return;
+    whatsappChatbotLoading = true;
+    whatsappChatbotError = null;
+    notifyListeners();
+    try {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      whatsappChatbotConfig = await cloudApiService
+          .fetchWhatsappChatbotConfig();
+    } catch (error) {
+      whatsappChatbotError = _userVisibleError(error);
+    } finally {
+      whatsappChatbotLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> saveWhatsappChatbotConfig({
+    required String phoneNumberId,
+    required String accessToken,
+    required bool isEnabled,
+    required bool orderingEnabled,
+  }) async {
+    if (!cloudConfig.canSync) {
+      lastError = 'Cloud sync must be connected before configuring WhatsApp.';
+      notifyListeners();
+      return false;
+    }
+    return _runBusy(() async {
+      cloudApiService.configure(
+        cloudConfig: cloudConfig,
+        serverConfig: serverConfig,
+      );
+      whatsappChatbotConfig = await cloudApiService
+          .updateWhatsappChatbotConfig(
+            phoneNumberId: phoneNumberId.trim().isEmpty
+                ? null
+                : phoneNumberId.trim(),
+            accessToken: accessToken.trim().isEmpty
+                ? null
+                : accessToken.trim(),
+            isEnabled: isEnabled,
+            orderingEnabled: orderingEnabled,
+          );
+      whatsappChatbotError = null;
+    });
+  }
+
   Future<void> saveLocalPublicSlug(String publicSlug) async {
     final cleanSlug = _normalizePublicSlug(publicSlug);
     serverConfig = serverConfig.copyWith(publicSlug: cleanSlug);
@@ -3591,7 +3646,7 @@ class PosAppController extends ChangeNotifier {
 
   Future<void> updateOrderDetails(
     String id, {
-    required OrderServiceType serviceType,
+    OrderServiceType? serviceType,
     String? tableNo,
     String? note,
     String? customerName,
@@ -3600,6 +3655,7 @@ class PosAppController extends ChangeNotifier {
     String? discountLabel,
     double? discountAmount,
     bool clearDiscount = false,
+    OrderPaymentMethod? paymentMethod,
   }) async {
     await database.updateOrderDetails(
       id,
@@ -3612,6 +3668,7 @@ class PosAppController extends ChangeNotifier {
       discountLabel: discountLabel,
       discountAmount: discountAmount,
       clearDiscount: clearDiscount,
+      paymentMethod: paymentMethod,
     );
     unawaited(syncService.syncNow());
   }

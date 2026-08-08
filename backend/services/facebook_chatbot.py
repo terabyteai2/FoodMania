@@ -771,7 +771,26 @@ async def _handle_event(
     if not text:
         text = "[Customer sent a non-text message]"
 
-    conversation = await _get_conversation(db, integration, psid)
+    await record_inbound_message(db, integration, psid, text)
+
+
+async def record_inbound_message(
+    db: AsyncSession,
+    integration: ChatbotIntegration,
+    customer_key: str,
+    text: str,
+) -> None:
+    """Channel-neutral inbound message pipeline.
+
+    Shared by the Facebook Messenger and WhatsApp webhook handlers: store the
+    inbound message, honor the manager takeover guard (escalated/replied
+    threads get an unread bump, never an auto-reply), then enqueue the text
+    for the shared micro-batching LLM worker. `customer_key` is the channel
+    customer id (Messenger psid or WhatsApp wa_id).
+    """
+    if not text:
+        text = "[Customer sent a non-text message]"
+    conversation = await _get_conversation(db, integration, customer_key)
     conversation.last_user_message = text
     append_chat_history(conversation, role="user", text=text)
     conversation.updated_at = datetime.now(timezone.utc)
@@ -943,6 +962,8 @@ async def _apply_order_action(
     outlet: Outlet,
     state: dict,
     action: dict,
+    order_source: str = FACEBOOK_ORDER_SOURCE,
+    order_note: str = "Facebook Messenger order",
 ) -> tuple[dict, dict | None]:
     intent = str(action.get("intent") or "none").strip().lower()
     if intent == "cancel":
@@ -974,8 +995,8 @@ async def _apply_order_action(
                 customer_name=str(state.get("customerName") or ""),
                 mobile_number=str(state.get("mobileNumber") or ""),
                 delivery_address=str(state.get("deliveryAddress") or ""),
-                note="Facebook Messenger order",
-                source=FACEBOOK_ORDER_SOURCE,
+                note=order_note,
+                source=order_source,
                 created_by_role="customer",
             )
             return _empty_state(), {
@@ -1081,7 +1102,45 @@ async def _validated_lines(
     return lines, None
 
 
-async def _send_message(integration: ChatbotIntegration, psid: str, text: str) -> None:
+def _is_whatsapp(integration: ChatbotIntegration) -> bool:
+    from services.whatsapp_chatbot import WHATSAPP_PROVIDER
+
+    return (integration.provider or "").strip().lower() == WHATSAPP_PROVIDER
+
+
+def _order_source_for(integration: ChatbotIntegration) -> str:
+    if _is_whatsapp(integration):
+        from services.whatsapp_chatbot import WHATSAPP_ORDER_SOURCE
+
+        return WHATSAPP_ORDER_SOURCE
+    return FACEBOOK_ORDER_SOURCE
+
+
+def _order_note_for(integration: ChatbotIntegration) -> str:
+    if _is_whatsapp(integration):
+        return "WhatsApp order"
+    return "Facebook Messenger order"
+
+
+async def _send_message(integration: ChatbotIntegration, customer_key: str, text: str) -> None:
+    """Channel-aware outbound sender.
+
+    Dispatches on the integration's provider so both the batch worker and the
+    manager reply endpoint work for every chatbot channel.
+    """
+    if not text:
+        return
+    if _is_whatsapp(integration):
+        from services.whatsapp_chatbot import send_whatsapp_message
+
+        await send_whatsapp_message(integration, customer_key, text)
+        return
+    await _send_facebook_message(integration, customer_key, text)
+
+
+async def _send_facebook_message(
+    integration: ChatbotIntegration, psid: str, text: str
+) -> None:
     if not text:
         return
     version = settings.META_GRAPH_API_VERSION.strip() or "v24.0"
@@ -1379,7 +1438,12 @@ async def _process_batch(batch: list[dict]) -> None:
                 and order_action
             ):
                 state, system_event = await _apply_order_action(
-                    db=db, outlet=outlet, state=state, action=order_action,
+                    db=db,
+                    outlet=outlet,
+                    state=state,
+                    action=order_action,
+                    order_source=_order_source_for(integration),
+                    order_note=_order_note_for(integration),
                 )
                 conv.state_json = state
 
@@ -1553,7 +1617,7 @@ async def _call_batched_llm(conversations: list[dict], system_prompt: str) -> di
 
 def _batched_system_prompt() -> str:
     return (
-        "You are an advanced AI assistant processing multiple simultaneous Facebook Messenger "
+        "You are an advanced AI assistant processing multiple simultaneous customer chat "
         "conversations for a restaurant POS system. \n\n"
         "### CORE DIRECTIVES\n"
         "1. LANGUAGE & TONE: Write only in bangla language Match the customer's tone and style. "
@@ -1668,7 +1732,7 @@ def _batched_system_prompt() -> str:
 
 def _final_reply_system_prompt() -> str:
     return (
-        "You are generating the final text reply for a Facebook Messenger restaurant bot. "
+        "You are generating the final text reply for a restaurant chatbot. "
         "The system has processed the user's intent and updated the conversation state. "
         "Write only in bangla language Match the customer's tone and style. "
         " Be natural, brief, and conversational.\n\n"

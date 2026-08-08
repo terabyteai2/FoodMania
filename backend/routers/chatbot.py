@@ -20,6 +20,7 @@ from schemas import (
     FacebookChatbotConfigRequest,
     FacebookChatbotNativeOAuthRequest,
     FacebookChatbotOAuthCompleteRequest,
+    WhatsAppChatbotConfigRequest,
     ok,
 )
 from services.facebook_chatbot import (
@@ -39,6 +40,12 @@ from services.facebook_chatbot import (
     save_facebook_config,
     _send_message,
 )
+from services.whatsapp_chatbot import (
+    get_whatsapp_config,
+    handle_whatsapp_webhook,
+    save_whatsapp_config,
+    whatsapp_webhook_verify_token,
+)
 
 router = APIRouter()
 CHATBOT_ADMIN_ROLES = {"manager", "owner"}
@@ -47,6 +54,10 @@ _CHAT_FROM = {
     "bot": "bot",
     "manager": "manager",
     "system": "system",
+}
+
+_CHAT_CUSTOMER_LABELS = {
+    "whatsapp": "WhatsApp customer",
 }
 
 
@@ -59,7 +70,7 @@ def _chat_status(state: dict) -> str:
     return value if value in {"needs", "replied", "bot"} else "bot"
 
 
-def _chat_dict(conv: ChatbotConversation) -> dict:
+def _chat_dict(conv: ChatbotConversation, provider: str = "facebook") -> dict:
     state = conv.state_json or {}
     history = recent_chat_history(conv.history_json, limit=CHAT_HISTORY_APP_LIMIT)
     messages = [
@@ -72,10 +83,13 @@ def _chat_dict(conv: ChatbotConversation) -> dict:
         for entry in history
         if isinstance(entry, dict)
     ]
+    channel_label = _CHAT_CUSTOMER_LABELS.get(
+        str(provider or "").strip().lower(), "Messenger customer"
+    )
     return {
         "id": conv.id,
         "psid": conv.psid,
-        "name": state.get("customerName") or "Messenger customer",
+        "name": state.get("customerName") or channel_label,
         "handle": conv.psid[-6:] if conv.psid else "",
         "status": _chat_status(state),
         "reason": state.get("reason"),
@@ -134,7 +148,7 @@ async def list_chats(
             .limit(100)
         )
     ).scalars().all()
-    return ok({"chats": [_chat_dict(c) for c in conversations]})
+    return ok({"chats": [_chat_dict(c, integration.provider) for c in conversations]})
 
 
 @router.post("/admin/chatbot/chats/{conversation_id}/reply")
@@ -165,7 +179,7 @@ async def reply_to_chat(
     await db.commit()
     await db.refresh(conv)
     await broadcast_chat_update(integration, conv)
-    return ok(_chat_dict(conv))
+    return ok(_chat_dict(conv, integration.provider))
 
 
 @router.post("/admin/chatbot/chats/{conversation_id}/handback")
@@ -185,7 +199,7 @@ async def hand_chat_back_to_bot(
     await db.commit()
     await db.refresh(conv)
     await broadcast_chat_update(integration, conv)
-    return ok(_chat_dict(conv))
+    return ok(_chat_dict(conv, integration.provider))
 
 
 async def _current_chatbot_admin(payload: dict, db: AsyncSession):
@@ -228,6 +242,65 @@ async def receive_facebook_webhook(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON.") from error
     await handle_facebook_webhook(db, payload)
     return {"success": True}
+
+
+@router.get("/webhooks/whatsapp", include_in_schema=False)
+async def verify_whatsapp_webhook(
+    hub_mode: str | None = Query(None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(None, alias="hub.challenge"),
+):
+    expected = whatsapp_webhook_verify_token()
+    if (
+        hub_mode == "subscribe"
+        and expected
+        and (hub_verify_token or "").strip() == expected
+        and hub_challenge is not None
+    ):
+        return Response(content=hub_challenge, media_type="text/plain")
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook token.")
+
+
+@router.post("/webhooks/whatsapp", include_in_schema=False)
+async def receive_whatsapp_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    raw = await request.body()
+    _verify_signature(raw, request.headers.get("X-Hub-Signature-256"))
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON.") from error
+    await handle_whatsapp_webhook(db, payload)
+    return {"success": True}
+
+
+@router.get("/admin/chatbot/whatsapp")
+async def get_whatsapp_chatbot_config(
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    return ok(await get_whatsapp_config(db, account.outlet_id))
+
+
+@router.put("/admin/chatbot/whatsapp")
+async def update_whatsapp_chatbot_config(
+    body: WhatsAppChatbotConfigRequest,
+    payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await _current_chatbot_admin(payload, db)
+    data = await save_whatsapp_config(
+        db=db,
+        outlet_id=account.outlet_id,
+        phone_number_id=body.phoneNumberId or "",
+        access_token=body.accessToken or "",
+        is_enabled=body.isEnabled,
+        ordering_enabled=body.orderingEnabled,
+    )
+    return ok(data)
 
 
 @router.get("/admin/chatbot/facebook")

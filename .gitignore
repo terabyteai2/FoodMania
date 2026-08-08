@@ -13,6 +13,7 @@ Thumbs.db
 # ---------- Deploy secrets ----------
 deploy/.deploy-secrets
 deploy/.deploy-secrets.*
+deploy/.deploy-dev-secrets
 
 # ---------- Python caches (regenerable) ----------
 __pycache__/

@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEYS: str = ""
     CHATBOT_OPENROUTER_MODEL: str = "openai/gpt-5-mini"
 
+    # In-app support assistant (Volt Assistant). Independent LLM route from the
+    # Facebook chatbot: empty overrides fall back to DeepSeek (DEEPSEEK_API_KEY
+    # + CHATBOT_DEEPSEEK_MODEL against https://api.deepseek.com/v1).
+    SUPPORT_CHAT_LLM_BASE_URL: str = ""
+    SUPPORT_CHAT_LLM_API_KEY: str = ""
+    SUPPORT_CHAT_LLM_MODEL: str = ""
+
     # Facebook Messenger chatbot
     FACEBOOK_APP_ID: str = ""
     FACEBOOK_APP_SECRET: str = ""
@@ -103,20 +110,38 @@ class Settings(BaseSettings):
     FACEBOOK_LOGIN_SCOPES: str = "pages_show_list,pages_manage_metadata,pages_messaging"
     FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES: int = 15
 
+    # WhatsApp Business API (Meta Cloud API) chatbot. Webhook verification
+    # token; falls back to FACEBOOK_WEBHOOK_VERIFY_TOKEN when unset (same Meta
+    # app). Signature verification reuses FACEBOOK_APP_SECRET.
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""
+
     # Voice agent — ElevenLabs
     ELEVENLABS_API_KEY: str = ""
     VOICE_ELEVENLABS_VOICE_ID: str = "SYVQhjMSUvWA1w0HkidA"
 
     # Voice agent — Sarvam AI (STT + LLM + TTS)
     SARVAM_API_KEY: str = ""
+    # Realtime STT (saaras:v3-realtime, event protocol). False = legacy /speech-to-text/ws.
+    SARVAM_STT_USE_REALTIME: bool = True
+    SARVAM_STT_STREAM_TYPE: str = "fast"
+    SARVAM_STT_ENDPOINTING: str = "vad"
+    SARVAM_STT_SILENCE_MS: int = 500
+    SARVAM_STT_THRESHOLD: float = 0.3
     SARVAM_STT_MODEL: str = "saaras:v3"
     SARVAM_STT_LANGUAGE: str = "bn-IN"
     SARVAM_LLM_MODEL: str = "sarvam-105b"
-    SARVAM_LLM_TEMPERATURE: float = 0.3
+    SARVAM_LLM_TEMPERATURE: float = 0.6
     SARVAM_LLM_MAX_TOKENS: int = 1024
+    # TTS over WebSocket (incremental, sentence-level). False = REST convert_stream.
+    SARVAM_TTS_USE_WS: bool = True
     SARVAM_TTS_MODEL: str = "bulbul:v3"
-    SARVAM_TTS_SPEAKER: str = "ishita"
+    SARVAM_TTS_SPEAKER: str = "suhani"
     SARVAM_TTS_LANGUAGE: str = "bn-IN"
+    SARVAM_TTS_PACE: float = 1.12
+    SARVAM_TTS_TEMPERATURE: float = 0.8
+    SARVAM_TTS_SAMPLE_RATE: int = 24000
+    SARVAM_TTS_MIN_BUFFER: int = 40
+    SARVAM_TTS_MAX_CHUNK: int = 150
 
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "159033519370",
+    "project_id": "quickbytes-2bc08",
+    "storage_bucket": "quickbytes-2bc08.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159033519370:android:9a1601e1aeeaf7818bdef3",
+        "android_client_info": {
+          "package_name": "com.terabyteai.foodmania.posadmin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHfFVDpwIiIp23guiPcCBNmb1u8LaFWWU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

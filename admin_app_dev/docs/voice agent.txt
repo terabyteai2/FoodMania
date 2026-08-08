@@ -1,0 +1,286 @@
+================================================================================
+            SARVAM AI VOICE AGENT – IMPLEMENTATION PLAN & API REFERENCE
+================================================================================
+
+Date: 2026-08-01
+For: Restaurant POS voice agent – end‑to‑end streaming with backend automation
+
+-------------------------------------------------------------------------------
+1. OVERVIEW & ARCHITECTURE
+-------------------------------------------------------------------------------
+
+Use Case:
+- Answer phone calls, take orders via natural conversation
+- Create orders on your backend server automatically via JSON action replies
+- Stream audio through your server (no round‑trip chaining)
+
+Recommended Architecture (All Streaming):
+
+  Customer Phone → [Audio] → Your Server → [WebSocket] → Sarvam STT
+                                                             ↓
+                                              [Transcripts streamed to your server]
+                                                             ↓
+                                              [Your server sends text to LLM via SSE]
+                                                             ↓
+                                              [LLM streams JSON actions + speech text]
+                                                             ↓
+                                      [Your server: parse JSON → trigger backend]
+                                      [Your server: forward speech to TTS]
+                                                             ↓
+                                              [TTS WebSocket streams audio chunks]
+                                                             ↓
+  Customer Phone ← [Audio] ← Your Server ← [Audio chunks] ← Sarvam TTS
+
+Key Principle: Your server is the central hub – Sarvam never talks directly to the
+customer's phone.
+
+-------------------------------------------------------------------------------
+2. AUTHENTICATION
+-------------------------------------------------------------------------------
+
+- Sign up at https://dashboard.sarvam.ai/
+- Generate API key in "API Keys" section – shown ONLY once, save immediately
+- Use in header: api-subscription-key: YOUR_SARVAM_API_KEY
+- Alternative: Authorization: Bearer YOUR_SARVAM_API_KEY
+- Store securely as environment variable (e.g., SARVAM_API_KEY)
+- Error on auth failure: HTTP 403 (not 401)
+
+-------------------------------------------------------------------------------
+3. STEP-BY-STEP IMPLEMENTATION
+-------------------------------------------------------------------------------
+
+3.1 SETUP
+
+  Install Python SDK:
+    pip install sarvamai
+
+  Or JavaScript/TypeScript:
+    npm install sarvamai
+
+  Initialize client:
+    from sarvamai import SarvamAI
+    client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+3.2 SPEECH‑TO‑TEXT (STT) – AUDIO IN
+
+  - Use WebSocket Streaming API (real‑time, low latency)
+  - Model: saaras:v3
+  - Mode: transcribe (standard transcription)
+  - Formats: WAV and raw PCM (pcm_s16le, pcm_l16, pcm_raw)
+  - Supports 8 kHz for telephony
+
+  Flow:
+    1. Your server opens WebSocket to Sarvam STT endpoint
+    2. Stream customer audio chunks from your server
+    3. Sarvam sends back transcription text as it becomes available
+       (interim and final results) – directly to your server
+    4. Your server forwards text to the LLM
+
+  Rate Limits (concurrent WebSocket connections):
+    Starter: 20
+    Pro: 100
+    Business: 100
+
+  Cost: ₹30 per hour (billed per second)
+
+3.3 LLM (CHAT COMPLETIONS) – UNDERSTANDING & ACTIONS
+
+  - Use Chat Completions API with streaming (stream: true)
+  - Recommended models: sarvam-30b (faster, cheaper) or sarvam-105b (more capable)
+
+  Two key features for your use case:
+
+  A. JSON Output Mode
+       Set response_format: { "type": "json_object" }
+       Guarantees valid JSON for easy backend parsing.
+
+  B. Tool Calling (Function Calling) – RECOMMENDED
+       Define tools like create_order, check_availability, confirm_order.
+       The model returns a structured tool_calls JSON object – cleaner and
+       more reliable than free‑form text parsing.
+
+  Flow:
+    1. Your server sends the STT transcript to /v1/chat/completions with stream: true
+    2. Sarvam streams back tokens via SSE (Server‑Sent Events)
+    3. Your server parses the accumulating JSON in real‑time
+    4. When a complete action JSON is detected, trigger your backend immediately
+    5. Simultaneously, forward the speech portion of the reply to TTS
+
+  Rate Limits:
+    Model         Starter   Pro      Business
+    default       60/min   200/min  1,000/min
+    sarvam-105B   40/min    60/min   120/min
+
+  Costs (per 1M tokens):
+    sarvam-105B: Input ₹4 / cached input ₹2.5 / output ₹16
+    sarvam-30B:  Input ₹2.5 / output ₹10
+
+3.4 TEXT‑TO‑SPEECH (TTS) – AUDIO OUT
+
+  - Use WebSocket Streaming API (lowest latency for voice agents)
+  - Models: bulbul:v2 (production) or bulbul:v3 (beta, higher quality)
+  - 30+ voices – see https://docs.sarvam.ai/api/api-guides-tutorials/text-to-speech/voices
+  - Supports sample rates: 8000, 16000, 22050, 24000 Hz (use 8000 for telephony)
+  - Character limit: 2500 per message (keep under 500 for lowest latency)
+
+  Flow:
+    1. Your server opens a WebSocket to Sarvam's TTS endpoint
+    2. As LLM streams text, your server feeds it incrementally to TTS
+    3. Sarvam streams back audio chunks BEFORE the entire text is processed
+    4. Your server forwards audio chunks to the customer's phone in real‑time
+    5. Keep the same WebSocket connection alive for multi‑turn conversations
+
+  Rate Limits (concurrent WebSocket connections):
+    Model    Starter   Pro      Business
+    v2       60        200      1,000
+    v3       30        200      1,000
+
+  Costs:
+    bulbul:v2: ₹15 per 10,000 characters
+    bulbul:v3: ₹30 per 10,000 characters (beta)
+
+3.5 BACKEND INTEGRATION – JSON ACTION PROCESSING
+
+  Two approaches:
+
+  Approach A: JSON Mode
+    Use response_format: { "type": "json_object" } and parse streaming tokens.
+
+  Approach B: Tool Calling (Recommended)
+    Define tools in your request:
+      tools = [{
+          "type": "function",
+          "function": {
+              "name": "create_order",
+              "description": "Create a new order in the POS system",
+              "parameters": {
+                  "type": "object",
+                  "properties": {
+                      "items": {"type": "array", "items": {"type": "string"}},
+                      "customer_name": {"type": "string"},
+                      "total": {"type": "number"}
+                  }
+              }
+          }
+      }]
+    The model returns structured tool_calls – parse and execute immediately.
+
+-------------------------------------------------------------------------------
+4. COST ESTIMATE (PER 2‑MINUTE CALL)
+-------------------------------------------------------------------------------
+
+Assumptions:
+  - STT: 2 minutes of audio
+  - LLM: sarvam-30B, ~150 input tokens, ~100 output tokens
+  - TTS: bulbul:v2, ~250 characters of spoken text
+
+  Service                   Calculation                                 Cost
+  ---------                 -----------                                 ----
+  STT                       (₹30 / 3600) × 120 sec                    ₹1.00
+  LLM (30B)                 (150×₹2.5/1M)+(100×₹10/1M)               ~₹0.0014
+  TTS (v2)                  (250/10,000) × ₹15                       ₹0.375
+  ------------------------------------------------------------------------
+  TOTAL PER CALL                                                      ~₹1.38
+
+Free credits on signup: ₹100 – that gives you ~72 calls (2 minutes each).
+
+-------------------------------------------------------------------------------
+5. RATE LIMITS SUMMARY (ALL APIS)
+-------------------------------------------------------------------------------
+
+  API                           Starter    Pro      Business
+  ----                          -------    ---      --------
+  STT WebSocket (concurrent)    20         100      100
+  LLM (default)                 60/min     200/min  1,000/min
+  LLM (sarvam-105B)             40/min      60/min   120/min
+  TTS WebSocket v2 (concurrent) 60         200      1,000
+  TTS WebSocket v3 (concurrent) 30         200      1,000
+
+-------------------------------------------------------------------------------
+6. SUBSCRIPTION PLANS
+-------------------------------------------------------------------------------
+
+  Plan       Price    Bonus Credits   Total Credits   Rate Limit
+  ---------  -------  --------------   --------------  -----------
+  Starter    ₹0       None             ₹0              60 req/min
+  Pro        ₹10,000  ₹1,000          ₹11,000         200 req/min
+  Business   ₹50,000  ₹7,500          ₹57,500         1,000 req/min
+
+-------------------------------------------------------------------------------
+7. ERROR HANDLING BEST PRACTICES
+-------------------------------------------------------------------------------
+
+  Retry ONLY for:         429 (rate limit / quota), 500, 503
+  Do NOT retry for:       400, 403, 422
+
+  Common error codes:
+    invalid_api_key_error      (403)  – invalid/missing key
+    invalid_request_error      (400/413/422) – bad parameters
+    insufficient_quota_error   (429)  – credits exhausted
+    rate_limit_exceeded_error  (429/503) – too many requests
+    internal_server_error      (500)  – server failure (retry with backoff)
+
+  Exponential backoff example (pseudocode):
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except ApiError as e:
+            if e.status_code not in (429, 500, 503):
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 60)
+
+-------------------------------------------------------------------------------
+8. SDK FEATURES
+-------------------------------------------------------------------------------
+
+  - Async support (concurrent requests)
+  - Configurable timeouts and automatic retries (exponential backoff)
+  - Typed exceptions mapped to HTTP status codes
+  - Streaming built in (handles SSE and WebSockets)
+
+  Async usage:
+    from sarvamai import AsyncSarvamAI
+    client = AsyncSarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+    # Run multiple requests concurrently
+
+-------------------------------------------------------------------------------
+9. NEXT STEPS
+-------------------------------------------------------------------------------
+
+  1. Sign up at https://dashboard.sarvam.ai/ – get ₹100 free credits
+  2. Generate API key – save immediately
+  3. Install SDK (Python or JavaScript)
+  4. Test STT WebSocket – stream a short audio file
+  5. Test LLM streaming – get JSON responses with stream: true
+  6. Test TTS WebSocket – stream audio output
+  7. Build the pipeline – connect all three with your server as hub
+  8. Integrate backend – parse JSON actions to create orders
+  9. Deploy & monitor – use dashboard for usage tracking
+
+  Community & Support:
+    - Discord: https://discord.com/invite/5rAsykttcs
+    - Email: see https://docs.sarvam.ai/api/getting-started/help
+
+-------------------------------------------------------------------------------
+10. KEY API DOCUMENTATION LINKS
+-------------------------------------------------------------------------------
+
+  Resource                              URL
+  --------                              ---
+  API Home                              https://docs.sarvam.ai/api/
+  Authentication                        https://docs.sarvam.ai/api-reference/authentication
+  SDKs                                  https://docs.sarvam.ai/api/getting-started/sdks
+  Errors & Troubleshooting              https://docs.sarvam.ai/api/getting-started/errors-troubleshooting
+  Rate Limits                           https://docs.sarvam.ai/api/getting-started/ratelimits
+  Pricing                               https://docs.sarvam.ai/api/getting-started/pricing
+  Changelog                             https://docs.sarvam.ai/api/getting-started/changelog
+  STT Overview                          https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/overview
+  Chat Completion                       https://docs.sarvam.ai/api/api-guides-tutorials/chat-completion/overview
+  TTS Overview                          https://docs.sarvam.ai/api/api-guides-tutorials/text-to-speech/overview
+  Batch STT                             https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/batch-api
+
+================================================================================
+END OF DOCUMENT
+================================================================================

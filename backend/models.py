@@ -448,3 +448,18 @@ class ChatbotConversation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     integration: Mapped[ChatbotIntegration] = relationship(back_populates="conversations")
+
+
+class SupportChatMessage(Base):
+    """Help-desk chat between an outlet (client) and the platform (server/LLM)."""
+
+    __tablename__ = "support_chat_messages"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    outlet_id: Mapped[str] = mapped_column(ForeignKey("outlets.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String, default="client", nullable=False)
+    sender_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    actions_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    steps_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

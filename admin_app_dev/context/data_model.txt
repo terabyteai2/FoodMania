@@ -1,0 +1,979 @@
+QUICKBYTES POS — COMPREHENSIVE DATA MODEL
+===========================================
+Updated: 2026-06-20
+Scope: ALL data models across backend/ (Python/SQLAlchemy/FastAPI) and admin_app/ (Flutter/Dart).
+
+================================================================================
+  TABLE OF CONTENTS
+================================================================================
+  1. BACKEND — SQLAlchemy ORM Models  (backend/models.py)
+  2. BACKEND — Pydantic API Schemas    (backend/schemas.py)
+  3. BACKEND — Router-level Pydantic Models
+  4. BACKEND — Service-layer Dataclass Models
+  5. BACKEND — Configuration & JWT Token Shapes
+  6. ADMIN_APP — Core Domain Models     (admin_app/lib/src/models/)
+  7. ADMIN_APP — Service Data Classes   (admin_app/lib/src/services/)
+  8. ADMIN_APP — Core Enums & Utility Types
+  9. ADMIN_APP — Theme / Design System Models
+
+================================================================================
+  1. BACKEND — SQLAlchemy ORM Models  (21 models, backend/models.py)
+================================================================================
+
+--- 1a. Restaurant ------------------------------------------------------------
+Table: restaurants
+id: str PK
+name: str
+created_at: datetime
+
+Relationships: outlets: list[Outlet]
+
+--- 1b. Outlet ----------------------------------------------------------------
+Table: outlets
+id: str PK
+restaurant_id: str FK -> restaurants.id
+name: str
+server_id: str UNIQUE
+table_count: int (default 10)
+status: str (default "active")
+public_slug: str? UNIQUE
+notes: str?
+banner_url: str?
+logo_url: str?
+logo_bitmap_url: str?
+video_url: str?
+gallery_images: list (JSONB)
+menu_theme: str (default "sultans_hearth")
+delivery_charge: Numeric(10,2) (default 0)
+pos_floor_layout: list (JSONB)
+pos_vat_rate_percent: Numeric(5,2) (default 0)
+pos_service_charge_percent: Numeric(5,2) (default 0)
+pos_discount_presets: list (JSONB)
+pos_daily_sales_target: Numeric(10,2)? (nullable)
+phone: str? (nullable)
+created_at: datetime
+
+Relationships: restaurant, admin_accounts, devices, menu_items, orders,
+               inventory_items, inventory_suppliers, subscription, chatbot_integrations
+
+--- 1c. AdminAccount ----------------------------------------------------------
+Table: admin_accounts
+id: str PK
+outlet_id: str FK -> outlets.id
+email: str UNIQUE
+username: str UNIQUE
+password_hash: str?
+role: str (default "manager")  // owner | manager | waiter
+google_sub: str? UNIQUE
+phone: str? UNIQUE
+phone_verified_at: datetime?
+invite_status: str?  // pending | accepted | declined
+display_name: str?
+invited_by_name: str?
+auth_provider: str (default "password")  // password | google | phone
+is_active: bool (default True)
+created_at: datetime
+
+Relationships: outlet
+
+--- 1d. Device ----------------------------------------------------------------
+Table: devices
+id: str PK
+outlet_id: str FK -> outlets.id
+server_id: str
+fcm_token: str?
+push_platform: str?
+last_seen_at: datetime?
+registered_at: datetime
+
+Relationships: outlet
+
+--- 1e. MenuItem --------------------------------------------------------------
+Table: menu_items
+id: str PK
+outlet_id: str FK -> outlets.id
+name: str
+name_en: str?
+name_bn: str?
+description: str?
+description_en: str?
+description_bn: str?
+price: Numeric(10,2)
+cost_price: Numeric(10,2)?
+category: str?
+category_en: str?
+category_bn: str?
+is_available: bool (default True)
+image_url: str?
+video_url: str?
+tags_json: str?  // JSON-encoded list of tag strings
+                 // e.g. ["icon:pizza","option:Large:50","addon:30:Cheese"]
+version: int (default 1)
+updated_at: datetime
+deleted_at: datetime?
+
+Relationships: outlet
+
+--- 1f. Order ----------------------------------------------------------------
+Table: orders
+id: str PK
+outlet_id: str FK -> outlets.id
+serial_number: int (default 0)
+source: str (default "pos")
+status: str (default "pending")  // pending|accepted|completed|rejected|preparing|ready|served|cancelled
+total_amount: Numeric(10,2)
+subtotal: Numeric(10,2)?
+vat_rate_percent: Numeric(5,2)?
+vat_amount: Numeric(10,2)?
+delivery_charge: Numeric(10,2)?
+service_type: str?  // dine_in|takeaway|delivery
+covers: int?
+payment_method: str?  // cash|card|bkash|nagad|pay_later
+table_no: str?
+items: JSONB (list of OrderLine dicts)
+notes: str?
+customer_name: str?
+delivery_address: str?
+mobile_number: str?
+created_by_account_id: str?
+created_by_role: str?
+shift_id: str?
+discount_label: str?
+discount_amount: Numeric(10,2) (default 0)
+service_charge_rate_percent: Numeric(5,2) (default 0)
+service_charge_amount: Numeric(10,2) (default 0)
+billing_snapshot: JSONB?
+kot_batches: JSONB? (list of KOT batch dicts)
+settled_at: datetime?
+order_date: Date?
+created_at: datetime
+updated_at: datetime
+
+Relationships: outlet
+OrderLine items shape (JSONB):
+  { id, menuItemId, name, nameEn, nameBn, qty, price, lineTotal,
+    costPriceSnapshot, note, kotBatchId, kotSentAt }
+KOT batch shape (JSONB):
+  { batchId, itemIds: [str], note, createdAt }
+
+--- 1g. PosShift --------------------------------------------------------------
+Table: pos_shifts
+id: str PK
+outlet_id: str FK -> outlets.id
+status: str (default "open")
+opening_cash: Numeric(10,2)
+expected_cash: Numeric(10,2)?
+counted_cash: Numeric(10,2)?
+variance_cash: Numeric(10,2)?
+opening_denominations: JSONB?  // {"500":2,"100":5,...}
+closing_denominations: JSONB?
+opened_by_account_id: str?
+closed_by_account_id: str?
+opened_at: datetime
+closed_at: datetime?
+updated_at: datetime
+
+--- 1h. PosSettlement ---------------------------------------------------------
+Table: pos_settlements (UNIQUE event_id)
+id: str PK
+event_id: str UNIQUE
+outlet_id: str FK -> outlets.id
+order_id: str FK -> orders.id
+shift_id: str? FK -> pos_shifts.id
+kind: str (default "payment")
+payment_method: str (default "cash")
+amount: Numeric(10,2)
+payer_label: str?
+created_by_account_id: str?
+created_at: datetime
+
+--- 1i. PosAuditEvent ---------------------------------------------------------
+Table: pos_audit_events (UNIQUE event_id)
+id: str PK
+event_id: str UNIQUE
+outlet_id: str FK -> outlets.id
+order_id: str? FK -> orders.id
+shift_id: str? FK -> pos_shifts.id
+action: str  // void|refund|comp|override_discount
+reason: str?
+metadata_json: JSONB?
+created_by_account_id: str?
+created_by_role: str?
+created_at: datetime
+
+--- 1j. PlatformAdmin ---------------------------------------------------------
+Table: platform_admins
+id: str PK
+email: str UNIQUE
+password_hash: str
+display_name: str?
+role: str (default "super_admin")
+is_active: bool (default True)
+created_at: datetime
+
+--- 1k. OutletSubscription ----------------------------------------------------
+Table: outlet_subscriptions
+id: str PK
+outlet_id: str FK -> outlets.id UNIQUE
+plan: str (default "trial")  // trial|monthly|yearly
+status: str (default "active")  // active|expired|cancelled
+starts_at: datetime
+expires_at: datetime?
+last_payment_session_id: str?
+updated_at: datetime
+
+Relationships: outlet
+
+--- 1l. BkashSession (legacy) -------------------------------------------------
+Table: bkash_sessions
+id: str PK
+server_id: str
+amount: Numeric(10,2)
+currency: str (default "BDT")
+purpose: str
+status: str (default "pending")
+created_at: datetime
+
+--- 1m. UddoktaPaySession -----------------------------------------------------
+Table: uddoktapay_sessions
+id: str PK
+outlet_id: str? FK -> outlets.id
+server_id: str
+amount: Numeric(10,2)
+currency: str (default "BDT")
+purpose: str  // admin_activation|subscription
+plan: str?
+status: str (default "pending")  // pending|completed|cancelled|failed
+invoice_id: str?
+transaction_id: str?
+payment_url: str?
+customer_name: str?
+customer_email: str?
+created_at: datetime
+
+--- 1n. InventoryItem ---------------------------------------------------------
+Table: inventory_items
+id: str PK
+outlet_id: str FK -> outlets.id
+name: str
+category: str (default "")
+unit: str (default "pcs")  // kg|g|L|mL|pcs
+quantity: Numeric(12,4) (default 0)
+min_threshold: Numeric(12,4) (default 0)
+cost_per_unit: Numeric(12,4) (default 0)
+notes: str (default "")
+default_supplier_id: str? FK -> inventory_suppliers.id
+default_reorder_qty: Numeric(12,4) (default 0)
+updated_at: datetime
+created_at: datetime
+deleted_at: datetime?
+
+Relationships: outlet, adjustments, daily_counts
+
+--- 1o. InventorySupplier -----------------------------------------------------
+Table: inventory_suppliers
+id: str PK
+outlet_id: str FK -> outlets.id
+name: str
+phone: str (default "")
+notes: str (default "")
+is_active: bool (default True)
+created_at: datetime
+updated_at: datetime
+
+Relationships: outlet
+
+--- 1p. StockAdjustment -------------------------------------------------------
+Table: stock_adjustments
+id: str PK
+outlet_id: str FK -> outlets.id
+inventory_item_id: str FK -> inventory_items.id (CASCADE)
+delta: Numeric(12,4)  // positive = stock-in, negative = usage/waste
+type: str  // restock|usage|waste|correction
+note: str (default "")
+total_cost_bdt: Numeric(12,2) (default 0)
+supplier_id: str? FK -> inventory_suppliers.id
+supplier_name: str (default "")
+reason: str (default "")
+bill_ref: str (default "")
+invoice_ref: str (default "")
+created_by_account_id: str?
+created_by_role: str?
+created_at: datetime
+
+Relationships: item
+
+--- 1q. DailyStockCount -------------------------------------------------------
+Table: daily_stock_counts
+id: str PK
+outlet_id: str FK -> outlets.id
+inventory_item_id: str FK -> inventory_items.id (CASCADE)
+count_date: str  // yyyy-MM-dd
+quantity: Numeric(12,4)
+created_at: datetime
+
+Relationships: item
+
+--- 1r. SystemConfig ----------------------------------------------------------
+Table: system_configs
+key: str PK
+value: str
+updated_at: datetime
+
+--- 1s. ChatbotIntegration ----------------------------------------------------
+Table: chatbot_integrations (UNIQUE provider+outlet, UNIQUE provider+page_id)
+id: str PK
+outlet_id: str FK -> outlets.id
+provider: str (default "facebook")
+page_id: str
+page_name: str?
+page_access_token: str
+is_enabled: bool (default True)
+ordering_enabled: bool (default True)
+last_error: str?
+created_at: datetime
+updated_at: datetime
+
+Relationships: outlet, conversations
+
+--- 1t. ChatbotOAuthSession ---------------------------------------------------
+Table: chatbot_oauth_sessions
+id: str PK
+outlet_id: str FK -> outlets.id
+account_id: str FK -> admin_accounts.id
+provider: str (default "facebook")
+pages_json: JSONB (list of {pageId, pageName})
+expires_at: datetime
+created_at: datetime
+
+--- 1u. ChatbotConversation ---------------------------------------------------
+Table: chatbot_conversations (UNIQUE integration_id + psid)
+id: str PK
+integration_id: str FK -> chatbot_integrations.id
+page_id: str
+psid: str  // Facebook Page-Scoped ID
+state_json: JSONB?
+history_json: JSONB? (list of message dicts)
+last_user_message: str?
+last_bot_message: str?
+created_at: datetime
+updated_at: datetime
+
+Relationships: integration
+
+
+================================================================================
+  2. BACKEND — Pydantic API Schemas  (68 models, backend/schemas.py + routers)
+================================================================================
+
+--- 2a. Tenant / Bootstrap ----------------------------------------------------
+BootstrapRequest:    { serverId, restaurantName, managerName?, outletName?,
+                       restaurantId?, outletId?, tableCount? (0-200) }
+BootstrapResponse:   { serverId, restaurantId, outletId, restaurantName,
+                       outletName, deviceToken, tableCount (0-200) }
+
+--- 2b. Admin Auth ------------------------------------------------------------
+AdminLoginRequest:           { usernameOrEmail, password, serverId }
+AdminCreateRequest:          { outletId, email, username, password?, role,
+                               googleSub?, displayName? }
+GoogleAdminAuthRequest:      { idToken, role, serverId?, restaurantName?,
+                               outletName?, restaurantId?, outletId?,
+                               tableCount? (0-200) }
+PhoneSendOtpRequest:         { phone, appSignature? (11-char hash) }
+PhoneVerifyOtpRequest:       { phone, code }
+PhoneCompleteManagerSignup:  { signupToken, restaurantName, managerName?,
+                               outletName?, serverId?, outletId?, tableCount? }
+StaffInviteRespondRequest:   { signupToken, inviteId, accept }
+StaffInviteRequest:          { phone?, email?, displayName?, role? (waiter/manager) }
+StaffUpdateRequest:          { isActive?, displayName? }
+StaffDevBypassLoginRequest:  { email, serverId, bypassSecret }
+OutletProfileUpdateRequest:  { restaurantName?, phone? }
+DisplayNameUpdateRequest:    { displayName }
+PublicSlugUpdateRequest:     { publicSlug }
+OutletWipeRequest:           { confirmation }
+OnboardingPlanRequest:       { plan }
+
+--- 2c. Messaging / Chatbot ---------------------------------------------------
+FacebookChatbotConfigRequest:    { pageAccessToken?, isEnabled, orderingEnabled }
+FacebookChatbotConfigResponse:   { isConfigured, isEnabled, orderingEnabled,
+                                   pageId?, pageName?, tokenPreview?, lastError? }
+FacebookChatbotOAuthStartResp:   { authorizationUrl, expiresInSeconds }
+FacebookChatbotOAuthCompleteReq: { sessionId, pageId }
+FacebookChatbotNativeOAuthReq:   { userAccessToken }
+ChatReplyRequest:                { text }
+
+--- 2d. Devices ---------------------------------------------------------------
+DeviceRegisterRequest: { serverId, restaurantId, outletId, restaurantName,
+                         outletName, tableCount? (0-200), fcmToken?,
+                         pushPlatform? }
+
+--- 2e. Menu ------------------------------------------------------------------
+MenuItemPayload:    { id, name, nameEn?, nameBn?, description?, descriptionEn?,
+                      descriptionBn?, price, costPrice?, category?, categoryEn?,
+                      categoryBn?, isAvailable, imageUrl?, tags?, version }
+ImageUploadRequest: { dataUrl, fileName }
+MenuSubItem:        { nameEn, nameBn? }
+MenuAddOnCandidate: { nameEn, nameBn?, price (>0) }
+MenuSizeVariant:    { nameEn, nameBn?, price (>0) }
+MenuScanCandidate:  { nameEn, nameBn, descriptionEn, descriptionBn,
+                      categoryEn, categoryBn, price (>0), isAvailable,
+                      iconKey, imageUrl?, subItems, addOns, sizeVariants }
+OutletMediaPatch:   { videoUrl?, logoUrl?, menuTheme?,
+                      deliveryCharge? (0-100000) }
+
+--- 2f. Inventory -------------------------------------------------------------
+InventoryItemPayload:       { id, name, category?, unit?, quantity,
+                              minThreshold, costPerUnit, notes?,
+                              defaultSupplierId?, defaultReorderQty,
+                              createdAt?, updatedAt? }
+StockAdjustmentPayload:     { id?, inventoryItemId, delta, type, note?,
+                              totalCostBdt, supplierId?, supplierName?,
+                              reason?, billRef?, createdAt? }
+StockAdjustmentBatchPayload: { adjustments (min 1) }
+InventorySupplierPayload:   { id?, name, phone?, notes? }
+InventorySupplierPatch:     { name?, phone?, notes?, isActive? }
+DailyStockCountPayload:     { id?, inventoryItemId, countDate, quantity,
+                              createdAt? }
+ReceiptScanCandidate:       { nameEn, nameBn, qty (>=0), unit, unitPriceBdt,
+                              totalBdt, matchedInventoryItemId? }
+
+--- 2g. Orders ----------------------------------------------------------------
+OrderLineItemPayload: { id?, orderId?, menuItemId?, name, nameEn?, nameBn?,
+                        qty (>=1), price, lineTotal, costPriceSnapshot?,
+                        note?, kotBatchId?, kotSentAt? }
+OrderPayload:          { id, serialNumber, source, status, totalAmount,
+                         subtotal?, vatRatePercent?, vatAmount?,
+                         deliveryCharge? (>=0), serviceType?, covers?,
+                         paymentMethod?, tableNo?, items, notes?,
+                         customerName?, deliveryAddress?, mobileNumber?,
+                         createdByAccountId?, createdByRole?, shiftId?,
+                         discountLabel?, discountAmount? (>=0),
+                         serviceChargeRatePercent? (0-100),
+                         serviceChargeAmount? (>=0), billingSnapshot?,
+                         kotBatches?, settledAt?, createdAt?, updatedAt? }
+OrderStatusUpdate:     { status, updatedAt? }
+OrderDetailsUpdate:    { serviceType?, tableNo?, notes?, customerName?,
+                         deliveryAddress?, mobileNumber?, updatedAt? }
+OrderItemsUpdate:      { items, subtotal?, totalAmount?, vatRatePercent?,
+                         vatAmount?, deliveryCharge? (>=0), updatedAt? }
+
+--- 2h. Desktop POS -----------------------------------------------------------
+PosFloorTablePayload:   { id, label (1-32), seats (1-99), sortOrder (>=0) }
+PosFloorZonePayload:    { id, name (1-64), sortOrder (>=0), tables }
+PosDiscountPresetPayload: { id, label (1-64), kind (percent|flat), value (>=0) }
+PosSettingsPatchPayload:  { floorLayout?, vatRatePercent? (0-100),
+                            serviceChargePercent? (0-100), discountPresets?,
+                            dailySalesTarget? (>=0) }
+PosShiftOpenPayload:      { id, openingCash (>=0), denominations }
+PosShiftClosePayload:     { countedCash (>=0), denominations }
+PosSettlementLinePayload: { eventId, paymentMethod, amount, payerLabel? }
+PosSettlementPayload:     { shiftId, discountPresetId?, customDiscountLabel?,
+                            discountAmount (>=0),
+                            serviceChargeRatePercent (0-100),
+                            serviceChargeAmount (>=0), totalAmount (>=0),
+                            settlements (min 1) }
+PosKotPayload:            { batchId, itemIds (min 1), note? }
+PosAuditPayload:          { eventId, action, reason?, shiftId?, amount?,
+                            paymentMethod?, metadata }
+
+--- 2i. Payments --------------------------------------------------------------
+BkashCreateRequest:      { serverId, amount, currency, purpose }
+UddoktaPayCreateRequest: { serverId, amount, currency, purpose, plan,
+                           fullName, email }
+UddoktaPayVerifyRequest: { invoiceId? }
+
+--- 2j. Platform Admin --------------------------------------------------------
+PlatformLoginRequest:         { email, password }
+PlatformOutletPatchRequest:   { name?, status?, notes? }
+PlatformAccountPatchRequest:  { isActive?, role?, displayName? }
+PlatformSubscriptionRequest:  { plan, status, extendDays?, expiresAt? }
+PlatformPaymentStatusPatch:   { status, activateSubscription }
+PlatformAppUpdateRequest:     { versionName, versionCode (>=1), apkUrl,
+                                releaseNotes?, required, enabled }
+PlatformBlockingNoticeReq:    { title?, message, imageUrl?, inputField,
+                                inputLabel?, outletIds? }
+BlockingNoticeRespondRequest: { response }
+PlatformAdminCreateRequest:   { email, password, displayName? }
+PlatformAdminPatchRequest:    { isActive?, displayName?, password? }
+SystemConfigPatchRequest:     { baseUrl?, bkashEnabled?, maintenanceMode?,
+                                supportEmail? }
+OutletCreateRequest:          { restaurantId?, restaurantName, outletName,
+                                serverId }
+OutletAccountCreateRequest:   { email, username, password, displayName?, role }
+
+--- 2k. Customer (routers/customer.py) ---------------------------------------
+CustomerOrderItem:    { menuItemId, name, qty, price }
+CustomerOrderRequest: { items, tableNo?, note?, orderType?, customerName?,
+                        deliveryAddress?, mobileNumber? }
+ReverseGeocodeRequest: { lat (-90 to 90), lng (-180 to 180) }
+
+
+================================================================================
+  3. BACKEND — Service-layer Dataclass Models
+================================================================================
+
+DeliveryOrderLine          (services/customer_orders.py):
+  @dataclass(frozen=True): { menu_item_id, name, qty, price }
+
+MenuScanParseResult        (services/menu_scan.py):
+  @dataclass: { items: list[MenuScanCandidate], provider, warnings }
+
+ReceiptScanParseResult     (services/receipt_scan.py):
+  @dataclass: { items: list[ReceiptScanCandidate], provider, warnings, category }
+
+_OtpEntry                  (services/phone_otp.py):
+  @dataclass: { code, expires_at }
+
+LegacyOrderImport          (services/order_history_import.py):
+  @dataclass(frozen=True): { id, serial_number, source_order_id, total_amount,
+                             items: list[dict], notes?, created_at }
+
+LegacyOrderCsvParseResult  (services/order_history_import.py):
+  @dataclass(frozen=True): { orders: list[LegacyOrderImport], row_count,
+                             skipped_rows, errors, columns }
+
+_Provider (menu_scan.py): @dataclass(frozen=True) -> { name, api_key, model, url, supports_schema }
+_Provider (receipt_scan.py): same shape for receipt-scanner AI providers
+
+ConnectionManager          (routers/ws.py): WebSocket room manager, per-outlet_id
+
+
+================================================================================
+  4. BACKEND — Configuration & JWT Token Shapes
+================================================================================
+
+Settings (backend/config.py) — pydantic.BaseSettings loaded from .env (~50 fields):
+  DATABASE_URL, SECRET_KEY, BASE_URL, GOOGLE_CLIENT_IDS, MAPBOX_ACCESS_TOKEN,
+  FIREBASE_PROJECT_ID, R2_ENDPOINT, R2_*, UDDOKTAPAY_API_KEY,
+  PLATFORM_ADMIN_EMAIL, ONECODESOFT_API_KEY, TWILIO_*, GROQ_API_KEY,
+  OPENAI_API_KEY, FACEBOOK_*, etc.
+
+JWT token payloads (backend/auth.py):
+  Device token:  { sub: outlet_id, account_id?, exp }  (365d)
+  Platform token: { sub: admin_id, type: "platform", exp }  (8h)
+  Signup token:  { type: "phone_signup", phone, purpose?, invite_id?, exp }  (15m)
+
+Dict shapes:
+  subscription_access_dict(): { hasAppAccess, subscriptionStatus, subscriptionPlan, subscriptionExpiresAt }
+  subscription_to_dict():     { id, outletId, outletName, plan, status, startsAt, expiresAt, ... }
+  blocking_notice:            { enabled, title, message, imageUrl, inputField, inputLabel, updatedAt }
+  app_update:                 { enabled, versionName, versionCode, apkUrl, releaseNotes, required, publishedAt }
+  push_notification payload:  { type, orderId, status, serialNumber, actionTarget }
+
+Helper response shapes:
+  ok(data)  -> { data, error: null }
+  err(msg)  -> { error: msg }
+
+
+================================================================================
+  5. ADMIN_APP — Core Domain Models  (admin_app/lib/src/models/)
+================================================================================
+
+--- 5a. AccountRole (enums/account_role.dart) ---------------------------------
+enum AccountRole { owner, manager, waiter }
+  value: String (name)
+  label / labelBn: localized labels
+  isManager: bool (owner || manager) — privilege gate
+  isOwner, isWaiter: bool
+  parse(String?): AccountRole (legacy "staff" -> waiter)
+
+--- 5b. AdminBlockingNotice ---------------------------------------------------
+{ enabled, title, message, imageUrl?, inputField, inputLabel?, updatedAt? }
+  isBlocking: enabled && message not empty
+  disabled(): returns a disabled sentinel
+  fromJson / toJson
+
+--- 5c. AppUpdateInfo ---------------------------------------------------------
+{ enabled, versionName, versionCode, apkUrl, releaseNotes, required,
+  publishedAt? }
+  isUsable: bool
+  isNewerThan(int currentVersionCode): bool
+  disabled(): sentinel
+
+--- 5d. AuditEntry ------------------------------------------------------------
+enum AuditAction { void_, refund, comp, discount, unknown }
+AuditLineItem: { name, qty }
+AuditEntry: { id, action, createdAt, reason?, amount?, orderSerial?,
+              who?, role?, items: list[AuditLineItem] }
+
+--- 5e. BkashPaymentSession ---------------------------------------------------
+{ paymentId, checkoutUrl, status, amount, currency, transactionId?,
+  merchantInvoiceNumber?, invoiceId?, lastError? }
+  paid: bool (status == paid/verified)
+
+--- 5f. ChatThread (Messenger) ------------------------------------------------
+enum ChatStatus { needs, replied, bot }
+enum ChatSender { customer, bot, manager, system }
+ChatMessage: { sender, text, kind? (e.g. "image"), createdAt? }
+ChatThread:  { id, name, handle, status, updatedAt, messages,
+               reason?, lastUserMessage?, unread }
+
+--- 5g. DailyReport -----------------------------------------------------------
+DailyReport: { date, unexplainedVarianceBdt, varianceItemCount, headlineEn,
+               headlineBn, breakdown, reorderSuggestions, stockFlow,
+               revenueSplit, topSellers }
+StockFlow: { inQty, outQty, spendBdt }
+RevenueSplit: { key, label, valueBdt, pct }
+TopSeller: { name, qty, salesBdt }
+VarianceBreakdown: { itemId, nameEn, nameBn, varianceQty, unit, expectedQty,
+                     actualQty, recurringWeeks, noteEn, varianceBdt }
+ReorderSuggestion: { itemId, nameEn, nameBn, qtyToOrder, unit, ctaEn }
+
+--- 5h. DailyStockCount -------------------------------------------------------
+{ id, inventoryItemId, countDate, quantity, createdAt }
+
+--- 5i. DashboardMetrics ------------------------------------------------------
+{ todayOrders, pendingOrders, completedOrders, totalSales, sevenDaySales,
+  thirtyDaySales, menuItemsCount, availableItemsCount, pendingSyncCount }
+
+--- 5j. DashboardSummary ------------------------------------------------------
+DashboardSummary: { asOf, moneyFirst, rightNow, review? }
+MoneyFirstSection: { earnedToday, earnedYesterday, deltaPct, deltaNote,
+                     sparkline, kpis, topMovers, serviceMix, closeTodayHintBdt }
+DashboardKpis: { orders, openOrders, avgTicket, profitPct }
+TopMover: { menuItemId, nameEn, nameBn, qty, salesBdt, sharePct }
+RightNowSection: { tablesSeated, tablesTotal, ordersInKitchen, lateOrders,
+                   lateMinThreshold, needsAttention, floorTables,
+                   todaySoFarBdt, todaySoFarDeltaPct }
+FloorTable: { tableNo, state, covers, orderId? }
+NeedsAttentionItem: { kind, title, body, cta, refId }
+
+ReviewSection: { hero, kpis, revenueByHour, itemsSold, bySource, issues,
+                 staff, fleet }
+ReviewHero: { earnedTodayBdt, earnedYesterdayBdt, avg7Bdt, deltaPct,
+              deltaUp, periodNote }
+ReviewKpis: { orders, covers, avgTicketBdt, foodCostPct? }
+RevenueByHour: { startHour, today, avg7, peakIndex, peakLabel }
+ReviewItem: { nameEn, nameBn, qty, salesBdt, marginBdt?, foodCostPct?,
+              lowMargin }
+SourceSlice: { key, label, valueBdt, pct }
+ReviewIssue: { tag, title, body }
+StaffScore: { name, role, covers, ordersToday, avgTicketBdt }
+
+FleetSection: { outlets, kpis, revenueByHour, capacity, topMovers, goal,
+                alerts, benchmarks, staffingSuggestion, openOutlets }
+FleetOutlet: { rank, name, area, revBdt, covers, deltaPct, deltaUp,
+               foodCostPct?, health (list of HealthChip), tablesSeated,
+               tablesTotal, occupancyPct, latePct, openOrders, sparkline }
+FleetKpis: { outletCount, revBdt, deltaPct, deltaUp, avg7Bdt, covers,
+             avgTicketBdt, foodCostPct?, onGoalCount, fleetLatePct }
+FleetGoal: { targetBdt, progressPct, remainingBdt }
+FleetAlert: { kind, title, body }
+FleetBenchmarks: { bestAvgTicketOutlet, worstLateOutlet }
+StaffingSuggestion: { outletName, peakLabel }
+HealthChip: { tone, label, value }
+CapacityRow: { name, pct, status }
+
+--- 5k. DesktopPos (Floor Layout) ---------------------------------------------
+PosFloorTable:  { id, label, seats (default 4), sortOrder }
+PosFloorZone:   { id, name, sortOrder, tables: list[PosFloorTable] }
+PosDiscountPreset: { id, label, kind (percent|flat), value }
+DesktopPosSettings: { floorLayout, vatRatePercent, serviceChargePercent,
+                      discountPresets, dailySalesTarget? }
+
+PosShift: { id, status, openingCash, expectedCash?, countedCash?,
+            varianceCash?, openingDenominations, closingDenominations,
+            openedByAccountId?, closedByAccountId?, openedAt, closedAt? }
+PosSettlementLine: { eventId, paymentMethod, amount, payerLabel? }
+PosReportSnapshot: { sales, orders, covers, paymentSplit, hourlySales, items,
+                     staff, coversByHour, auditCounts,
+                     priorSameWeekdayHourlyAverage, discounts, vatIncluded,
+                     deliveryFees, serviceSplit }
+
+--- 5l. FacebookChatbotConfig -------------------------------------------------
+FacebookChatbotConfig: { isConfigured, isEnabled, orderingEnabled, pageId?,
+                         pageName?, tokenPreview?, lastError? }
+FacebookChatbotOAuthStart: { authorizationUrl, expiresInSeconds }
+FacebookChatbotPage: { pageId, pageName }
+FacebookChatbotOAuthPages: { sessionId, pages }
+
+--- 5m. InventoryItem ---------------------------------------------------------
+{ id, name, category, unit (kg|g|L|mL|pcs), quantity, minThreshold,
+  costPerUnit, notes, defaultSupplierId?, defaultReorderQty, createdAt, updatedAt }
+  isLowStock: bool (qty > 0 && <= minThreshold)
+  isOutOfStock: bool (qty <= 0)
+  nameEn / nameBn: split from "English/বাংলা" convention
+  localizedName(AppLanguage)
+
+--- 5n. InventorySummary ------------------------------------------------------
+InventorySummary: { asOf, stockValueBdt, varianceTodayBdt, varianceItemCount,
+                    alerts, categories, items }
+InventoryCategoryBucket: { key, labelEn, labelBn, count }
+InventorySummaryItem: { id, nameEn, nameBn, category, unit, onHand, minThreshold,
+                        todayIn, todayOut, todaySpendBdt, varianceQty,
+                        varianceStatus (ok|low|out|variance), costPerUnit }
+
+--- 5o. InventorySupplier -----------------------------------------------------
+{ id, name, phone, notes, isActive, createdAt, updatedAt }
+
+--- 5p. InventoryUnits (constants) --------------------------------------------
+Static constants: kg, g, L, mL, pcs
+  displayLabel(unit, isBn?): String
+  normalize(raw): String — normalizes variants like "gm"->"g", "liter"->"L"
+  formatQuantity(qty, unit, isBn?): String
+
+--- 5q. MenuItem --------------------------------------------------------------
+MenuItem: { id, name, nameEn, nameBn, description, descriptionEn, descriptionBn,
+            category, categoryEn, categoryBn, price, costPrice?, imageUrl?,
+            isAvailable, preparationTimeMinutes?, tags, syncStatus, version,
+            deletedAt?, createdAt, updatedAt }
+  extras: MenuItemExtras (derived from tags)
+
+MenuItemExtras: { iconKey?, discountPercent?, discountFlat?, includes,
+                  options, addOns, passthrough }
+  fromTags(List<String>) / toTags(): List<String>
+  Tag encoding: "icon:<key>", "discount:percent:<n>", "discount:flat:<n>",
+                "inc:<text>", "option:<name>:<priceDelta>", "size:<name>:<price>",
+                "addon:<price>:<name>"
+
+MenuOption: { name, priceDelta }
+MenuAddOn:  { name, price }
+
+--- 5r. OrderItem / OrderRequestItem -----------------------------------------
+OrderItem: { id, orderId, menuItemId, name, nameEn, nameBn, qty, price,
+             lineTotal, costPriceSnapshot, note?, kotBatchId?, kotSentAt? }
+OrderRequestItem: { menuItemId, qty, note?, existingOrderItemId?, unitPrice?,
+                    lineTotal?, nameSuffix?, nameOverride?, nameEnOverride?,
+                    nameBnOverride? }
+
+--- 5s. OrderModel ------------------------------------------------------------
+OrderModel: { id, orderNo, customerName?, tableNo?, note?, deliveryAddress?,
+              mobileNumber?, createdByAccountId?, createdByRole?, shiftId?,
+              discountLabel?, discountAmount, serviceChargeRatePercent,
+              serviceChargeAmount, billingSnapshot, kotBatches, settledAt?,
+              serviceType? (OrderServiceType), covers? (int),
+              paymentMethod? (OrderPaymentMethod), source (OrderSource),
+              status (OrderStatus), subtotal, vatRatePercent, vatAmount,
+              deliveryCharge, total, items, syncStatus, version, sequenceNo,
+              orderDate?, createdAt, updatedAt }
+  displaySequence: "#n" for sequenceNo > 0 else "#-"
+
+--- 5t. Order Enums -----------------------------------------------------------
+OrderPaymentMethod: enum { cash, card, bkash, nagad, payLater }
+  value: wire string; label / banglaLabel; tryParse(String?)
+
+OrderServiceType: enum { dineIn, takeaway, delivery }
+  value: wire string; label / banglaLabel; localized(bool); tryParse(String?)
+
+OrderSource: enum { localLan, cloud, facebookMessenger, desktopPos, manual }
+  value: wire string; label; parse(String?, fallback)
+
+OrderStatus: enum { pending, accepted, completed, rejected,
+                    preparing (legacy), ready (legacy), served (legacy),
+                    cancelled (legacy) }
+  adminStatus: normalizes legacy states
+  isOpen / isCompleted / isRejected: bool
+  canTransitionTo(OrderStatus): bool
+  tryParse(String?): OrderStatus?
+
+--- 5u. OrderingSettings ------------------------------------------------------
+DiscountPreset: { id, label, kind, value }
+OrderingSettings: { vatRatePercent, serviceChargePercent, discountPresets,
+                    dailySalesTarget? }
+
+--- 5v. PaymentGatewayConfig --------------------------------------------------
+{ uddoktaPayEnabled, uddoktaPaySandbox, uddoktaPayBaseUrl, callbackBaseUrl,
+  redirectUrlWarning? }
+
+--- 5w. PosNotification -------------------------------------------------------
+enum PosNotificationType: { pendingOrder, acceptedOrder, printSuccess,
+                            printFailed, system }
+enum PosNotificationTarget: { none, orders, inventory, menu, receiptPrinter,
+                              settings, messages }
+PosNotification: { id, type, title, body, orderId?, actionTarget?, createdAt,
+                   readAt? }
+  target: derived from actionTarget or type
+
+--- 5x. ReceiptScan -----------------------------------------------------------
+enum StockScanCategory: { stockIn, count }
+StockScanResult: { category, items, provider, pageCount, warnings }
+ReceiptScanLine: { nameEn, nameBn, qty, unit, unitPriceBdt, totalBdt,
+                   matchedInventoryItemId? }
+
+--- 5y. SalesReport -----------------------------------------------------------
+SalesReport: { title, days, startAt, endAt, totalOrders, completedOrders,
+               cancelledOrders, openOrders, totalSales, averageOrderValue,
+               totalItemsSold, topItems, dailyBreakdown }
+SalesItemSummary: { menuItemId, name, qty, sales }
+SalesDailySummary: { date, orders, sales }
+
+--- 5z. ServerConfig / CloudConfig -------------------------------------------
+ServerConfig: { serverId, restaurantId, outletId, restaurantName, outletName,
+                publicSlug, outletPhone, tableCount, customerMenuTheme,
+                deliveryCharge, logoUrl?, logoBitmapUrl? }
+CloudConfig: { baseUrl, enabled, deviceToken, autoSyncIntervalSeconds }
+  hasValidBaseUrl / hasDeviceToken / canConnect / canSync: bool
+
+--- 5aa. StaffMember ----------------------------------------------------------
+StaffMember: { id, role (AccountRole), isActive, displayName?, phone?, email?,
+               inviteStatus? (pending|accepted|declined) }
+
+--- 5bb. StockAdjustment ------------------------------------------------------
+enum AdjustmentType: { restock, usage, waste, correction }
+StockAdjustment: { id, inventoryItemId, delta, type, note, createdAt,
+                   totalCostBdt, supplierId?, supplierName, reason, billRef,
+                   createdByAccountId?, createdByRole? }
+
+--- 5cc. SyncEvent / SyncStatus / SyncSummary ---------------------------------
+enum SyncStatus: { synced, pending, failed }
+SyncEvent: { id, entityType, entityId, action, payloadJson, status, retryCount,
+             lastError?, createdAt, updatedAt }
+  payload: Map (decoded from JSON)
+SyncSummary: { pendingCount, failedCount, lastSyncAt? }
+
+
+================================================================================
+  6. ADMIN_APP — Service Data Classes  (admin_app/lib/src/services/)
+================================================================================
+
+--- 6a. Printer (printer_service.dart) ----------------------------------------
+BluetoothPrinterDevice: { name, address, label }
+enum PrinterTransport: { none, builtIn, usb, windowsUsb, bluetooth }
+PrinterRuntimeState: { autoPrintEnabled, connected, busy, activeTransport,
+                       builtInPrinterAvailable, usbPrinterAvailable,
+                       selectedPrinterName?, selectedPrinterAddress?,
+                       selectedWindowsQueueName?, windowsPaperWidthMm, lastError?,
+                       lastPrintedOrderNo?, lastPrintedAt? }
+
+--- 6b. Ticket Bitmap (ticket_bitmap.dart) ------------------------------------
+TicketLineItem:    { index, name, qtyText, lineTotalText }
+TicketSummaryRow:  { label, value, emphasis }
+TicketCopyData:    { restaurantName, outletName?, restaurantSubtitle?,
+                     orderNumberDisplay, orderTypeLabel, copyLabel, dateLine,
+                     tableLine, sourceLine, items, totalLabel, totalAmount,
+                     totalNote, isManagerCopy, customerName, customerNameLabel,
+                     note, noteLabel, orderDetailsUrl?, deliveryAddress?,
+                     deliveryAddressLabel, mobileNumber?, mobileNumberLabel,
+                     summaryRows, paymentLine?, qrCaption?, footerText?,
+                     logoImageBytes?, serverRole? }
+KotLineItem:       { qtyText, name, modifiers, note? }
+KotTicketData:      { restaurantName, restaurantSubtitle?, serialLabel,
+                      serialValue, dateLabel, dateValue, timeLabel, timeValue,
+                      typeLabel, typeValue, tableLabel?, tableValue?,
+                      items, itemsLabel, noteLabel, serverLabel, serverName? }
+UtilityTicketSection: { title, lines }
+UtilityTicketData:   { title, subtitle?, warning?, headerRows, sections,
+                       totalRows, footerLines }
+
+--- 6c. Cloud API (cloud_api_service.dart) ------------------------------------
+CloudApiException: Exception class
+CloudRealtimeConfig: { enabled, supabaseUrl, publishableKey, channelPrefix,
+                       restBaseUrl, deviceToken }
+TenantBootstrapResult: { serverId, restaurantId, outletId, restaurantName,
+                         outletName, deviceToken, tableCount, publicApiBaseUrl?,
+                         logoUrl?, logoBitmapUrl? }
+AdminLoginResult:    { email, username, accountId, role, displayName?,
+                       serverId, restaurantId, outletId, restaurantName,
+                       outletName, deviceToken, tableCount, publicSlug?,
+                       outletPhone?, customerMenuUrl?, publicApiBaseUrl?,
+                       hasAppAccess, logoUrl?, logoBitmapUrl? }
+MenuScanCandidate:   { nameEn, nameBn, descriptionEn, descriptionBn,
+                       categoryEn, categoryBn, price, isAvailable, iconKey,
+                       imageUrl?, subItems, addOns, sizeVariants }
+MenuScanSubItem:     { nameEn, nameBn }
+MenuScanAddOn:       { nameEn, nameBn, price }
+MenuScanSizeVariant: { nameEn, nameBn, price }
+MenuScanPageUpload:  { bytes, fileName, mimeType }
+MenuScanResult:      { items, provider, pageCount, warnings }
+OrderHistoryImportResult: { importedOrders, duplicateOrders, skippedRows,
+                            rowCount, errors }
+PhoneOtpSendResult:  { smsSent, phoneOtpMode, message?, devOtpCode?, phone? }
+PhoneVerifyResult:   { status, login?, signupToken?, phone?, inviteId?,
+                       restaurantName?, outletName?, role?, invitedBy? }
+AppAccessResult:     { hasAppAccess, subscriptionStatus?, subscriptionPlan? }
+
+--- 6d. Sync (sync_service.dart) --------------------------------------------
+SyncLogEntry:     { message, createdAt, isError }
+SyncRuntimeState: { isSyncing, cloudConnected, pendingCount, failedCount,
+                     lastSyncAt?, lastError?, logs }
+
+--- 6e. App Update (app_update_installer_service.dart) ------------------------
+AppRuntimeInfo: { supported, versionName, versionCode }
+
+--- 6f. Menu Image (menu_image_service.dart) ------------------------------------
+PickedMenuImage:   { bytes, mimeType }
+PickedMenuScanPage: { bytes, mimeType, fileName }
+
+--- 6g. Connectivity (connectivity_service.dart) ----------------------------
+GoogleAuthPreflightResult: { ok, reasonCode, userMessage, hasNetworkRoute,
+                             genericDnsReachable, googleDnsReachable,
+                             googleHttpsReachable, httpsProbeUrl? }
+
+
+================================================================================
+  7. ADMIN_APP — Core Enums & Utility Types
+================================================================================
+
+--- 7a. AppLanguage (admin_app/lib/src/core/localization/app_strings.dart) ----
+enum AppLanguage { bn, en }
+  code: str; label: str; locale: Locale
+  parse(String?): AppLanguage
+
+--- 7b. BusinessTier (admin_app/lib/src/core/enums/business_tier.dart) --------
+enum BusinessTier { simple, standard, advanced, enterprise }
+  isAdvanced: bool (advanced || enterprise)
+  canonicalMode: BusinessTier (simple|advanced)
+  displayName: String
+
+--- 7c. BoundedStringSet (admin_app/lib/src/core/utils/bounded_string_set.dart) -
+Capacity-limited LinkedHashSet<String> (default cap=2000)
+
+--- 7d. Theme / Design System (admin_app/lib/src/core/theme/app_theme.dart) ----
+enum PosThemeTone { dark, light }
+PosColors: static color constants for the blue (#2F4FE0) design system (Petpooja clone, see redesign_source_of_truth.md)
+PosSpacing: base-4 spatial scale (sp1=4 .. sp8=40)
+PosRadii: xs=3, sm=5, md=7, lg=9, xl=12, pill=999
+PosShadows: soft, glow, bar, raised, fab
+PosGradients: brand, brandDeep, softWash, cardTint
+AppTheme: light() / dark() -> Flutter ThemeData
+
+--- 7e. TfDesignSystem (admin_app/lib/src/core/widgets/tf_design_system.dart) ---
+Key widget enums:
+  TfButtonVariant:  { primary, dark, ghost, paper, accent }
+  TfButtonSize:     { lg, md, sm }
+  TfSourceIconName: { back, chat, bell, bolt }
+  TfFilterChipData: { label, active, onTap, badge? }
+  TfCustomTab:      (for segmented/tab controls)
+
+
+================================================================================
+  ENTITY RELATIONSHIP SUMMARY (backend DB)
+================================================================================
+
+Restaurant 1──N Outlet
+Outlet     1──N AdminAccount
+Outlet     1──N Device
+Outlet     1──N MenuItem
+Outlet     1──N Order
+Outlet     1──N InventoryItem
+Outlet     1──N InventorySupplier
+Outlet     1──1 OutletSubscription
+Outlet     1──N ChatbotIntegration
+
+Order      1──N PosSettlement
+Order      N──1 PosShift (via shift_id FK)
+
+PosShift   1──N PosSettlement
+PosShift   1──N PosAuditEvent
+
+InventoryItem 1──N StockAdjustment
+InventoryItem 1──N DailyStockCount
+InventoryItem N──1 InventorySupplier (via default_supplier_id)
+
+ChatbotIntegration 1──N ChatbotConversation
+ChatbotIntegration 1──N ChatbotOAuthSession
+
+================================================================================
+  KEY DESIGN INVARIANTS (from spec + status_report)
+================================================================================
+- All money is integer-ish BDT Taka (Numeric fields in DB, double in Dart).
+- NULL-safe DB additions: every new column defaults NULL = "not configured".
+  Existing logic behaves exactly as before when null.
+- No forced customer data for FOH (dine-in/parcel/counter) — customer identity
+  comes only from online channels (Messenger, website).
+- Bilingual EN+বাংলা throughout; name fields have separate _en/_bn columns.
+- Tags encoded as simple strings in menu_item.tags_json (no separate ModGroup table);
+  parsed client-side into MenuItemExtras.
+- Order lifecycle: pending -> accepted -> completed; rejected removes from flow.
+  Legacy states (preparing, ready, served, cancelled) normalize at read time.
+- Printing dedup: kot_batches JSONB + PrinterService hasPrintedOrderId() set.

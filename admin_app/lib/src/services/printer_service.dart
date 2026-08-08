@@ -239,6 +239,8 @@ class _ReceiptLabels {
         return _bn ? 'ক্লাউড / ওয়েব' : 'Cloud / web';
       case OrderSource.facebookMessenger:
         return 'Messenger';
+      case OrderSource.whatsapp:
+        return 'WhatsApp';
       case OrderSource.manual:
         return _bn ? 'ম্যানুয়াল' : 'Manual';
       case OrderSource.desktopPos:
@@ -306,7 +308,17 @@ class PrinterService {
   static const int debugTargetPrintSpeedMmPerSecond = 180;
   // Extra line feeds after the last printed pixel so the tear-off point clears
   // the printer housing. ESC d n feeds n lines (≈1 mm each on 58 mm paper).
-  static const int _trailingFeedLines = 10;
+  // We bypass esc_pos_utils Generator.cut(), which prepends 5 raw newlines,
+  // so this is the exact trailing gap before the full cut (GS V 0).
+  static const int _trailingFeedLines = 4;
+
+  // Full cut (GS V 0) with an explicit feed instead of Generator.cut(),
+  // whose built-in emptyLines(5) added ~5 mm of blank paper per ticket.
+  static List<int> _trailingFeedAndCut(
+    Generator generator, {
+    int feedLines = _trailingFeedLines,
+  }) =>
+      <int>[...generator.feed(feedLines), 0x1D, 0x56, 0x30];
 
   static const List<int> _targetPrintSpeed90MmPerSecond = [
     0x1D,
@@ -1304,8 +1316,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(raster, align: PosAlign.left),
-      ...generator.feed(4),
-      ...generator.cut(),
+      ..._trailingFeedAndCut(generator, feedLines: 4),
     ];
     debugPrint(
       '[QB-PRINTER-DIAG] _buildTableQrLabelBytes escPosBytes=${bytes.length}',
@@ -1427,8 +1438,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(raster, align: PosAlign.left),
-      ...generator.feed(_trailingFeedLines),
-      ...generator.cut(),
+      ..._trailingFeedAndCut(generator),
     ];
     _debugPrintRasterResult(order, copyKind: 'kot', byteCount: bytes.length);
     return bytes;
@@ -1561,8 +1571,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(raster, align: PosAlign.left),
-      ...generator.feed(_trailingFeedLines),
-      ...generator.cut(),
+      ..._trailingFeedAndCut(generator),
     ];
     _debugPrintRasterResult(
       order,
@@ -1588,8 +1597,7 @@ class PrinterService {
       ...generator.reset(),
       ..._targetPrintSpeed90MmPerSecond,
       ...generator.imageRaster(raster, align: PosAlign.left),
-      ...generator.feed(_trailingFeedLines),
-      ...generator.cut(),
+      ..._trailingFeedAndCut(generator),
     ];
   }
 

@@ -2,6 +2,7 @@ enum OrderSource {
   localLan,
   cloud,
   facebookMessenger,
+  whatsapp,
   desktopPos,
   manual;
 
@@ -13,6 +14,8 @@ enum OrderSource {
         return 'cloud';
       case OrderSource.facebookMessenger:
         return 'facebook_messenger';
+      case OrderSource.whatsapp:
+        return 'whatsapp';
       case OrderSource.desktopPos:
         return 'desktop_pos';
       case OrderSource.manual:
@@ -28,6 +31,8 @@ enum OrderSource {
         return 'Cloud';
       case OrderSource.facebookMessenger:
         return 'Messenger';
+      case OrderSource.whatsapp:
+        return 'WhatsApp';
       case OrderSource.desktopPos:
         return 'Desktop POS';
       case OrderSource.manual:
@@ -53,6 +58,11 @@ enum OrderSource {
         normalized == 'fb_messenger' ||
         normalized == 'facebook_messenger') {
       return OrderSource.facebookMessenger;
+    }
+    if (normalized == 'wa' ||
+        normalized == 'whats_app' ||
+        normalized == 'whatsapp_business') {
+      return OrderSource.whatsapp;
     }
     for (final source in OrderSource.values) {
       if (source.value == normalized ||

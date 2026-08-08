@@ -1,0 +1,26 @@
+# ============================================
+# Backend .gitignore
+# Only excludes regenerable caches and runtime junk.
+# Use .env locally; never commit (see root .gitignore).
+# ============================================
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual envs (HUGE, regenerable)
+venv/
+.venv/
+.venv*/
+env/
+
+# Logs / pids
+cloudflared.log
+ngrok.log
+*.pid
+*.log
+*.db
+
+# OS
+.DS_Store

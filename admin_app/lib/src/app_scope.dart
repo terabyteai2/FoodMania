@@ -106,7 +106,12 @@ class AppModel extends InheritedModel<AppAspect> {
         AppAspect.settings: c.serverConfig,
         AppAspect.language: c.language,
         AppAspect.appUpdate: c.pendingAppUpdate,
-        AppAspect.chatbot: c.facebookChatbotConfig,
+        AppAspect.chatbot: (
+          c.facebookChatbotConfig,
+          c.whatsappChatbotConfig,
+          c.facebookChatbotLoading,
+          c.whatsappChatbotLoading,
+        ),
       };
 
   @override

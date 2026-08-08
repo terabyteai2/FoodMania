@@ -790,6 +790,9 @@ class SyncService {
           case OrderSource.facebookMessenger:
             prefix = 'M';
             break;
+          case OrderSource.whatsapp:
+            prefix = 'WA';
+            break;
           case OrderSource.manual:
           case OrderSource.desktopPos:
             prefix = (role == 'waiter' || role == 'staff') ? 'S' : '';

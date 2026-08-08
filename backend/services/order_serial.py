@@ -6,6 +6,7 @@ their own numbering with a distinguishing letter prefix:
 
 - "W"  website orders          (source: customer_web / cloud / online / ...)
 - "M"  Facebook Messenger      (source: facebook_messenger / facebook / ...)
+- "WA" WhatsApp                (source: whatsapp / wa)
 - "S"  waiter-taken orders     (created_by_role: waiter / staff, local POS)
 - ""   manager/owner POS       (everything else, no prefix)
 
@@ -39,6 +40,14 @@ MESSENGER_SOURCES = frozenset(
     }
 )
 
+WHATSAPP_SOURCES = frozenset(
+    {
+        "whatsapp",
+        "wa",
+        "whatsapp_business",
+    }
+)
+
 WAITER_ROLES = frozenset({"waiter", "staff"})
 
 
@@ -49,6 +58,8 @@ def serial_prefix(source: str | None, created_by_role: str | None = None) -> str
         return "W"
     if src in MESSENGER_SOURCES:
         return "M"
+    if src in WHATSAPP_SOURCES:
+        return "WA"
     role = (created_by_role or "").strip().lower()
     if role in WAITER_ROLES:
         return "S"
@@ -63,11 +74,13 @@ def serial_group_filter(source: str | None, created_by_role: str | None = None):
     """
     src = (source or "").strip().lower()
     role = (created_by_role or "").strip().lower()
-    online_sources = list(WEB_SOURCES | MESSENGER_SOURCES)
+    online_sources = list(WEB_SOURCES | MESSENGER_SOURCES | WHATSAPP_SOURCES)
     if src in WEB_SOURCES:
         return Order.source.in_(list(WEB_SOURCES))
     if src in MESSENGER_SOURCES:
         return Order.source.in_(list(MESSENGER_SOURCES))
+    if src in WHATSAPP_SOURCES:
+        return Order.source.in_(list(WHATSAPP_SOURCES))
     if role in WAITER_ROLES:
         return and_(
             Order.source.notin_(online_sources),
@@ -87,7 +100,7 @@ def format_serial(
     source: str | None,
     created_by_role: str | None = None,
 ) -> str:
-    """Render an order serial as ``#N``, ``#W1``, ``#M1``, ``#S1`` or ``#-``."""
+    """Render an order serial as ``#N``, ``#W1``, ``#M1``, ``#WA1``, ``#S1`` or ``#-``."""
     if not serial_number:
         return "#-"
     return f"#{serial_prefix(source, created_by_role)}{serial_number}"

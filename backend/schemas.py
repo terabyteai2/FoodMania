@@ -107,6 +107,23 @@ class FacebookChatbotConfigResponse(BaseModel):
     lastError: str | None = None
 
 
+class WhatsAppChatbotConfigRequest(BaseModel):
+    phoneNumberId: str | None = None
+    accessToken: str | None = None
+    isEnabled: bool = True
+    orderingEnabled: bool = True
+
+
+class WhatsAppChatbotConfigResponse(BaseModel):
+    isConfigured: bool
+    isEnabled: bool
+    orderingEnabled: bool
+    phoneNumberId: str | None = None
+    displayPhoneNumber: str | None = None
+    tokenPreview: str | None = None
+    lastError: str | None = None
+
+
 class ChatReplyRequest(BaseModel):
     text: str
 
@@ -333,6 +350,9 @@ class OrderDetailsUpdate(BaseModel):
     discountLabel: str | None = None
     discountAmount: float | None = Field(default=None, ge=0)
     clearDiscount: bool = False
+    # NULL-safe: clients that omit this (existing builds) leave the stored
+    # payment method untouched; "unset" = not configured, never rejected.
+    paymentMethod: str | None = None
     updatedAt: str | None = None
 
 

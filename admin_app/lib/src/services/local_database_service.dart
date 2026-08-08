@@ -785,6 +785,7 @@ class LocalDatabaseService {
     String? discountLabel,
     double? discountAmount,
     bool clearDiscount = false,
+    OrderPaymentMethod? paymentMethod,
     bool createSyncEvent = true,
   }) async {
     final db = await _db;
@@ -825,6 +826,7 @@ class LocalDatabaseService {
         discountAmount: clearDiscount
             ? 0
             : (discountAmount ?? current.discountAmount),
+        paymentMethod: paymentMethod ?? current.paymentMethod,
         clearTableNo: nextTable == null,
         clearNote: nextNote == null,
         clearCustomerName: nextCustomer == null,
@@ -1940,14 +1942,16 @@ class LocalDatabaseService {
     // Source-aware serial grouping: each group (W/M/S/default) keeps its own
     // per-day counter. Must match backend `serial_group_filter` logic.
     // Local DB stores source as the OrderSource enum value, so online sources
-    // are 'cloud' (website) and 'facebook_messenger' (messenger).
-    const onlineSources = "'cloud','facebook_messenger'";
+    // are 'cloud' (website), 'facebook_messenger' (messenger) and 'whatsapp'.
+    const onlineSources = "'cloud','facebook_messenger','whatsapp'";
     String groupFilter;
     switch (source) {
       case OrderSource.cloud:
         groupFilter = "AND source = 'cloud'";
       case OrderSource.facebookMessenger:
         groupFilter = "AND source = 'facebook_messenger'";
+      case OrderSource.whatsapp:
+        groupFilter = "AND source = 'whatsapp'";
       case OrderSource.manual:
       case OrderSource.desktopPos:
       case OrderSource.localLan:
@@ -2459,8 +2463,9 @@ class LocalDatabaseService {
           'totalAmount': total,
         },
         paymentMethod: settlements.length == 1
-            ? OrderPaymentMethod.tryParse(settlements.first.paymentMethod)
-            : current.paymentMethod,
+            ? OrderPaymentMethod.tryParse(settlements.first.paymentMethod) ??
+                current.paymentMethod
+            : OrderPaymentMethod.split,
         status: OrderStatus.served,
         settledAt: now,
         total: total,

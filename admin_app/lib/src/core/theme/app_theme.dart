@@ -117,6 +117,7 @@ class PosColors {
   // counter navy · website/messenger blue · table-QR amber · waiter green.
   static const Color channelWebsite = blue500;
   static const Color channelMessenger = blue500;
+  static const Color channelWhatsapp = Color(0xFF128C7E);
   static const Color channelQr = Color(0xFFC98208);
   static const Color channelCounter = secondary; // navy
   static const Color channelDineIn = blue500;

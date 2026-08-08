@@ -679,6 +679,8 @@ class _ChannelLoadCard extends StatelessWidget {
     switch (s) {
       case OrderSource.facebookMessenger:
         return Icons.chat_bubble_outline_rounded;
+      case OrderSource.whatsapp:
+        return Icons.chat_outlined;
       case OrderSource.cloud:
         return Icons.public_rounded;
       case OrderSource.desktopPos:

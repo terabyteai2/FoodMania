@@ -655,6 +655,17 @@ class _OrdersScreenState extends State<OrdersScreen>
       if (app.settleAndSaveEnabled) {
         final settled = await showSettleAndSaveDialog(context, order: order);
         if (settled == null || !context.mounted) return;
+        // Persist the chosen payment mode so the printed bill (and its cloud
+        // copy) show the real method instead of the Cash fallback.
+        await app.updateOrderDetails(
+          order.id,
+          serviceType: order.serviceType,
+          paymentMethod: settled,
+        );
+        final fresh = await app.database.getOrderById(order.id);
+        if (fresh != null && mounted) {
+          order = fresh;
+        }
       }
       await app.updateOrderStatus(order.id, OrderStatus.completed);
     }
@@ -1474,6 +1485,13 @@ _ChannelStyle _resolveChannel(OrderModel order) {
         'chatbot',
         TfNavIcon.chat,
         PosColors.channelMessenger,
+        PosColors.channelNeutralSoft,
+      );
+    case OrderSource.whatsapp:
+      return const _ChannelStyle(
+        'whatsapp',
+        TfNavIcon.chat,
+        PosColors.channelWhatsapp,
         PosColors.channelNeutralSoft,
       );
     case OrderSource.desktopPos:
@@ -5436,7 +5454,8 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
               childAspectRatio: 3.1,
               children: [
                 for (final method in OrderPaymentMethod.values)
-                  _ModeTile(
+                  if (method != OrderPaymentMethod.split)
+                    _ModeTile(
                     method: method,
                     selected: method == _method,
                     isBn: isBn,

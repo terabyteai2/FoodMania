@@ -89,6 +89,8 @@ class OrderModel {
         return 'W';
       case OrderSource.facebookMessenger:
         return 'M';
+      case OrderSource.whatsapp:
+        return 'WA';
       case OrderSource.manual:
       case OrderSource.desktopPos:
         final role = (createdByRole ?? '').trim().toLowerCase();

@@ -44,6 +44,7 @@ from models import (
     OutletSubscription,
     Restaurant,
     StockAdjustment,
+    SupportChatMessage,
     UddoktaPaySession,
 )
 from schemas import (
@@ -763,6 +764,10 @@ async def wipe_outlet_data(
         "orders": await delete_rows(Order, Order.outlet_id == outlet_id),
         "menuItems": await delete_rows(MenuItem, MenuItem.outlet_id == outlet_id),
         "devices": await delete_rows(Device, Device.outlet_id == outlet_id),
+        "supportChatMessages": await delete_rows(
+            SupportChatMessage,
+            SupportChatMessage.outlet_id == outlet_id,
+        ),
         "chatbotConversations": await delete_rows(
             ChatbotConversation,
             ChatbotConversation.integration_id.in_(
