@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -8,6 +9,8 @@ from jose import JWTError, jwt
 
 from config import settings
 from services.support_llm import auto_reply as support_llm_auto_reply
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -74,6 +77,15 @@ def _support_message_dict(message) -> dict:
         "text": message.text,
         "actions": message.actions_json or [],
         "steps": message.steps_json or [],
+        "replyStatus": message.reply_status,
+        "replyReason": message.reply_reason,
+        "replyError": message.reply_error,
+        "replyDetail": message.reply_detail,
+        "replyLatencyMs": message.reply_latency_ms,
+        "replyModel": message.reply_model,
+        "replyAttemptedAt": (
+            message.reply_attempted_at.isoformat() if message.reply_attempted_at else None
+        ),
         "createdAt": message.created_at.isoformat() if message.created_at else None,
     }
 
@@ -154,9 +166,16 @@ async def _handle_client_message(ws: WebSocket, outlet_id: str, raw: str) -> Non
             },
         )
         asyncio.create_task(support_llm_auto_reply(outlet_id))
-    except Exception:
-        # Never let a chat send kill the outlet's realtime connection.
-        pass
+    except Exception as exc:
+        # Never let a chat send kill the outlet's realtime connection, but do
+        # log it — a silent failure here loses the message AND its auto-reply
+        # trigger with no trace.
+        logger.error(
+            "[ws] failed to persist support message for outlet %s: %s",
+            outlet_id,
+            exc,
+            exc_info=True,
+        )
 
 
 async def _ping_loop(ws: WebSocket) -> None:

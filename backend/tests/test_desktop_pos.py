@@ -24,7 +24,7 @@ async def _manager(client: AsyncClient) -> tuple[str, str, dict]:
 
     async with AsyncSessionLocal() as db:
         outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-        phone = f"+88017{suffix.hex[:8]}"
+        phone = f"+88017{uuid.uuid4().int % 100000000:08d}"
         account = AdminAccount(
             id=str(uuid4()),
             outlet_id=outlet.id,
@@ -51,7 +51,7 @@ async def _staff(client: AsyncClient, outlet_id: str, server_id: str) -> dict:
     suffix = uuid.uuid4()
     async with AsyncSessionLocal() as db:
         outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-        phone = f"+88018{suffix.hex[:8]}"
+        phone = f"+88018{uuid.uuid4().int % 100000000:08d}"
         account = AdminAccount(
             id=str(uuid4()),
             outlet_id=outlet.id,
@@ -389,7 +389,7 @@ async def test_zero_table_outlet_keeps_main_floor_without_fake_table():
         assert boot.json()["data"]["tableCount"] == 0
         async with AsyncSessionLocal() as db:
             outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-            phone = f"+88017{suffix.hex[:8]}"
+            phone = f"+88017{uuid.uuid4().int % 100000000:08d}"
             account = AdminAccount(
                 id=str(uuid4()),
                 outlet_id=outlet.id,

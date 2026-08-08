@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
+import '../../app_scope.dart';
+import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
 import 'tf_design_system.dart';
 
@@ -10,8 +14,13 @@ import 'tf_design_system.dart';
 /// Screens expose primary-action widgets to the tour by wrapping them in a
 /// [TourSpot]; the shell resolves each spot to a screen rect via
 /// [TourSpotRegistry] and renders a dim scrim with a cutout around the target
-/// plus a tooltip card (title/body/Next/Skip). Steps whose spot is not
-/// currently mounted are skipped automatically.
+/// plus a tooltip card (title/body/hint/Continue/Skip). The scrim is always
+/// painted — the screen stays dimmed between steps, while a target resolves,
+/// and until the user finishes or skips. The cutout is interactive: the real
+/// widget under it receives taps, so the user clicks the highlighted button
+/// to advance (see [TourSpotRegistry.notifySpotTapped]). The tour never
+/// auto-advances: when a step's spot is not visible, the card shows an
+/// explicit Continue button (steps with a navigation target run it first).
 class TourSpotRegistry {
   TourSpotRegistry._();
 
@@ -63,6 +72,22 @@ class TourSpotRegistry {
 
   @visibleForTesting
   static int countFor(String name) => _keys[name]?.length ?? 0;
+
+  /// Single-slot tap listener owned by the active [GuidedTourOverlay]. Only
+  /// one tour can be on screen at a time, so one slot suffices; the overlay
+  /// clears it on dispose.
+  static void Function(String name)? _tapListener;
+
+  static void setTapListener(void Function(String name)? listener) {
+    _tapListener = listener;
+  }
+
+  /// Called by [TourSpot] on any pointer-down within its box. The listener
+  /// is passive — it never competes in the gesture arena, so the wrapped
+  /// button's own tap still fires.
+  static void notifySpotTapped(String name) {
+    _tapListener?.call(name);
+  }
 
   /// True when [context] is not hidden by any [Visibility]/[Offstage] ancestor
   /// (e.g. the unselected children of an [IndexedStack], which this SDK
@@ -147,14 +172,18 @@ class _TourSpotState extends State<TourSpot> {
   }
 
   @override
-  Widget build(BuildContext context) => KeyedSubtree(key: _key, child: widget.child);
+  Widget build(BuildContext context) => Listener(
+        onPointerDown: (_) => TourSpotRegistry.notifySpotTapped(widget.name),
+        child: KeyedSubtree(key: _key, child: widget.child),
+      );
 }
 
 enum TourSpotlightShape { roundedRect, circle }
 
-/// One coach-mark step. Either points at a [TourSpot] by name
-/// ([TourStep.spot]) or dims the whole screen with no cutout
-/// ([TourStep.overview]).
+/// One coach-mark step pointing at a [TourSpot] by name. The step advances
+/// when the user taps the highlighted element itself; when the target is not
+/// visible the card offers Continue (which runs the step's navigation target
+/// first) and Skip.
 class TourStep {
   const TourStep.spot({
     required this.spot,
@@ -162,26 +191,16 @@ class TourStep {
     required this.body,
     this.shape = TourSpotlightShape.roundedRect,
     this.onEnter,
-  }) : isOverview = false;
+  });
 
-  const TourStep.overview({
-    required this.title,
-    required this.body,
-    this.onEnter,
-  }) : spot = null,
-       isOverview = true,
-       shape = TourSpotlightShape.roundedRect;
-
-  /// Name of the target [TourSpot]; null for overview steps.
-  final String? spot;
-
-  /// True for whole-screen dim steps (no cutout).
-  final bool isOverview;
+  /// Name of the target [TourSpot].
+  final String spot;
 
   /// Runs once when this step becomes active while its spot is not yet
   /// visible (e.g. opens the drawer or switches tabs so the target mounts).
-  /// The overlay then waits up to ~1.5s for the spot to appear before
-  /// skipping to the next step.
+  /// The overlay then polls for the spot and switches to spotlight mode the
+  /// moment it appears; if it never appears the card stays on screen with a
+  /// Continue button (no auto-advance).
   final VoidCallback? onEnter;
 
   final String title;
@@ -190,8 +209,11 @@ class TourStep {
 }
 
 /// Full-screen coach-mark layer. Insert it via an [OverlayEntry] above the
-/// shell (see `_MainShellState._startGuidedTour`). Taps on the scrim are
-/// absorbed and do nothing; advancing happens only via Next/Done.
+/// shell (see [SupportChatController.startGuide]). The background stays
+/// dimmed for the whole tour. Taps outside the spotlight hole are absorbed;
+/// the spotlighted widget stays interactive — tapping it fires its real
+/// action and advances the tour. Steps whose target is not visible show a
+/// Continue button instead; the tour never advances on its own.
 class GuidedTourOverlay extends StatefulWidget {
   const GuidedTourOverlay({
     required this.steps,
@@ -209,27 +231,21 @@ class GuidedTourOverlay extends StatefulWidget {
 class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
   int _index = 0;
 
-  /// Index whose missing spot already scheduled a skip-advance; guards
-  /// against double-scheduling from repeated builds.
-  int? _skipPendingFor;
-
   /// Index whose [TourStep.onEnter] already ran and whose spot is now being
   /// awaited. Reset in [_next].
   int? _enteredFor;
 
-  /// Index whose wait-loop frame is already scheduled.
-  int? _waitPendingFor;
+  /// Guards against a second pointer-down on the same spot advancing two
+  /// steps before the frame (lock is released post-frame).
+  bool _advanceLocked = false;
 
-  /// Frames spent waiting for an entered step's spot to become visible.
-  int _waitFrames = 0;
-
-  /// Longest wait for a spot after its enter action: the drawer slide-in
-  /// animation (~250 ms) plus a couple of frames, comfortably under this.
-  static const int _maxWaitFrames = 90;
+  /// Index the pending-spot poll timer is currently running for.
+  int? _recheckFor;
+  Timer? _recheckTimer;
 
   static const double _cardWidth = 340;
   static const double _cardSideMargin = 16;
-  static const double _estimatedCardHeight = 168;
+  static const double _estimatedCardHeight = 200;
 
   /// Screen size for the on-screen spot check; resolved in
   /// [didChangeDependencies] (MediaQuery is not available in [initState]).
@@ -238,10 +254,34 @@ class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
   @override
   void initState() {
     super.initState();
-    // Deferred to the first frame: rect resolution needs [_screenSize].
+    TourSpotRegistry.setTapListener(_onSpotTapped);
+    // Deferred to the first frame: rect resolution needs [_screenSize] and a
+    // completed layout pass for the spots underneath.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _ensureStepVisible();
+      if (!mounted) return;
+      _ensureStepVisible();
+      setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _stopRecheck();
+    TourSpotRegistry.setTapListener(null);
+    super.dispose();
+  }
+
+  /// Click-to-advance: a pointer-down on the current step's spot advances
+  /// the tour. The spot's own button action still fires — this listener is
+  /// passive and only observes.
+  void _onSpotTapped(String name) {
+    if (_advanceLocked || _index >= widget.steps.length) return;
+    if (widget.steps[_index].spot != name) return;
+    _advanceLocked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _advanceLocked = false;
+    });
+    _next();
   }
 
   @override
@@ -260,91 +300,59 @@ class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
       rect.top < size.height &&
       rect.bottom > 0;
 
-  /// Advances past any step whose spot is not currently visible; steps with
-  /// an [TourStep.onEnter] action instead run the action once and then wait
-  /// up to [_maxWaitFrames] frames for the spot to appear. Safe to call from
-  /// [build]: a pending skip/wait is only ever scheduled once per index.
+  /// Keeps the current step's card on screen in all states. The tour NEVER
+  /// auto-advances: if the spotlight target is not visible yet, the card
+  /// stays in "Continue" mode until the user acts. For steps with an
+  /// [TourStep.onEnter] action (the step's deeplink navigation) the spot is
+  /// polled in the background so the card flips to spotlight mode the moment
+  /// the target mounts. Safe to call from [build]: scheduling is deferred.
   void _ensureStepVisible() {
-    if (_index >= widget.steps.length) {
-      widget.onFinished();
+    if (_index >= widget.steps.length) return;
+    final step = widget.steps[_index];
+    final rect = TourSpotRegistry.rectOf(step.spot);
+    if (rect != null && _withinScreen(rect, _screenSize)) {
+      _stopRecheck();
       return;
     }
-    final step = widget.steps[_index];
-    if (step.isOverview) return;
-    final rect = TourSpotRegistry.rectOf(step.spot!);
-    if (rect != null && _withinScreen(rect, _screenSize)) return;
-
-    if (step.onEnter != null && _enteredFor != _index) {
+    if (step.onEnter == null) return; // no way for the target to appear
+    if (_enteredFor != _index) {
       // Fire the enter action post-frame: it may call setState on the shell
       // (switch tabs / open the drawer), which is illegal during build.
       _enteredFor = _index;
-      _waitFrames = 0;
-      _scheduleEnter();
-      return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _enteredFor != _index) return;
+        widget.steps[_index].onEnter?.call();
+        setState(() {});
+      });
     }
-    if (_enteredFor == _index) {
-      if (_waitFrames >= _maxWaitFrames) {
-        // Timed out — advance to the next step post-frame (setState during
-        // build is illegal).
-        if (_skipPendingFor == _index) return;
-        _skipPendingFor = _index;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _skipPendingFor = null;
-          if (mounted) _next();
-        });
-      } else {
-        _scheduleWaitFrame();
-      }
-      return;
-    }
-    if (_skipPendingFor == _index) return;
-    _skipPendingFor = _index;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _skipPendingFor = null;
-      if (!mounted) return;
-      if (_index >= widget.steps.length) {
-        widget.onFinished();
+    _ensureRecheck();
+  }
+
+  /// Polls for the entered step's spot to become visible (throttled), so the
+  /// card switches to spotlight mode without user input once the target
+  /// mounts. Never advances — the user stays in control.
+  void _ensureRecheck() {
+    if (_recheckTimer != null && _recheckFor == _index) return;
+    _recheckFor = _index;
+    _recheckTimer?.cancel();
+    _recheckTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (!mounted || _recheckFor != _index) {
+        _stopRecheck();
         return;
       }
-      // Re-check after the frame (layout has now run): a spot mounted during
-      // this frame's build must not be skipped.
-      final step = widget.steps[_index];
-      if (step.isOverview) return;
-      final rect = TourSpotRegistry.rectOf(step.spot!);
-      if (rect == null || !_withinScreen(rect, _screenSize)) {
-        _next();
-      }
-    });
-  }
-
-  /// Runs the step's enter action after the frame, then starts the wait loop.
-  void _scheduleEnter() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      widget.steps[_index].onEnter?.call();
-      _waitFrames++;
       setState(() {});
     });
   }
 
-  /// Schedules the next frame of the spot-wait loop: the rebuild re-resolves
-  /// the target rect while the drawer slides in or the tab mounts.
-  void _scheduleWaitFrame() {
-    if (_waitPendingFor == _index) return;
-    _waitPendingFor = _index;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _waitPendingFor = null;
-      if (!mounted) return;
-      _waitFrames++;
-      setState(() {});
-    });
+  void _stopRecheck() {
+    _recheckTimer?.cancel();
+    _recheckTimer = null;
+    _recheckFor = null;
   }
 
   void _next() {
-    _skipPendingFor = null;
+    _stopRecheck();
     _enteredFor = null;
-    _waitPendingFor = null;
-    _waitFrames = 0;
     if (_index + 1 >= widget.steps.length) {
       widget.onFinished();
       return;
@@ -362,27 +370,31 @@ class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
     final step = widget.steps[_index];
     final media = MediaQuery.of(context);
     final size = media.size;
-    final rect = step.isOverview ? null : TourSpotRegistry.rectOf(step.spot!);
-    if (!step.isOverview && (rect == null || !_withinScreen(rect, size))) {
-      return const SizedBox.shrink();
-    }
+    final rect = TourSpotRegistry.rectOf(step.spot);
+    final spotlight =
+        (rect != null && _withinScreen(rect, size)) ? rect : null;
 
     return Stack(
       children: [
         Positioned.fill(
-          child: GestureDetector(
-            // Absorb scrim taps — advancing happens only via Next (avoids
-            // accidental dismissals while tapping through).
-            onTap: () {},
+          child: _ScrimHitBox(
+            // Full dim while the target resolves; a hit-through hole once
+            // the spotlight is on. Taps outside the hole are absorbed by the
+            // hit-test; inside the hole the real widget stays interactive
+            // (click-to-advance).
+            hole: spotlight,
             child: CustomPaint(
-              painter: _SpotlightPainter(spotlight: rect, shape: step.shape),
+              painter: _SpotlightPainter(
+                spotlight: spotlight,
+                shape: step.shape,
+              ),
             ),
           ),
         ),
         Positioned(
           left: _cardSideMargin,
           right: _cardSideMargin,
-          top: _cardTop(size, media.padding, rect),
+          top: _cardTop(size, media.padding, spotlight),
           child: Align(
             alignment: Alignment.center,
             child: AnimatedSwitcher(
@@ -394,8 +406,9 @@ class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
                 step: step,
                 index: _index,
                 total: widget.steps.length,
+                requiresContinue: spotlight == null,
+                onContinue: _next,
                 onSkip: _skip,
-                onNext: _next,
               ),
             ),
           ),
@@ -409,8 +422,8 @@ class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
     final estHeight = _estimatedCardHeight;
     final maxTop = math.max(8.0, size.height - padding.bottom - estHeight - 8);
     if (rect == null) {
-      // Overview: bottom-anchored above the safe area.
-      return math.max(24.0, maxTop - margin);
+      // No target yet: center the card vertically.
+      return math.min(math.max(8.0, (size.height - estHeight) / 2), maxTop);
     }
     if (rect.top > size.height * 0.45) {
       // Target in the lower half → card sits above it.
@@ -420,25 +433,69 @@ class _GuidedTourOverlayState extends State<GuidedTourOverlay> {
   }
 }
 
+/// Scrim that absorbs hits everywhere except inside the spotlight hole, so
+/// the real widget under the cutout stays interactive (click-to-advance).
+/// With no hole (target not yet visible) the whole screen dims and absorbs.
+class _ScrimHitBox extends SingleChildRenderObjectWidget {
+  const _ScrimHitBox({required this.hole, required super.child});
+
+  /// Hole rect in this box's coordinates (the box is full-screen), or null
+  /// while no spotlight is up.
+  final Rect? hole;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _ScrimRenderObject(hole);
+
+  @override
+  void updateRenderObject(BuildContext context, _ScrimRenderObject render) {
+    render.hole = hole;
+  }
+}
+
+class _ScrimRenderObject extends RenderProxyBox {
+  _ScrimRenderObject(this.hole);
+
+  Rect? hole;
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final hole = this.hole;
+    if (hole != null && hole.contains(position)) return false;
+    return super.hitTestChildren(result, position: position);
+  }
+
+  @override
+  bool hitTestSelf(Offset position) {
+    final hole = this.hole;
+    return hole == null || !hole.contains(position);
+  }
+}
+
 class _TooltipCard extends StatelessWidget {
   const _TooltipCard({
     required this.step,
     required this.index,
     required this.total,
+    required this.requiresContinue,
+    required this.onContinue,
     required this.onSkip,
-    required this.onNext,
     super.key,
   });
 
   final TourStep step;
   final int index;
   final int total;
+
+  /// True when the spotlight target is not visible yet: the card stays on
+  /// screen (the screen stays dimmed) and an explicit Continue advances.
+  final bool requiresContinue;
+  final VoidCallback onContinue;
   final VoidCallback onSkip;
-  final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
-    final isLast = index == total - 1;
+    final strings = AppStrings.of(AppScope.read(context).language);
     return Container(
       width: _GuidedTourOverlayState._cardWidth,
       padding: const EdgeInsets.fromLTRB(
@@ -479,6 +536,28 @@ class _TooltipCard extends StatelessWidget {
             step.body,
             style: TfTextStyles.body.copyWith(color: PosColors.ink2),
           ),
+          const SizedBox(height: PosSpacing.sp2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                requiresContinue
+                    ? Icons.arrow_forward_rounded
+                    : Icons.touch_app_outlined,
+                size: 14,
+                color: PosColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TfText(
+                  requiresContinue
+                      ? strings.guidedTourContinueHint
+                      : strings.guidedTourTapHint,
+                  style: TfTextStyles.label.copyWith(color: PosColors.muted),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: PosSpacing.sp3),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -487,20 +566,22 @@ class _TooltipCard extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (requiresContinue) ...[
+                    TfButton(
+                      label: strings.guidedTourContinue,
+                      variant: TfButtonVariant.accent,
+                      size: TfButtonSize.sm,
+                      fullWidth: false,
+                      onPressed: onContinue,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   TfButton(
-                    label: 'Skip',
+                    label: strings.guidedTourSkip,
                     variant: TfButtonVariant.ghost,
                     size: TfButtonSize.sm,
                     fullWidth: false,
                     onPressed: onSkip,
-                  ),
-                  const SizedBox(width: PosSpacing.sp2),
-                  TfButton(
-                    label: isLast ? 'Done' : 'Next',
-                    variant: TfButtonVariant.primary,
-                    size: TfButtonSize.sm,
-                    fullWidth: false,
-                    onPressed: onNext,
                   ),
                 ],
               ),
@@ -542,17 +623,20 @@ class _ProgressDots extends StatelessWidget {
 class _SpotlightPainter extends CustomPainter {
   const _SpotlightPainter({required this.spotlight, required this.shape});
 
+  /// Target rect, or null while the target is not visible (the screen stays
+  /// fully dimmed, no hole and no outline).
   final Rect? spotlight;
   final TourSpotlightShape shape;
 
   @override
   void paint(Canvas canvas, Size size) {
     final scrim = Paint()..color = PosColors.tourScrim;
+    final spotlight = this.spotlight;
     if (spotlight == null) {
       canvas.drawRect(Offset.zero & size, scrim);
       return;
     }
-    final rect = spotlight!.inflate(8);
+    final rect = spotlight.inflate(8);
     final radius = switch (shape) {
       TourSpotlightShape.circle => Radius.circular(rect.shortestSide / 2),
       TourSpotlightShape.roundedRect => const Radius.circular(PosRadii.md),

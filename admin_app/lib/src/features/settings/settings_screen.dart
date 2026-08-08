@@ -12,7 +12,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
-import '../../core/widgets/shell_nav_scope.dart';
+import '../../core/widgets/support_chat_overlay.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/subscription_gate_card.dart';
 import '../../models/facebook_chatbot_config.dart';
@@ -117,14 +117,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: _facebookBotTrailing(app, text),
                     onTap: _openFacebookChatbot,
                   ),
-                if (_showFacebookChatbotSettings)
-                  _SettingActionData(
-                    title: text.whatsappChatbot,
-                    subtitle: text.whatsappChatbotSubtitle,
-                    icon: Icons.chat_outlined,
-                    trailing: _whatsappBotTrailing(app, text),
-                    onTap: _openWhatsappChatbot,
-                  ),
                 _SettingActionData(
                   title: text.auditTrail,
                   subtitle: text.auditTrailSubtitle,
@@ -138,11 +130,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openStaff,
                 ),
                 _SettingActionData(
-                  title: 'Help & Guide',
-                  subtitle: 'Replay the app walkthrough',
-                  icon: Icons.tour_outlined,
-                  onTap: () =>
-                      ShellNavScope.maybeOf(context)?.startGuidedTour.call(),
+                  title: text.supportChatTitle,
+                  subtitle: 'Ask the assistant for a guided tour',
+                  icon: Icons.support_agent_outlined,
+                  onTap: () => _openSupportChat(context),
                 ),
               ],
             ),
@@ -246,11 +237,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _openReceiptPrinter,
                 ),
                 _SettingActionData(
-                  title: 'Help & Guide',
-                  subtitle: 'Replay the app walkthrough',
-                  icon: Icons.tour_outlined,
-                  onTap: () =>
-                      ShellNavScope.maybeOf(context)?.startGuidedTour.call(),
+                  title: text.supportChatTitle,
+                  subtitle: 'Ask the assistant for a guided tour',
+                  icon: Icons.support_agent_outlined,
+                  onTap: () => _openSupportChat(context),
                 ),
               ],
             ),
@@ -350,16 +340,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : text.facebookBotDisabled;
   }
 
-  String _whatsappBotTrailing(PosAppController app, AppStrings text) {
-    final config = app.whatsappChatbotConfig;
-    if (config == null || !config.isConfigured) {
-      return text.whatsappBotNotConnected;
-    }
-    return config.isEnabled
-        ? text.whatsappBotConnected
-        : text.whatsappBotDisabled;
-  }
-
   Future<void> _openFacebookChatbot() async {
     final text = AppScope.of(context).strings;
     await Navigator.of(context).push(
@@ -367,18 +347,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context) => _SettingsSectionPage(
           title: text.facebookMessengerBot,
           child: const _FacebookChatbotSettingsPage(),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openWhatsappChatbot() async {
-    final text = AppScope.of(context).strings;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => _SettingsSectionPage(
-          title: text.whatsappChatbot,
-          child: const _WhatsappChatbotSettingsPage(),
         ),
       ),
     );
@@ -646,6 +614,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const StaffScreen()));
+  }
+
+  void _openSupportChat(BuildContext context) {
+    SupportChatController.instance.attachHost(context);
+    SupportChatController.instance.open();
   }
 
   Future<void> _openRestaurantDetails() async {
@@ -1435,206 +1408,6 @@ class _FacebookChatbotSettingsPageState
     final clean = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
     if (clean.isEmpty) return '';
     return '$clean/webhooks/facebook';
-  }
-}
-
-class _WhatsappChatbotSettingsPage extends StatefulWidget {
-  const _WhatsappChatbotSettingsPage();
-
-  @override
-  State<_WhatsappChatbotSettingsPage> createState() =>
-      _WhatsappChatbotSettingsPageState();
-}
-
-class _WhatsappChatbotSettingsPageState
-    extends State<_WhatsappChatbotSettingsPage> {
-  final TextEditingController _phoneNumberIdController =
-      TextEditingController();
-  final TextEditingController _accessTokenController = TextEditingController();
-  bool _enabled = true;
-  bool _orderingEnabled = true;
-  bool _loadRequested = false;
-  String _configKey = '';
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final app = AppScope.of(context);
-    final config = app.whatsappChatbotConfig;
-    final nextKey = config == null
-        ? ''
-        : '${config.phoneNumberId}|${config.isEnabled}|${config.orderingEnabled}';
-    if (config != null && nextKey != _configKey) {
-      _enabled = config.isEnabled;
-      _orderingEnabled = config.orderingEnabled;
-      _configKey = nextKey;
-    }
-    if (!_loadRequested) {
-      _loadRequested = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          unawaited(AppScope.of(context).loadWhatsappChatbotConfig());
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _phoneNumberIdController.dispose();
-    _accessTokenController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final text = app.strings;
-    final config = app.whatsappChatbotConfig;
-    final configured = config != null && config.isConfigured;
-    final statusLabel = !configured
-        ? text.whatsappBotNotConnected
-        : config.isEnabled
-        ? text.whatsappBotConnected
-        : text.whatsappBotDisabled;
-    final statusKind = !configured
-        ? TfStatusKind.warning
-        : config.isEnabled
-        ? TfStatusKind.accepted
-        : TfStatusKind.info;
-    final webhookUrl = _whatsappWebhookUrl(app.cloudConfig.baseUrl);
-    final canSave = !app.busy &&
-        (configured ||
-            _phoneNumberIdController.text.trim().isNotEmpty ||
-            _accessTokenController.text.trim().isNotEmpty);
-
-    return _SectionCard(
-      title: text.whatsappChatbot,
-      subtitle: text.whatsappChatbotSubtitle,
-      icon: Icons.chat_outlined,
-      children: [
-        SubscriptionGateCard(
-          feature: 'messenger_bot',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: PosSpacing.sp2),
-              Row(
-                children: [
-                  TfStatusBadge(
-                    label: statusLabel,
-                    kind: statusKind,
-                    upper: false,
-                  ),
-                  if (app.whatsappChatbotLoading) ...[
-                    SizedBox(width: 8),
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ],
-                ],
-              ),
-              SizedBox(height: 12),
-              TfField(
-                label: text.whatsappPhoneNumberId,
-                hint: text.whatsappPhoneNumberIdHint,
-                hintHelper: text.whatsappPhoneNumberIdHelper,
-                controller: _phoneNumberIdController,
-                keyboardType: TextInputType.text,
-              ),
-              TfField(
-                label: text.whatsappAccessToken,
-                hint: text.whatsappAccessTokenHint,
-                hintHelper: text.whatsappAccessTokenHelper,
-                controller: _accessTokenController,
-                obscure: true,
-                keyboardType: TextInputType.text,
-              ),
-              _FacebookToggleRow(
-                label: text.whatsappBotEnabled,
-                value: _enabled,
-                onChanged: (value) => setState(() => _enabled = value),
-              ),
-              _FacebookToggleRow(
-                label: text.whatsappOrderingEnabled,
-                value: _orderingEnabled,
-                onChanged: (value) => setState(() => _orderingEnabled = value),
-              ),
-              SizedBox(height: 10),
-              _FacebookInfoRow(
-                label: text.whatsappWebhookUrl,
-                value: webhookUrl,
-                copyable: webhookUrl.isNotEmpty,
-              ),
-              if (configured) ...[
-                _FacebookInfoRow(
-                  label: text.whatsappDisplayPhoneNumber,
-                  value: config.displayPhoneNumber,
-                ),
-                _FacebookInfoRow(
-                  label: text.whatsappPhoneNumberId,
-                  value: config.phoneNumberId,
-                ),
-                _FacebookInfoRow(
-                  label: text.whatsappTokenSavedAs,
-                  value: config.tokenPreview,
-                ),
-              ],
-              if ((app.whatsappChatbotError ?? config?.lastError ?? '')
-                  .isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: TfText(
-                    app.whatsappChatbotError ?? config?.lastError ?? '',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
-                  ),
-                ),
-              SizedBox(height: 14),
-              TfButton(
-                label: text.saveWhatsappSettings,
-                icon: Icons.check_rounded,
-                busy: app.busy,
-                fullWidth: true,
-                onPressed: canSave ? _save : null,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _save() async {
-    final app = AppScope.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    final ok = await app.saveWhatsappChatbotConfig(
-      phoneNumberId: _phoneNumberIdController.text,
-      accessToken: _accessTokenController.text,
-      isEnabled: _enabled,
-      orderingEnabled: _orderingEnabled,
-    );
-    if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: TfText(
-          ok
-              ? app.strings.whatsappSettingsSaved
-              : app.whatsappChatbotError ??
-                    app.lastError ??
-                    app.strings.whatsappSettingsValidateFailed,
-        ),
-      ),
-    );
-  }
-
-  String _whatsappWebhookUrl(String baseUrl) {
-    final clean = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
-    if (clean.isEmpty) return '';
-    return '$clean/webhooks/whatsapp';
   }
 }
 

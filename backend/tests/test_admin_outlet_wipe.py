@@ -51,7 +51,7 @@ async def test_manager_can_wipe_current_outlet_database_and_media(monkeypatch):
         restaurant_id = boot["restaurantId"]
         async with AsyncSessionLocal() as db:
             outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-            phone = f"+88017{suffix.hex[:8]}"
+            phone = f"+88017{uuid.uuid4().int % 100000000:08d}"
             email = phone_to_synthetic_email(phone)
             account = AdminAccount(
                 id=str(uuid4()),
@@ -149,6 +149,7 @@ async def test_manager_can_wipe_current_outlet_database_and_media(monkeypatch):
     assert video_url in deleted_urls
     assert deleted_keys == [
         f"hero_media/{outlet_id}/images/asset.jpg",
+        f"hero_media/{outlet_id}/logo/asset.jpg",
         f"hero_media/{outlet_id}/video/asset.jpg",
     ]
 

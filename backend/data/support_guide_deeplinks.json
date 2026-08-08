@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "description": "Overlay-guide deeplink vocabulary for Volt Assistant. Each deeplink below is executable by the admin app (see admin_app_dev/lib/src/app.dart, _handleChatDeepLink). Use get_guide_deeplinks to fetch this vocabulary and build guide steps/actions with real targets only.",
+  "tabs": [
+    {
+      "name": "analytics",
+      "description": "Your day at a glance: gross sales, discounts, net sales, collection, prep cost, and profit. Tap a headline card to drill into detail."
+    },
+    {
+      "name": "orders",
+      "description": "Live order feed; new orders appear instantly from tables, Facebook Messenger, and the restaurant's website. The + button builds a new order (dine-in, parcel, or delivery → pick items → send to the kitchen)."
+    },
+    {
+      "name": "tables",
+      "description": "(Waiter role) every table; tap a free table to seat guests and take their order."
+    },
+    {
+      "name": "stock",
+      "description": "Inventory management: items, suppliers, stock-in, end-of-day stock count, and scan-to-stock."
+    },
+    {
+      "name": "menu",
+      "description": "Menu management: add/edit items and categories, apply discounts, set the delivery charge. 'Scan menu card' imports a whole printed menu by photographing it."
+    },
+    {
+      "name": "reports",
+      "description": "Download the performance report for any period: daily sales, orders, and per-item totals."
+    },
+    {
+      "name": "salesSummary",
+      "description": "Today's takings summary."
+    },
+    {
+      "name": "live",
+      "description": "Control Tower."
+    },
+    {
+      "name": "more",
+      "description": "Settings: language, printer settings, staff management, audit log, sign out."
+    }
+  ],
+  "screens": [
+    {
+      "name": "staff",
+      "description": "Staff management list."
+    },
+    {
+      "name": "audit",
+      "description": "Audit log of account activity."
+    },
+    {
+      "name": "stock_in",
+      "description": "Stock-in form to add stock."
+    },
+    {
+      "name": "stock_count",
+      "description": "End-of-day stock count."
+    }
+  ],
+  "modals": [
+    {
+      "name": "menu_discounts",
+      "description": "Menu discounts editor sheet."
+    },
+    {
+      "name": "menu_delivery_charge",
+      "description": "Delivery charge editor sheet."
+    }
+  ],
+  "spots": [
+    {
+      "name": "analytics.stats",
+      "description": "The stats headline card on the Analytics tab."
+    },
+    {
+      "name": "menu.scanCta",
+      "description": "The 'Scan menu card' button on the Menu tab."
+    },
+    {
+      "name": "orders.newOrderFab",
+      "description": "The + new-order button on the Orders tab."
+    },
+    {
+      "name": "tables.grid",
+      "description": "The tables grid on the Tables tab."
+    },
+    {
+      "name": "header.menu",
+      "description": "The menu button in the header that opens the sidebar/drawer."
+    },
+    {
+      "name": "header.bell",
+      "description": "The notification bell in the header; new orders from Messenger and the website arrive here."
+    },
+    {
+      "name": "header.avatar",
+      "description": "The avatar button in the header that opens profile/settings."
+    }
+  ],
+  "navSpots": {
+    "prefix": "nav.",
+    "description": "highlight:nav.<tab> lights up a sidebar tab, e.g. highlight:nav.orders."
+  },
+  "conventions": [
+    "tab:<name> switches the sidebar tab (roles see different sets).",
+    "screen:<name> opens a full screen (staff, audit, stock-in, end-of-day stock count).",
+    "modal:<name> opens the discount or delivery-charge editor sheet.",
+    "highlight:<spot> lights up an exact element in the current screen.",
+    "Each step auto-navigates: its target deeplink executes before the step is shown. The user advances by tapping the highlighted element itself; the app never advances by itself.",
+    "Give every step a spot when an element exists to highlight — the spotlight points at the element the user must tap. A step with both target and spot navigates itself and then points at the element.",
+    "Target-only steps (no spot) are only for opening a destination the next step will highlight; they show a Continue button the user taps to move on.",
+    "If a step's destination must be opened first, combine it in the same step: target opens the destination and the spot lights up the exact element."
+  ]
+}

@@ -25,7 +25,6 @@ import '../models/stock_adjustment.dart';
 import '../models/order_model.dart';
 import '../models/order_status.dart';
 import '../models/server_config.dart';
-import '../models/whatsapp_chatbot_config.dart';
 
 class CloudApiException implements Exception {
   CloudApiException(this.message);
@@ -527,6 +526,31 @@ class CloudApiService {
     await _sendJson('POST', uri, body: {'response': response});
   }
 
+  /// Support-chat history for this outlet, oldest-first (newest last).
+  Future<List<Map<String, Object?>>> fetchSupportChatHistory({int limit = 200}) async {
+    final uri = _uri('/admin/support-chat', queryParameters: {'limit': '$limit'});
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    final response = await _sendJson('GET', uri);
+    final data = response['data'];
+    final raw = data is Map ? data['messages'] : null;
+    if (raw is! List) return <Map<String, Object?>>[];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, Object?>.from(e))
+        .toList(growable: false);
+  }
+
+  /// Persists a client support message via REST (fallback when WS is down).
+  Future<Map<String, Object?>> sendSupportChatMessage(String text) async {
+    final uri = _uri('/admin/support-chat');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    return _sendJson('POST', uri, body: {'text': text});
+  }
+
   Future<CloudRealtimeConfig?> loadRealtimeConfig() async {
     if (_realtimeConfig?.canConnect == true) return _realtimeConfig;
     if (!_cloudConfig.canConnect) return null;
@@ -825,40 +849,6 @@ class CloudApiService {
       },
     );
     return FacebookChatbotConfig.fromJson(response);
-  }
-
-  Future<WhatsAppChatbotConfig> fetchWhatsappChatbotConfig() async {
-    final uri = _uri('/admin/chatbot/whatsapp');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson('GET', uri);
-    return WhatsAppChatbotConfig.fromJson(response);
-  }
-
-  Future<WhatsAppChatbotConfig> updateWhatsappChatbotConfig({
-    String? phoneNumberId,
-    String? accessToken,
-    required bool isEnabled,
-    required bool orderingEnabled,
-  }) async {
-    final uri = _uri('/admin/chatbot/whatsapp');
-    if (uri == null) {
-      throw CloudApiException('Cloud API URL is empty or invalid.');
-    }
-    final response = await _sendJson(
-      'PUT',
-      uri,
-      body: {
-        if (phoneNumberId != null && phoneNumberId.trim().isNotEmpty)
-          'phoneNumberId': phoneNumberId.trim(),
-        if (accessToken != null && accessToken.trim().isNotEmpty)
-          'accessToken': accessToken.trim(),
-        'isEnabled': isEnabled,
-        'orderingEnabled': orderingEnabled,
-      },
-    );
-    return WhatsAppChatbotConfig.fromJson(response);
   }
 
   Future<List<Map<String, Object?>>> listStaffAccounts() async {

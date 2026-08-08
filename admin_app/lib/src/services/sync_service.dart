@@ -677,6 +677,12 @@ class SyncService {
         return;
       }
 
+      if (type == 'support_msg') {
+        _onRemoteEvent?.call(event);
+        _addLog('Cloud realtime support message received.');
+        return;
+      }
+
       if (type == 'menu_scan_progress') {
         _onRemoteEvent?.call(event);
         _addLog('Cloud realtime menu scan progress received.');
@@ -789,9 +795,6 @@ class SyncService {
             break;
           case OrderSource.facebookMessenger:
             prefix = 'M';
-            break;
-          case OrderSource.whatsapp:
-            prefix = 'WA';
             break;
           case OrderSource.manual:
           case OrderSource.desktopPos:

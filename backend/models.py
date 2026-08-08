@@ -462,4 +462,16 @@ class SupportChatMessage(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     actions_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     steps_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Auto-reply outcome, recorded on client rows (see services/support_llm.py).
+    reply_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    reply_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    reply_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured failure detail: raw LLM response (finish_reason, usage, body
+    # snippet) + request fingerprint. JSON object, or NULL on success.
+    reply_detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    reply_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reply_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    reply_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

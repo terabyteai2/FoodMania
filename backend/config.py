@@ -110,11 +110,6 @@ class Settings(BaseSettings):
     FACEBOOK_LOGIN_SCOPES: str = "pages_show_list,pages_manage_metadata,pages_messaging"
     FACEBOOK_OAUTH_STATE_EXPIRE_MINUTES: int = 15
 
-    # WhatsApp Business API (Meta Cloud API) chatbot. Webhook verification
-    # token; falls back to FACEBOOK_WEBHOOK_VERIFY_TOKEN when unset (same Meta
-    # app). Signature verification reuses FACEBOOK_APP_SECRET.
-    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""
-
     # Voice agent — ElevenLabs
     ELEVENLABS_API_KEY: str = ""
     VOICE_ELEVENLABS_VOICE_ID: str = "SYVQhjMSUvWA1w0HkidA"

@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'guided_tour.dart';
 import 'notification_center.dart';
 import 'shell_nav_scope.dart';
+import 'support_chat_overlay.dart';
 import 'tf_design_system.dart';
 
 /// Unified app chrome shared across every primary tab.
@@ -154,6 +155,9 @@ class TfGlobalTopBar extends StatelessWidget {
         trailing: [
           ...extraActions,
           if (showTrailing) ...[
+            HeaderSupportChatButton(
+              color: isBlue ? PosColors.accentInk : null,
+            ),
             TourSpot(
               name: 'header.bell',
               child: HeaderNotificationBell(

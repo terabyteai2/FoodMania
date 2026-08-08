@@ -21,6 +21,21 @@ class CloudRealtimeService {
   bool get isSubscribed => _subscribed;
   String? get channelName => _channelName;
 
+  /// Sends a JSON payload to the server over the open socket.
+  /// Returns false when the socket is not connected (callers fall back to REST).
+  Future<bool> sendMessage(Map<String, Object?> payload) async {
+    final socket = _socket;
+    if (socket == null || !_subscribed || socket.readyState != WebSocket.open) {
+      return false;
+    }
+    try {
+      socket.add(jsonEncode(payload));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> connect({
     required CloudRealtimeConfig config,
     required ServerConfig serverConfig,

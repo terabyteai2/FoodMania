@@ -17,6 +17,7 @@ import 'core/constants/payment_defaults.dart';
 import 'core/localization/app_strings.dart';
 import 'core/theme/category_tints.dart';
 import 'core/utils/bounded_string_set.dart';
+import 'core/widgets/support_chat_overlay.dart';
 import 'models/account_role.dart';
 import 'models/admin_blocking_notice.dart';
 import 'models/app_update_info.dart';
@@ -28,7 +29,6 @@ import 'models/dashboard_metrics.dart';
 import 'models/dashboard_summary.dart';
 import 'models/desktop_pos.dart';
 import 'models/facebook_chatbot_config.dart';
-import 'models/whatsapp_chatbot_config.dart';
 import 'models/inventory_item.dart';
 import 'models/inventory_summary.dart';
 import 'models/inventory_supplier.dart';
@@ -262,13 +262,6 @@ class PosAppController extends ChangeNotifier {
   String? verifiedPhoneDisplay;
   StaffInvitePending? pendingStaffInvite;
 
-  /// Account ids that already completed the guided tour. Auto-start skips
-  /// them; the More hub Help/Guide entry always allows a replay.
-  /// Guided-tour passes ("cohorts") already shown for this account, as
-  /// `'<accountKey>:<cohort>'` entries. Cohorts are independent so a pass
-  /// that became relevant later (e.g. 20+ completed orders) still auto-starts.
-  final Set<String> _guidedTourDoneCohorts = <String>{};
-
   /// New manager sign-up must pay before using the app (survives app restarts).
   bool needsOnboardingPayment = false;
   String selectedSubscriptionPlan = '';
@@ -391,9 +384,6 @@ class PosAppController extends ChangeNotifier {
   FacebookChatbotConfig? facebookChatbotConfig;
   bool facebookChatbotLoading = false;
   String? facebookChatbotError;
-  WhatsAppChatbotConfig? whatsappChatbotConfig;
-  bool whatsappChatbotLoading = false;
-  String? whatsappChatbotError;
   int _dismissedAppUpdateVersionCode = 0;
   AppUpdateInfo? _appUpdateWaitingForPermission;
   String? _cachedApkPath;
@@ -427,45 +417,6 @@ class PosAppController extends ChangeNotifier {
   /// Manager must pick a plan and receive activation before using the app.
   bool get mustCompleteOnboardingPayment =>
       isManager && needsOnboardingPayment && subscriptionState != 'paid';
-
-  /// Completed-order count at which the Sales Summary tour pass is offered.
-  static const int kGuidedTourCompletedThreshold = 20;
-
-  /// Guided-tour passes ("cohorts") that apply to the current account state
-  /// and have not been shown yet: `base` (always, once), `menu` (empty menu —
-  /// point at the sidebar Menu and the Scan menu card button), `sales` (20+
-  /// completed orders — point at Sales Summary), `owner` (backoffice surface —
-  /// point at Analytics and Reports). Each launch auto-starts one merged pass
-  /// covering every applicable cohort.
-  List<String> get pendingTourCohorts {
-    if (!isLoggedIn) return const [];
-    final shown = _guidedTourDoneCohorts;
-    final key = _guidedTourAccountKey;
-    return [
-      if (!shown.contains('$key:base')) 'base',
-      if (!shown.contains('$key:menu') && menuItems.isEmpty) 'menu',
-      if (!shown.contains('$key:sales') &&
-          ordersFor(status: OrderStatus.completed).length >=
-              kGuidedTourCompletedThreshold)
-        'sales',
-      if (!shown.contains('$key:owner') && accountRole.isOwner) 'owner',
-    ];
-  }
-
-  String get _guidedTourAccountKey =>
-      accountId.isEmpty ? 'device' : accountId;
-
-  /// Persists the shown cohorts so their passes do not auto-start again.
-  Future<void> markGuidedTourDoneFor(List<String> cohorts) async {
-    if (cohorts.isEmpty) return;
-    final preferences = await SharedPreferences.getInstance();
-    final key = _guidedTourAccountKey;
-    _guidedTourDoneCohorts.addAll(cohorts.map((c) => '$key:$c'));
-    await preferences.setStringList(
-      _guidedTourDoneKey,
-      _guidedTourDoneCohorts.toList()..sort(),
-    );
-  }
 
   // App is ready to use as soon as the restaurant has a name.
   // Cloud sync is optional and configured separately.
@@ -660,15 +611,6 @@ class PosAppController extends ChangeNotifier {
       // first frame so the add-items tints don't flash the name-keyed colors.
       await CategoryPaletteAssigner.instance.ensureLoaded();
       hasSeenIntro = preferences.getBool(_seenIntroKey) ?? false;
-      // v2 cohorts (`account:cohort`) supersede the v1 once-per-account flag:
-      // any account that already finished the v1 tour has its base pass done.
-      _guidedTourDoneCohorts
-          .addAll(preferences.getStringList(_guidedTourDoneKey) ?? const []);
-      for (final account in preferences
-          .getStringList(_guidedTourV1DoneKey) ??
-          const []) {
-        _guidedTourDoneCohorts.add('$account:base');
-      }
       bkashPaymentVerified =
           preferences.getBool(_bkashPaymentVerifiedKey) ??
           !PaymentDefaults.requireBkashGate;
@@ -1999,57 +1941,6 @@ class PosAppController extends ChangeNotifier {
     });
   }
 
-  Future<void> loadWhatsappChatbotConfig() async {
-    if (!cloudConfig.canSync) return;
-    whatsappChatbotLoading = true;
-    whatsappChatbotError = null;
-    notifyListeners();
-    try {
-      cloudApiService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      whatsappChatbotConfig = await cloudApiService
-          .fetchWhatsappChatbotConfig();
-    } catch (error) {
-      whatsappChatbotError = _userVisibleError(error);
-    } finally {
-      whatsappChatbotLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<bool> saveWhatsappChatbotConfig({
-    required String phoneNumberId,
-    required String accessToken,
-    required bool isEnabled,
-    required bool orderingEnabled,
-  }) async {
-    if (!cloudConfig.canSync) {
-      lastError = 'Cloud sync must be connected before configuring WhatsApp.';
-      notifyListeners();
-      return false;
-    }
-    return _runBusy(() async {
-      cloudApiService.configure(
-        cloudConfig: cloudConfig,
-        serverConfig: serverConfig,
-      );
-      whatsappChatbotConfig = await cloudApiService
-          .updateWhatsappChatbotConfig(
-            phoneNumberId: phoneNumberId.trim().isEmpty
-                ? null
-                : phoneNumberId.trim(),
-            accessToken: accessToken.trim().isEmpty
-                ? null
-                : accessToken.trim(),
-            isEnabled: isEnabled,
-            orderingEnabled: orderingEnabled,
-          );
-      whatsappChatbotError = null;
-    });
-  }
-
   Future<void> saveLocalPublicSlug(String publicSlug) async {
     final cleanSlug = _normalizePublicSlug(publicSlug);
     serverConfig = serverConfig.copyWith(publicSlug: cleanSlug);
@@ -2371,6 +2262,12 @@ class PosAppController extends ChangeNotifier {
   void _handleRemoteSyncEvent(Map<String, Object?> event) {
     final type = event['type']?.toString() ?? '';
     final data = event['data'];
+    if (type == 'support_msg' && data is Map) {
+      unawaited(
+        SupportChatController.instance.handleRemoteEvent(event),
+      );
+      return;
+    }
     if (type == 'outlet_config_updated' && data is Map) {
       unawaited(_applyOutletConfigUpdate(data.cast<String, Object?>()));
       return;
@@ -4903,8 +4800,6 @@ class PosAppController extends ChangeNotifier {
   }
 
   static final String _seenIntroKey = 'local_pos_seen_intro';
-  static final String _guidedTourDoneKey = 'guided_tour_v2_done_accounts';
-  static final String _guidedTourV1DoneKey = 'guided_tour_v1_done_accounts';
   static final String _restaurantNameKey = 'local_pos_restaurant_name';
   static final String _outletNameKey = 'local_pos_outlet_name';
   static final String _serverIdKey = 'local_pos_server_id';

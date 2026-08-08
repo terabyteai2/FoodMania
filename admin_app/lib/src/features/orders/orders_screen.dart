@@ -1487,13 +1487,6 @@ _ChannelStyle _resolveChannel(OrderModel order) {
         PosColors.channelMessenger,
         PosColors.channelNeutralSoft,
       );
-    case OrderSource.whatsapp:
-      return const _ChannelStyle(
-        'whatsapp',
-        TfNavIcon.chat,
-        PosColors.channelWhatsapp,
-        PosColors.channelNeutralSoft,
-      );
     case OrderSource.desktopPos:
     case OrderSource.localLan:
       return const _ChannelStyle(

@@ -573,7 +573,7 @@ async def staff_invite_respond(
             select(AdminAccount).where(
                 (AdminAccount.id == body.inviteId)
                 & (AdminAccount.phone == phone)
-                & (AdminAccount.role.in_(FLOOR_ROLES))
+                & (AdminAccount.role.in_((MANAGER, *FLOOR_ROLES)))
             )
         )
     ).scalar_one_or_none()

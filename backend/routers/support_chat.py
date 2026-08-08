@@ -13,7 +13,10 @@ from auth import (
 from database import get_db
 from models import PlatformAdmin, SupportChatMessage
 from routers.ws import _persist_support_message, _support_message_dict
-from services.support_llm import auto_reply as support_llm_auto_reply
+from services.support_llm import (
+    auto_reply as support_llm_auto_reply,
+    diagnostics as support_llm_diagnostics,
+)
 
 router = APIRouter()
 
@@ -71,6 +74,18 @@ async def send_support_chat_message(
     )
     asyncio.create_task(support_llm_auto_reply(payload["sub"]))
     return {"data": _support_message_dict(message), "error": None}
+
+
+@router.get("/admin/support-chat/diagnostics")
+async def get_support_chat_diagnostics(
+    payload: dict = Depends(get_current_device_payload),
+):
+    """Per-outlet auto-reply diagnostics: LLM config presence, in-flight /
+    cooldown state, and the last messages with their recorded outcomes
+    (status / reason / error / latency)."""
+    outlet_id = payload["sub"]
+    result = await support_llm_diagnostics(outlet_id)
+    return {"data": result, "error": None}
 
 
 @router.get("/platform/support-chats")

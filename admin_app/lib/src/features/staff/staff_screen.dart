@@ -105,7 +105,7 @@ class _StaffScreenState extends State<StaffScreen> {
                       }
                       final m = members[i - 1];
                       final canToggle =
-                          !(m.role == AccountRole.manager && !app.demoOwnerAccess);
+                          !(m.role == AccountRole.manager && !app.isOwner);
                       return _StaffCard(
                         text: text,
                         member: m,
@@ -167,7 +167,7 @@ class _StaffScreenState extends State<StaffScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) =>
-          _InviteSheet(text: app.strings, canInviteManager: app.demoOwnerAccess),
+          _InviteSheet(text: app.strings, canInviteManager: app.isOwner),
     );
     if (sent == true) _reload();
   }

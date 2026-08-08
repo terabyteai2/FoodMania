@@ -31,6 +31,7 @@ async def create_tables() -> None:
         await _ensure_inventory_redesign_columns(conn)
         await _ensure_pos_columns(conn)
         await _ensure_chatbot_columns(conn)
+        await _ensure_support_chat_columns(conn)
         await _ensure_role_migration(conn)
         await _ensure_subscription_columns(conn)
     await seed_platform_admin()
@@ -457,6 +458,41 @@ async def _ensure_chatbot_columns(conn) -> None:
             "llm_batch_count INTEGER DEFAULT 0",
         ]:
             await conn.execute(text(col))
+
+
+async def _ensure_support_chat_columns(conn) -> None:
+    """Add auto-reply outcome columns to support_chat_messages (diagnostics).
+
+    Recorded by services/support_llm.py on client rows so every message that
+    did or did not get a reply carries a machine-readable outcome.
+    """
+    dialect = conn.dialect.name
+    timestamp_type = "TIMESTAMP" if dialect == "sqlite" else "TIMESTAMPTZ"
+    json_type = "JSON" if dialect == "sqlite" else "JSONB"
+    columns = [
+        ("reply_status", "VARCHAR"),
+        ("reply_reason", "VARCHAR"),
+        ("reply_error", "TEXT"),
+        ("reply_detail", json_type),
+        ("reply_latency_ms", "INTEGER"),
+        ("reply_model", "VARCHAR"),
+        ("reply_attempted_at", timestamp_type),
+    ]
+    for column, column_type in columns:
+        try:
+            if dialect == "sqlite":
+                await conn.execute(
+                    text(f"ALTER TABLE support_chat_messages ADD COLUMN {column} {column_type}")
+                )
+            else:
+                await conn.execute(
+                    text(
+                        f"ALTER TABLE support_chat_messages ADD COLUMN IF NOT EXISTS {column} {column_type}"
+                    )
+                )
+        except Exception:
+            if dialect != "sqlite":
+                raise
 
 
 async def _ensure_subscription_columns(conn) -> None:

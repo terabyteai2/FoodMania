@@ -28,7 +28,7 @@ async def test_supplier_and_batch_adjustments_capture_actor_and_rollback_togethe
         outlet_id = boot["outletId"]
         async with AsyncSessionLocal() as db:
             outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-            phone = f"+88017{suffix.hex[:8]}"
+            phone = f"+88017{uuid.uuid4().int % 100000000:08d}"
             account = AdminAccount(
                 id=str(uuid4()),
                 outlet_id=outlet.id,

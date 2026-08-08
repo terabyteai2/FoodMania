@@ -1942,16 +1942,14 @@ class LocalDatabaseService {
     // Source-aware serial grouping: each group (W/M/S/default) keeps its own
     // per-day counter. Must match backend `serial_group_filter` logic.
     // Local DB stores source as the OrderSource enum value, so online sources
-    // are 'cloud' (website), 'facebook_messenger' (messenger) and 'whatsapp'.
-    const onlineSources = "'cloud','facebook_messenger','whatsapp'";
+    // are 'cloud' (website) and 'facebook_messenger' (messenger).
+    const onlineSources = "'cloud','facebook_messenger'";
     String groupFilter;
     switch (source) {
       case OrderSource.cloud:
         groupFilter = "AND source = 'cloud'";
       case OrderSource.facebookMessenger:
         groupFilter = "AND source = 'facebook_messenger'";
-      case OrderSource.whatsapp:
-        groupFilter = "AND source = 'whatsapp'";
       case OrderSource.manual:
       case OrderSource.desktopPos:
       case OrderSource.localLan:

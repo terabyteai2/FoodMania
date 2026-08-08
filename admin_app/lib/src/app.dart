@@ -12,13 +12,15 @@ import 'core/widgets/notification_center.dart';
 import 'core/widgets/screen_blocker.dart';
 import 'core/widgets/shell_nav_scope.dart';
 import 'core/widgets/guided_tour.dart';
+import 'core/widgets/support_chat_overlay.dart';
 import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
 import 'models/account_role.dart';
-import 'models/order_status.dart';
 import 'services/cloud_api_service.dart';
 import 'features/analytics/analytics_screen.dart';
+import 'features/audit/audit_screen.dart';
+import 'features/auth/staff_invite_screen.dart';
 import 'features/desktop_pos/desktop_pos_shell.dart';
 import 'features/inventory/end_of_day_count_screen.dart';
 import 'features/inventory/inventory_screen.dart';
@@ -29,9 +31,9 @@ import 'features/menu/menu_scan_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/reports/reports_hub_screen.dart';
-import 'features/auth/staff_invite_screen.dart';
 import 'features/setup/tenant_setup_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
+import 'features/staff/staff_screen.dart';
 import 'features/system/admin_blocking_notice_screen.dart';
 import 'features/tables/tables_screen.dart';
 import 'features/tower/control_tower_screen.dart';
@@ -427,160 +429,8 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-// Guided-tour copy and step builder. The walkthrough adapts to the account's
-// state at launch: an empty menu gets a sidebar → Menu → Scan-menu-card pass,
-// 20+ completed orders add a Sales Summary pointer, and the backoffice surface
-// gets Analytics/Reports pointers. Steps are only added for destinations the
-// role's sidebar actually contains; enter actions (open drawer / switch tab)
-// make every target reachable.
-const String _tourMenuTitle = 'Open the navigation menu';
-const String _tourMenuBody =
-    'Tap the menu icon to open the drawer — Menu, Stock, Reports, and '
-    'settings all live there.';
-const String _tourBellTitle = 'Notifications';
-const String _tourBellBody =
-    'New orders from Messenger and your website arrive here as '
-    'notifications, so you never miss a sale.';
-const String _tourAvatarTitle = 'Your profile & settings';
-const String _tourAvatarBody =
-    'Switch language, open printer settings, and sign out from your '
-    'profile menu.';
-
-/// Builds the adaptive guided-tour step list (English only — matches the
-/// existing walkthrough). [tabs] holds the role's sidebar destinations as
-/// [_AppTab] names; [actions] supplies per-step enter callbacks (open the
-/// drawer / switch tabs) so the overlay auto-navigates to each target.
-@visibleForTesting
-List<TourStep> buildTourSteps({
-  required List<String> tabs,
-  required bool noMenu,
-  required int completedOrders,
-  required bool canCreateOrders,
-  required Map<String, VoidCallback> actions,
-}) {
-  bool has(String tab) => tabs.contains(tab);
-  final ownerSurface = has('reports');
-  final waiterSurface = has('tables') && !has('stock');
-
-  // The intro points at the surface's landing content so every step has a
-  // cutout; a manager whose menu has no creatable items gets the hamburger
-  // (the FAB spot does not exist then).
-  final introSpot = ownerSurface
-      ? 'analytics.stats'
-      : waiterSurface
-          ? 'tables.grid'
-          : canCreateOrders
-              ? 'orders.newOrderFab'
-              : 'header.menu';
-
-  final steps = <TourStep>[
-    TourStep.spot(
-      spot: introSpot,
-      title: ownerSurface
-          ? 'Your day at a glance'
-          : waiterSurface
-              ? 'Your floor at a glance'
-              : 'Your orders, live',
-      body: ownerSurface
-          ? 'This is the analytics dashboard — gross sales, discounts, net '
-              'sales, collection, prep cost, and profit on one screen. The '
-              'headline cards show today\'s numbers first — tap any card to '
-              'drill into the detail.'
-          : waiterSurface
-              ? 'Tables shows every table in the restaurant. Tap a free table '
-                  'to seat guests and take their order.'
-              : 'Every new order appears here the moment it is placed — from '
-                  'tables, Messenger, or your website. Tap + to build an '
-                  'order: pick dine-in, parcel, or delivery, choose the '
-                  'items, and send it to the kitchen.',
-      shape: introSpot == 'orders.newOrderFab'
-          ? TourSpotlightShape.circle
-          : TourSpotlightShape.roundedRect,
-      onEnter: ownerSurface
-          ? actions['selectAnalytics']
-          : waiterSurface
-              ? actions['selectTables']
-              : canCreateOrders
-                  ? actions['selectOrders']
-                  : null,
-    ),
-    if (introSpot != 'header.menu')
-      TourStep.spot(
-        spot: 'header.menu',
-        title: _tourMenuTitle,
-        body: _tourMenuBody,
-      ),
-    TourStep.spot(
-      spot: 'header.bell',
-      title: _tourBellTitle,
-      body: _tourBellBody,
-    ),
-    TourStep.spot(
-      spot: 'header.avatar',
-      title: _tourAvatarTitle,
-      body: _tourAvatarBody,
-    ),
-  ];
-
-  // No menu yet → walk from the sidebar to the scan button.
-  if (noMenu && has('menu')) {
-    steps.add(
-      TourStep.spot(
-        spot: 'nav.menu',
-        title: 'Add your menu',
-        body: 'Your menu is empty. Open the Menu page to add your first '
-            'items.',
-        onEnter: actions['openDrawer'],
-      ),
-    );
-    steps.add(
-      TourStep.spot(
-        spot: 'menu.scanCta',
-        title: 'Scan menu card',
-        body: 'The fastest way to build a menu: photograph your printed card '
-            'and the app imports every item automatically.',
-        onEnter: actions['selectMenu'],
-      ),
-    );
-  }
-
-  // Backoffice surface → Analytics and Reports.
-  if (ownerSurface) {
-    steps.add(
-      TourStep.spot(
-        spot: 'nav.analytics',
-        title: 'Analytics',
-        body: 'Your day at a glance — gross sales, discounts, net sales, '
-            'collection, prep cost, and profit on one screen.',
-        onEnter: actions['openDrawer'],
-      ),
-    );
-    steps.add(
-      TourStep.spot(
-        spot: 'nav.reports',
-        title: 'Reports',
-        body: 'Download your performance report for any period — daily '
-            'sales, orders, and per-item totals.',
-        onEnter: actions['openDrawer'],
-      ),
-    );
-  }
-
-  // A full Completed tab → point at Sales Summary.
-  if (has('salesSummary') &&
-      completedOrders >= PosAppController.kGuidedTourCompletedThreshold) {
-    steps.add(
-      TourStep.spot(
-        spot: 'nav.salesSummary',
-        title: 'Sales Summary',
-        body: 'You have $completedOrders completed orders — review today\'s '
-            'takings in Sales Summary.',
-        onEnter: actions['openDrawer'],
-      ),
-    );
-  }
-  return steps;
-}
+// Guided tours are assistant-driven: the support chat sends guide steps
+// (title/body/target/spot) and the client plays them on [GuidedTourOverlay].
 
 class _MainShellState extends State<MainShell> {
   late _AppTab _selected;
@@ -593,60 +443,7 @@ class _MainShellState extends State<MainShell> {
   int _receiptPrinterOpenRequest = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   OverlayEntry? _scanOverlay;
-  OverlayEntry? _tourOverlay;
-  AccountRole? _tourRole;
-  List<String> _tourCohorts = const [];
   bool _useRail = false;
-
-  void _startGuidedTour() {
-    final app = AppScope.read(context);
-    _dismissGuidedTour();
-    _tourRole = app.accountRole;
-    _tourCohorts = app.pendingTourCohorts;
-    _tourOverlay = OverlayEntry(
-      builder: (_) => GuidedTourOverlay(
-        steps: _tourSteps(app),
-        onFinished: () {
-          unawaited(app.markGuidedTourDoneFor(_tourCohorts));
-          _scaffoldKey.currentState?.closeDrawer();
-          _dismissGuidedTour();
-        },
-      ),
-    );
-    Overlay.of(context, rootOverlay: true).insert(_tourOverlay!);
-  }
-
-  /// Builds the adaptive step list from the current sidebar and domain state.
-  /// The enter actions auto-navigate: open the drawer on the phone surface
-  /// (the rail always shows the destinations), and select the tab each
-  /// screen-level target lives on.
-  List<TourStep> _tourSteps(PosAppController app) => buildTourSteps(
-    tabs: _currentTabOrder.map((t) => t.name).toList(growable: false),
-    noMenu: app.menuItems.isEmpty,
-    completedOrders: app.ordersFor(status: OrderStatus.completed).length,
-    canCreateOrders: app.menuItems.any((i) => i.isAvailable),
-    actions: {
-      'openDrawer': () {
-        if (!_useRail) _scaffoldKey.currentState?.openDrawer();
-      },
-      'selectMenu': () {
-        _scaffoldKey.currentState?.closeDrawer();
-        _selectTab(_AppTab.menu);
-      },
-      'selectAnalytics': () {
-        _scaffoldKey.currentState?.closeDrawer();
-        _selectTab(_AppTab.analytics);
-      },
-      'selectOrders': () => _selectTab(_AppTab.orders),
-      'selectTables': () => _selectTab(_AppTab.tables),
-    },
-  );
-
-  void _dismissGuidedTour() {
-    _tourOverlay?.remove();
-    _tourOverlay = null;
-    _tourRole = null;
-  }
 
   void _showScanOverlay(String message) {
     _hideScanOverlay();
@@ -713,12 +510,12 @@ class _MainShellState extends State<MainShell> {
     _selected = _ownerTabOrder[vi];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final app = AppScope.read(context);
-      // Snapshot the onboarding flags BEFORE onMounted consumes the landing
-      // flag — the tour must not stack on the onboarding-landing flow.
-      final onboardingLandingPending = app.pendingOnboardingLanding;
-      final onboardingMenuScanPending = app.pendingOnboardingMenuScan;
       app.systemNotifications.requestNotificationAccess();
       widget.onMounted?.call();
+      // Support-chat overlay: host context (toasts + overlay insertion) and
+      // shell-level deeplink navigation.
+      SupportChatController.instance.attachHost(context);
+      SupportChatController.instance.attachNavigator(_handleChatDeepLink);
       // Handle FCM notification that launched the app (killed state).
       final pending = app.pendingFcmNavigation;
       if (pending != null) {
@@ -729,13 +526,6 @@ class _MainShellState extends State<MainShell> {
       if (app.pendingOnboardingMenuScan) {
         app.pendingOnboardingMenuScan = false;
         _navigateOnboardingMenuScan(context, app);
-      }
-      // Auto-start the guided tour for every applicable, not-yet-shown pass
-      // (replayable from More hub).
-      if (!onboardingLandingPending &&
-          !onboardingMenuScanPending &&
-          app.pendingTourCohorts.isNotEmpty) {
-        _startGuidedTour();
       }
     });
   }
@@ -752,7 +542,6 @@ class _MainShellState extends State<MainShell> {
   @override
   void dispose() {
     _hideScanOverlay();
-    _dismissGuidedTour();
     _notificationToastDebounce?.cancel();
     super.dispose();
   }
@@ -771,10 +560,6 @@ class _MainShellState extends State<MainShell> {
     _currentTabOrder = _tabOrderForRole(app.accountRole);
     if (!_currentTabOrder.contains(_selected)) {
       _selected = _currentTabOrder.first;
-    }
-    // A role switch (More → demo role switcher) invalidates the active tour.
-    if (_tourOverlay != null && _tourRole != app.accountRole) {
-      _dismissGuidedTour();
     }
     _maybeShowNotification(app);
     _consumeFcmNavigation(app);
@@ -834,19 +619,6 @@ class _MainShellState extends State<MainShell> {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Width changes (foldable resize, breakpoint crossings) remount the
-        // shell tree; re-resolve the tour's spotlight targets next frame so
-        // the cutout/tooltip follow the new header. Deferred post-frame: the
-        // overlay entry lives in the root overlay (not under this
-        // LayoutBuilder), so marking it dirty during the build phase would
-        // violate the framework's markNeedsBuild contract.
-        if (_tourOverlay != null && _tourOverlay!.mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_tourOverlay != null && _tourOverlay!.mounted) {
-              _tourOverlay!.markNeedsBuild();
-            }
-          });
-        }
         _useRail = constraints.maxWidth >= 760;
         if (!_useRail) {
           // Phone surface: Petpooja-style left drawer opened by a hamburger in
@@ -868,7 +640,6 @@ class _MainShellState extends State<MainShell> {
               openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
               showScanOverlay: _showScanOverlay,
               hideScanOverlay: _hideScanOverlay,
-              startGuidedTour: _startGuidedTour,
               child: body,
             ),
           );
@@ -946,7 +717,6 @@ class _MainShellState extends State<MainShell> {
                   openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                   showScanOverlay: _showScanOverlay,
                   hideScanOverlay: _hideScanOverlay,
-                  startGuidedTour: _startGuidedTour,
                   child: body,
                 ),
               ),
@@ -999,6 +769,40 @@ class _MainShellState extends State<MainShell> {
       case PosNotificationTarget.none:
         return;
     }
+  }
+
+  /// Support-chat deeplink dispatcher (wired via
+  /// [SupportChatController.attachNavigator]). The chat overlay stays open
+  /// while the navigation happens underneath it.
+  void _handleChatDeepLink(String target) {
+    if (target.startsWith('tab:')) {
+      final name = target.substring('tab:'.length).trim();
+      final tab = _AppTab.values.asNameMap()[name];
+      if (tab != null && _currentTabOrder.contains(tab)) _selectTab(tab);
+      return;
+    }
+    switch (target) {
+      case 'screen:staff':
+        unawaited(_pushChatScreen(const StaffScreen()));
+      case 'screen:audit':
+        unawaited(_pushChatScreen(const AuditScreen()));
+      case 'screen:stock_in':
+        unawaited(_pushThenRefreshInventory(const StockInScreen()));
+      case 'screen:stock_count':
+        unawaited(_pushThenRefreshInventory(const EndOfDayCountScreen()));
+      case 'modal:menu_discounts':
+        unawaited(showMenuDiscountsSheet(context));
+      case 'modal:menu_delivery_charge':
+        unawaited(showMenuDeliveryChargeEditor(context));
+      default:
+        break;
+    }
+  }
+
+  Future<void> _pushChatScreen(Widget screen) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => screen),
+    );
   }
 
   /// Drawer group-child actions: quick screens/sheets that don't map to a tab.

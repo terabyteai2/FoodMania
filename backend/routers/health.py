@@ -87,6 +87,12 @@ async def health():
             "ok": any(chatbot_providers.values()),
             "providers": chatbot_providers,
         },
+        "supportChat": {
+            "ok": _configured(settings.SUPPORT_CHAT_LLM_API_KEY)
+            or _configured(settings.DEEPSEEK_API_KEY),
+            "llmOverrideConfigured": _configured(settings.SUPPORT_CHAT_LLM_API_KEY),
+            "deepseekConfigured": _configured(settings.DEEPSEEK_API_KEY),
+        },
         "monitoring": {"sentryEnabled": _configured(settings.SENTRY_DSN)},
         "realtime": {"enabled": False},
     }

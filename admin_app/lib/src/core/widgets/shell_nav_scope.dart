@@ -11,7 +11,6 @@ class ShellNavScope extends InheritedWidget {
     required this.openDrawer,
     required this.showScanOverlay,
     required this.hideScanOverlay,
-    required this.startGuidedTour,
     required super.child,
     super.key,
   });
@@ -25,10 +24,6 @@ class ShellNavScope extends InheritedWidget {
   /// Hides the scan overlay.
   final VoidCallback hideScanOverlay;
 
-  /// Starts the guided-tour overlay at the shell level (first-run auto-start
-  /// and the More hub's Help/Guide replay entry).
-  final VoidCallback startGuidedTour;
-
   static ShellNavScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ShellNavScope>();
 
@@ -36,6 +31,5 @@ class ShellNavScope extends InheritedWidget {
   bool updateShouldNotify(ShellNavScope oldWidget) =>
       openDrawer != oldWidget.openDrawer ||
       showScanOverlay != oldWidget.showScanOverlay ||
-      hideScanOverlay != oldWidget.hideScanOverlay ||
-      startGuidedTour != oldWidget.startGuidedTour;
+      hideScanOverlay != oldWidget.hideScanOverlay;
 }

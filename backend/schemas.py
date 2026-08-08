@@ -107,23 +107,6 @@ class FacebookChatbotConfigResponse(BaseModel):
     lastError: str | None = None
 
 
-class WhatsAppChatbotConfigRequest(BaseModel):
-    phoneNumberId: str | None = None
-    accessToken: str | None = None
-    isEnabled: bool = True
-    orderingEnabled: bool = True
-
-
-class WhatsAppChatbotConfigResponse(BaseModel):
-    isConfigured: bool
-    isEnabled: bool
-    orderingEnabled: bool
-    phoneNumberId: str | None = None
-    displayPhoneNumber: str | None = None
-    tokenPreview: str | None = None
-    lastError: str | None = None
-
-
 class ChatReplyRequest(BaseModel):
     text: str
 

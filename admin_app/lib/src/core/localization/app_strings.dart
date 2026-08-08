@@ -267,45 +267,6 @@ class AppStrings {
   String get messengerSettingsSaved =>
       isBn ? 'Messenger সেটিংস সেভ হয়েছে' : 'Messenger settings saved';
 
-  String get whatsappChatbot =>
-      isBn ? 'WhatsApp bot' : 'WhatsApp bot';
-  String get whatsappChatbotSubtitle => isBn
-      ? 'WhatsApp থেকে মেনু প্রশ্ন ও ডেলিভারি অর্ডার নিন।'
-      : 'Answer menu questions and take delivery orders from WhatsApp.';
-  String get whatsappPhoneNumberId =>
-      isBn ? 'Phone number ID' : 'Phone number ID';
-  String get whatsappPhoneNumberIdHint =>
-      isBn ? 'WhatsApp Business Manager থেকে Phone number ID পেস্ট করুন'
-           : 'Paste the Phone number ID from WhatsApp Business Manager';
-  String get whatsappPhoneNumberIdHelper => isBn
-      ? 'Meta Business Manager → WhatsApp → Phone numbers থেকে নিন।'
-      : 'Get it from Meta Business Manager → WhatsApp → Phone numbers.';
-  String get whatsappAccessToken =>
-      isBn ? 'Access token' : 'Access token';
-  String get whatsappAccessTokenHint =>
-      isBn ? 'সিস্টেম ইউজার টোকেন পেস্ট করুন' : 'Paste the system user token';
-  String get whatsappAccessTokenHelper => isBn
-      ? 'whatsapp_business_messaging পারমিশনসহ টোকেন দিন। সেভের পর ব্যাকএন্ডে গোপন থাকবে।'
-      : 'Use a token with whatsapp_business_messaging permission. It stays hidden on the backend.';
-  String get whatsappBotEnabled => isBn ? 'বট চালু' : 'Bot enabled';
-  String get whatsappOrderingEnabled =>
-      isBn ? 'ডেলিভারি অর্ডার চালু' : 'Delivery ordering enabled';
-  String get whatsappWebhookUrl =>
-      isBn ? 'Webhook callback URL' : 'Webhook callback URL';
-  String get whatsappDisplayPhoneNumber =>
-      isBn ? 'WhatsApp number' : 'WhatsApp number';
-  String get whatsappTokenSavedAs => isBn ? 'Saved token' : 'Saved token';
-  String get whatsappBotConnected => isBn ? 'Connected' : 'Connected';
-  String get whatsappBotNotConnected => isBn ? 'Setup needed' : 'Setup needed';
-  String get whatsappBotDisabled => isBn ? 'Disabled' : 'Disabled';
-  String get saveWhatsappSettings =>
-      isBn ? 'WhatsApp সেটিংস সেভ করুন' : 'Save WhatsApp settings';
-  String get whatsappSettingsSaved =>
-      isBn ? 'WhatsApp সেটিংস সেভ হয়েছে' : 'WhatsApp settings saved';
-  String get whatsappSettingsValidateFailed =>
-      isBn ? 'WhatsApp ক্রেডেনশিয়াল যাচাই করা যায়নি'
-           : 'Could not validate WhatsApp credentials';
-
   String get restaurantName => isBn ? 'রেস্টুরেন্টের নাম' : 'Restaurant name';
   String get outletName => isBn ? 'আউটলেটের নাম' : 'Outlet name';
 
@@ -756,8 +717,6 @@ class AppStrings {
         return isBn ? 'ক্লাউড / ওয়েব' : 'Cloud / web';
       case OrderSource.facebookMessenger:
         return isBn ? 'Messenger' : 'Messenger';
-      case OrderSource.whatsapp:
-        return isBn ? 'WhatsApp' : 'WhatsApp';
       case OrderSource.desktopPos:
         return isBn ? 'ডেস্কটপ POS' : 'Desktop POS';
       case OrderSource.manual:
@@ -775,8 +734,6 @@ class AppStrings {
         return isBn ? 'ওয়েবসাইট' : 'Website';
       case 'chatbot':
         return isBn ? 'মেসেঞ্জার' : 'Messenger';
-      case 'whatsapp':
-        return isBn ? 'WhatsApp' : 'WhatsApp';
       case 'qr':
         return isBn ? 'টেবিল QR' : 'Table QR';
       case 'waiter':
@@ -1729,4 +1686,35 @@ class AppStrings {
   String get liveMetricsOffline =>
       isBn ? 'লাইভ মেট্রিক্স অফলাইন' : 'Live metrics offline';
   String get pullToRefresh => isBn ? 'রিফ্রেশ করতে টানুন' : 'Pull to refresh';
+
+  // ── Support chat overlay ──────────────────────────────────────────────────
+  String get supportChatTitle => isBn ? 'সাপোর্ট' : 'Support';
+  String get supportChatTooltip =>
+      isBn ? 'সাহায্য চ্যাট খুলুন' : 'Open support chat';
+  String get supportChatInputHint =>
+      isBn ? 'বার্তা লিখুন…' : 'Type a message…';
+  String get supportChatSend => isBn ? 'পাঠান' : 'Send';
+  String get supportChatConnected => isBn ? 'সংযুক্ত' : 'Connected';
+  String get supportChatOffline => isBn ? 'অফলাইন' : 'Offline';
+  String get supportChatOfflineHint => isBn
+      ? 'অফলাইন — বার্তা রেফ্রেশ না হওয়া পর্যন্ত পাঠানো যাবে না।'
+      : 'Offline — messages will be sent once reconnected.';
+  String get supportChatEmpty =>
+      isBn ? 'কোনো বার্তা নেই। কিছু লিখে জিজ্ঞেস করুন!' : 'No messages yet. Ask anything!';
+  String get supportChatYou => isBn ? 'আপনি' : 'You';
+  String get supportChatHelper => isBn ? 'সাহায্যকারী' : 'Helper';
+  String get supportChatShowMe => isBn ? 'দেখান' : 'Show me';
+  String get supportChatOpen => isBn ? 'খুলুন' : 'Open';
+  String get supportChatStartGuide => isBn ? 'গাইড শুরু করুন' : 'Start guide';
+  String get guidedTourTapHint =>
+      isBn ? 'এগিয়ে যেতে হাইলাইট করা বাটনে চাপ দিন' : 'Tap the highlighted button to continue';
+  String get guidedTourContinueHint =>
+      isBn ? 'পরের ধাপে যেতে চালিয়ে যান বাটনে চাপ দিন'
+          : 'Tap Continue to move to the next step';
+  String get guidedTourContinue => isBn ? 'চালিয়ে যান' : 'Continue';
+  String get guidedTourSkip => isBn ? 'স্কিপ' : 'Skip';
+  String get supportChatFailed =>
+      isBn ? 'বার্তা পাঠানো যায়নি' : 'Could not send message';
+  String get supportChatNewMessage =>
+      isBn ? 'নতুন সাপোর্ট বার্তা' : 'New support message';
 }

@@ -875,16 +875,14 @@ async def dashboard_summary(
 ANALYTICS_LOOKBACK_DAYS = 90  # cohort/LTV window over online channels
 
 _MESSENGER_SOURCES = {"facebook_messenger", "facebook", "messenger", "fb_messenger"}
-_WHATSAPP_SOURCES = {"whatsapp", "wa", "whatsapp_business"}
 _WEBSITE_SOURCES = {
     "customer_web", "online", "web", "cloud_customer", "web_cloud", "customer_cloud",
 }
-_ONLINE_CHANNELS = {"website", "messenger", "whatsapp"}
+_ONLINE_CHANNELS = {"website", "messenger"}
 
 _CHANNEL_LABELS = {
     "website": "Website",
     "messenger": "Messenger",
-    "whatsapp": "WhatsApp",
     "counter": "Counter",
     "pos": "POS",
 }
@@ -909,8 +907,6 @@ def _channel_key(source: str | None) -> str:
     raw = (source or "").strip().lower()
     if raw in _MESSENGER_SOURCES:
         return "messenger"
-    if raw in _WHATSAPP_SOURCES:
-        return "whatsapp"
     if raw in _WEBSITE_SOURCES:
         return "website"
     if raw == "desktop_pos":

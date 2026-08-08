@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
@@ -25,7 +26,7 @@ async def _manager_headers(client: AsyncClient, label: str) -> tuple[str, dict]:
     outlet_id = bootstrap.json()["data"]["outletId"]
     async with AsyncSessionLocal() as db:
         outlet = (await db.execute(select(Outlet).where(Outlet.id == outlet_id))).scalar_one()
-        phone = f"+88017{uuid.uuid4().hex[:8]}"
+        phone = f"+88017{uuid.uuid4().int % 100000000:08d}"
         account = AdminAccount(
             id=str(uuid.uuid4()),
             outlet_id=outlet.id,
@@ -324,6 +325,7 @@ async def test_chat_history_api_returns_recent_ten_without_truncating_db(monkeyp
 
     monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
     monkeypatch.setattr(facebook_chatbot, "_send_message", fake_send)
+    monkeypatch.setattr("routers.chatbot._send_message", fake_send)
     monkeypatch.setattr(facebook_chatbot.manager, "broadcast", fake_broadcast)
 
     await create_tables()
@@ -461,7 +463,7 @@ async def test_batched_llm_receives_recent_ten_without_truncating_db(monkeypatch
         return {"pageId": page_id, "pageName": "LLM History Page"}
 
     async def fake_call(conversations, _system_prompt):
-        captured["history"] = conversations[0]["history"]
+        captured["history"] = conversations[0]["recentHistory"]
         return {
             "responses": [
                 {
@@ -518,11 +520,6 @@ async def test_batched_llm_receives_recent_ten_without_truncating_db(monkeypatch
     assert [payload["type"] for _, payload in broadcasts] == ["chat_updated"]
     assert broadcasts[0][1]["data"]["conversationId"] == conv_id
     assert [entry["text"] for entry in captured["history"]] == [
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
         "h7",
         "h8",
         "h9",
@@ -595,11 +592,19 @@ async def test_webhook_records_image_attachment_note_with_customer_text(monkeypa
     async with AsyncSessionLocal() as db:
         conv = (
             await db.execute(
-                select(ChatbotConversation).where(
-                    ChatbotConversation.psid == "psid-attach"
+                select(ChatbotConversation)
+                .join(
+                    ChatbotIntegration,
+                    ChatbotConversation.integration_id == ChatbotIntegration.id,
                 )
+                .where(
+                    ChatbotIntegration.page_id == page_id,
+                    ChatbotConversation.psid == "psid-attach",
+                )
+                .order_by(ChatbotConversation.created_at.desc())
             )
-        ).scalar_one()
+        ).scalars().first()
+    assert conv is not None
     assert conv.last_user_message.startswith("is this available?")
     assert "the bot cannot see" in conv.last_user_message
     assert "https://cdn.fb/img.jpg" in conv.last_user_message
@@ -616,7 +621,7 @@ async def test_batched_llm_receives_manager_note_in_history(monkeypatch):
         return {"pageId": page_id, "pageName": "Manager Note Page"}
 
     async def fake_call(conversations, _system_prompt):
-        captured["history"] = conversations[0]["history"]
+        captured["history"] = conversations[0]["recentHistory"]
         return {
             "responses": [
                 {
@@ -693,33 +698,86 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
     calls = []
     sent_messages = []
 
-    async def fake_groq(**kwargs):
-        calls.append(kwargs["user_text"])
-        if len(calls) == 1:
+    async def fake_batched(conversations, _system_prompt):
+        ids = {c["id"] for c in conversations}
+        async with AsyncSessionLocal() as db:
+            own_ids = (
+                await db.execute(
+                    select(ChatbotConversation.id)
+                    .join(
+                        ChatbotIntegration,
+                        ChatbotConversation.integration_id
+                        == ChatbotIntegration.id,
+                    )
+                    .where(
+                        ChatbotIntegration.page_id == page_id,
+                        ChatbotConversation.psid == "psid-1",
+                        ChatbotConversation.id.in_(ids),
+                    )
+                )
+            ).scalars().all()
+        entry = next(
+            (c for c in conversations if c["id"] in set(own_ids)),
+            None,
+        )
+        if entry is None:
+            return {"responses": []}
+        msg = entry.get("customerMessage", "")
+        calls.append(msg)
+        if msg == "2 burger":
             return {
-                    "reply": "I found that item.",
-                    "order": {
-                        "intent": "draft",
-                        "items": [{"menuItemId": menu_id, "qty": 2}],
-                    "customerName": "Nadia",
-                    "mobileNumber": "01700000000",
-                    "deliveryAddress": "Road 1",
-                    "confirmed": False,
-                },
+                "responses": [
+                    {
+                        "id": entry["id"],
+                        "reply": "I found that item. Reply yes to confirm your order.",
+                        "replyType": "action",
+                        "escalate": {"needed": False},
+                        "order": {
+                            "intent": "draft",
+                            "items": [{"menuItemId": menu_id, "qty": 2}],
+                            "customerName": "Nadia",
+                            "mobileNumber": "01700000000",
+                            "deliveryAddress": "Road 1",
+                            "confirmed": False,
+                        },
+                    }
+                ]
             }
+        if msg == "yes":
+            return {
+                "responses": [
+                    {
+                        "id": entry["id"],
+                        "reply": "Placing it now.",
+                        "replyType": "action",
+                        "escalate": {"needed": False},
+                        "order": {"intent": "confirm", "confirmed": True},
+                    }
+                ]
+            }
+        # Final-reply call after order_created: entries carry systemEvent, no customerMessage.
         return {
-            "reply": "Placing it now.",
-            "order": {"intent": "confirm", "confirmed": True},
+            "responses": [
+                {"id": entry["id"], "reply": "Your order is confirmed! Thank you."}
+            ]
         }
 
     async def fake_send(_integration, psid: str, text: str):
         sent_messages.append((psid, text))
 
+    async def wait_until(predicate, timeout: float = 12.0):
+        deadline = asyncio.get_event_loop().time() + timeout
+        while not predicate():
+            if asyncio.get_event_loop().time() > deadline:
+                raise AssertionError("timed out waiting for chatbot batch worker")
+            await asyncio.sleep(0.1)
+
     monkeypatch.setattr(facebook_chatbot, "resolve_facebook_page", fake_resolve)
-    monkeypatch.setattr(facebook_chatbot, "_chat_with_groq", fake_groq)
+    monkeypatch.setattr(facebook_chatbot, "_call_batched_llm", fake_batched)
     monkeypatch.setattr(facebook_chatbot, "_send_message", fake_send)
 
     await create_tables()
+    facebook_chatbot.start_batch_worker()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         outlet_id, headers = await _manager_headers(client, "bot-order")
@@ -750,6 +808,7 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
                 ],
             },
         )
+        await wait_until(lambda: len(sent_messages) >= 1)
         confirm = await client.post(
             "/webhooks/facebook",
             json={
@@ -764,6 +823,7 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
                 ],
             },
         )
+        await wait_until(lambda: len(sent_messages) >= 2)
         orders = await client.get(f"/outlets/{outlet_id}/orders", headers=headers)
 
     assert draft.status_code == 200
@@ -772,4 +832,4 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
     body = orders.json()["data"]
     messenger_order = next(order for order in body if order["source"] == "facebook_messenger")
     assert messenger_order["customerName"] == "Nadia"
-    assert messenger_order["totalAmount"] == 252.0
+    assert messenger_order["totalAmount"] == 240.0

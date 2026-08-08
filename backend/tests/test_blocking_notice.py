@@ -24,6 +24,10 @@ def test_disabled_blocking_notice():
         "inputField": False,
         "inputLabel": None,
         "updatedAt": None,
+        "type": "adminNotice",
+        "ctaLabel": None,
+        "ctaUrl": None,
+        "dismissible": False,
     }
 
 
@@ -44,6 +48,10 @@ def test_blocking_notice_from_json_requires_enabled_message():
         "inputField": False,
         "inputLabel": None,
         "updatedAt": "2026-06-02T12:00:00+00:00",
+        "type": "adminNotice",
+        "ctaLabel": None,
+        "ctaUrl": None,
+        "dismissible": False,
     }
 
 
@@ -51,7 +59,9 @@ def test_blocking_notice_from_json_with_new_fields():
     parsed = blocking_notice_from_json(
         '{"enabled":true,"title":"Update needed","message":"Please update your app.",'
         '"imageUrl":"https://example.com/hero.png","inputField":true,'
-        '"inputLabel":"Your contact email","updatedAt":"2026-06-11T12:00:00+00:00"}'
+        '"inputLabel":"Your contact email","updatedAt":"2026-06-11T12:00:00+00:00",'
+        '"type":"announcement","ctaLabel":"Update now","ctaUrl":"https://example.com/dl",'
+        '"dismissible":true}'
     )
 
     assert parsed == {
@@ -62,6 +72,10 @@ def test_blocking_notice_from_json_with_new_fields():
         "inputField": True,
         "inputLabel": "Your contact email",
         "updatedAt": "2026-06-11T12:00:00+00:00",
+        "type": "announcement",
+        "ctaLabel": "Update now",
+        "ctaUrl": "https://example.com/dl",
+        "dismissible": True,
     }
 
 
