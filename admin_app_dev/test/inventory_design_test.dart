@@ -4,7 +4,6 @@ import 'package:local_pos/src/app_controller.dart';
 import 'package:local_pos/src/app_scope.dart';
 import 'package:local_pos/src/core/localization/app_strings.dart';
 import 'package:local_pos/src/core/theme/app_theme.dart';
-import 'package:local_pos/src/core/widgets/tf_design_system.dart';
 import 'package:local_pos/src/features/inventory/inventory_screen.dart';
 import 'package:local_pos/src/models/inventory_summary.dart';
 
@@ -62,30 +61,28 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    // Summary strip.
-    expect(find.text('Stock value'), findsOneWidget);
-    expect(find.text('Items in Short'), findsOneWidget);
-    // Advanced view toggle lives in the top bar (no INVENTORY eyebrow row).
-    expect(find.text('Advanced'), findsOneWidget);
-    // Ranked table headers — simple view is ITEM + QTY (no VALUE column).
+    // Ranked table headers — ITEM + IN/OUT + UNIT PRICE + QTY (no
+    // VALUE/NET/COVER; the old summary strip and sticky footer are gone).
     expect(find.text('ITEM'), findsOneWidget);
-    expect(find.text('VALUE'), findsNothing);
+    expect(find.text('IN/OUT'), findsOneWidget);
+    expect(find.text('UNIT PRICE'), findsOneWidget);
     expect(find.text('QTY'), findsOneWidget);
-    // Items are listed.
+    expect(find.text('NET'), findsNothing);
+    expect(find.text('VALUE'), findsNothing);
+    expect(find.text('COVER'), findsNothing);
+    expect(find.text('Advanced'), findsNothing);
+    // Legacy footer actions are gone (Scan lives in the drawer's Stock group).
+    expect(find.text('Count'), findsNothing);
+    expect(find.text('Stock in'), findsNothing);
+    expect(find.text('Scan'), findsNothing);
+    // Items are listed with their unit price.
     expect(find.text('Rice'), findsWidgets);
     expect(find.text('Mutton'), findsWidgets);
-    // Bottom-bar actions (Scan moved to the drawer's Stock group).
-    expect(find.text('Count'), findsOneWidget);
-    expect(find.text('Stock in'), findsOneWidget);
-    expect(find.text('Scan'), findsNothing);
-
-    // Flip the Advanced toggle → IN/OUT + NET appear; QTY stays (no COVER).
-    await tester.tap(find.byType(AdvToggle));
-    await tester.pump();
-    expect(find.text('IN/OUT'), findsOneWidget);
-    expect(find.text('NET'), findsOneWidget);
-    expect(find.text('COVER'), findsNothing);
-    expect(find.text('QTY'), findsOneWidget);
+    expect(find.text('৳60'), findsNWidgets(2));
+    // In-list Add item + advanced drill-downs.
+    expect(find.text('Add Item'), findsOneWidget);
+    expect(find.text('Daily variance'), findsOneWidget);
+    expect(find.text('Suppliers'), findsOneWidget);
 
     controller.dispose();
   });

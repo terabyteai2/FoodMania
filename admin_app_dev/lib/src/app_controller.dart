@@ -3302,6 +3302,28 @@ class PosAppController extends ChangeNotifier {
     return updated;
   }
 
+  Future<InventoryItem> setInventoryCostPrice({
+    required String inventoryItemId,
+    required double newCostPerUnit,
+  }) async {
+    if (!isManager) throw Exception('Only managers can edit inventory items.');
+    if (newCostPerUnit < 0) throw Exception('Unit price cannot be negative.');
+    final current = inventoryItems
+        .where((row) => row.id == inventoryItemId)
+        .firstOrNull;
+    if (current == null) throw Exception('Inventory item not found.');
+    if ((current.costPerUnit - newCostPerUnit).abs() < 0.0001) return current;
+    final updated = current.copyWith(
+      costPerUnit: newCostPerUnit,
+      updatedAt: DateTime.now(),
+    );
+    await database.upsertInventoryItem(updated);
+    await refreshInventory();
+    await refreshInventorySummary();
+    await _pushInventoryItemToCloud(updated);
+    return updated;
+  }
+
   Future<double?> yesterdayClosingQuantity(String inventoryItemId) async {
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
     return database.getDailyStockQuantity(

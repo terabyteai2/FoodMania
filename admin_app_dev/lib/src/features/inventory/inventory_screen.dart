@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
@@ -15,7 +18,6 @@ import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/pos_notification.dart';
-import 'end_of_day_count_screen.dart';
 import 'inventory_item_detail_screen.dart';
 import 'stock_in_screen.dart';
 import 'stock_suppliers_screen.dart';
@@ -39,7 +41,7 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-enum _StockSort { name, inOut, net, qty, status }
+enum _StockSort { name, inOut, price, qty, status }
 
 class _InventoryScreenState extends State<InventoryScreen> {
   _StockSort _sort = _StockSort.qty;
@@ -59,9 +61,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: TfText(error.toString())),
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TfText(error.toString())));
+      rethrow;
+    }
+  }
+
+  Future<void> _onPriceCommit(InventorySummaryItem item, double price) async {
+    final app = AppScope.read(context);
+    try {
+      await app.setInventoryCostPrice(
+        inventoryItemId: item.id,
+        newCostPerUnit: price,
       );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TfText(error.toString())));
+      rethrow;
     }
   }
 
@@ -135,14 +154,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     });
   }
 
-  void _surfaceBelowPar() {
-    // Tapping the "Below par" card sorts worst-first (ascending qty/par ratio).
-    setState(() {
-      _sort = _StockSort.status;
-      _dir = 1;
-    });
-  }
-
   // Memoized sort: the inventory screen rebuilds on every controller
   // notification, but the row order only changes when the source list or the
   // sort/direction changes. Cache by source identity + sort key so we don't
@@ -169,8 +180,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
         case _StockSort.inOut:
           r = a.todayOut - b.todayOut;
           break;
-        case _StockSort.net:
-          r = (a.todayIn - a.todayOut) - (b.todayIn - b.todayOut);
+        case _StockSort.price:
+          r = a.costPerUnit - b.costPerUnit;
           break;
         case _StockSort.qty:
           r = a.onHand - b.onHand;
@@ -195,14 +206,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     await Navigator.push<void>(
       context,
       MaterialPageRoute(builder: (_) => StockInScreen(preseedItemId: itemId)),
-    );
-    if (context.mounted) await AppScope.read(context).refreshInventorySummary();
-  }
-
-  Future<void> _openCount(BuildContext context) async {
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(builder: (_) => const EndOfDayCountScreen()),
     );
     if (context.mounted) await AppScope.read(context).refreshInventorySummary();
   }
@@ -263,10 +266,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
 
     final items = summary?.items ?? const <InventorySummaryItem>[];
-    final stockValue = items.fold<double>(0, (s, i) => s + _itemValue(i));
-    final lowCount = items
-        .where((i) => _stockKind(i.onHand, i.minThreshold) != 'ok')
-        .length;
     final sorted = _sorted(items);
 
     return AppScaffold(
@@ -278,15 +277,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
       pinHeader: true,
       fillBody: true,
-      // Sticky footer chrome per v4 §5.5 — full-bleed surface + bar shadow.
-      // Scan moved to the drawer's Stock group; Stock in is the hero.
-      footer: TfStickyCTA(
-        child: _StockBottomBar(
-          text: text,
-          onCount: () => _openCount(context),
-          onStockIn: () => _openStockIn(context),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -316,14 +306,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: PosSpacing.sp3),
-                      _SummaryStrip(
-                        text: text,
-                        stockValue: stockValue,
-                        lowCount: lowCount,
-                        lowActive: _sort == _StockSort.status,
-                        onTapLow: _surfaceBelowPar,
-                      ),
-                      SizedBox(height: PosSpacing.sp2),
                       Expanded(
                         child: Stack(
                           children: [
@@ -332,14 +314,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                     child: TfEmptyState(
                                       icon: Icons.inventory_2_outlined,
                                       title: text.noStockItems,
-                                      message: 'Use Stock in to add your first item.',
+                                      message:
+                                          'Use Stock in to add your first item.',
                                       messageBn: text.addFirstStockItem,
                                     ),
                                   )
                                 : SingleChildScrollView(
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
                                       children: [
                                         _StockTable(
                                           text: text,
@@ -351,11 +335,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                           onRowTap: (item) =>
                                               _openRow(context, app, item),
                                           onQtyCommit: _onQtyCommit,
+                                          onPriceCommit: _onPriceCommit,
                                         ),
                                         const SizedBox(height: 12),
                                         _AddItemButton(
                                           text: text,
-                                          onPressed: () => _showAddItem(context),
+                                          onPressed: () =>
+                                              _showAddItem(context),
                                         ),
                                         const SizedBox(height: 14),
                                         _AdvancedDrilldowns(text: text),
@@ -399,94 +385,11 @@ String _stockKind(double onHand, double par) {
 double _ratio(InventorySummaryItem it) =>
     it.minThreshold > 0 ? it.onHand / it.minThreshold : 99;
 
-double _itemValue(InventorySummaryItem it) => it.onHand * it.costPerUnit;
-
 InventoryItem? _resolveItem(PosAppController app, String id) {
   for (final i in app.inventoryItems) {
     if (i.id == id) return i;
   }
   return null;
-}
-
-// ── Summary strip ───────────────────────────────────────────────────────────
-
-class _SummaryStrip extends StatelessWidget {
-  const _SummaryStrip({
-    required this.text,
-    required this.stockValue,
-    required this.lowCount,
-    required this.lowActive,
-    required this.onTapLow,
-  });
-
-  final AppStrings text;
-  final double stockValue;
-  final int lowCount;
-  final bool lowActive;
-  final VoidCallback onTapLow;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(15, 10, 15, 10),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.line),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: _summaryCell(context, text.stockValue, tfFormatCurrency(context, stockValue), null, false, null)),
-            Container(width: 1, color: PosColors.line),
-            Expanded(
-              child: _summaryCell(
-                context,
-                text.itemsInShort,
-                tfFormatNumber(context, lowCount),
-                lowCount > 0 ? PosColors.warning : PosColors.text,
-                lowActive,
-                onTapLow,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _summaryCell(BuildContext context, String label, String value, Color? valueColor, bool active, VoidCallback? onTap) {
-    final body = Container(
-      color: active ? PosColors.primarySoft : null,
-      padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp2),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: TfText(
-              value,
-              maxLines: 1,
-              style: TfTextStyles.statNumber.copyWith(
-                color: valueColor ?? PosColors.text,
-              ),
-            ),
-          ),
-          const SizedBox(height: 2),
-          TfText(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TfTextStyles.label.copyWith(color: PosColors.muted),
-          ),
-        ],
-      ),
-    );
-    if (onTap == null) return body;
-    return InkWell(onTap: onTap, child: body);
-  }
 }
 
 // ── Stock table ────────────────────────────────────────────────────────────
@@ -501,6 +404,7 @@ class _StockTable extends StatelessWidget {
     required this.onSort,
     required this.onRowTap,
     required this.onQtyCommit,
+    required this.onPriceCommit,
   });
 
   final AppStrings text;
@@ -512,6 +416,8 @@ class _StockTable extends StatelessWidget {
   final ValueChanged<InventorySummaryItem> onRowTap;
   final Future<void> Function(InventorySummaryItem item, double qty)
   onQtyCommit;
+  final Future<void> Function(InventorySummaryItem item, double price)
+  onPriceCommit;
 
   @override
   Widget build(BuildContext context) {
@@ -552,11 +458,11 @@ class _StockTable extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 _HCell(
-                  label: text.colNet,
-                  width: 54,
-                  active: sort == _StockSort.net,
+                  label: text.colUnitPrice,
+                  width: 68,
+                  active: sort == _StockSort.price,
                   dir: dir,
-                  onTap: () => onSort(_StockSort.net),
+                  onTap: () => onSort(_StockSort.price),
                 ),
                 const SizedBox(width: 12),
                 _HCell(
@@ -578,6 +484,7 @@ class _StockTable extends StatelessWidget {
               canEdit: canEdit,
               onTap: () => onRowTap(items[i]),
               onQtyCommit: onQtyCommit,
+              onPriceCommit: onPriceCommit,
             ),
         ],
       ),
@@ -619,6 +526,7 @@ class _HCell extends StatelessWidget {
               style: TfTextStyles.eyebrow.copyWith(
                 color: active ? PosColors.accentStrong : PosColors.muted,
                 letterSpacing: 0.55,
+                fontSize: 10,
               ),
             ),
           ),
@@ -647,6 +555,7 @@ class _StockRow extends StatelessWidget {
     required this.canEdit,
     required this.onTap,
     required this.onQtyCommit,
+    required this.onPriceCommit,
   });
 
   final AppStrings text;
@@ -657,6 +566,8 @@ class _StockRow extends StatelessWidget {
   final VoidCallback onTap;
   final Future<void> Function(InventorySummaryItem item, double qty)
   onQtyCommit;
+  final Future<void> Function(InventorySummaryItem item, double price)
+  onPriceCommit;
 
   @override
   Widget build(BuildContext context) {
@@ -676,9 +587,7 @@ class _StockRow extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: last ? Colors.transparent : PosColors.line,
-          ),
+          bottom: BorderSide(color: last ? Colors.transparent : PosColors.line),
         ),
       ),
       child: Row(
@@ -719,6 +628,7 @@ class _StockRow extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TfTextStyles.rowMoney.copyWith(
                               color: PosColors.text,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -735,6 +645,7 @@ class _StockRow extends StatelessWidget {
                               '+${tfFormatNumber(context, item.todayIn)}',
                               style: TfTextStyles.label.copyWith(
                                 color: PosColors.success,
+                                fontSize: 10,
                                 fontFeatures: const [
                                   FontFeature.tabularFigures(),
                                 ],
@@ -745,6 +656,7 @@ class _StockRow extends StatelessWidget {
                               '-${tfFormatNumber(context, item.todayOut)}',
                               style: TfTextStyles.label.copyWith(
                                 color: PosColors.muted,
+                                fontSize: 10,
                                 fontFeatures: const [
                                   FontFeature.tabularFigures(),
                                 ],
@@ -755,38 +667,10 @@ class _StockRow extends StatelessWidget {
                               '—',
                               style: TfTextStyles.bodyMuted.copyWith(
                                 color: PosColors.mutedSoft,
+                                fontSize: 10,
                               ),
                             ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 54,
-                      child: Builder(
-                        builder: (context) {
-                          final net = item.todayIn - item.todayOut;
-                          if (net == 0) {
-                            return TfText(
-                              '—',
-                              textAlign: TextAlign.right,
-                              style: TfTextStyles.bodyMuted.copyWith(
-                                color: PosColors.mutedSoft,
-                              ),
-                            );
-                          }
-                          return TfText(
-                            '${net > 0 ? '+' : ''}${tfFormatNumber(context, net)}',
-                            textAlign: TextAlign.right,
-                            style: TfTextStyles.body.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                              color: net > 0
-                                  ? PosColors.success
-                                  : PosColors.danger,
-                            ),
-                          );
-                        },
                       ),
                     ),
                   ],
@@ -797,9 +681,22 @@ class _StockRow extends StatelessWidget {
           const SizedBox(width: 12),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 13),
-            child: _EditableQtyCell(
+            child: _ScrubCell(
+              key: ValueKey('price-${item.id}'),
+              item: item,
+              mode: _ScrubMode.price,
+              canEdit: canEdit,
+              width: 68,
+              onCommit: onPriceCommit,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            child: _ScrubCell(
               key: ValueKey('qty-${item.id}'),
               item: item,
+              mode: _ScrubMode.qty,
               unit: unit,
               qtyColor: qtyColor,
               canEdit: canEdit,
@@ -811,177 +708,470 @@ class _StockRow extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _ScrubMode { qty, price }
+
+/// Tap-to-edit cell with a delta scrubber: tapping the value opens an anchored
+/// popover (slider + editor + "26 +8" label) over the cell; any outside tap
+/// commits and closes. While the value differs from the original, the cell
+/// shows the struck-through original (muted) with the new value in
+/// green/red below; after commit the pair flashes ~1s, then the cell settles
+/// on the new value.
+class _ScrubCell extends StatefulWidget {
+  const _ScrubCell({
+    required this.item,
+    required this.mode,
+    required this.canEdit,
+    required this.width,
+    required this.onCommit,
+    this.unit = '',
+    this.qtyColor,
+    super.key,
+  });
+
+  final InventorySummaryItem item;
+  final _ScrubMode mode;
+  final bool canEdit;
+  final double width;
+  final String unit;
+  final Color? qtyColor;
+  final Future<void> Function(InventorySummaryItem item, double value) onCommit;
+
+  @override
+  State<_ScrubCell> createState() => _ScrubCellState();
+}
+
+class _ScrubCellState extends State<_ScrubCell> {
+  static const double _panelWidth = 232;
+  static const double _panelHeight = 128;
+
+  final GlobalKey _anchorKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+  Timer? _flashTimer;
+  bool _editing = false;
+  bool _busy = false;
+  bool _flash = false;
+  double _openValue = 0;
+  double _value = 0;
+  double _flashOld = 0;
+  double _flashValue = 0;
+
+  bool get _isPrice => widget.mode == _ScrubMode.price;
+
+  double get _current =>
+      _isPrice ? widget.item.costPerUnit : widget.item.onHand;
+
+  double get _maxDelta => math.max(_current.abs(), _isPrice ? 100 : 10);
+
+  @override
+  void dispose() {
+    _flashTimer?.cancel();
+    _overlayEntry?.remove();
+    super.dispose();
+  }
+
+  void _open() {
+    if (!widget.canEdit || _busy || _editing) return;
+    final anchor = _anchorKey.currentContext;
+    if (anchor == null) return;
+    final box = anchor.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    setState(() {
+      _editing = true;
+      _openValue = _current;
+      _value = _current;
+    });
+    _overlayEntry = OverlayEntry(
+      builder: (_) => _ScrubPanel(
+        mode: widget.mode,
+        current: _openValue,
+        value: _value,
+        unit: widget.unit,
+        maxDelta: _maxDelta,
+        anchorRect: rect,
+        onChanged: (value) => setState(() => _value = value),
+        onSubmit: _commit,
+      ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _closeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  Future<void> _commit() async {
+    if (!_editing || _busy) return;
+    _closeOverlay();
+    final value = _value;
+    final delta = value - _openValue;
+    setState(() => _editing = false);
+    if (delta.abs() < 0.0001) return;
+    _busy = true;
+    var ok = false;
+    try {
+      await widget.onCommit(widget.item, value);
+      ok = true;
+    } catch (_) {
+      // Screen-level callback shows the snackbar; keep the old value.
+    } finally {
+      _busy = false;
+      if (mounted && ok) {
+        setState(() {
+          _flash = true;
+          _flashOld = _openValue;
+          _flashValue = value;
+        });
+        _flashTimer?.cancel();
+        _flashTimer = Timer(const Duration(seconds: 1), () {
+          if (mounted) setState(() => _flash = false);
+        });
+      }
+    }
+  }
 
   static String _formatQty(BuildContext context, double value) {
     if (value == value.roundToDouble()) return tfFormatNumber(context, value);
     return tfFormatNumber(context, value, decimalDigits: 1);
   }
-}
 
-/// Tap-to-edit quantity cell: tap the value to switch to an inline numeric
-/// field (no modal); commit on keyboard Done or tap-away.
-class _EditableQtyCell extends StatefulWidget {
-  const _EditableQtyCell({
-    required this.item,
-    required this.unit,
-    required this.qtyColor,
-    required this.canEdit,
-    required this.width,
-    required this.onCommit,
-    super.key,
-  });
+  static String _formatPlain(double value) {
+    if (value == value.roundToDouble()) return value.round().toString();
+    var s = value.toStringAsFixed(2);
+    s = s.replaceFirst(RegExp(r'0+$'), '');
+    s = s.replaceFirst(RegExp(r'\.$'), '');
+    return s;
+  }
 
-  final InventorySummaryItem item;
-  final String unit;
-  final Color qtyColor;
-  final bool canEdit;
-  final double width;
-  final Future<void> Function(InventorySummaryItem item, double qty) onCommit;
+  String _line(double value) =>
+      _isPrice ? tfFormatCurrency(context, value) : _formatQty(context, value);
 
   @override
-  State<_EditableQtyCell> createState() => _EditableQtyCellState();
+  Widget build(BuildContext context) {
+    final current = _current;
+    double base;
+    double shown;
+    if (_editing) {
+      base = _openValue;
+      shown = _value;
+    } else if (_flash) {
+      base = _flashOld;
+      shown = _flashValue;
+    } else {
+      base = current;
+      shown = current;
+    }
+    final delta = shown - base;
+    final showPreview = (_editing || _flash) && delta.abs() >= 0.0001;
+    final deltaColor = delta > 0 ? PosColors.success : PosColors.danger;
+
+    return KeyedSubtree(
+      key: _anchorKey,
+      child: SizedBox(
+        width: widget.width,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: GestureDetector(
+            onTap: _open,
+            behavior: HitTestBehavior.opaque,
+            child: showPreview
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      TfText(
+                        _line(base),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TfTextStyles.rowMoney.copyWith(
+                          fontSize: 10,
+                          color: PosColors.muted,
+                          decoration: TextDecoration.lineThrough,
+                          decorationColor: PosColors.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      TfText(
+                        _line(shown),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TfTextStyles.rowMoney.copyWith(
+                          fontSize: 12,
+                          color: deltaColor,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  )
+                : FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (_isPrice) ...[
+                          TfText(
+                            current > 0 ? _line(current) : '—',
+                            style: TfTextStyles.rowMoney.copyWith(
+                              color: current > 0
+                                  ? PosColors.text
+                                  : PosColors.mutedSoft,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ] else ...[
+                          TfText(
+                            _formatQty(context, current),
+                            style: TfTextStyles.rowMoney.copyWith(
+                              color: widget.qtyColor ?? PosColors.text,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          TfText(
+                            widget.unit,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TfTextStyles.label.copyWith(
+                              color: PosColors.muted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _EditableQtyCellState extends State<_EditableQtyCell> {
+/// Popover panel for [_ScrubCell]: label ("26 +8"), center-zero delta
+/// slider and a numeric editor synced both ways. Rendered in the app Overlay;
+/// a full-screen barrier beneath it commits on any outside tap.
+class _ScrubPanel extends StatefulWidget {
+  const _ScrubPanel({
+    required this.mode,
+    required this.current,
+    required this.value,
+    required this.unit,
+    required this.maxDelta,
+    required this.anchorRect,
+    required this.onChanged,
+    required this.onSubmit,
+  });
+
+  final _ScrubMode mode;
+  final double current;
+  final double value;
+  final String unit;
+  final double maxDelta;
+  final Rect anchorRect;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onSubmit;
+
+  @override
+  State<_ScrubPanel> createState() => _ScrubPanelState();
+}
+
+class _ScrubPanelState extends State<_ScrubPanel> {
   late final TextEditingController _controller;
-  late final FocusNode _focusNode;
-  bool _editing = false;
-  bool _busy = false;
+  late double _value;
+
+  bool get _isPrice => widget.mode == _ScrubMode.price;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController();
-    _focusNode = FocusNode()..addListener(_onFocusChanged);
+    _value = widget.value;
+    _controller = TextEditingController(
+      text: _ScrubCellState._formatPlain(_value),
+    );
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    _focusNode.dispose();
     super.dispose();
-  }
-
-  void _onFocusChanged() {
-    if (!_focusNode.hasFocus && _editing) {
-      _commit();
-    }
-  }
-
-  void _startEdit() {
-    if (!widget.canEdit || _busy || _editing) return;
-    final current = _StockRow._formatQty(context, widget.item.onHand);
-    setState(() {
-      _editing = true;
-      _controller.text = current;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _focusNode.requestFocus();
-      _controller.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: _controller.text.length,
-      );
-    });
-  }
-
-  Future<void> _commit() async {
-    if (!_editing || _busy) return;
-    final qty = double.tryParse(_controller.text.trim());
-    _editing = false;
-    setState(() {});
-    if (qty == null) return;
-    _busy = true;
-    try {
-      await widget.onCommit(widget.item, qty);
-    } finally {
-      _busy = false;
-      if (mounted) setState(() {});
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.width,
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: _editing
-            ? Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+    final screen = MediaQuery.sizeOf(context);
+    final w = _ScrubCellState._panelWidth;
+    final h = _ScrubCellState._panelHeight;
+    final rect = widget.anchorRect;
+    final below = rect.bottom + 6 + h <= screen.height - 4;
+    final top = below ? rect.bottom + 6 : math.max(4.0, rect.top - 6 - h);
+    final left = (rect.center.dx - w / 2).clamp(8.0, screen.width - w - 8);
+
+    final delta = _value - widget.current;
+    final deltaColor = delta > 0
+        ? PosColors.success
+        : delta < 0
+        ? PosColors.danger
+        : PosColors.text;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onSubmit,
+          ),
+        ),
+        Positioned(
+          left: left,
+          top: top,
+          width: w,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              decoration: BoxDecoration(
+                color: PosColors.surface,
+                borderRadius: BorderRadius.circular(PosRadii.md),
+                border: Border.all(color: PosColors.line),
+                boxShadow: PosShadows.soft,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    width: widget.width - 30,
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.done,
-                      autofocus: true,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-                      ],
-                      onSubmitted: (_) => _commit(),
-                      onTapOutside: (_) => _commit(),
-                      style: TfTextStyles.rowMoney.copyWith(
-                        color: widget.qtyColor,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        fontSize: 14,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  TfText(
-                    widget.unit,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TfTextStyles.label.copyWith(
-                      color: PosColors.muted,
-                    ),
-                  ),
-                ],
-              )
-            : GestureDetector(
-                onTap: _startEdit,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TfText(
-                        _StockRow._formatQty(context, widget.item.onHand),
-                        style: TfTextStyles.rowMoney.copyWith(
-                          color: widget.qtyColor,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      Expanded(
+                        child: TfText(
+                          _isPrice
+                              ? tfFormatCurrency(context, _value)
+                              : _ScrubCellState._formatQty(context, _value),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TfTextStyles.rowMoney.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 3),
-                      TfText(
-                        widget.unit,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TfTextStyles.label.copyWith(
-                          color: PosColors.muted,
+                      if (delta.abs() >= 0.0001)
+                        TfText(
+                          '${delta > 0 ? '+' : '-'}'
+                          '${_ScrubCellState._formatQty(context, delta.abs())}',
+                          maxLines: 1,
+                          style: TfTextStyles.rowMoney.copyWith(
+                            fontSize: 12,
+                            color: deltaColor,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 2),
+                  Slider(
+                    value: delta.clamp(-widget.maxDelta, widget.maxDelta),
+                    min: -widget.maxDelta,
+                    max: widget.maxDelta,
+                    onChanged: (d) {
+                      final next = widget.current + d.roundToDouble();
+                      setState(() {
+                        _value = next;
+                        _controller.text = _ScrubCellState._formatPlain(next);
+                      });
+                      widget.onChanged(next);
+                    },
+                  ),
+                  Row(
+                    children: [
+                      if (_isPrice) ...[
+                        TfText(
+                          '৳',
+                          style: TfTextStyles.rowMoney.copyWith(
+                            color: PosColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          textInputAction: TextInputAction.done,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                          ],
+                          textAlign: TextAlign.right,
+                          style: TfTextStyles.rowMoney.copyWith(
+                            fontSize: 12,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                          onChanged: (text) {
+                            final parsed = double.tryParse(text);
+                            if (parsed == null || parsed < 0) return;
+                            setState(() => _value = parsed);
+                            widget.onChanged(parsed);
+                          },
+                          onSubmitted: (_) => widget.onSubmit(),
+                          onTapOutside: (details) {
+                            final box =
+                                context.findRenderObject() as RenderBox?;
+                            if (box == null) return;
+                            final local = box.globalToLocal(details.position);
+                            if (local.dx >= -8 &&
+                                local.dy >= -8 &&
+                                local.dx <= box.size.width + 8 &&
+                                local.dy <= box.size.height + 8) {
+                              return;
+                            }
+                            widget.onSubmit();
+                          },
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                      if (!_isPrice) ...[
+                        const SizedBox(width: 4),
+                        TfText(
+                          widget.unit,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TfTextStyles.label.copyWith(
+                            color: PosColors.muted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-      ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1054,7 +1244,7 @@ class _AdvancedDrilldowns extends StatelessWidget {
             Expanded(
               child: TfText(
                 text.stockItemDetailHint,
-              style: TfTextStyles.bodyMuted,
+                style: TfTextStyles.bodyMuted,
               ),
             ),
           ],
@@ -1114,9 +1304,9 @@ class _DrillCard extends StatelessWidget {
               hint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-                style: TfTextStyles.bodyMuted,
-              ),
-            ],
+              style: TfTextStyles.bodyMuted,
+            ),
+          ],
         ),
       ),
     );
@@ -1164,50 +1354,7 @@ class _AddItemButton extends StatelessWidget {
   }
 }
 
-/// Bottom actions: **Stock in** is the primary hero, **Count** the navy
-/// secondary beside it (app-wide sticky-footer pairing = dark + primary).
-/// Scan lives in the drawer's Stock group (stock_scan_flow.dart).
-
-class _StockBottomBar extends StatelessWidget {
-  const _StockBottomBar({
-    required this.text,
-    required this.onCount,
-    required this.onStockIn,
-  });
-
-  final AppStrings text;
-  final VoidCallback onCount;
-  final VoidCallback onStockIn;
-
-  @override
-  Widget build(BuildContext context) {
-    // Chrome (surface + bar shadow + padding) comes from the enclosing
-    // TfStickyCTA (v4 §5.5); this is just the button row.
-    return Row(
-      children: [
-        Expanded(
-          child: TfButton(
-            label: text.stockIn,
-            icon: Icons.add_box_outlined,
-            variant: TfButtonVariant.dark,
-            size: TfButtonSize.lg,
-            onPressed: onStockIn,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TfButton(
-            label: text.countAction,
-            icon: Icons.fact_check_outlined,
-            variant: TfButtonVariant.primary,
-            size: TfButtonSize.lg,
-            onPressed: onCount,
-          ),
-        ),
-      ],
-    );
-  }
-}
+// ── Add item ─────────────────────────────────────────────────────────────────
 
 Future<void> _showAddItem(BuildContext context) async {
   final app = AppScope.read(context);
@@ -1247,7 +1394,7 @@ class _SheetShell extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-          SizedBox(height: PosSpacing.sp2),
+            SizedBox(height: PosSpacing.sp2),
             Container(
               width: 40,
               height: 4,
@@ -1261,10 +1408,7 @@ class _SheetShell extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: TfText(
-                      title,
-                      style: TfTextStyles.appBarTitle,
-                    ),
+                    child: TfText(title, style: TfTextStyles.appBarTitle),
                   ),
                   TfIconButton(
                     icon: Icons.close,
@@ -1387,9 +1531,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
         TfField(label: text.itemCategory, controller: _categoryCtrl),
         TfText(
           text.unit,
-          style: TfTextStyles.bodyMuted.copyWith(
-            color: PosColors.slate,
-          ),
+          style: TfTextStyles.bodyMuted.copyWith(color: PosColors.slate),
         ),
         const SizedBox(height: 8),
         Wrap(

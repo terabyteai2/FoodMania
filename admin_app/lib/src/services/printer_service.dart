@@ -2066,11 +2066,16 @@ class PrinterService {
         '${item.qtyText} x ${item.name}${mods.isEmpty ? '' : ' $mods'}',
       );
     }
+    final orderNote = data.orderNote?.trim();
+    final hasOrderNote = orderNote != null && orderNote.isNotEmpty;
     final notedItems = data.items
         .where((item) => item.note?.trim().isNotEmpty == true)
         .toList(growable: false);
-    if (notedItems.isNotEmpty) {
+    if (hasOrderNote || notedItems.isNotEmpty) {
       buffer.writeln(data.noteLabel);
+      if (hasOrderNote) {
+        buffer.writeln(orderNote);
+      }
       for (final item in notedItems) {
         buffer.writeln(item.note!.trim());
       }
@@ -2297,6 +2302,7 @@ class PrinterService {
       noteLabel: labels.pick('Note', 'নোট'),
       serverLabel: labels.pick('Server', 'সার্ভার'),
       serverName: serverName,
+      orderNote: order.note,
     );
   }
 

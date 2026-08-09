@@ -1494,6 +1494,7 @@ class AppStrings {
   String get colItem => isBn ? 'আইটেম' : 'ITEM';
   String get colOnHand => isBn ? 'বর্তমান' : 'ON HAND';
   String get colNet => isBn ? 'নিট' : 'NET';
+  String get colUnitPrice => isBn ? 'দাম' : 'UNIT PRICE';
   String get colInOut => isBn ? 'ইন/আউট' : 'IN/OUT';
   String get colVar => isBn ? 'ভ্যার' : 'VAR';
   String get statusOk => isBn ? 'ঠিক' : 'OK';

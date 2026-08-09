@@ -15,7 +15,11 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
+<<<<<<< Updated upstream
 from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, support_chat, tenants, voice, ws
+=======
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, tenants, voice, ws
+>>>>>>> Stashed changes
 from services.facebook_chatbot import start_batch_worker, stop_batch_worker
 from subscription_service import maybe_expire_subscription
 
