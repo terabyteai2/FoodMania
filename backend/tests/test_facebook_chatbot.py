@@ -687,7 +687,7 @@ async def test_batched_llm_receives_manager_note_in_history(monkeypatch):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkeypatch):
+async def test_facebook_webhook_creates_order_after_details_complete(monkeypatch):
     page_id = f"page-order-{uuid.uuid4()}"
     menu_id = f"menu-fb-{uuid.uuid4()}"
     monkeypatch.setattr(facebook_chatbot.settings, "FACEBOOK_APP_SECRET", "")
@@ -828,7 +828,7 @@ async def test_facebook_webhook_creates_order_after_explicit_confirmation(monkey
 
     assert draft.status_code == 200
     assert confirm.status_code == 200
-    assert "Reply yes" in sent_messages[0][1]
+    assert sent_messages[0][1] == "Your order is confirmed! Thank you."
     body = orders.json()["data"]
     messenger_order = next(order for order in body if order["source"] == "facebook_messenger")
     assert messenger_order["customerName"] == "Nadia"

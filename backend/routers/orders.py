@@ -132,85 +132,19 @@ def _parse_client_iso(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
-@router.get("/outlets/{outlet_id}/orders")
-async def pull_orders(
-    outlet_id: str,
-    since: str | None = None,
-    limit: int | None = None,
-    order_date: str | None = None,
-    current_outlet: str = Depends(get_current_outlet_id),
-    db: AsyncSession = Depends(get_db),
-):
-    _ensure_outlet(current_outlet, outlet_id)
-    query = select(Order).where(Order.outlet_id == outlet_id).order_by(Order.created_at.desc())
-    if since:
-        dt = _parse_since(since)
-        query = query.where(Order.updated_at > dt)
-    if order_date:
-        from datetime import date
-        parsed = date.fromisoformat(order_date)
-        query = query.where(Order.order_date == parsed)
-    # Clients pass `limit` on the initial (no-`since`) pull so memory-constrained
-    # devices only load the most recent slice of history instead of every order.
-    if limit and limit > 0:
-        query = query.limit(limit)
-    orders = (await db.execute(query)).scalars().all()
-    return ok([_order_to_dict(o) for o in orders])
-
-
-@router.post("/outlets/{outlet_id}/orders")
-async def push_order(
+async def create_order_record(
+    db: AsyncSession,
     outlet_id: str,
     body: OrderPayload,
-    current_outlet: str = Depends(get_current_outlet_id),
-    device_payload: dict = Depends(get_current_device_payload),
-    db: AsyncSession = Depends(get_db),
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-):
-    _ensure_outlet(current_outlet, outlet_id)
-    created_by_role = (body.createdByRole or "").strip().lower() or None
-    status_value = _normalize_order_status(body.status)
-    # Staff-created manual orders should enter the manager's actionable flow
-    # directly so manager-side auto-print can run without extra status taps.
-    if created_by_role in ("staff", "waiter") and status_value == "pending":
-        status_value = "accepted"
-    existing = (await db.execute(select(Order).where(Order.id == body.id))).scalar_one_or_none()
-    if existing:
-        return ok(_order_to_dict(existing))
+    *,
+    created_by_role: str | None,
+    desktop_account: AdminAccount | None = None,
+) -> Order:
+    """Persist an order with outlet-serial numbering, broadcast and push.
 
-    desktop_account: AdminAccount | None = None
-    if (body.source or "").strip().lower() == "desktop_pos":
-        account_id = str(device_payload.get("account_id") or "")
-        desktop_account = (
-            await db.execute(
-                select(AdminAccount).where(
-                    AdminAccount.id == account_id,
-                    AdminAccount.outlet_id == outlet_id,
-                    AdminAccount.is_active.is_(True),
-                )
-            )
-        ).scalar_one_or_none()
-        if desktop_account is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Desktop POS sales require an authenticated account token.",
-            )
-        shift_id = (body.shiftId or "").strip()
-        active_shift = (
-            await db.execute(
-                select(PosShift).where(
-                    PosShift.id == shift_id,
-                    PosShift.outlet_id == outlet_id,
-                    PosShift.status == "open",
-                )
-            )
-        ).scalar_one_or_none()
-        if active_shift is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Desktop sales require an open outlet register shift.",
-            )
-
+    Shared by the device POS `push_order` route and the Sarvam Voice Agents
+    `place_order` tool webhook so both flows produce identical order records.
+    """
     now = datetime.now(timezone.utc)
     # Offline devices sync queued orders in a burst once they reconnect. The
     # client-supplied createdAt carries the true local creation time; honor it
@@ -242,7 +176,7 @@ async def push_order(
         serial_number=next_serial,
         order_date=today,
         source=body.source,
-        status=status_value,
+        status=_normalize_order_status(body.status),
         total_amount=body.totalAmount,
         subtotal=body.subtotal if body.subtotal is not None else body.totalAmount,
         vat_rate_percent=body.vatRatePercent if body.vatRatePercent is not None else 0,
@@ -284,6 +218,94 @@ async def push_order(
         outlet_id=outlet_id,
         event_type="order_created",
         order=order,
+    )
+    return order
+
+
+@router.get("/outlets/{outlet_id}/orders")
+async def pull_orders(
+    outlet_id: str,
+    since: str | None = None,
+    limit: int | None = None,
+    order_date: str | None = None,
+    current_outlet: str = Depends(get_current_outlet_id),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    query = select(Order).where(Order.outlet_id == outlet_id).order_by(Order.created_at.desc())
+    if since:
+        dt = _parse_since(since)
+        query = query.where(Order.updated_at > dt)
+    if order_date:
+        from datetime import date
+        parsed = date.fromisoformat(order_date)
+        query = query.where(Order.order_date == parsed)
+    # Clients pass `limit` on the initial (no-`since`) pull so memory-constrained
+    # devices only load the most recent slice of history instead of every order.
+    if limit and limit > 0:
+        query = query.limit(limit)
+    orders = (await db.execute(query)).scalars().all()
+    return ok([_order_to_dict(o) for o in orders])
+
+
+@router.post("/outlets/{outlet_id}/orders")
+async def push_order(
+    outlet_id: str,
+    body: OrderPayload,
+    current_outlet: str = Depends(get_current_outlet_id),
+    device_payload: dict = Depends(get_current_device_payload),
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    _ensure_outlet(current_outlet, outlet_id)
+    created_by_role = (body.createdByRole or "").strip().lower() or None
+    # Staff-created manual orders should enter the manager's actionable flow
+    # directly so manager-side auto-print can run without extra status taps.
+    if created_by_role in ("staff", "waiter") and _normalize_order_status(body.status) == "pending":
+        body.status = "accepted"
+    existing = (await db.execute(select(Order).where(Order.id == body.id))).scalar_one_or_none()
+    if existing:
+        return ok(_order_to_dict(existing))
+
+    desktop_account: AdminAccount | None = None
+    if (body.source or "").strip().lower() == "desktop_pos":
+        account_id = str(device_payload.get("account_id") or "")
+        desktop_account = (
+            await db.execute(
+                select(AdminAccount).where(
+                    AdminAccount.id == account_id,
+                    AdminAccount.outlet_id == outlet_id,
+                    AdminAccount.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if desktop_account is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Desktop POS sales require an authenticated account token.",
+            )
+        shift_id = (body.shiftId or "").strip()
+        active_shift = (
+            await db.execute(
+                select(PosShift).where(
+                    PosShift.id == shift_id,
+                    PosShift.outlet_id == outlet_id,
+                    PosShift.status == "open",
+                )
+            )
+        ).scalar_one_or_none()
+        if active_shift is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Desktop sales require an open outlet register shift.",
+            )
+
+    order = await create_order_record(
+        db,
+        outlet_id,
+        body,
+        created_by_role=created_by_role,
+        desktop_account=desktop_account,
     )
     return ok(_order_to_dict(order))
 

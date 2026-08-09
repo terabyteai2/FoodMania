@@ -116,7 +116,6 @@ class Settings(BaseSettings):
 
     # Voice agent — Sarvam AI (STT + LLM + TTS)
     SARVAM_API_KEY: str = ""
-<<<<<<< Updated upstream
     # Realtime STT (saaras:v3-realtime, event protocol). False = legacy /speech-to-text/ws.
     SARVAM_STT_USE_REALTIME: bool = True
     SARVAM_STT_STREAM_TYPE: str = "fast"
@@ -125,7 +124,9 @@ class Settings(BaseSettings):
     SARVAM_STT_THRESHOLD: float = 0.3
     SARVAM_STT_MODEL: str = "saaras:v3"
     SARVAM_STT_LANGUAGE: str = "bn-IN"
-    SARVAM_LLM_MODEL: str = "sarvam-105b"
+    # sarvam-105b-conversations is tuned for real-time conversational /
+    # voice-agent workloads per Sarvam docs.
+    SARVAM_LLM_MODEL: str = "sarvam-105b-conversations"
     SARVAM_LLM_TEMPERATURE: float = 0.6
     SARVAM_LLM_MAX_TOKENS: int = 1024
     # TTS over WebSocket (incremental, sentence-level). False = REST convert_stream.
@@ -138,16 +139,9 @@ class Settings(BaseSettings):
     SARVAM_TTS_SAMPLE_RATE: int = 24000
     SARVAM_TTS_MIN_BUFFER: int = 40
     SARVAM_TTS_MAX_CHUNK: int = 150
-=======
-    SARVAM_STT_MODEL: str = "saaras:v3"
-    SARVAM_STT_LANGUAGE: str = "bn-IN"
-    SARVAM_LLM_MODEL: str = "sarvam-105b"
-    SARVAM_LLM_TEMPERATURE: float = 0.3
-    SARVAM_LLM_MAX_TOKENS: int = 1024
-    SARVAM_TTS_MODEL: str = "bulbul:v3"
-    SARVAM_TTS_SPEAKER: str = "ishita"
-    SARVAM_TTS_LANGUAGE: str = "bn-IN"
->>>>>>> Stashed changes
+    # Shared secret for the Sarvam Voice Agents platform tool/hook webhooks
+    # (sent as X-Voice-Agent-Secret). Empty = tool endpoints disabled (503).
+    VOICE_AGENT_TOOL_SECRET: str = ""
 
 
 UDDOKTAPAY_SANDBOX_DEFAULT = "https://sandbox.uddoktapay.com"

@@ -84,7 +84,10 @@ class _TablesScreenState extends State<TablesScreen> {
       fillBody: true,
       removeHorizontalPadding: counterMode,
       child: counterMode
-          ? _CounterMode(onNavigateToOrders: widget.onNavigateToOrders)
+          ? TourSpot(
+              name: 'tables.counterMode',
+              child: _CounterMode(onNavigateToOrders: widget.onNavigateToOrders),
+            )
           : _FullService(
               app: app,
               text: text,
@@ -135,23 +138,26 @@ class _FullService extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TfTabs(
-          activeIndex: _TableSeg.values.indexOf(seg),
-          onChanged: (i) => onSeg(_TableSeg.values[i]),
-          items: [
-            TfTabItem(
-              label: OrderServiceType.dineIn.localized(false),
-              labelBn: OrderServiceType.dineIn.localized(true),
-            ),
-            TfTabItem(
-              label: OrderServiceType.takeaway.localized(false),
-              labelBn: OrderServiceType.takeaway.localized(true),
-            ),
-            TfTabItem(
-              label: OrderServiceType.delivery.localized(false),
-              labelBn: OrderServiceType.delivery.localized(true),
-            ),
-          ],
+        TourSpot(
+          name: 'tables.modeTabs',
+          child: TfTabs(
+            activeIndex: _TableSeg.values.indexOf(seg),
+            onChanged: (i) => onSeg(_TableSeg.values[i]),
+            items: [
+              TfTabItem(
+                label: OrderServiceType.dineIn.localized(false),
+                labelBn: OrderServiceType.dineIn.localized(true),
+              ),
+              TfTabItem(
+                label: OrderServiceType.takeaway.localized(false),
+                labelBn: OrderServiceType.takeaway.localized(true),
+              ),
+              TfTabItem(
+                label: OrderServiceType.delivery.localized(false),
+                labelBn: OrderServiceType.delivery.localized(true),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: PosDensity.sectionGap),
         Expanded(

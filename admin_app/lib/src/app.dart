@@ -339,17 +339,9 @@ const _ownerTabOrder = <_AppTab>[
   _AppTab.reports,
   _AppTab.more,
 ];
-<<<<<<< Updated upstream
 // Manager: Orders · Menu · Stock · Live (Control Tower) · Sales Summary · More
 const _managerTabOrder = <_AppTab>[
   _AppTab.orders,
-=======
-// Manager: Live (Control Tower) · Orders · Stock · Menu · Sales Summary · More
-const _managerTabOrder = <_AppTab>[
-  _AppTab.orders,
-  _AppTab.live,
-  _AppTab.stock,
->>>>>>> Stashed changes
   _AppTab.menu,
   _AppTab.stock,
   _AppTab.live,
@@ -1288,11 +1280,6 @@ class _AppNavDrawer extends StatelessWidget {
     void goTab(_AppTab tab) {
       close();
       onSelectTab(tab);
-    }
-
-    void goTarget(PosNotificationTarget target) {
-      close();
-      onNavigateTarget(target);
     }
 
     void goAction(_DrawerAction action) {

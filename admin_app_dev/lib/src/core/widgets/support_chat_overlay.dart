@@ -47,6 +47,7 @@ class SupportChatStep {
     required this.body,
     this.spot,
     this.target,
+    this.shape,
   });
 
   final String title;
@@ -60,14 +61,21 @@ class SupportChatStep {
   /// `modal:menu_discounts`).
   final String? target;
 
+  /// Optional spotlight cutout shape: `circle` for round targets (FABs),
+  /// `roundedRect` (default) for buttons/cards. Mirrors the vocabulary
+  /// metadata the assistant reads via get_guide_deeplinks.
+  final String? shape;
+
   factory SupportChatStep.fromJson(Map<String, Object?> json) {
     final spot = json['spot']?.toString().trim();
     final target = json['target']?.toString().trim();
+    final shape = json['shape']?.toString().trim();
     return SupportChatStep(
       title: json['title']?.toString() ?? '',
       body: json['body']?.toString() ?? '',
       spot: (spot == null || spot.isEmpty) ? null : spot,
       target: (target == null || target.isEmpty) ? null : target,
+      shape: (shape == 'circle' || shape == 'roundedRect') ? shape : null,
     );
   }
 }
@@ -380,6 +388,9 @@ class SupportChatController extends ChangeNotifier {
       spot: step.spot ?? '',
       title: step.title,
       body: step.body,
+      shape: step.shape == 'circle'
+          ? TourSpotlightShape.circle
+          : TourSpotlightShape.roundedRect,
       onEnter: (target.isNotEmpty && navigator != null)
           ? () => navigator(target)
           : null,

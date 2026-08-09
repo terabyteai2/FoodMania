@@ -441,6 +441,7 @@ async def _ensure_chatbot_columns(conn) -> None:
     if dialect == "sqlite":
         for col in [
             f"ALTER TABLE chatbot_conversations ADD COLUMN history_json {json_type}",
+            "ALTER TABLE chatbot_conversations ADD COLUMN customer_name VARCHAR",
             "ALTER TABLE chatbot_integrations ADD COLUMN llm_session_started_at TIMESTAMP",
             "ALTER TABLE chatbot_integrations ADD COLUMN llm_batch_count INTEGER DEFAULT 0",
         ]:
@@ -452,6 +453,7 @@ async def _ensure_chatbot_columns(conn) -> None:
         for col in [
             f"ALTER TABLE chatbot_conversations ADD COLUMN IF NOT EXISTS "
             f"history_json {json_type} DEFAULT '[]'::{json_type}",
+            "ALTER TABLE chatbot_conversations ADD COLUMN IF NOT EXISTS customer_name VARCHAR",
             "ALTER TABLE chatbot_integrations ADD COLUMN IF NOT EXISTS "
             "llm_session_started_at TIMESTAMPTZ",
             "ALTER TABLE chatbot_integrations ADD COLUMN IF NOT EXISTS "

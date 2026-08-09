@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_tints.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
@@ -476,36 +477,39 @@ class _MenuContent extends StatelessWidget {
       );
     }
 
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PosSpacing.sp4,
-            0,
-            PosSpacing.sp4,
-            PosDensity.sectionGap,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: PosDensity.gridGap,
-              crossAxisSpacing: PosDensity.gridGap,
-              mainAxisExtent: PosDensity.tileMenu,
+    return TourSpot(
+      name: 'orders.newOrderMenu',
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PosSpacing.sp4,
+              0,
+              PosSpacing.sp4,
+              PosDensity.sectionGap,
             ),
-            delegate: SliverChildBuilderDelegate((_, i) {
-              final item = items[i];
-              return _GridTile(
-                item: item,
-                qty: cart[item.id] ?? 0,
-                onTap: () => onTap(item),
-                onDecrement: () => onDecrement(item.id),
-                onToggleFavorite: () => onToggleFavorite(item),
-                onSetShortCode: () => onSetShortCode(item),
-              );
-            }, childCount: items.length),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: PosDensity.gridGap,
+                crossAxisSpacing: PosDensity.gridGap,
+                mainAxisExtent: PosDensity.tileMenu,
+              ),
+              delegate: SliverChildBuilderDelegate((_, i) {
+                final item = items[i];
+                return _GridTile(
+                  item: item,
+                  qty: cart[item.id] ?? 0,
+                  onTap: () => onTap(item),
+                  onDecrement: () => onDecrement(item.id),
+                  onToggleFavorite: () => onToggleFavorite(item),
+                  onSetShortCode: () => onSetShortCode(item),
+                );
+              }, childCount: items.length),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1007,11 +1011,14 @@ class CartFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    return TfStickyCTA(
-      child: TfButton(
-        label: '${text.reviewOrder} · ${tfFormatCurrency(context, total)}',
-        size: TfButtonSize.lg,
-        onPressed: onSubmit,
+    return TourSpot(
+      name: 'orders.newOrderCart',
+      child: TfStickyCTA(
+        child: TfButton(
+          label: '${text.reviewOrder} · ${tfFormatCurrency(context, total)}',
+          size: TfButtonSize.lg,
+          onPressed: onSubmit,
+        ),
       ),
     );
   }

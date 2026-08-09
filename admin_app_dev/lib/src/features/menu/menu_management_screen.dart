@@ -174,16 +174,21 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, PosDensity.sectionGap, 16, 0),
-            child: TfSearchField(
-              controller: _searchController,
-              hintText: text.menuSearchHint,
-              prefixIcon: Icons.search_rounded,
-              onChanged: (_) => setState(() {}),
+            child: TourSpot(
+              name: 'menu.search',
+              child: TfSearchField(
+                controller: _searchController,
+                hintText: text.menuSearchHint,
+                prefixIcon: Icons.search_rounded,
+                onChanged: (_) => setState(() {}),
+              ),
             ),
           ),
           if (app.menuItems.isNotEmpty) ...[
             SizedBox(height: PosDensity.sectionGap),
-            TfFilterChipRow(
+            TourSpot(
+              name: 'menu.categories',
+              child: TfFilterChipRow(
               chips: categories
                   .map(
                     (cat) => TfFilterChipData(
@@ -201,6 +206,7 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   .toList(),
               onSelected: (index) =>
                   setState(() => _selectedCategory = categories[index]),
+              ),
             ),
           ],
           SizedBox(height: PosDensity.sectionGap),
@@ -229,11 +235,14 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: TfButton(
-                      label: text.menuNewButton,
-                      icon: Icons.add_rounded,
-                      size: TfButtonSize.lg,
-                      onPressed: () => _openMenuForm(context),
+                    child: TourSpot(
+                      name: 'menu.newItem',
+                      child: TfButton(
+                        label: text.menuNewButton,
+                        icon: Icons.add_rounded,
+                        size: TfButtonSize.lg,
+                        onPressed: () => _openMenuForm(context),
+                      ),
                     ),
                   ),
                 ],

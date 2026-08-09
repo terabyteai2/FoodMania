@@ -4,6 +4,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/account_role.dart';
@@ -134,39 +135,47 @@ class _ControlTowerScreenState extends State<ControlTowerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (hasAlerts) ...[
-                    if (showSlowest)
-                      _AlertCard(
-                        icon: Icons.schedule_rounded,
-                        tone: PosColors.danger,
-                        toneSoft: PosColors.dangerSoft,
-                        title: text.orderWaitingMinutes(
-                          slowest.displaySequence,
-                          _ageMins(slowest),
-                        ),
-                        body:
-                            '${_typeLabel(text, slowest)} · ${text.needsAccepting}',
-                        onTap:
-                            widget.onNavigateToOrders ??
-                            () => widget.onNavigateToTarget?.call(
-                              PosNotificationTarget.orders,
+                    TourSpot(
+                      name: 'controlTower.alerts',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showSlowest)
+                            _AlertCard(
+                              icon: Icons.schedule_rounded,
+                              tone: PosColors.danger,
+                              toneSoft: PosColors.dangerSoft,
+                              title: text.orderWaitingMinutes(
+                                slowest.displaySequence,
+                                _ageMins(slowest),
+                              ),
+                              body:
+                                  '${_typeLabel(text, slowest)} · ${text.needsAccepting}',
+                              onTap:
+                                  widget.onNavigateToOrders ??
+                                  () => widget.onNavigateToTarget?.call(
+                                    PosNotificationTarget.orders,
+                                  ),
                             ),
+                          if (lowItems.isNotEmpty) ...[
+                            if (showSlowest) const SizedBox(height: 8),
+                            _AlertCard(
+                              icon: Icons.warning_amber_rounded,
+                              tone: PosColors.warning,
+                              toneSoft: PosColors.warningSoft,
+                              title: text.itemsBelowParAlert(lowItems.length),
+                              body: lowItems
+                                  .take(3)
+                                  .map((i) => i.localizedName(text.language))
+                                  .join(', '),
+                              onTap: () => widget.onNavigateToTarget?.call(
+                                PosNotificationTarget.inventory,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    if (lowItems.isNotEmpty) ...[
-                      if (showSlowest) const SizedBox(height: 8),
-                      _AlertCard(
-                        icon: Icons.warning_amber_rounded,
-                        tone: PosColors.warning,
-                        toneSoft: PosColors.warningSoft,
-                        title: text.itemsBelowParAlert(lowItems.length),
-                        body: lowItems
-                            .take(3)
-                            .map((i) => i.localizedName(text.language))
-                            .join(', '),
-                        onTap: () => widget.onNavigateToTarget?.call(
-                          PosNotificationTarget.inventory,
-                        ),
-                      ),
-                    ],
+                    ),
                     const SizedBox(height: 14),
                   ] else ...[
                     _AllClearCard(text: text),

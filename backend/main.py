@@ -15,11 +15,7 @@ from sqlalchemy import select
 from config import settings
 from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
-<<<<<<< Updated upstream
-from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, support_chat, tenants, voice, ws
-=======
-from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, tenants, voice, ws
->>>>>>> Stashed changes
+from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, support_chat, tenants, voice, voice_agent_tools, ws
 from services.facebook_chatbot import start_batch_worker, stop_batch_worker
 from subscription_service import maybe_expire_subscription
 
@@ -123,7 +119,11 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.OUTLET_IMAGES_DIR, exist_ok=True)
     os.makedirs(settings.OUTLET_VIDEOS_DIR, exist_ok=True)
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
     expiry_task = asyncio.create_task(_expire_stale_subscriptions_loop())
     start_batch_worker()
 
@@ -182,6 +182,7 @@ app.include_router(payments.router)
 app.include_router(platform.router)
 app.include_router(voice.router)
 app.include_router(sarvam_voice.router)
+app.include_router(voice_agent_tools.router)
 app.include_router(ws.router)
 app.include_router(customer.router)
 app.include_router(app_download.router)

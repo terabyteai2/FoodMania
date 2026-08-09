@@ -27,6 +27,38 @@ LLM_TIMEOUT = 45.0
 TURN_DEBOUNCE_SECONDS = 0.15
 
 
+def _timing_secs(after: float | None, before: float | None) -> float | None:
+    """Duration between two monotonic stamps, or None if either is missing."""
+    if after is None or before is None:
+        return None
+    return max(0.0, after - before)
+
+
+def _fmt_secs(seconds: float | None) -> str:
+    return "–" if seconds is None else f"{seconds:.2f}s"
+
+
+def _format_turn_timing(stamps: dict) -> str:
+    """One-line per-turn latency breakdown for diagnostics.
+
+    ``stamps`` maps step names to monotonic seconds (or None). Durations that
+    can't be computed are rendered as "–" so the stuck step stands out.
+    """
+    stt = _timing_secs(stamps.get("stt_final_at"), stamps.get("stt_speech_end_at"))
+    llm_ttft = _timing_secs(stamps.get("llm_first_token_at"), stamps.get("llm_started_at"))
+    llm_total = _timing_secs(stamps.get("llm_done_at"), stamps.get("llm_started_at"))
+    tts_first = _timing_secs(stamps.get("tts_first_audio_at"), stamps.get("tts_started_at"))
+    tts_total = _timing_secs(stamps.get("tts_done_at"), stamps.get("tts_started_at"))
+    turn_total = _timing_secs(stamps.get("tts_done_at"), stamps.get("turn_started_at"))
+    return (
+        f"[sarvam:turn] #{stamps.get('turn_idx')} "
+        f"STT={_fmt_secs(stt)} LLM_TTFT={_fmt_secs(llm_ttft)} LLM={_fmt_secs(llm_total)} "
+        f"TTS_connect={_fmt_secs(stamps.get('tts_connect_secs'))} "
+        f"TTS_first={_fmt_secs(tts_first)} TTS={_fmt_secs(tts_total)} "
+        f"turn_total={_fmt_secs(turn_total)}"
+    )
+
+
 def _pcm16_to_wav(pcm: bytes) -> bytes:
     """Wrap 16-bit little-endian mono PCM into a RIFF/WAVE container.
 
@@ -142,6 +174,7 @@ class _TtsWsClient:
 
     def __init__(self):
         self.ws = None
+        self.connect_seconds: float | None = None
 
     async def connect(self) -> bool:
         if self.ws is not None:
@@ -151,6 +184,8 @@ class _TtsWsClient:
             except AttributeError:
                 return True
             self.ws = None
+        self.connect_seconds = None
+        t0 = time.monotonic()
         try:
             ws = await websockets.connect(
                 TTS_WS_URL + "?" + urllib.parse.urlencode({
@@ -174,7 +209,8 @@ class _TtsWsClient:
                 },
             }))
             self.ws = ws
-            logger.info("[sarvam:tts-ws] Connected and configured")
+            self.connect_seconds = time.monotonic() - t0
+            logger.info("[sarvam:tts-ws] Connected and configured in %.2fs", self.connect_seconds)
             return True
         except Exception as e:
             logger.error("[sarvam:tts-ws] Connect failed: %s", e)
@@ -494,6 +530,51 @@ class SarvamVoiceAgentSession:
         self._tts_scanner = _ReplyScanner()
         self._tts_queue: asyncio.Queue = asyncio.Queue()
         self._turn_start = 0.0
+        # Per-turn timing stamps (monotonic seconds) for latency diagnostics.
+        self._turn_idx = 0
+        self._stt_speech_end_at: float | None = None
+        self._stt_final_at: float | None = None
+        self._llm_started_at: float | None = None
+        self._llm_first_token_at: float | None = None
+        self._llm_done_at: float | None = None
+        self._tts_connect_secs: float | None = None
+        self._tts_started_at: float | None = None
+        self._tts_first_audio_at: float | None = None
+        self._tts_last_audio_at: float | None = None
+        self._tts_done_at: float | None = None
+
+    def _reset_turn_timings(self):
+        # The vad.speech_end stamp belongs to the utterance whose final is
+        # about to be processed — keep it across the reset so STT latency
+        # (speech_end → final) is measurable.
+        prev_speech_end = self._stt_speech_end_at
+        self._turn_idx += 1
+        self._turn_start = time.monotonic()
+        self._stt_speech_end_at = prev_speech_end
+        self._stt_final_at = None
+        self._llm_started_at = None
+        self._llm_first_token_at = None
+        self._llm_done_at = None
+        self._tts_connect_secs = None
+        self._tts_started_at = None
+        self._tts_first_audio_at = None
+        self._tts_last_audio_at = None
+        self._tts_done_at = None
+
+    def _turn_timing_summary(self) -> str:
+        return _format_turn_timing({
+            "turn_idx": self._turn_idx,
+            "stt_speech_end_at": self._stt_speech_end_at,
+            "stt_final_at": self._stt_final_at,
+            "llm_started_at": self._llm_started_at,
+            "llm_first_token_at": self._llm_first_token_at,
+            "llm_done_at": self._llm_done_at,
+            "tts_connect_secs": self._tts_connect_secs,
+            "tts_started_at": self._tts_started_at,
+            "tts_first_audio_at": self._tts_first_audio_at,
+            "tts_done_at": self._tts_done_at,
+            "turn_started_at": self._turn_start,
+        })
 
     async def run(self):
         setup = _build_restaurant_setup(self.outlet, self.menu_items)
@@ -605,6 +686,7 @@ class SarvamVoiceAgentSession:
         elif msg_type == "events":
             signal = (data.get("data") or {}).get("signal_type")
             if signal == "END_SPEECH":
+                self._stt_speech_end_at = time.monotonic()
                 try:
                     await self.stt_ws.send(json.dumps({"type": "flush"}))
                 except Exception:
@@ -633,6 +715,7 @@ class SarvamVoiceAgentSession:
         elif event == "vad.speech_start":
             logger.debug("[sarvam:stt] VAD speech start")
         elif event == "vad.speech_end":
+            self._stt_speech_end_at = time.monotonic()
             logger.debug("[sarvam:stt] VAD speech end")
         elif event == "session.end":
             logger.info("[sarvam:stt] Session end: %s", data)
@@ -774,6 +857,7 @@ class SarvamVoiceAgentSession:
                                 "audio": {"data": base64.b64encode(wav).decode(), "encoding": "audio/wav", "sample_rate": STT_SAMPLE_RATE},
                             })
                         await self.stt_ws.send(payload)
+                        self._stt_last_audio_sent_at = time.monotonic()
                     except Exception as e:
                         logger.warning("[sarvam:relay] STT send failed: %s", e)
                         break
@@ -789,7 +873,8 @@ class SarvamVoiceAgentSession:
 
     async def _handle_committed(self, text: str):
         logger.info("[sarvam:llm] Handling transcript: %s", text[:120])
-        self._turn_start = time.monotonic()
+        self._reset_turn_timings()
+        self._stt_final_at = time.monotonic()
         state_note = _order_state_note(self._order_state, self.outlet)
         self.history.append({"role": "user", "content": f"{text}\n\n{state_note}"})
         self._tts_scanner = _ReplyScanner()
@@ -807,6 +892,21 @@ class SarvamVoiceAgentSession:
             else:
                 emitted = min(self._tts_scanner.emitted_chars, len(reply_text))
                 await self._stream_tts(reply_text[emitted:] or reply_text)
+        asyncio.create_task(self._log_turn_timing())
+
+    async def _log_turn_timing(self):
+        """Log the per-turn breakdown once TTS has finished (or after a cap).
+
+        Runs as a background task so TTS_* metrics capture the full pipeline
+        instead of the pre-TTS state. Bails out early if the next turn started.
+        """
+        turn_idx = self._turn_idx
+        deadline = time.monotonic() + 10.0
+        while self._tts_done_at is None and time.monotonic() < deadline and not self._done:
+            if self._turn_idx != turn_idx:
+                return
+            await asyncio.sleep(0.05)
+        logger.info(self._turn_timing_summary())
 
     async def _on_llm_delta(self, delta: str):
         if not settings.SARVAM_TTS_USE_WS or self._tts_ws_failed:
@@ -826,25 +926,27 @@ class SarvamVoiceAgentSession:
             if self._tts_ws is None:
                 self._tts_ws = _TtsWsClient()
             if await self._tts_ws.send_text(sentence):
+                if self._tts_started_at is None:
+                    self._tts_started_at = time.monotonic()
+                if self._tts_connect_secs is None and self._tts_ws.connect_seconds is not None:
+                    self._tts_connect_secs = self._tts_ws.connect_seconds
                 self._tts_inflight += 1
             else:
                 self._tts_ws_failed = True
-                logger.error("[sarvam:tts-ws] Feed failed, falling back to REST TTS for next turns")
+                logger.error("[sarvam:tts-ws] Feed failed, falling back to REST TTS for next turns; partial timings: %s", self._turn_timing_summary())
 
     async def _tts_finish_turn(self, remainder: str):
         if not settings.SARVAM_TTS_USE_WS or self._done:
             return
         if self._tts_ws_failed:
             if not self._tts_done_sent:
-                self._tts_done_sent = True
-                await self._send_browser({"type": "tts_done"})
+                await self._send_tts_done()
             return
         if remainder and remainder.strip():
             await self._tts_queue.put(remainder.strip())
         self._tts_turn_done = True
         if self._tts_queue.empty() and self._tts_inflight == 0 and not self._tts_done_sent:
-            self._tts_done_sent = True
-            await self._send_browser({"type": "tts_done"})
+            await self._send_tts_done()
         else:
             asyncio.create_task(self._tts_done_guard())
 
@@ -855,8 +957,7 @@ class SarvamVoiceAgentSession:
                 break
             await asyncio.sleep(0.25)
         if not self._tts_done_sent:
-            self._tts_done_sent = True
-            await self._send_browser({"type": "tts_done"})
+            await self._send_tts_done()
 
     async def _tts_reader(self):
         while not self._done:
@@ -884,14 +985,19 @@ class SarvamVoiceAgentSession:
             if mtype == "audio":
                 audio = ((msg.get("data") or {}).get("audio") or "")
                 if audio:
+                    now = time.monotonic()
+                    if self._tts_first_audio_at is None:
+                        self._tts_first_audio_at = now
+                        if self._tts_started_at is not None:
+                            logger.info("[sarvam:tts-ws] First audio after %.2fs", now - self._tts_started_at)
+                    self._tts_last_audio_at = now
                     await self._send_browser({"type": "audio", "data": audio})
             elif mtype == "event":
                 if (msg.get("data") or {}).get("event_type") == "final":
                     if self._tts_inflight > 0:
                         self._tts_inflight -= 1
                     if self._tts_turn_done and self._tts_queue.empty() and self._tts_inflight == 0 and not self._tts_done_sent:
-                        self._tts_done_sent = True
-                        await self._send_browser({"type": "tts_done"})
+                        await self._send_tts_done()
             elif mtype == "error":
                 inner = msg.get("data") or {}
                 logger.error("[sarvam:tts-ws] API error: %s", inner.get("message") or inner)
@@ -904,6 +1010,7 @@ class SarvamVoiceAgentSession:
             await self._send_browser({"type": "error", "text": "LLM not configured."})
             return ""
         messages = self.history[-20:]
+        self._llm_started_at = time.monotonic()
         logger.info("[sarvam:llm] Calling Sarvam model=%s with %d messages", settings.SARVAM_LLM_MODEL, len(messages))
         try:
             content = await asyncio.wait_for(
@@ -911,11 +1018,11 @@ class SarvamVoiceAgentSession:
                 timeout=LLM_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            logger.error("[sarvam:llm] LLM call timed out")
+            logger.error("[sarvam:llm] LLM call timed out; partial timings: %s", self._turn_timing_summary())
             await self._send_browser({"type": "error", "text": "Sorry, the assistant took too long."})
             return ""
         except Exception as e:
-            logger.error("[sarvam:llm] LLM call failed: %s", e, exc_info=True)
+            logger.error("[sarvam:llm] LLM call failed: %s; partial timings: %s", e, self._turn_timing_summary(), exc_info=True)
             await self._send_browser({"type": "error", "text": "Sorry, I couldn't reach the assistant."})
             return ""
         logger.info("[sarvam:llm] Response received (content_len=%d, %.2fs)",
@@ -947,6 +1054,7 @@ class SarvamVoiceAgentSession:
         url = "https://api.sarvam.ai/v1/chat/completions"
         headers = {
             "api-subscription-key": settings.SARVAM_API_KEY.strip(),
+            "Authorization": f"Bearer {settings.SARVAM_API_KEY.strip()}",
             "Content-Type": "application/json",
         }
         payload = {
@@ -984,11 +1092,15 @@ class SarvamVoiceAgentSession:
                     try:
                         delta = chunk["choices"][0]["delta"]
                         if delta and delta.get("content"):
+                            if self._llm_first_token_at is None:
+                                self._llm_first_token_at = time.monotonic()
+                                logger.info("[sarvam:llm] First token after %.2fs", self._llm_first_token_at - self._llm_started_at)
                             content += delta["content"]
                             if on_delta:
                                 await on_delta(delta["content"])
                     except (KeyError, IndexError, TypeError):
                         pass
+        self._llm_done_at = time.monotonic()
         return content
 
     async def _stream_tts(self, text: str):
@@ -998,6 +1110,8 @@ class SarvamVoiceAgentSession:
         logger.info("[sarvam:tts] Streaming via Sarvam AI (model=%s speaker=%s pace=%s temperature=%s)",
                     settings.SARVAM_TTS_MODEL, settings.SARVAM_TTS_SPEAKER,
                     settings.SARVAM_TTS_PACE, settings.SARVAM_TTS_TEMPERATURE)
+        if self._tts_started_at is None:
+            self._tts_started_at = time.monotonic()
         try:
             client = SarvamAI(api_subscription_key=settings.SARVAM_API_KEY)
             audio_count = 0
@@ -1025,12 +1139,24 @@ class SarvamVoiceAgentSession:
                 if self._done:
                     break
                 audio_count += 1
+                now = time.monotonic()
+                if self._tts_first_audio_at is None:
+                    self._tts_first_audio_at = now
+                self._tts_last_audio_at = now
                 await self._send_browser({"type": "audio", "data": base64.b64encode(chunk).decode()})
             logger.info("[sarvam:tts] Sarvam AI stream complete (%d chunks)", audio_count)
-            await self._send_browser({"type": "tts_done"})
+            await self._send_tts_done()
         except Exception as e:
             logger.error("[sarvam:tts] Stream error: %s", e, exc_info=True)
             await self._send_browser({"type": "error", "text": f"TTS error: {e}"})
+
+    async def _send_tts_done(self):
+        """Send tts_done to the browser exactly once, stamping the moment TTS finished."""
+        if self._tts_done_sent:
+            return
+        self._tts_done_sent = True
+        self._tts_done_at = time.monotonic()
+        await self._send_browser({"type": "tts_done"})
 
     async def _send_browser(self, msg: dict):
         try:

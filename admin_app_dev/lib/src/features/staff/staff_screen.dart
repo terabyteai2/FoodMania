@@ -5,6 +5,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/account_role.dart';
 import '../../models/staff_member.dart';
@@ -121,12 +122,15 @@ class _StaffScreenState extends State<StaffScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
-            child: TfButton(
-              label: text.inviteStaffCta,
-              icon: Icons.person_add_alt_1_outlined,
-              variant: TfButtonVariant.primary,
-              size: TfButtonSize.lg,
-              onPressed: () => _openInvite(context, app),
+            child: TourSpot(
+              name: 'staff.invite',
+              child: TfButton(
+                label: text.inviteStaffCta,
+                icon: Icons.person_add_alt_1_outlined,
+                variant: TfButtonVariant.primary,
+                size: TfButtonSize.lg,
+                onPressed: () => _openInvite(context, app),
+              ),
             ),
           ),
         ],

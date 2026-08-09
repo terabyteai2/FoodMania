@@ -8,11 +8,14 @@ from services.sarvam_voice_agent import (
     _TtsWsClient,
     _append_event_reply,
     _build_menu_lookup,
+    _fmt_secs,
+    _format_turn_timing,
     _lookup_item,
     _merge_state,
     _merge_turn_parts,
     _parse_json_object,
     _split_sentences,
+    _timing_secs,
     _validate_lines,
 )
 
@@ -254,3 +257,67 @@ def test_tts_ws_send_text_returns_true_and_flushes(monkeypatch):
     messages = [json.loads(p) for p in client.ws.sent]
     assert messages[-2] == {"type": "text", "data": {"text": "হ্যাঁ, শুনতে পাচ্ছি!"}}
     assert messages[-1] == {"type": "flush"}
+
+
+def test_timing_secs_requires_both_stamps():
+    assert _timing_secs(None, 1.0) is None
+    assert _timing_secs(2.0, None) is None
+    assert _timing_secs(None, None) is None
+
+
+def test_timing_secs_computes_delta():
+    assert _timing_secs(3.25, 1.0) == 2.25
+    assert _timing_secs(0.5, 1.0) == 0.0
+
+
+def test_fmt_secs_dash_when_missing():
+    assert _fmt_secs(None) == "–"
+    assert _fmt_secs(1.234) == "1.23s"
+
+
+def test_format_turn_timing_full_pipeline():
+    stamps = {
+        "turn_idx": 3,
+        "stt_speech_end_at": 1.0,
+        "stt_final_at": 1.3,
+        "llm_started_at": 1.5,
+        "llm_first_token_at": 2.4,
+        "llm_done_at": 4.6,
+        "tts_connect_secs": 0.4,
+        "tts_started_at": 4.8,
+        "tts_first_audio_at": 5.6,
+        "tts_done_at": 7.0,
+        "turn_started_at": 0.1,
+    }
+    out = _format_turn_timing(stamps)
+    assert "#3" in out
+    assert "STT=0.30s" in out
+    assert "LLM_TTFT=0.90s" in out
+    assert "LLM=3.10s" in out
+    assert "TTS_connect=0.40s" in out
+    assert "TTS_first=0.80s" in out
+    assert "TTS=2.20s" in out
+    assert "turn_total=6.90s" in out
+
+
+def test_format_turn_timing_partial_shows_dash_for_stuck_step():
+    stamps = {
+        "turn_idx": 1,
+        "stt_speech_end_at": 0.1,
+        "stt_final_at": 1.2,
+        "llm_started_at": 1.4,
+        "llm_first_token_at": None,
+        "llm_done_at": None,
+        "tts_connect_secs": None,
+        "tts_started_at": None,
+        "tts_first_audio_at": None,
+        "tts_done_at": None,
+        "turn_started_at": 0.1,
+    }
+    out = _format_turn_timing(stamps)
+    assert "STT=1.10s" in out
+    assert "LLM_TTFT=–" in out
+    assert "LLM=–" in out
+    assert "TTS_connect=–" in out
+    assert "TTS=–" in out
+    assert "turn_total=–" in out

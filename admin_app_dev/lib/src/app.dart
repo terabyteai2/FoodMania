@@ -31,6 +31,7 @@ import 'features/menu/menu_scan_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/reports/reports_hub_screen.dart';
+import 'features/settings/settings_screen.dart';
 import 'features/setup/tenant_setup_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
 import 'features/staff/staff_screen.dart';
@@ -790,6 +791,16 @@ class _MainShellState extends State<MainShell> {
         unawaited(_pushThenRefreshInventory(const StockInScreen()));
       case 'screen:stock_count':
         unawaited(_pushThenRefreshInventory(const EndOfDayCountScreen()));
+      case 'screen:settings':
+        unawaited(_pushChatScreen(SettingsScreen(
+          onNavigateToOrders: () {},
+          onNavigateToTarget: _navigateNotificationTarget,
+        )));
+      case 'screen:control_tower':
+        unawaited(_pushChatScreen(ControlTowerScreen(
+          onNavigateToOrders: () {},
+          onNavigateToTarget: _navigateNotificationTarget,
+        )));
       case 'modal:menu_discounts':
         unawaited(showMenuDiscountsSheet(context));
       case 'modal:menu_delivery_charge':

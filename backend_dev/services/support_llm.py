@@ -197,8 +197,8 @@ def _contract_section() -> str:
         "content: {\"reply\": string, \"actions\": [{\"label\": string, "
         "\"target\": string}] optional max 3, \"steps\": [{\"title\": "
         "string, \"body\": string, \"target\": string optional, \"spot\": "
-        "string optional}] optional max 4}. No markdown fences, no text "
-        "before or after.\n"
+        "string optional, \"shape\": string optional}] optional max 4}. No "
+        "markdown fences, no text before or after.\n"
         '- "reply" is REQUIRED: always a non-empty plain conversational '
         "message, in Bangla by default (English only when the user writes in "
         "English) — no markdown.\n"
@@ -210,7 +210,9 @@ def _contract_section() -> str:
         'highlight; a step with both "target" and "spot" navigates itself '
         'and then points at the element. Target-only steps (no "spot") are '
         "only for opening a destination the next step will highlight — they "
-        "show a Continue button.\n"
+        "show a Continue button. Include \"shape\": \"circle\" only when "
+        "the vocabulary marks the spot as a round target (e.g. the + FAB); "
+        "leave it out for regular buttons.\n"
         "- Only use targets and spots returned by get_guide_deeplinks — "
         "never invent deeplinks or spot names. Most replies need no "
         "actions/steps at all."
@@ -252,6 +254,9 @@ def _clean_step(raw: object) -> dict | None:
     spot = str(raw.get("spot") or "").strip()
     if spot and _valid_spot(spot):
         step["spot"] = spot
+    shape = str(raw.get("shape") or "").strip()
+    if shape in ("circle", "roundedRect"):
+        step["shape"] = shape
     return step
 
 

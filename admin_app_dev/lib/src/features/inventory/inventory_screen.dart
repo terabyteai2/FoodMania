@@ -10,6 +10,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/subscription_gate_card.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
@@ -280,22 +281,25 @@ class _InventoryScreenState extends State<InventoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TfPeriodWithCalendar(
-            options: [
-              ('today', text.rangeToday),
-              ('week', text.range7Days),
-              ('month', text.range30Days),
-            ],
-            value: _timeframe.name,
-            start: _rangeStart,
-            end: _rangeEnd,
-            onChanged: (value, start, end) {
-              if (value == TfPeriodWithCalendar.customValue) {
-                _onRangeChanged(start, end);
-              } else {
-                _updateTimeframe(TfTimeframe.values.byName(value));
-              }
-            },
+          TourSpot(
+            name: 'stock.period',
+            child: TfPeriodWithCalendar(
+              options: [
+                ('today', text.rangeToday),
+                ('week', text.range7Days),
+                ('month', text.range30Days),
+              ],
+              value: _timeframe.name,
+              start: _rangeStart,
+              end: _rangeEnd,
+              onChanged: (value, start, end) {
+                if (value == TfPeriodWithCalendar.customValue) {
+                  _onRangeChanged(start, end);
+                } else {
+                  _updateTimeframe(TfTimeframe.values.byName(value));
+                }
+              },
+            ),
           ),
           Expanded(
             child: Builder(
@@ -325,23 +329,29 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        _StockTable(
-                                          text: text,
-                                          items: sorted,
-                                          sort: _sort,
-                                          dir: _dir,
-                                          canEdit: app.canManageStock,
-                                          onSort: _toggleSort,
-                                          onRowTap: (item) =>
-                                              _openRow(context, app, item),
-                                          onQtyCommit: _onQtyCommit,
-                                          onPriceCommit: _onPriceCommit,
+                                        TourSpot(
+                                          name: 'stock.table',
+                                          child: _StockTable(
+                                            text: text,
+                                            items: sorted,
+                                            sort: _sort,
+                                            dir: _dir,
+                                            canEdit: app.canManageStock,
+                                            onSort: _toggleSort,
+                                            onRowTap: (item) =>
+                                                _openRow(context, app, item),
+                                            onQtyCommit: _onQtyCommit,
+                                            onPriceCommit: _onPriceCommit,
+                                          ),
                                         ),
                                         const SizedBox(height: 12),
-                                        _AddItemButton(
-                                          text: text,
-                                          onPressed: () =>
-                                              _showAddItem(context),
+                                        TourSpot(
+                                          name: 'stock.addItem',
+                                          child: _AddItemButton(
+                                            text: text,
+                                            onPressed: () =>
+                                                _showAddItem(context),
+                                          ),
                                         ),
                                         const SizedBox(height: 14),
                                         _AdvancedDrilldowns(text: text),
@@ -1205,27 +1215,33 @@ class _AdvancedDrilldowns extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: _DrillCard(
-                  icon: Icons.swap_vert_rounded,
-                  label: text.dailyVariance,
-                  hint: text.expectedVsCounted,
-                  onTap: () => Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const StockVarianceScreen(),
+                child: TourSpot(
+                  name: 'stock.variance',
+                  child: _DrillCard(
+                    icon: Icons.swap_vert_rounded,
+                    label: text.dailyVariance,
+                    hint: text.expectedVsCounted,
+                    onTap: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StockVarianceScreen(),
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _DrillCard(
-                  icon: Icons.local_shipping_outlined,
-                  label: text.suppliers,
-                  hint: text.suppliersCount(suppliers.length),
-                  onTap: () => Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SuppliersScreen()),
+                child: TourSpot(
+                  name: 'stock.suppliers',
+                  child: _DrillCard(
+                    icon: Icons.local_shipping_outlined,
+                    label: text.suppliers,
+                    hint: text.suppliersCount(suppliers.length),
+                    onTap: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SuppliersScreen()),
+                    ),
                   ),
                 ),
               ),

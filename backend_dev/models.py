@@ -440,6 +440,7 @@ class ChatbotConversation(Base):
     )
     page_id: Mapped[str] = mapped_column(String, nullable=False)
     psid: Mapped[str] = mapped_column(String, nullable=False)
+    customer_name: Mapped[str | None] = mapped_column(String, nullable=True)
     state_json: Mapped[dict] = mapped_column(JSONB, nullable=True, default=dict)
     history_json: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
     last_user_message: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -21,7 +21,6 @@ from routers.ws import manager
 from services.customer_orders import (
     DeliveryOrderLine,
     create_delivery_order,
-    delivery_order_totals,
 )
 from services.order_serial import format_serial
 
@@ -35,7 +34,7 @@ GRAPH_TIMEOUT_SECONDS = 8.0
 GROQ_TIMEOUT_SECONDS = 30.0
 DEEPSEEK_TIMEOUT_SECONDS = 45.0
 MAX_REPLY_CHARS = 1900
-BATCH_WAIT_SECONDS = 4.0
+BATCH_WAIT_SECONDS = 1.0
 BATCH_MAX_SIZE = 5
 BATCH_LLM_MAX_TOKENS = 6000
 CHAT_HISTORY_CONTEXT_LIMIT = 10
@@ -102,6 +101,7 @@ def _conversation_unread(conversation: ChatbotConversation) -> int:
 def chat_update_payload(conversation: ChatbotConversation) -> dict:
     return {
         "conversationId": conversation.id,
+        "customerName": conversation.customer_name or "",
         "status": _conversation_status(conversation),
         "unread": _conversation_unread(conversation),
         "updatedAt": conversation.updated_at.isoformat(),
@@ -866,6 +866,32 @@ def _media_note(what: str, url: str) -> str:
     return f"[Customer sent {what} — view it in the Page inbox]"
 
 
+async def _fetch_profile_name(
+    integration: ChatbotIntegration,
+    psid: str,
+) -> str | None:
+    """Fetch the Messenger user's profile name via the Graph API.
+
+    Used to prefill the order's customer name and escalation notifications.
+    Any failure (permissions, privacy, network) simply falls back to asking
+    the customer for their name.
+    """
+    try:
+        payload = await _graph_get(
+            f"/{psid}",
+            {
+                "fields": "first_name,last_name,name",
+                "access_token": integration.page_access_token,
+            },
+            "Could not read the customer's profile.",
+        )
+    except Exception:
+        logger.warning("profile name lookup failed for psid=%s", psid, exc_info=True)
+        return None
+    name = str(payload.get("name") or "").strip()
+    return name or None
+
+
 async def _get_conversation(
     db: AsyncSession,
     integration: ChatbotIntegration,
@@ -951,65 +977,41 @@ async def _apply_order_action(
     state = _merge_state(state, action)
     lines, issue = await _validated_lines(db, outlet.id, state)
     if issue:
-        state["awaitingConfirmation"] = False
         return state, {"type": "validation_failed", "reason": issue}
     
     if not lines:
         return state, None
 
-    totals = delivery_order_totals(lines)
     has_details = all(
         str(state.get(key) or "").strip()
         for key in ("customerName", "mobileNumber", "deliveryAddress")
     )
-    confirmed = bool(action.get("confirmed")) or intent == "confirm"
-    awaiting = bool(state.get("awaitingConfirmation"))
-
-    if confirmed and has_details:
-        if awaiting or intent == "confirm":
-            order = await create_delivery_order(
-                db=db,
-                outlet=outlet,
-                lines=lines,
-                customer_name=str(state.get("customerName") or ""),
-                mobile_number=str(state.get("mobileNumber") or ""),
-                delivery_address=str(state.get("deliveryAddress") or ""),
-                note="Facebook Messenger order",
-                source=FACEBOOK_ORDER_SOURCE,
-                created_by_role="customer",
-            )
-            return _empty_state(), {
-                "type": "order_created",
-                "orderNumber": format_serial(
-                    order.serial_number, order.source, order.created_by_role
-                ),
-                "totalAmount": float(order.total_amount),
-            }
-        state["awaitingConfirmation"] = True
-        return state, {
-            "type": "needs_confirmation",
-            "items": [{"name": l.name, "qty": l.qty} for l in lines],
-            "total": totals["total"],
-        }
-
-    if has_details:
-        state["awaitingConfirmation"] = True
-        return state, {
-            "type": "needs_confirmation",
-            "items": [{"name": l.name, "qty": l.qty} for l in lines],
-            "total": totals["total"],
-        }
-
-    state["awaitingConfirmation"] = False
-    missing = [
-        key
-        for key in ("customerName", "mobileNumber", "deliveryAddress")
-        if not str(state.get(key) or "").strip()
-    ]
-    if missing:
+    if not has_details:
+        missing = [
+            key
+            for key in ("customerName", "mobileNumber", "deliveryAddress")
+            if not str(state.get(key) or "").strip()
+        ]
         return state, {"type": "missing_details", "missing": missing}
-    
-    return state, None
+
+    order = await create_delivery_order(
+        db=db,
+        outlet=outlet,
+        lines=lines,
+        customer_name=str(state.get("customerName") or ""),
+        mobile_number=str(state.get("mobileNumber") or ""),
+        delivery_address=str(state.get("deliveryAddress") or ""),
+        note="Facebook Messenger order",
+        source=FACEBOOK_ORDER_SOURCE,
+        created_by_role="customer",
+    )
+    return _empty_state(), {
+        "type": "order_created",
+        "orderNumber": format_serial(
+            order.serial_number, order.source, order.created_by_role
+        ),
+        "totalAmount": float(order.total_amount),
+    }
 
 
 def _merge_state(state: dict, action: dict) -> dict:
@@ -1245,6 +1247,21 @@ async def _process_batch(batch: list[dict]) -> None:
         menu_map: dict[str, list[MenuItem]] = {}
         for oid in outlet_ids:
             menu_map[oid] = await _available_menu_items(db, oid)
+
+        # ── Fetch missing customer names from Facebook (background worker) ──
+        # Prefill the conversation's customer name so the bot only asks for
+        # phone + address, and escalations carry the customer's name.
+        for conv in conversations:
+            if conv.integration is None or conv.customer_name:
+                continue
+            name = await _fetch_profile_name(conv.integration, conv.psid)
+            if not name:
+                continue
+            conv.customer_name = name
+            state = _normalize_state(conv.state_json)
+            if not state["customerName"]:
+                state["customerName"] = name
+                conv.state_json = state
 
         # ── Per-outlet session check ──────────────────────────────────────
         # Track batch count per outlet for session refresh.
@@ -1556,14 +1573,18 @@ def _batched_system_prompt() -> str:
         "You are an advanced AI assistant processing multiple simultaneous Facebook Messenger "
         "conversations for a restaurant POS system. \n\n"
         "### CORE DIRECTIVES\n"
-        "1. LANGUAGE & TONE: Write only in bangla language Match the customer's tone and style. "
-        " Be natural, brief, and conversational. \n"
+        "1. LANGUAGE & TONE: Reply ONLY in Bangla (বাংলা), no matter what language the customer "
+        "writes in — even English. Be slightly friendly and warm — a small smile, nothing "
+        "excessive. Use at most one emoji per reply. Be very brief: at most 10 words, one sentence "
+        "(the numbered menu list is the only exception). Use everyday Bangla numerals (১, ২, ৩) "
+        "and simple words. Never use bullet-style formatting except for the numbered menu list. "
+        "Use an item's Bengali name (nameBn) when present, otherwise its English name.\n"
         "2. BATCH PROCESSING: You will receive a JSON object containing an array of independent "
         "\"conversations\". You MUST process EVERY conversation in the array and return a response "
         "for EACH one. Do not mix up the context between different conversations.\n\n"
         "### FULL CONTEXT\n"
         "Each conversation entry always includes:\n"
-        "- \"setup\": The restaurant's full context (name, menu with prices, delivery chargee). "
+        "- \"setup\": The restaurant's full context (name, menu with prices, delivery charge). "
         "Use this to answer menu questions and calculate totals.\n"
         "- \"recentHistory\": The last few exchanges between the customer and the bot/manager. "
         "Each entry has a \"role\": \"user\" (customer), \"bot\" (you), \"manager\" (human staff), "
@@ -1590,6 +1611,26 @@ def _batched_system_prompt() -> str:
         "The full menu with prices is always in the \"setup\" field — refer to it directly.\n"
         "- If the customer goes off-topic, respond naturally in Bangla while preserving their "
         "current order state.\n\n"
+        "### MENU PRESENTATION (numbered list)\n"
+        "- When the customer asks for the menu, show items as a numbered serial list using Bangla "
+        "numerals (১, ২, ৩, …) in the exact order of the \"menu\" array in \"setup\". Format each "
+        "line as \"numeral. name — price\", e.g. \"১. বার্গার — ৳১৫০\". Group items by category "
+        "but keep the numbering continuous across categories.\n"
+        "- Put a fitting food emoji before each category group header, e.g. \"🍔 বার্গার\", "
+        "\"🍕 পিৎজা\", \"🥤 ড্রিংকস\", \"🍟 সাইডস\", \"🍗 চিকেন\", \"🍛 রাইস\", \"🍰 ডেজার্ট\". "
+        "Pick a sensible emoji for any other category. The one-emoji-per-reply rule does NOT "
+        "apply to the numbered menu list.\n"
+        "- After the list, invite the customer to order by number: \"কোনটা নিবেন? নাম্বার লিখে "
+        "বলুন।\"\n"
+        "- Keep the reply within about 1900 characters. If the menu is long, do NOT dump every "
+        "item at once: first show the categories as a numbered list, then show the numbered items "
+        "of the category the customer picks.\n"
+        "- When the customer orders by numbers (\"১\", \"2\", \"item 3\", \"২ নম্বর ২টা\"), map "
+        "each number (1-based) to the item at that position in the current \"setup\".\"menu\" array "
+        "and put its \"menuItemId\" with the requested quantity in \"order\".\"items\". If a number "
+        "matches nothing or is ambiguous, ask the customer to clarify.\n"
+        "- Keep using the same numbering in later turns (for example when confirming the cart) so "
+        "the customer can follow along.\n\n"
         "### ORDERING RULES (Delivery Only)\n"
         "- You OWN the whole ordering conversation. Using the setup, conversationState, "
         "and recentHistory, YOU collect everything and write every message yourself in "
@@ -1600,15 +1641,14 @@ def _batched_system_prompt() -> str:
         "- Quantities: MANDATORY. You must ensure every item has a quantity. If the user doesn't "
         "specify, assume 1 or ask politely, but the final JSON must always have a valid integer "
         "for \"qty\".\n"
-        "- Customer Details: Politely ask for any of the three details (name, mobile, address) "
-        "that are still missing in conversationState. Ask naturally in your \"reply\".\n"
-        "- Confirmation: Once you have AT LEAST ONE item AND all three customer details, "
-        "summarize the cart in your \"reply\" (in the customer's language) and ask them to confirm. Compute "
-        "the total as (sum of price×qty) + vatRatePercent% VAT + deliveryCharge so it matches "
-        "the final bill. \n"
-        "- Affirmative: If they reply with an affirmative (e.g., \"হ্যাঁ\", \"yes\", \"confirm\", "
-        "\"ঠিক আছে\"), set \"order\".\"intent\" to \"confirm\", \"order\".\"confirmed\" to true, "
-        "replyType to \"action\", and write a warm \"reply\" confirming you are placing it (the "
+        "- Customer Details: The customer's name is already filled in "
+        "conversationState.customerName when Facebook provides it — do NOT ask for it again; "
+        "greet the customer by name. Ask only for mobileNumber and deliveryAddress. If "
+        "customerName is empty, ask for the name as well.\n"
+        "- No confirmation step: As soon as you have AT LEAST ONE item AND all three customer "
+        "details (name, mobile, address), place the order immediately in the same turn: set "
+        "\"order\".\"intent\" to \"confirm\", \"order\".\"confirmed\" to true, replyType to "
+        "\"action\", and write a short \"reply\" confirming the order is being placed (the "
         "system adds the order number after).\n"
         "- Cancellation: If they want to cancel, set \"order\".\"intent\" to \"cancel\" and "
         "acknowledge it in your \"reply\".\n\n"
@@ -1632,7 +1672,7 @@ def _batched_system_prompt() -> str:
         "  3. Catering, bulk, event, or custom orders (large party, special menu) — reason "
         "\"catering\".\n"
         "- To escalate: set \"escalate\".\"needed\" to true with the matching \"reason\", and write a "
-        "short, warm holding \"reply\" (in the customer's language) telling them you're checking with the team "
+        "short holding \"reply\" (in Bangla) telling them you're checking with the team "
         "and will get back shortly. Do NOT invent a photo, price, or promise.\n"
         "- For anything you can answer normally (including when a manager note already covers it), "
         "set \"escalate\".\"needed\" to false.\n\n"
@@ -1670,8 +1710,9 @@ def _final_reply_system_prompt() -> str:
     return (
         "You are generating the final text reply for a Facebook Messenger restaurant bot. "
         "The system has processed the user's intent and updated the conversation state. "
-        "Write only in bangla language Match the customer's tone and style. "
-        " Be natural, brief, and conversational.\n\n"
+        "Reply ONLY in Bangla (বাংলা), no matter what language the customer writes in — even "
+        "English. Be slightly friendly and warm, and use at most one emoji per reply. Keep replies "
+        "very short: at most 10 words, one sentence. Use Bangla numerals (১, ২, ৩).\n\n"
         "Each input item includes the 'systemEvent' and 'conversationState'. "
         "Based on the 'systemEvent' in the input, generate the appropriate message:\n"
         "- 'order_created': Congratulate the user, mention the order number (orderNumber) and total amount (totalAmount).\n"
