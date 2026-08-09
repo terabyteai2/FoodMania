@@ -102,7 +102,7 @@ class AppModel extends InheritedModel<AppAspect> {
         AppAspect.sync: c.syncState,
         AppAspect.printer: c.printerState,
         AppAspect.dashboard: c.dashboardSummary,
-        AppAspect.account: (c.isLoggedIn, c.accountRole, c.accountId),
+        AppAspect.account: (c.isLoggedIn, c.accountRole, c.realAccountRole, c.accountId),
         AppAspect.settings: c.serverConfig,
         AppAspect.language: c.language,
         AppAspect.appUpdate: c.pendingAppUpdate,

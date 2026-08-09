@@ -637,26 +637,25 @@ class _GridTile extends StatelessWidget {
                         padding: const EdgeInsets.all(PosSpacing.sp4),
                         child: Stack(
                           children: [
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  TfText(
-                                    item.localizedName(app.language),
-                                    textAlign: TextAlign.start,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
-                                  ),
-                                  if (!off) ...[
-                                    const SizedBox(height: 2),
-                                    _PriceTag(price: item.price),
+                            Positioned.fill(
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    TfText(
+                                      item.localizedName(app.language),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
+                                    ),
+                                    if (!off) ...[
+                                      const SizedBox(height: 2),
+                                      _PriceTag(price: item.price),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                             if (off)
@@ -669,42 +668,38 @@ class _GridTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // In cart: minus button beside the count badge, bottom-
+                    // In cart: minus button top-left, running count badge top-
                     // right of the card, overlaying the padding edge — same
                     // treatment as the short-code list rows.
-                    if (inCart)
+                    if (inCart) ...[
                       Positioned(
-                        bottom: PosSpacing.sp2,
-                        right: PosSpacing.sp2,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: onDecrement,
-                              behavior: HitTestBehavior.opaque,
-                              child: Padding(
-                                padding: const EdgeInsets.all(3),
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: PosColors.surface,
-                                    border: Border.all(color: PosColors.lineStrong),
-                                    borderRadius: BorderRadius.circular(PosRadii.chip),
-                                  ),
-                                  child: Icon(
-                                    Icons.remove_rounded,
-                                    size: 16,
-                                    color: PosColors.primaryDark,
-                                  ),
-                                ),
-                              ),
+                        top: PosSpacing.sp1,
+                        left: PosSpacing.sp1,
+                        child: GestureDetector(
+                          onTap: onDecrement,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: PosColors.surface,
+                              border: Border.all(color: PosColors.lineStrong),
+                              borderRadius: BorderRadius.circular(PosRadii.chip),
                             ),
-                            const SizedBox(width: 4),
-                            _CountBadge(qty: qty),
-                          ],
+                            child: Icon(
+                              Icons.remove_rounded,
+                              size: 16,
+                              color: PosColors.primaryDark,
+                            ),
+                          ),
                         ),
                       ),
+                      Positioned(
+                        top: PosSpacing.sp1,
+                        right: PosSpacing.sp1,
+                        child: _CountBadge(qty: qty),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -755,6 +750,7 @@ class _PriceTag extends StatelessWidget {
   Widget build(BuildContext context) {
     return TfText(
       '৳ ${tfFormatNumber(context, price)}',
+      textAlign: TextAlign.center,
       style: TfTextStyles.rowMoney.copyWith(color: PosColors.primaryDark),
     );
   }

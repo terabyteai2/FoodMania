@@ -332,6 +332,12 @@ class PosAppController extends ChangeNotifier {
   String devOtpCodeHint = '000000';
   bool isLoggedIn = false;
   AccountRole accountRole = AccountRole.manager;
+
+  /// The account's genuine role from the authenticated session. Unlike
+  /// [accountRole] it is never overwritten by the "view as" demo switch, so
+  /// permission checks (invite roles, Settings, stock) always reflect the real
+  /// account rather than the locally previewed role.
+  AccountRole realAccountRole = AccountRole.manager;
   String accountId = '';
   String accountDisplayName = '';
   bool notificationSoundEnabled = true;
@@ -427,13 +433,13 @@ class PosAppController extends ChangeNotifier {
 
   bool get isCloudReady =>
       cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl;
-  bool get isManager => accountRole.isManager;
+  bool get isManager => realAccountRole.isManager;
 
   /// Owner-only — full Analytics, Settings, invite any role.
-  bool get isOwner => accountRole.isOwner;
+  bool get isOwner => realAccountRole.isOwner;
 
   /// Floor-only role (Tables · Orders · More).
-  bool get isWaiter => accountRole.isWaiter;
+  bool get isWaiter => realAccountRole.isWaiter;
 
   /// Settings is owner-only (spec §RBAC).
   bool get canManageSettings => isOwner;
@@ -708,6 +714,12 @@ class PosAppController extends ChangeNotifier {
       if (accountRole == AccountRole.manager &&
           (preferences.getString(_deviceTokenKey) ?? '').isEmpty) {
         accountRole = AccountRole.owner;
+      }
+      realAccountRole = AccountRole.parse(
+        preferences.getString(_realAccountRoleKey) ?? '',
+      );
+      if (realAccountRole == AccountRole.manager) {
+        realAccountRole = accountRole;
       }
       _ownerViewPreview =
           preferences.getBool(_ownerViewPreviewKey) ?? false;
@@ -2809,6 +2821,7 @@ class PosAppController extends ChangeNotifier {
     );
     accountId = result.accountId;
     accountDisplayName = result.displayName ?? '';
+    realAccountRole = result.role;
     if (result.role == AccountRole.owner) {
       _ownerViewPreview = true;
       accountRole = AccountRole.manager;
@@ -2892,7 +2905,9 @@ class PosAppController extends ChangeNotifier {
     // Drop any owner "view as manager" preview so the next session's switch
     // visibility is derived solely from the freshly authenticated role.
     _ownerViewPreview = false;
+    realAccountRole = AccountRole.manager;
     await preferences.remove(_ownerViewPreviewKey);
+    await preferences.remove(_realAccountRoleKey);
     selectedSubscriptionPlan = '';
     // Tear down the realtime WebSocket so the next login forces a fresh
     // connection with the new device token — otherwise the stale socket
@@ -3164,7 +3179,7 @@ class PosAppController extends ChangeNotifier {
       supplierName: supplierName,
       billRef: billRef,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
     await _pushLatestInventoryAdjustment(inventoryItemId);
@@ -3188,7 +3203,7 @@ class PosAppController extends ChangeNotifier {
       note: note,
       reason: reason,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
     await _pushLatestInventoryAdjustment(inventoryItemId);
@@ -3215,7 +3230,7 @@ class PosAppController extends ChangeNotifier {
           note: note,
           reason: reason,
           createdByAccountId: accountId.isEmpty ? null : accountId,
-          createdByRole: accountRole.value,
+          createdByRole: realAccountRole.value,
         ),
       );
       rows.add((await database.getStockAdjustments(entry.key, limit: 1)).first);
@@ -3250,7 +3265,7 @@ class PosAppController extends ChangeNotifier {
       inventoryItemId: inventoryItemId,
       quantity: quantity,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
     await _pushLatestInventoryAdjustment(inventoryItemId);
@@ -3278,7 +3293,7 @@ class PosAppController extends ChangeNotifier {
       note: note,
       reason: 'manual',
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
     await refreshInventorySummary();
@@ -3327,7 +3342,7 @@ class PosAppController extends ChangeNotifier {
           : 0,
       source: OrderSource.manual,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
       // All manually-created orders (both manager and staff) go straight to
       // accepted so they are ready to serve immediately.
       initialStatus: OrderStatus.accepted,
@@ -3364,7 +3379,7 @@ class PosAppController extends ChangeNotifier {
       shiftId: shift.id,
       vatRatePercent: settings.vatRatePercent,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
       initialStatus: OrderStatus.accepted,
     );
     unawaited(syncService.syncNow());
@@ -4675,6 +4690,7 @@ class PosAppController extends ChangeNotifier {
     await preferences.setString(_accountIdKey, accountId);
     await preferences.setString(_accountDisplayNameKey, accountDisplayName);
     await preferences.setString(_accountRoleKey, accountRole.value);
+    await preferences.setString(_realAccountRoleKey, realAccountRole.value);
     await preferences.setBool(_accountLoggedInKey, isLoggedIn);
   }
 
@@ -4824,6 +4840,7 @@ class PosAppController extends ChangeNotifier {
   static final String _accountIdKey = 'local_pos_account_id';
   static final String _accountDisplayNameKey = 'local_pos_account_display_name';
   static final String _accountRoleKey = 'local_pos_account_role';
+  static final String _realAccountRoleKey = 'local_pos_real_account_role';
   static final String _ownerViewPreviewKey = 'local_pos_owner_view_preview';
   static final String _accountLoggedInKey = 'local_pos_account_logged_in';
   static final String _notificationSoundEnabledKey =
