@@ -1,23 +1,21 @@
-<!-- @dsCard group="Spacing" viewport="700x160" name="Radii & elevation" subtitle="Corners ≤12px; hairlines over shadows; only toggles fully round" -->
+<!-- @dsCard group="Spacing" viewport="860x170" name="Radii & elevation" subtitle="Soft rounded corners 8–20px; card shadow + hairline; blue glow moments" -->
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="../styles.css">
 <style>
-  body { margin: 0; font-family: var(--font-sans); color: var(--qb-ink); background: var(--qb-bg); padding: 16px 20px; display: flex; gap: 14px; align-items: center; }
-  .demo { background: var(--qb-surface); border: 1px solid var(--qb-hairline); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--qb-muted); flex-direction: column; gap: 2px; }
+  body { margin: 0; font-family: var(--font-sans); color: var(--qb-ink); background: var(--qb-bg); padding: 16px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .demo { background: var(--qb-surface); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--qb-muted); flex-direction: column; gap: 2px; text-align: center; }
   .demo b { color: var(--qb-ink); font-size: 12px; }
-  .toggle { width: 44px; height: 26px; border-radius: var(--radius-pill); background: var(--qb-lime); position: relative; flex: none; }
-  .toggle::after { content: ""; position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; }
   .trow { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--qb-muted); }
 </style>
 </head>
 <body>
-  <div class="demo" style="width: 130px; height: 100px; border-radius: var(--radius-lg);"><b>Card</b>12px + hairline</div>
-  <div class="demo" style="width: 120px; height: 44px; border-radius: var(--radius-md);"><b>Button / input</b>10px</div>
-  <div class="demo" style="width: 90px; height: 28px; border-radius: var(--radius-sm); flex-direction: row; gap: 4px;"><b>Chip</b> 6px</div>
-  <div class="demo" style="width: 150px; height: 100px; border-radius: var(--radius-lg); border: none; box-shadow: var(--shadow-popover);"><b>Popover</b>only thing with shadow</div>
-  <div class="trow"><span class="toggle"></span>toggle — only full round</div>
+  <div class="demo" style="width: 140px; height: 100px; border-radius: var(--radius-xl); box-shadow: var(--shadow-card); border: 1px solid var(--qb-line);"><b>Card</b>16px · card shadow + line</div>
+  <div class="demo" style="width: 130px; height: 48px; border-radius: var(--radius-md); background: var(--qb-primary); color: #fff; flex-direction: row; gap: 4px;"><b>Button</b>12px</div>
+  <div class="demo" style="width: 90px; height: 32px; border-radius: var(--radius-pill); background: var(--qb-primary-tint); color: var(--qb-primary-strong);"><b>Chip / pill</b>full round</div>
+  <div class="demo" style="width: 160px; height: 100px; border-radius: var(--radius-lg); box-shadow: var(--shadow-e3); border: none;"><b>Popover / e3</b>elevated</div>
+  <div class="demo" style="width: 100px; height: 100px; border-radius: 50%; box-shadow: var(--shadow-glow); border: 1px solid var(--qb-line);"><b>Glow</b>blue halo</div>
 </body>
 </html>

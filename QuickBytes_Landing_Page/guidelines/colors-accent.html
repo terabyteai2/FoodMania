@@ -1,19 +1,21 @@
-<!-- @dsCard group="Colors" viewport="700x150" name="Accent" subtitle="Electric lime — one moment per screen; never white text on lime" -->
+<!-- @dsCard group="Colors" viewport="760x160" name="Primary" subtitle="Royal-indigo blue #2F4FE0 — one primary action per screen" -->
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="../styles.css">
 <style>
-  body { margin: 0; font-family: var(--font-sans); display: flex; gap: 10px; padding: 14px; background: var(--qb-surface); }
-  .sw { flex: 1; border-radius: var(--radius-lg); border: 1px solid var(--qb-hairline); padding: 12px 14px; display: flex; flex-direction: column; justify-content: flex-end; height: 96px; }
-  .name { font-size: 12px; font-weight: 600; }
-  .hex { font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; }
+  body { margin: 0; font-family: var(--font-sans); display: flex; gap: 8px; padding: 14px; background: var(--qb-surface); }
+  .sw { flex: 1; border-radius: var(--radius-lg); border: 1px solid var(--qb-line); padding: 10px 12px; display: flex; flex-direction: column; justify-content: flex-end; height: 96px; }
+  .name { font-size: 11px; font-weight: 600; }
+  .hex { font-size: 10px; opacity: 0.7; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
-  <div class="sw" style="background: var(--qb-lime); color: var(--qb-ink-on-lime);"><span class="name">Lime</span><span class="hex">#99FF47 · ink #14180E on top</span></div>
-  <div class="sw" style="background: var(--qb-accent-wash); color: var(--qb-ink);"><span class="name">Accent wash</span><span class="hex">#F0FADF</span></div>
-  <div class="sw" style="background: var(--qb-surface); color: var(--qb-accent-strong);"><span class="name">Accent strong</span><span class="hex">#3E7E14 — lime text on white</span></div>
+  <div class="sw" style="background: var(--qb-primary); color: var(--qb-primary-ink);"><span class="name">Primary</span><span class="hex">#2F4FE0</span></div>
+  <div class="sw" style="background: var(--qb-primary-press); color: #fff;"><span class="name">Press</span><span class="hex">#2440C2</span></div>
+  <div class="sw" style="background: var(--qb-primary-tint); color: var(--qb-ink);"><span class="name">Tint / Wash</span><span class="hex">#EEF1FE</span></div>
+  <div class="sw" style="background: var(--qb-surface); color: var(--qb-primary-strong);"><span class="name">Strong · text on white</span><span class="hex">#1D339B</span></div>
+  <div class="sw" style="background: var(--qb-navy); color: var(--qb-navy-ink);"><span class="name">Navy · secondary</span><span class="hex">#1E2A44</span></div>
 </body>
 </html>

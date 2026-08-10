@@ -1,23 +1,20 @@
-<!-- @dsCard group="Colors" viewport="700x150" name="Occupied table slate" subtitle="Occupied reads as neutral state — deliberately never lime" -->
+<!-- @dsCard group="Colors" viewport="800x160" name="State pastels" subtitle="Order/table states — Petpooja‑style tint + dark‑ink label" -->
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="../styles.css">
 <style>
-  body { margin: 0; font-family: var(--font-sans); display: flex; gap: 10px; padding: 14px; background: var(--qb-bg); align-items: center; }
-  .tile { width: 96px; height: 96px; border-radius: var(--radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-weight: 600; font-size: 16px; }
-  .vacant { background: var(--qb-surface); border: 1px solid var(--qb-hairline); color: var(--qb-ink); }
-  .occ { background: var(--qb-slate-bg); border: 1px solid var(--qb-slate-border); color: var(--qb-slate-ink); }
-  .sub { font-size: 10px; font-weight: 500; opacity: 0.75; }
-  .note { margin-left: 12px; font-size: 12px; color: var(--qb-muted); max-width: 280px; line-height: 1.5; }
+  body { margin: 0; font-family: var(--font-sans); display: flex; gap: 8px; padding: 14px; background: var(--qb-surface); }
+  .sw { flex: 1; border-radius: var(--radius-lg); border: 1px solid var(--qb-line); padding: 10px 12px; display: flex; flex-direction: column; justify-content: flex-end; height: 96px; }
+  .name { font-size: 11px; font-weight: 600; }
+  .hex { font-size: 10px; opacity: 0.7; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
-  <div class="tile vacant">T1<span class="sub">Vacant</span></div>
-  <div class="tile occ">T2<span class="sub">Occupied · 2</span></div>
-  <div class="tile occ">T3<span class="sub">Occupied · 4</span></div>
-  <div class="tile vacant">T4<span class="sub">Vacant</span></div>
-  <p class="note">Slate #EDF1F7 / #D5DEEC / ink #4C679C. Lime would imply an action to take; occupied is just a fact.</p>
+  <div class="sw" style="background: var(--qb-state-running); color: var(--qb-state-running-ink);"><span class="name">Running / Seated</span><span class="hex">#DCEBFB</span></div>
+  <div class="sw" style="background: var(--qb-state-printed); color: var(--qb-state-printed-ink);"><span class="name">Bill printed</span><span class="hex">#E3F6EC</span></div>
+  <div class="sw" style="background: var(--qb-state-kot); color: var(--qb-state-kot-ink);"><span class="name">Running KOT</span><span class="hex">#FCF3CF</span></div>
+  <div class="sw" style="background: var(--qb-state-available); color: var(--qb-ink);"><span class="name">Vacant / Available</span><span class="hex">#FFFFFF · line</span></div>
 </body>
 </html>

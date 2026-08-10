@@ -1,6 +1,5 @@
-/* QuickBytes spacing, radii, elevation — spec §8.
-   Corners ≤12px; only toggles are fully round.
-   Hairline borders preferred over box shadows. */
+/* QuickBytes spacing, radii, elevation — DESIGN.md v2.
+   Soft rounded cards (Petpooja feel), hairline + light shadow. */
 :root {
   --space-1: 4px;
   --space-2: 8px;
@@ -10,16 +9,29 @@
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 64px;
+  --space-9: 80px;
+  --space-10: 96px;
+  --space-11: 120px;
 
-  --radius-sm: 6px;     /* chips, badges */
-  --radius-md: 10px;    /* buttons, inputs */
-  --radius-lg: 12px;    /* cards — the maximum */
-  --radius-pill: 999px; /* toggles + nav pills ONLY */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-pill: 999px;
 
-  --border-card: 1px solid var(--qb-hairline);
-  --shadow-none: none; /* default — elevation comes from hairlines */
-  --shadow-popover: 0 8px 24px rgba(26, 30, 20, 0.10); /* dropdowns/popovers only */
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(20, 25, 40, 0.04), 0 2px 8px rgba(20, 25, 40, 0.05);
+  --shadow-e3: 0 4px 16px rgba(20, 25, 40, 0.08), 0 1px 4px rgba(20, 25, 40, 0.06);
+  --shadow-e-up: 0 -2px 12px rgba(20, 25, 40, 0.06);
+  --shadow-glow: 0 0 48px -4px rgba(47, 79, 224, 0.18);
+  --shadow-glow-lg: 0 0 96px -8px rgba(47, 79, 224, 0.14);
 
-  --hit-mobile: 44px;  /* min touch target, mobile */
-  --hit-desktop: 40px; /* min target, desktop */
+  --border-card: 1px solid var(--qb-line);
+
+  --hit-mobile: 44px;
+  --hit-desktop: 40px;
+
+  --max-width: 1200px;
 }

@@ -4,25 +4,34 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-bengali: 'Noto Sans Bengali', 'Inter', sans-serif;
 
-  /* Scale */
-  --fs-display: 2.5rem;   /* 40 — marketing / hero numbers */
-  --fs-title: 1.5rem;     /* 24 — screen titles */
-  --fs-heading: 1.125rem; /* 18 — card headings */
-  --fs-body: 0.9375rem;   /* 15 — default UI text */
-  --fs-caption: 0.8125rem;/* 13 — secondary, meta */
-  --fs-micro: 0.6875rem;  /* 11 — overlines, badges (uppercase, tracked) */
+  /* Marketing display scale */
+  --fs-hero: clamp(3rem, 5vw, 4rem);     /* 48–64 — hero headline */
+  --fs-display: clamp(2rem, 3.5vw, 2.75rem); /* 32–44 — section headings */
+  --fs-headline: 1.375rem;               /* 22 — card titles */
+  --fs-subhead: 1.125rem;                /* 18 — hero sub, feature teaser */
 
-  --lh-tight: 1.15; /* @kind font */
-  --lh-body: 1.5; /* @kind font */
+  /* UI text scale */
+  --fs-title: 1.5rem;                    /* 24 — screen titles */
+  --fs-heading: 1.125rem;                /* 18 — card headings */
+  --fs-body: 0.9375rem;                  /* 15 — default UI text */
+  --fs-body-sm: 0.875rem;                /* 14 — report labels, meta */
+  --fs-caption: 0.8125rem;               /* 13 — secondary, subtitles */
+  --fs-micro: 0.6875rem;                 /* 11 — overlines, badges (uppercase, tracked) */
+  --fs-overline: 0.75rem;                /* 12 — section overlines */
 
-  --fw-regular: 400; /* @kind font */
-  --fw-medium: 500; /* @kind font */
-  --fw-semibold: 600; /* @kind font */
-  --fw-bold: 700; /* @kind font */
+  --lh-tight: 1.1;
+  --lh-snug: 1.25;
+  --lh-body: 1.5;
 
-  --tracking-tight: -0.02em;  /* display & titles */
-  --tracking-wide: 0.08em;    /* uppercase overlines */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
 
-  /* Money: Inter + font-variant-numeric: tabular-nums */
-  --numeric-tabular: tabular-nums; /* @kind font */
+  --tracking-tight: -0.02em;
+  --tracking-close: -0.01em;
+  --tracking-wide: 0.08em;
+
+  --numeric-tabular: tabular-nums;
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart';
@@ -3114,25 +3115,6 @@ class PosAppController extends ChangeNotifier {
 
   double inventoryTodaySpend = 0;
 
-  Future<void> _pushInventoryItemToCloud(InventoryItem item) async {
-    if (!cloudConfig.canSync) return;
-    try {
-      await cloudApiService.pushInventoryItem(item);
-    } catch (_) {}
-  }
-
-  Future<void> _pushLatestInventoryAdjustment(String inventoryItemId) async {
-    if (!cloudConfig.canSync) return;
-    try {
-      final rows = await database.getStockAdjustments(
-        inventoryItemId,
-        limit: 1,
-      );
-      if (rows.isEmpty) return;
-      await cloudApiService.pushInventoryAdjustment(rows.first);
-    } catch (_) {}
-  }
-
   Future<void> saveInventoryItem(InventoryItem item) async {
     if (!isManager) throw Exception('Only managers can edit inventory items.');
     final normalized = item.copyWith(
@@ -3141,7 +3123,7 @@ class PosAppController extends ChangeNotifier {
     );
     await database.upsertInventoryItem(normalized);
     await refreshInventory();
-    await _pushInventoryItemToCloud(normalized);
+    unawaited(syncService.syncNow());
   }
 
   Future<void> deleteInventoryItem(String id) async {
@@ -3150,11 +3132,7 @@ class PosAppController extends ChangeNotifier {
     }
     await database.deleteInventoryItem(id);
     await refreshInventory();
-    if (cloudConfig.canSync) {
-      try {
-        await cloudApiService.deleteInventoryItemCloud(id);
-      } catch (_) {}
-    }
+    unawaited(syncService.syncNow());
   }
 
   Future<InventoryItem> recordInventoryPurchase({
@@ -3182,8 +3160,7 @@ class PosAppController extends ChangeNotifier {
       createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3206,8 +3183,7 @@ class PosAppController extends ChangeNotifier {
       createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3216,34 +3192,22 @@ class PosAppController extends ChangeNotifier {
     required String reason,
     String note = '',
   }) async {
-    final rows = <StockAdjustment>[];
-    final updatedItems = <InventoryItem>[];
     for (final entry in quantities.entries) {
       if (entry.value <= 0) continue;
-      updatedItems.add(
-        await database.adjustStock(
-          inventoryItemId: entry.key,
-          delta: -entry.value,
-          type: reason == 'spoiled'
-              ? AdjustmentType.waste.value
-              : AdjustmentType.usage.value,
-          note: note,
-          reason: reason,
-          createdByAccountId: accountId.isEmpty ? null : accountId,
-          createdByRole: realAccountRole.value,
-        ),
+      await database.adjustStock(
+        inventoryItemId: entry.key,
+        delta: -entry.value,
+        type: reason == 'spoiled'
+            ? AdjustmentType.waste.value
+            : AdjustmentType.usage.value,
+        note: note,
+        reason: reason,
+        createdByAccountId: accountId.isEmpty ? null : accountId,
+        createdByRole: realAccountRole.value,
       );
-      rows.add((await database.getStockAdjustments(entry.key, limit: 1)).first);
     }
     await refreshInventory();
-    if (cloudConfig.canSync && rows.isNotEmpty) {
-      try {
-        await cloudApiService.pushInventoryAdjustments(rows);
-        for (final item in updatedItems) {
-          await cloudApiService.pushInventoryItem(item);
-        }
-      } catch (_) {}
-    }
+    unawaited(syncService.syncNow());
   }
 
   Future<void> saveInventorySupplier(InventorySupplier supplier) async {
@@ -3268,8 +3232,7 @@ class PosAppController extends ChangeNotifier {
       createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3289,16 +3252,21 @@ class PosAppController extends ChangeNotifier {
     final updated = await database.adjustStock(
       inventoryItemId: inventoryItemId,
       delta: delta,
-      type: AdjustmentType.correction.value,
+      type: delta > 0
+          ? AdjustmentType.restock.value
+          : AdjustmentType.usage.value,
       note: note,
       reason: 'manual',
       createdByAccountId: accountId.isEmpty ? null : accountId,
       createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await refreshInventorySummary();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    _applyInventorySummaryEdit(
+      inventoryItemId: inventoryItemId,
+      delta: delta,
+      costPerUnit: null,
+    );
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3319,9 +3287,85 @@ class PosAppController extends ChangeNotifier {
     );
     await database.upsertInventoryItem(updated);
     await refreshInventory();
-    await refreshInventorySummary();
-    await _pushInventoryItemToCloud(updated);
+    _applyInventorySummaryEdit(
+      inventoryItemId: inventoryItemId,
+      delta: null,
+      costPerUnit: newCostPerUnit,
+    );
+    unawaited(syncService.syncNow());
     return updated;
+  }
+
+  /// Optimistically applies an inline stock edit to the in-memory summary so
+  /// the stock table reflects the change immediately, even offline. The server
+  /// summary re-fetch on the next sync reconciles any drift.
+  void _applyInventorySummaryEdit({
+    required String inventoryItemId,
+    required double? delta,
+    required double? costPerUnit,
+  }) {
+    final summary = inventorySummary;
+    if (summary == null) return;
+    var changed = false;
+    var stockValueBdt = 0.0;
+    var alerts = 0;
+    final items = summary.items.map((row) {
+      if (row.id != inventoryItemId) {
+        stockValueBdt += row.onHand * row.costPerUnit;
+        if (row.varianceStatus == 'out' ||
+            row.varianceStatus == 'low' ||
+            row.varianceStatus == 'variance') {
+          alerts++;
+        }
+        return row;
+      }
+      changed = true;
+      final onHand = delta == null
+          ? row.onHand
+          : math.max(0.0, row.onHand + delta);
+      final todayIn = delta != null && delta > 0
+          ? row.todayIn + delta
+          : row.todayIn;
+      final todayOut = delta != null && delta < 0
+          ? row.todayOut - delta
+          : row.todayOut;
+      final unitPrice = costPerUnit ?? row.costPerUnit;
+      final threshold = row.minThreshold;
+      final status =
+          onHand <= 0
+              ? 'out'
+              : threshold > 0 && onHand <= threshold
+              ? 'low'
+              : 'ok';
+      stockValueBdt += onHand * unitPrice;
+      if (status != 'ok') alerts++;
+      return InventorySummaryItem(
+        id: row.id,
+        nameEn: row.nameEn,
+        nameBn: row.nameBn,
+        category: row.category,
+        unit: row.unit,
+        onHand: onHand,
+        minThreshold: row.minThreshold,
+        todayIn: todayIn,
+        todayOut: todayOut,
+        todaySpendBdt: row.todaySpendBdt,
+        varianceQty: 0,
+        varianceStatus: status,
+        costPerUnit: unitPrice,
+      );
+    }).toList(growable: false);
+    if (!changed) return;
+    inventorySummary = InventorySummary(
+      asOf: summary.asOf,
+      stockValueBdt: stockValueBdt,
+      varianceTodayBdt: summary.varianceTodayBdt,
+      varianceItemCount: summary.varianceItemCount,
+      alerts: alerts,
+      categories: summary.categories,
+      items: items,
+    );
+    notifyListeners();
   }
 
   Future<double?> yesterdayClosingQuantity(String inventoryItemId) async {

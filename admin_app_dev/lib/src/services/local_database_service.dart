@@ -2760,12 +2760,26 @@ class LocalDatabaseService {
       item.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    await _insertSyncEvent(
+      db,
+      entityType: 'inventory_item',
+      entityId: item.id,
+      action: 'upsert',
+      payload: item.toMap(),
+    );
     _emitChange();
   }
 
   Future<void> deleteInventoryItem(String id) async {
     final db = await _db;
     await db.delete('inventory_items', where: 'id = ?', whereArgs: [id]);
+    await _insertSyncEvent(
+      db,
+      entityType: 'inventory_item',
+      entityId: id,
+      action: 'delete',
+      payload: {'id': id},
+    );
     _emitChange();
   }
 
@@ -2899,6 +2913,13 @@ class LocalDatabaseService {
         createdAt: DateTime.now(),
       );
       await txn.insert('stock_adjustments', adjustment.toMap());
+      await _insertSyncEvent(
+        txn,
+        entityType: 'inventory_adjustment',
+        entityId: adjustment.id,
+        action: 'create',
+        payload: adjustment.toMap(),
+      );
     });
     _emitChange();
     return updated;
@@ -2969,6 +2990,13 @@ class LocalDatabaseService {
           ).toMap(),
         );
       }
+      await _insertSyncEvent(
+        txn,
+        entityType: 'inventory_daily_count',
+        entityId: row.id,
+        action: 'upsert',
+        payload: row.toMap(),
+      );
     });
     _emitChange();
     return updated;

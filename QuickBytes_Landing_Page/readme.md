@@ -1,4 +1,4 @@
-# QuickBytes Design System
+# QuickBytes Design System v2
 
 **QuickBytes** (quickbytes.buzz) is a complete restaurant point-of-sale platform for small and medium restaurants in **Bangladesh**. Three surfaces — a phone app (the floor), a desktop counter station, and a hardware POS terminal — sync to one cloud backend. Six order channels (website, Facebook Messenger chatbot, table QR, waiter, counter, manager) flow into one queue with one lifecycle: **pending → accepted → completed**. KOT prints the moment an order is accepted.
 
@@ -9,7 +9,7 @@
 
 ## Design philosophy (one sentence)
 
-Mostly white with **one electric-lime moment per screen** — calm enough for a busy kitchen, sharp enough to feel modern.
+White surfaces, **calm royal-indigo blue** as the one primary — dense enough for a busy kitchen, modern enough to feel sharp.
 
 ## CONTENT FUNDAMENTALS
 
@@ -24,29 +24,29 @@ Mostly white with **one electric-lime moment per screen** — calm enough for a 
 
 ## VISUAL FOUNDATIONS
 
-- **Color:** white surfaces on #F7F8F4 page; ink #1A1E14; muted #878C79. Electric lime #99FF47 is the only accent and is rationed to one moment per screen (the primary action). Text on lime is always #14180E — **never white on lime**. Lime-family text on white uses #3E7E14. Soft wash #F0FADF for emphasis panels, accept states, bot bubbles, analytics hero cards.
-- **Signals:** success #498F18, warning #B0760A, danger #D43A3F, info #3E6FE0.
-- **Occupied tables are slate** (#EDF1F7 / #D5DEEC / #4C679C) — deliberately not lime, because occupied is a neutral state, not an action.
+- **Color:** white surfaces on #F6F7F9 page; ink #1B2330; muted #8A93A3. Royal-indigo #2F4FE0 is the only primary — one primary action per screen. Blue press #2440C2; blue tint #EEF1FE (wash/selected/highlight); blue strong #1D339B (blue text on white). Navy #1E2A44 is the secondary action colour (paired footer: navy + blue).
+- **Signals:** success #1E9E5A, warning #C98208, danger #D8434A, info = primary blue. Each has a soft tint. Destructive = red only.
+- **Table / order states** use Petpooja-style pastel fills: running #DCEBFB, printed #E3F6EC, running KOT #FCF3CF, available #FFFFFF. Each with matching dark ink label.
 - **Type:** Inter, weights 400–800. Tight tracking (-0.02em) on titles. Tabular numerals for all money/quantities. Bengali text uses Noto Sans Bengali.
-- **Corners:** ≤12px. Cards 12px, buttons/inputs 10px, chips 6px. Only toggles and nav pills are fully round.
-- **Elevation:** hairline borders (#EDEEE8) instead of box shadows. A soft shadow is permitted only on popovers/dropdowns.
-- **Backgrounds:** flat color only. No gradients, no textures, no patterns, no hand-drawn illustration.
-- **Hover:** slight darkening (or wash tint on white); **press:** darker still, no shrink transforms.
-- **Animation:** restrained — quick fades and 150–200ms ease-out position/color transitions. No bounces, no infinite loops.
-- **Imagery:** real photos of food/restaurants when needed (user-supplied); never SVG illustration.
+- **Corners:** 8–16px. Cards 14–16px, buttons 12px, chips/pills fully round. Marketing can reach 20–24px for hero frames.
+- **Elevation:** soft card shadow (0 1px 2px / 0 2px 8px) + 1px hairline; e3 for popovers/dropdowns; blue glow shadow for accent moments.
+- **Backgrounds:** flat colour only. No gradients, no textures, no patterns, no hand-drawn illustration. A soft radial blue glow is permitted on the marketing site hero/CTA.
+- **Hover:** slight darkening (or tint on white); **press:** darker still, no shrink transforms.
+- **Animation:** restrained — quick fades and 150–200ms ease-out position/colour transitions. No bounces, no infinite loops.
+- **Imagery:** real product screenshots or food photos when needed (user-supplied); never SVG illustration.
 - **Touch targets:** ≥44px mobile, ≥40px desktop.
-- **Layout:** primary actions live in the bottom bar on mobile, never the top. Desktop is a fixed 1280×800 canvas with a 92px icon rail; nothing scrolls on the register screen.
+- **Layout:** primary actions live in the bottom bar on mobile, never the top. Desktop is a fixed 1280×800 canvas with an icon rail; nothing scrolls on the register screen.
 
 ## ICONOGRAPHY
 
-No icon assets were provided. Recommended: **Lucide** (CDN: `https://unpkg.com/lucide@latest`) — 1.5–2px stroke, geometric, matches the calm/hairline aesthetic. Channel indicators may be tiny uppercase text badges (WEB, MSG, QR) where an icon would be ambiguous. Unicode glyphs used sparingly for inline actions (✕ reject). No emoji, ever. **Flagged: a real QuickBytes logo/wordmark has not been provided** — current wordmark is typographic (lime square + "QuickBytes" in Inter 700).
+No icon assets were provided. Recommended: **Lucide** (CDN: `https://unpkg.com/lucide@latest`) — 1.5–2px stroke, geometric, matches the calm/hairline aesthetic. Channel indicators may be tiny uppercase text badges (WEB, MSG, QR) where an icon would be ambiguous. Unicode glyphs used sparingly for inline actions (✕ reject). No emoji, ever. **The QuickBytes logo/wordmark** is a rounded square with a white lightning bolt on the brand blue.
 
 ## INDEX
 
 - `styles.css` — global entry; imports everything under `tokens/`
 - `tokens/` — `colors.css`, `typography.css`, `spacing.css`, `fonts.css`
 - `guidelines/` — foundation specimen cards (Design System tab)
-- `templates/landing-page/` — marketing landing page for quickbytes.buzz (template)
+- `templates/landing-page/` — marketing landing page for quickbytes.buzz
 - `SKILL.md` — agent skill entry point
 
 **Not yet built** (next steps): reusable React components (Button, OrderCard, TableTile, ChatBubble…), UI kits for the three surfaces (mobile 410px, desktop 1280×800, terminal portrait).

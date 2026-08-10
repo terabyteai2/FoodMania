@@ -1,39 +1,80 @@
-/* QuickBytes color system — spec §8.
-   Philosophy: mostly white with ONE electric-lime moment per screen. */
+/* QuickBytes color system — DESIGN.md v2, blue-primary.
+   Royal-indigo #2F4FE0 is the one and only primary.
+   Lime is fully retired. */
 :root {
-  /* Accent */
-  --qb-lime: #99FF47;          /* primary accent — "go", "positive", "active" */
-  --qb-ink-on-lime: #14180E;   /* text on lime — NEVER white on lime */
-  --qb-accent-wash: #F0FADF;   /* soft lime tint — emphasis, accept, bot bubbles */
-  --qb-accent-strong: #3E7E14; /* lime-family text on white */
+  /* Primary — blue ramp (royal-indigo) */
+  --qb-primary: #2F4FE0;
+  --qb-primary-press: #2440C2;
+  --qb-primary-ink: #FFFFFF;
+  --qb-primary-tint: #EEF1FE;
+  --qb-primary-strong: #1D339B;
+
+  /* Blue ramp raw steps */
+  --qb-blue-50: #EEF1FE;
+  --qb-blue-100: #DCE3FD;
+  --qb-blue-200: #B9C7FB;
+  --qb-blue-300: #8FA3F5;
+  --qb-blue-400: #5E74EC;
+  --qb-blue-500: #2F4FE0;
+  --qb-blue-600: #2440C2;
+  --qb-blue-700: #1D339B;
+  --qb-blue-800: #182A7D;
+  --qb-blue-900: #131F5A;
+
+  /* Secondary — navy */
+  --qb-navy: #1E2A44;
+  --qb-navy-press: #15203A;
+  --qb-navy-ink: #FFFFFF;
 
   /* Neutrals */
-  --qb-bg: #F7F8F4;            /* app background */
-  --qb-surface: #FFFFFF;       /* cards, sheets */
-  --qb-ink: #1A1E14;           /* primary text */
-  --qb-muted: #878C79;         /* secondary text */
-  --qb-hairline: #EDEEE8;      /* borders — preferred over shadows */
+  --qb-bg: #F6F7F9;
+  --qb-surface: #FFFFFF;
+  --qb-surface-2: #F1F3F6;
+  --qb-surface-3: #E7EAEF;
+  --qb-ink: #1B2330;
+  --qb-ink-2: #5A6475;
+  --qb-muted: #8A93A3;
+  --qb-placeholder: #AAB2C0;
+  --qb-line: #ECEEF2;
+  --qb-line-2: #DEE2E9;
 
   /* Signals */
-  --qb-success: #498F18;
-  --qb-warning: #B0760A;
-  --qb-danger: #D43A3F;
-  --qb-info: #3E6FE0;
+  --qb-success: #1E9E5A;
+  --qb-success-soft: #E3F6EC;
+  --qb-warning: #C98208;
+  --qb-warning-soft: #FCF0D8;
+  --qb-danger: #D8434A;
+  --qb-danger-soft: #FBE5E6;
+  --qb-info: var(--qb-primary);
 
-  /* Occupied table — deliberately slate, never lime (occupied = neutral) */
-  --qb-slate-bg: #EDF1F7;
-  --qb-slate-border: #D5DEEC;
-  --qb-slate-ink: #4C679C;
+  /* Table / order state pastels (Petpooja-style) */
+  --qb-state-running: #DCEBFB;
+  --qb-state-running-ink: #2B5C9E;
+  --qb-state-printed: #E3F6EC;
+  --qb-state-printed-ink: #1E7A47;
+  --qb-state-kot: #FCF3CF;
+  --qb-state-kot-ink: #9A7400;
+  --qb-state-available: #FFFFFF;
 
-  /* Semantic aliases */
-  --surface-card: var(--qb-surface);
-  --surface-page: var(--qb-bg);
-  --text-body: var(--qb-ink);
-  --text-muted: var(--qb-muted);
-  --text-on-accent: var(--qb-ink-on-lime);
-  --border-hairline: var(--qb-hairline);
-  --action-primary-bg: var(--qb-lime);
-  --action-primary-ink: var(--qb-ink-on-lime);
-  --action-wash-bg: var(--qb-accent-wash);
-  --accent-text: var(--qb-accent-strong);
+  /* Channel tags */
+  --qb-channel-counter: var(--qb-navy);
+  --qb-channel-website: var(--qb-primary);
+  --qb-channel-messenger: var(--qb-primary);
+  --qb-channel-qr: #C98208;
+  --qb-channel-waiter: #1E9E5A;
+
+  /* Analytics tile-icon tints */
+  --qb-tint-purple: #EFEAFB;
+  --qb-tint-purple-icon: #7C5CD6;
+  --qb-tint-blue: #E4EFFA;
+  --qb-tint-blue-icon: #2F6FB0;
+  --qb-tint-green: #E6F6EC;
+  --qb-tint-green-icon: #2E9E63;
+  --qb-tint-amber: #FCF3CF;
+  --qb-tint-amber-icon: #9A7400;
+  --qb-tint-red: #FBE5E6;
+  --qb-tint-red-icon: #C0454B;
+
+  /* Third-party */
+  --qb-whatsapp: #25D366;
 }

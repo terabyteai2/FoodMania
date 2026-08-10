@@ -1,20 +1,34 @@
-<!-- @dsCard group="Colors" viewport="700x150" name="Signals" subtitle="Success, warning, danger, info" -->
+<!-- @dsCard group="Colors" viewport="800x160" name="Signals" subtitle="Success, warning, danger + soft fills. Destructive = red only." -->
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="../styles.css">
 <style>
-  body { margin: 0; font-family: var(--font-sans); display: flex; gap: 10px; padding: 14px; background: var(--qb-surface); }
-  .sw { flex: 1; border-radius: var(--radius-lg); padding: 12px 14px; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; height: 96px; }
-  .name { font-size: 12px; font-weight: 600; }
-  .hex { font-size: 11px; opacity: 0.8; }
+  body { margin: 0; font-family: var(--font-sans); display: flex; gap: 8px; padding: 14px; background: var(--qb-surface); }
+  .sw { flex: 1; border-radius: var(--radius-lg); padding: 10px 12px; display: flex; flex-direction: column; justify-content: flex-end; height: 96px; box-sizing: border-box; }
+  .pair { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .sw-s { flex: 1; border-radius: 6px; display: flex; align-items: center; padding: 0 10px; }
+  .name { font-size: 11px; font-weight: 600; }
+  .hex { font-size: 10px; opacity: 0.8; }
 </style>
 </head>
 <body>
-  <div class="sw" style="background: var(--qb-success);"><span class="name">Success</span><span class="hex">#498F18</span></div>
-  <div class="sw" style="background: var(--qb-warning);"><span class="name">Warning</span><span class="hex">#B0760A</span></div>
-  <div class="sw" style="background: var(--qb-danger);"><span class="name">Danger</span><span class="hex">#D43A3F</span></div>
-  <div class="sw" style="background: var(--qb-info);"><span class="name">Info</span><span class="hex">#3E6FE0</span></div>
+  <div class="pair">
+    <div class="sw-s" style="background: var(--qb-success); color: #fff; font-size: 11px; font-weight: 600;">Success #1E9E5A</div>
+    <div class="sw-s" style="background: var(--qb-success-soft); color: var(--qb-ink); font-size: 11px;">Soft #E3F6EC</div>
+  </div>
+  <div class="pair">
+    <div class="sw-s" style="background: var(--qb-warning); color: #fff; font-size: 11px; font-weight: 600;">Warning #C98208</div>
+    <div class="sw-s" style="background: var(--qb-warning-soft); color: var(--qb-ink); font-size: 11px;">Soft #FCF0D8</div>
+  </div>
+  <div class="pair">
+    <div class="sw-s" style="background: var(--qb-danger); color: #fff; font-size: 11px; font-weight: 600;">Danger #D8434A</div>
+    <div class="sw-s" style="background: var(--qb-danger-soft); color: var(--qb-ink); font-size: 11px;">Soft #FBE5E6</div>
+  </div>
+  <div class="pair">
+    <div class="sw-s" style="background: var(--qb-info); color: #fff; font-size: 11px; font-weight: 600;">Info #2F4FE0</div>
+    <div class="sw-s" style="background: var(--qb-primary-tint); color: var(--qb-ink); font-size: 11px;">Soft #EEF1FE</div>
+  </div>
 </body>
 </html>
