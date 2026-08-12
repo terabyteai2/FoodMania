@@ -19,6 +19,7 @@ import '../../models/inventory_item.dart';
 import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/pos_notification.dart';
+import '../../models/receipt_scan.dart';
 import 'inventory_item_detail_screen.dart';
 import 'stock_in_screen.dart';
 import 'stock_suppliers_screen.dart';
@@ -32,11 +33,24 @@ class InventoryScreen extends StatefulWidget {
   const InventoryScreen({
     this.onNavigateToOrders,
     this.onNavigateToTarget,
+    this.pendingScan,
+    this.onPendingScanResolved,
     super.key,
   });
 
   final VoidCallback? onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+
+  /// A stock inventory scan (supplier bill or count sheet) awaiting
+  /// confirmation. When set, the table switches to review mode: changed rows
+  /// render the manual-edit preview (muted struck-through old value, green/red
+  /// new value below) and a sticky Confirm/Cancel CTA replaces the bottom
+  /// actions.
+  final StockScanResult? pendingScan;
+
+  /// Called when the pending scan is confirmed or cancelled so the shell can
+  /// clear its review state.
+  final VoidCallback? onPendingScanResolved;
 
   @override
   State<InventoryScreen> createState() => _InventoryScreenState();
@@ -48,6 +62,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
   _StockSort _sort = _StockSort.qty;
   int _dir = -1; // -1 desc, 1 asc
   bool _firstLoadKicked = false;
+  bool _applying = false;
+  final Uuid _uuid = const Uuid();
 
   TfTimeframe _timeframe = TfTimeframe.today;
   DateTime? _rangeStart;
@@ -203,6 +219,212 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return list;
   }
 
+  // ── Scan review mode ────────────────────────────────────────────────────
+
+  bool get _reviewing => widget.pendingScan != null;
+
+  InventorySummaryItem? _matchSummaryItem(
+    List<InventorySummaryItem> items,
+    ReceiptScanLine line,
+  ) {
+    final names = <String>[
+      line.nameEn.trim().toLowerCase(),
+      line.nameBn.trim().toLowerCase(),
+    ].where((n) => n.isNotEmpty).toList(growable: false);
+    if (names.isEmpty) return null;
+    for (final item in items) {
+      final itemNames = <String>[
+        item.nameEn.trim().toLowerCase(),
+        item.nameBn.trim().toLowerCase(),
+      ].where((n) => n.isNotEmpty).toList(growable: false);
+      for (final n in names) {
+        for (final iname in itemNames) {
+          if (n == iname || n.contains(iname) || iname.contains(n)) {
+            return item;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  InventoryItem? _matchInventoryItem(
+    List<InventoryItem> items,
+    ReceiptScanLine line,
+  ) {
+    final names = <String>[
+      line.nameEn.trim().toLowerCase(),
+      line.nameBn.trim().toLowerCase(),
+    ].where((n) => n.isNotEmpty).toList(growable: false);
+    if (names.isEmpty) return null;
+    for (final item in items) {
+      final itemNames = <String>[
+        item.name.trim().toLowerCase(),
+        item.nameEn.trim().toLowerCase(),
+        item.nameBn.trim().toLowerCase(),
+      ].where((n) => n.isNotEmpty).toSet().toList(growable: false);
+      for (final n in names) {
+        for (final iname in itemNames) {
+          if (n == iname || n.contains(iname) || iname.contains(n)) {
+            return item;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  _ScanReviewData _reviewData(List<InventorySummaryItem> items) {
+    final scan = widget.pendingScan;
+    if (scan == null) return const _ScanReviewData();
+    final previews = <String, _ScanCellPreview>{};
+    final unmatched = <String>[];
+    var newItemCount = 0;
+    void addUnmatched(ReceiptScanLine line) {
+      final name = line.nameEn.trim().isNotEmpty
+          ? line.nameEn.trim()
+          : line.nameBn.trim();
+      newItemCount++;
+      if (name.isNotEmpty) unmatched.add(name);
+    }
+
+    switch (scan.category) {
+      case StockScanCategory.count:
+        for (final line in scan.items) {
+          final id = line.matchedInventoryItemId;
+          if (id == null || id.isEmpty) {
+            addUnmatched(line);
+            continue;
+          }
+          InventorySummaryItem? item;
+          for (final i in items) {
+            if (i.id == id) {
+              item = i;
+              break;
+            }
+          }
+          if (item == null) continue;
+          previews[id] = _ScanCellPreview(qty: (item.onHand, line.qty));
+        }
+      case StockScanCategory.stockIn:
+        for (final line in scan.items) {
+          final item = _matchSummaryItem(items, line);
+          if (item == null) {
+            addUnmatched(line);
+            continue;
+          }
+          final prior = previews[item.id];
+          final oldQty = prior?.qty.$1 ?? item.onHand;
+          final newQty = (prior?.qty.$2 ?? oldQty) + line.qty;
+          final price =
+              line.unitPriceBdt > 0 &&
+                  (item.costPerUnit - line.unitPriceBdt).abs() > 0.001
+              ? (item.costPerUnit, line.unitPriceBdt)
+              : prior?.price;
+          previews[item.id] = _ScanCellPreview(
+            qty: (oldQty, newQty),
+            price: price,
+          );
+        }
+    }
+    return _ScanReviewData(
+      previews: previews,
+      unmatchedNames: unmatched,
+      newItemCount: newItemCount,
+    );
+  }
+
+  void _cancelScan() {
+    widget.onPendingScanResolved?.call();
+  }
+
+  Future<void> _confirmScan() async {
+    if (_applying) return;
+    final scan = widget.pendingScan;
+    if (scan == null) return;
+    final app = AppScope.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _applying = true);
+    var applied = 0;
+    try {
+      switch (scan.category) {
+        case StockScanCategory.count:
+          for (final line in scan.items) {
+            final id = line.matchedInventoryItemId;
+            if (id == null || id.isEmpty) continue;
+            await app.setInventoryEndOfDayCount(
+              inventoryItemId: id,
+              quantity: line.qty,
+            );
+            applied++;
+          }
+        case StockScanCategory.stockIn:
+          for (final line in scan.items) {
+            final matched = _matchInventoryItem(app.inventoryItems, line);
+            if (matched != null) {
+              if (line.unitPriceBdt > 0 &&
+                  (matched.costPerUnit - line.unitPriceBdt).abs() > 0.001) {
+                await app.saveInventoryItem(
+                  matched.copyWith(costPerUnit: line.unitPriceBdt),
+                );
+              }
+              await app.recordInventoryPurchase(
+                inventoryItemId: matched.id,
+                quantity: line.qty,
+                totalCostBdt: line.totalBdt,
+                supplierId: null,
+                supplierName: '',
+                billRef: '',
+              );
+            } else {
+              final name = line.nameEn.trim().isNotEmpty
+                  ? line.nameEn.trim()
+                  : line.nameBn.trim();
+              if (name.isEmpty) continue;
+              final newItem = InventoryItem(
+                id: _uuid.v4(),
+                name: name,
+                category: '',
+                unit: InventoryUnits.normalize(line.unit),
+                quantity: 0,
+                minThreshold: 0,
+                costPerUnit: line.unitPriceBdt,
+                notes: '',
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              );
+              await app.saveInventoryItem(newItem);
+              await app.recordInventoryPurchase(
+                inventoryItemId: newItem.id,
+                quantity: line.qty,
+                totalCostBdt: line.totalBdt,
+                supplierId: null,
+                supplierName: '',
+                billRef: '',
+              );
+            }
+            applied++;
+          }
+      }
+    } catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: TfText(error.toString())));
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
+    // Clear the review state first: the table falls back to live values while
+    // the summary refresh is in flight, and a second Confirm can't double-apply.
+    widget.onPendingScanResolved?.call();
+    await app.refreshInventorySummary();
+    if (mounted) {
+      messenger.showSnackBar(
+        SnackBar(content: TfText(app.strings.scanReviewDone(applied))),
+      );
+    }
+  }
+
   Future<void> _openStockIn(BuildContext context, {String? itemId}) async {
     await Navigator.push<void>(
       context,
@@ -216,6 +438,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     PosAppController app,
     InventorySummaryItem item,
   ) async {
+    if (_reviewing) return;
     final full = _resolveItem(app, item.id);
     if (full != null) {
       await Navigator.push<void>(
@@ -268,6 +491,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     final items = summary?.items ?? const <InventorySummaryItem>[];
     final sorted = _sorted(items);
+    final reviewing = _reviewing;
+    final reviewData = _reviewData(items);
 
     return AppScaffold(
       title: text.stockTab,
@@ -278,6 +503,34 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
       pinHeader: true,
       fillBody: true,
+      footer: reviewing
+          ? TfStickyCTA(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TfButton(
+                      label: text.cancel,
+                      variant: TfButtonVariant.dark,
+                      size: TfButtonSize.lg,
+                      onPressed: _applying ? null : _cancelScan,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TourSpot(
+                      name: 'stock.scanConfirm',
+                      child: TfButton(
+                        label: text.scanReviewApply,
+                        size: TfButtonSize.lg,
+                        busy: _applying,
+                        onPressed: _applying ? null : _confirmScan,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -329,6 +582,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
+                                        if (reviewing) ...[
+                                          _ScanReviewBanner(
+                                            text: text,
+                                            changed: reviewData.previews.length,
+                                            category: widget.pendingScan!
+                                                .category,
+                                            unmatched:
+                                                reviewData.unmatchedNames,
+                                            newItemCount:
+                                                reviewData.newItemCount,
+                                          ),
+                                          const SizedBox(height: 10),
+                                        ],
                                         TourSpot(
                                           name: 'stock.table',
                                           child: _StockTable(
@@ -342,17 +608,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                                 _openRow(context, app, item),
                                             onQtyCommit: _onQtyCommit,
                                             onPriceCommit: _onPriceCommit,
+                                            previews: reviewing
+                                                ? reviewData.previews
+                                                : const {},
+                                            readOnly: reviewing,
                                           ),
                                         ),
-                                        const SizedBox(height: 12),
-                                        TourSpot(
-                                          name: 'stock.addItem',
-                                          child: _AddItemButton(
-                                            text: text,
-                                            onPressed: () =>
-                                                _showAddItem(context),
+                                        if (!reviewing) ...[
+                                          const SizedBox(height: 12),
+                                          TourSpot(
+                                            name: 'stock.addItem',
+                                            child: _AddItemButton(
+                                              text: text,
+                                              onPressed: () =>
+                                                  _showAddItem(context),
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                         const SizedBox(height: 14),
                                         _AdvancedDrilldowns(text: text),
                                       ],
@@ -415,6 +687,8 @@ class _StockTable extends StatelessWidget {
     required this.onRowTap,
     required this.onQtyCommit,
     required this.onPriceCommit,
+    this.previews = const {},
+    this.readOnly = false,
   });
 
   final AppStrings text;
@@ -428,6 +702,8 @@ class _StockTable extends StatelessWidget {
   onQtyCommit;
   final Future<void> Function(InventorySummaryItem item, double price)
   onPriceCommit;
+  final Map<String, _ScanCellPreview> previews;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -491,10 +767,11 @@ class _StockTable extends StatelessWidget {
               item: items[i],
               last: i == items.length - 1,
               heroW: heroW,
-              canEdit: canEdit,
+              canEdit: canEdit && !readOnly,
               onTap: () => onRowTap(items[i]),
               onQtyCommit: onQtyCommit,
               onPriceCommit: onPriceCommit,
+              preview: previews[items[i].id],
             ),
         ],
       ),
@@ -566,6 +843,7 @@ class _StockRow extends StatelessWidget {
     required this.onTap,
     required this.onQtyCommit,
     required this.onPriceCommit,
+    this.preview,
   });
 
   final AppStrings text;
@@ -578,6 +856,7 @@ class _StockRow extends StatelessWidget {
   onQtyCommit;
   final Future<void> Function(InventorySummaryItem item, double price)
   onPriceCommit;
+  final _ScanCellPreview? preview;
 
   @override
   Widget build(BuildContext context) {
@@ -698,6 +977,7 @@ class _StockRow extends StatelessWidget {
               canEdit: canEdit,
               width: 68,
               onCommit: onPriceCommit,
+              preview: preview?.price,
             ),
           ),
           const SizedBox(width: 12),
@@ -712,6 +992,110 @@ class _StockRow extends StatelessWidget {
               canEdit: canEdit,
               width: heroW,
               onCommit: onQtyCommit,
+              preview: preview?.qty,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Review-mode preview pair (old, new) rendered by [_ScrubCell] in the exact
+/// manual-edit style: muted struck-through old on top, green/red new below.
+class _ScanCellPreview {
+  const _ScanCellPreview({required this.qty, this.price});
+
+  final (double, double) qty;
+  final (double, double)? price;
+}
+
+/// Computed per-build review state for a pending stock scan.
+class _ScanReviewData {
+  const _ScanReviewData({
+    this.previews = const {},
+    this.unmatchedNames = const [],
+    this.newItemCount = 0,
+  });
+
+  final Map<String, _ScanCellPreview> previews;
+  final List<String> unmatchedNames;
+
+  /// Stock-in lines that matched nothing and would be created as new items
+  /// on confirm.
+  final int newItemCount;
+}
+
+/// Slim status banner shown above the table during scan review: the change
+/// count plus any lines that couldn't be matched to an inventory item.
+class _ScanReviewBanner extends StatelessWidget {
+  const _ScanReviewBanner({
+    required this.text,
+    required this.changed,
+    required this.category,
+    required this.unmatched,
+    required this.newItemCount,
+  });
+
+  final AppStrings text;
+  final int changed;
+  final StockScanCategory category;
+  final List<String> unmatched;
+  final int newItemCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: PosColors.primaryWash,
+        borderRadius: BorderRadius.circular(PosRadii.card),
+        border: Border.all(color: PosColors.primary),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.document_scanner_outlined,
+            size: 19,
+            color: PosColors.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TfText(
+                  text.scanReviewCount(changed),
+                  style: TfTextStyles.bodyMuted.copyWith(
+                    color: PosColors.primaryDark,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                if (unmatched.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  TfText(
+                    category == StockScanCategory.count
+                        ? text.countScanUnmatched
+                        : text.stockScanNewItems(newItemCount),
+                    style: TfTextStyles.bodyMuted.copyWith(
+                      color: PosColors.warning,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  TfText(
+                    unmatched.join(', '),
+                    style: TfTextStyles.bodyMuted.copyWith(
+                      color: PosColors.slate,
+                      fontWeight: FontWeight.w500,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -727,7 +1111,8 @@ enum _ScrubMode { qty, price }
 /// commits and closes. While the value differs from the original, the cell
 /// shows the struck-through original (muted) with the new value in
 /// green/red below; after commit the pair flashes ~1s, then the cell settles
-/// on the new value.
+/// on the new value. In scan-review mode a [preview] pair is rendered in the
+/// exact same style (read-only, no scrubber).
 class _ScrubCell extends StatefulWidget {
   const _ScrubCell({
     required this.item,
@@ -737,6 +1122,7 @@ class _ScrubCell extends StatefulWidget {
     required this.onCommit,
     this.unit = '',
     this.qtyColor,
+    this.preview,
     super.key,
   });
 
@@ -747,6 +1133,10 @@ class _ScrubCell extends StatefulWidget {
   final String unit;
   final Color? qtyColor;
   final Future<void> Function(InventorySummaryItem item, double value) onCommit;
+
+  /// (old, new) value pair rendered like an in-progress edit. When set the
+  /// cell is read-only and previews its delta instead of the live value.
+  final (double, double)? preview;
 
   @override
   State<_ScrubCell> createState() => _ScrubCellState();
@@ -782,7 +1172,7 @@ class _ScrubCellState extends State<_ScrubCell> {
   }
 
   void _open() {
-    if (!widget.canEdit || _busy || _editing) return;
+    if (!widget.canEdit || _busy || _editing || widget.preview != null) return;
     final anchor = _anchorKey.currentContext;
     if (anchor == null) return;
     final box = anchor.findRenderObject() as RenderBox?;
@@ -870,12 +1260,16 @@ class _ScrubCellState extends State<_ScrubCell> {
     } else if (_flash) {
       base = _flashOld;
       shown = _flashValue;
+    } else if (widget.preview != null) {
+      base = widget.preview!.$1;
+      shown = widget.preview!.$2;
     } else {
       base = current;
       shown = current;
     }
     final delta = shown - base;
-    final showPreview = (_editing || _flash) && delta.abs() >= 0.0001;
+    final showPreview =
+        (_editing || _flash || widget.preview != null) && delta.abs() >= 0.0001;
     final deltaColor = delta > 0 ? PosColors.success : PosColors.danger;
 
     return KeyedSubtree(

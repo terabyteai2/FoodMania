@@ -44,7 +44,7 @@ def _providers() -> list[_Provider]:
             name="deepseek",
             api_key=settings.DEEPSEEK_API_KEY.strip(),
             model=settings.MENU_SCAN_DEEPSEEK_MODEL.strip(),
-            url="https://api.deepseek.com/chat/completions",
+            url="https://api.deepseek.com/v1/chat/completions",
             supports_schema=False,
         ),
     ]
@@ -212,12 +212,34 @@ def _menu_scan_instructions() -> str:
     )
 
 
-def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
+KNOWN_ITEMS_PROMPT_LIMIT = 300
+
+
+def _prompt(
+    page_texts: list[str], known_items: list[str] | None = None
+) -> list[dict[str, str]]:
     pages = "\n\n".join(
         f"--- OCR.SPACE MENU PAGE {index + 1} JSON ---\n{text.strip()}"
         for index, text in enumerate(page_texts)
         if text.strip()
     )
+    user_content = (
+        "Parse these OCR.space JSON menu pages into JSON with an items array. "
+        "Do not invent items that are not visible in the OCR result. Preserve "
+        "the page order when practical and merge duplicate sightings of "
+        "the same item.\n\n"
+        f"{pages}"
+    )
+    known = _dedup_names(known_items or [])[:KNOWN_ITEMS_PROMPT_LIMIT]
+    if known:
+        user_content += (
+            "\n\nThe following items have ALREADY been extracted from this "
+            "menu in a previous pass and are already in the restaurant's menu:\n"
+            + "\n".join(known)
+            + "\nDo NOT include any of these already-known items in your items "
+              "array, even if you see them again in the OCR text. Only output "
+              "items that are NOT in the list above."
+        )
     return [
         {
             "role": "system",
@@ -225,13 +247,7 @@ def _prompt(page_texts: list[str]) -> list[dict[str, str]]:
         },
         {
             "role": "user",
-            "content": (
-                "Parse these OCR.space JSON menu pages into JSON with an items array. "
-                "Do not invent items that are not visible in the OCR result. Preserve "
-                "the page order when practical and merge duplicate sightings of "
-                "the same item.\n\n"
-                f"{pages}"
-            ),
+            "content": user_content,
         },
     ]
 
@@ -252,11 +268,13 @@ def _response_format(provider: _Provider) -> dict[str, Any]:
     return response_format
 
 
-def _request_payload(provider: _Provider, page_texts: list[str]) -> dict[str, Any]:
+def _request_payload(
+    provider: _Provider, page_texts: list[str], known_item_names: list[str] | None = None
+) -> dict[str, Any]:
     payload = {
         "model": provider.model,
         "temperature": 0,
-        "messages": _prompt(page_texts),
+        "messages": _prompt(page_texts, known_item_names),
         "response_format": _response_format(provider),
     }
     if provider.name == "groq":
@@ -364,6 +382,17 @@ def _dedup_items(items: list[MenuScanCandidate]) -> list[MenuScanCandidate]:
     return result
 
 
+def _dedup_names(names: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for name in names:
+        key = name.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(name.strip())
+    return result
+
+
 def _split_bilingual(value: Any) -> tuple[str, str]:
     text = str(value or "").strip()
     if not text:
@@ -445,7 +474,9 @@ def _normalize_size_variants(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
-async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
+async def parse_menu_text(
+    page_texts: list[str], known_item_names: list[str] | None = None
+) -> MenuScanParseResult:
     clean_pages = [text.strip() for text in page_texts if text.strip()]
     if not clean_pages:
         raise MenuScanError("OCR did not find readable menu text.")
@@ -455,14 +486,20 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
     if not configured:
         raise MenuScanError("Menu scan AI is not configured on the backend.")
 
+    known_item_names = (
+        _dedup_names(known_item_names)[:KNOWN_ITEMS_PROMPT_LIMIT] if known_item_names else []
+    )
+
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
         for provider in configured:
             try:
                 logger.info(
-                    "menu scan llm request provider=%s model=%s pages=%s",
+                    "menu scan llm request provider=%s model=%s url=%s pages=%s chars=%s",
                     provider.name,
                     provider.model,
+                    provider.url,
                     len(clean_pages),
+                    sum(len(p) for p in clean_pages),
                 )
                 response = await client.post(
                     provider.url,
@@ -470,11 +507,23 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
                         "Authorization": f"Bearer {provider.api_key}",
                         "Content-Type": "application/json",
                     },
-                    json=_request_payload(provider, clean_pages),
+                    json=_request_payload(provider, clean_pages, known_item_names),
+                )
+                logger.info(
+                    "menu scan llm response provider=%s status=%s",
+                    provider.name,
+                    response.status_code,
                 )
                 response.raise_for_status()
                 decoded = response.json()
-                items = _validated_items(_message_content(decoded))
+                raw_content = _message_content(decoded)
+                logger.info(
+                    "menu scan llm raw provider=%s content_chars=%s preview=%r",
+                    provider.name,
+                    len(raw_content),
+                    raw_content[:300],
+                )
+                items = _validated_items(raw_content)
                 logger.info(
                     "menu scan llm parsed provider=%s items=%s",
                     provider.name,
@@ -506,18 +555,36 @@ async def parse_menu_text(page_texts: list[str]) -> MenuScanParseResult:
                 )
                 warnings.append(f"{provider.name}: {error}")
 
-    raise MenuScanError("All configured menu scan AI providers failed.")
+    combined_detail = "; ".join(warnings) if warnings else "no providers tried"
+    raise MenuScanError(f"All configured menu scan AI providers failed: {combined_detail}")
+
+
+async def scan_image_once(
+    image_bytes: bytes,
+    content_type: str,
+    known_item_names: list[str] | None = None,
+) -> MenuScanParseResult:
+    """Single OCR→LLM trip on one image. Results are returned immediately
+    so the caller can broadcast them to the client as soon as each trip
+    finishes. known_item_names lists items already extracted so later trips
+    only hunt for items the previous passes missed."""
+    page_texts = await extract_menu_page_texts([(image_bytes, content_type)])
+    return await parse_menu_text(page_texts, known_item_names)
 
 
 async def scan_single_image_with_dedup(
     image_bytes: bytes, content_type: str
 ) -> MenuScanParseResult:
-    """Run 2 independent OCR→LLM trips on one image, then deduplicate by nameEn."""
+    """Run 2 OCR→LLM trips on one image; trip 2 lists trip 1's items as
+    already-known and only looks for misses, then defensive dedup runs."""
     page_texts_1 = await extract_menu_page_texts([(image_bytes, content_type)])
     result_1 = await parse_menu_text(page_texts_1)
 
     page_texts_2 = await extract_menu_page_texts([(image_bytes, content_type)])
-    result_2 = await parse_menu_text(page_texts_2)
+    result_2 = await parse_menu_text(
+        page_texts_2,
+        [item.nameEn for item in result_1.items] or None,
+    )
 
     combined = result_1.items + result_2.items
     deduped = _dedup_items(combined)
@@ -612,6 +679,20 @@ async def _extract_page_ocr_json(
         )
         response.raise_for_status()
         payload = _ocr_space_payload(response.json())
+        logger.info(
+            "menu scan ocr ok content_type=%s status=%s chars=%s",
+            content_type,
+            response.status_code,
+            len(json.dumps(payload, ensure_ascii=False)),
+        )
+    except httpx.HTTPStatusError as error:
+        logger.warning(
+            "OCR.space rejected content_type=%s status=%s detail=%s",
+            content_type,
+            error.response.status_code,
+            _provider_error_detail(error.response),
+        )
+        raise MenuScanError("OCR.space request failed while reading a menu page.") from error
     except httpx.HTTPError as error:
         logger.warning(
             "OCR.space request failed content_type=%s error=%s",
@@ -652,6 +733,12 @@ async def extract_menu_page_texts(pages: list[tuple[bytes, str]]) -> list[str]:
             continue
         texts.append(result)
 
+    logger.info(
+        "menu scan ocr done pages=%s ok=%s of=%s",
+        len(pages),
+        len(texts),
+        len(results),
+    )
     if not texts:
         if first_error is not None:
             raise first_error

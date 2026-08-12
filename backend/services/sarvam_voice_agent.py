@@ -1004,18 +1004,17 @@ class SarvamVoiceAgentSession:
                 self._tts_ws_failed = True
 
     async def _call_llm(self) -> str:
-        api_key = settings.DEEPSEEK_API_KEY.strip()
-        model = settings.CHATBOT_DEEPSEEK_MODEL.strip()
-        if not api_key or not model:
-            logger.error("[sarvam:llm] DeepSeek not configured (api_key=%s model=%s)", bool(api_key), model)
+        api_key = settings.SARVAM_API_KEY.strip()
+        if not api_key:
+            logger.error("[sarvam:llm] Sarvam API key not configured")
             await self._send_browser({"type": "error", "text": "LLM not configured."})
             return ""
         messages = self.history[-20:]
         self._llm_started_at = time.monotonic()
-        logger.info("[sarvam:llm] Calling DeepSeek model=%s with %d messages", model, len(messages))
+        logger.info("[sarvam:llm] Calling Sarvam model=%s with %d messages", settings.SARVAM_LLM_MODEL, len(messages))
         try:
             content = await asyncio.wait_for(
-                self._complete_llm(messages, api_key=api_key, model=model, on_delta=self._on_llm_delta),
+                self._complete_llm(messages, on_delta=self._on_llm_delta),
                 timeout=LLM_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -1029,7 +1028,7 @@ class SarvamVoiceAgentSession:
         logger.info("[sarvam:llm] Response received (content_len=%d, %.2fs)",
                     len(content), time.monotonic() - self._turn_start)
         if not content:
-            logger.warning("[sarvam:llm] Empty response from DeepSeek")
+            logger.warning("[sarvam:llm] Empty response from Sarvam LLM")
             return ""
         try:
             parsed = _parse_json_object(content)
@@ -1050,22 +1049,22 @@ class SarvamVoiceAgentSession:
             logger.warning("[sarvam:llm] Unknown replyType=%s, treating as chat", reply_type)
         return reply[:500]
 
-    async def _complete_llm(
-        self, messages: list[dict], *, api_key: str, model: str, on_delta=None
-    ) -> str:
+    async def _complete_llm(self, messages: list[dict], on_delta=None) -> str:
         import httpx
-        url = "https://api.deepseek.com/v1/chat/completions"
+        url = "https://api.sarvam.ai/v1/chat/completions"
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "api-subscription-key": settings.SARVAM_API_KEY.strip(),
+            "Authorization": f"Bearer {settings.SARVAM_API_KEY.strip()}",
             "Content-Type": "application/json",
         }
         payload = {
-            "model": model,
+            "model": settings.SARVAM_LLM_MODEL,
             "messages": messages,
             "stream": True,
             "temperature": settings.SARVAM_LLM_TEMPERATURE,
             "max_tokens": settings.SARVAM_LLM_MAX_TOKENS,
             "response_format": {"type": "json_object"},
+            "reasoning_effort": None,
         }
         content = ""
         async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:

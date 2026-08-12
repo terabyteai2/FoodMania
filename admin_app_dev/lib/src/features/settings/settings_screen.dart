@@ -187,6 +187,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : (text.isBn ? 'বন্ধ' : 'Off'),
                   onTap: _toggleSettleAndSave,
                 ),
+                _SettingActionData(
+                  title: text.shiftHoursSetting,
+                  subtitle: text.shiftHoursSubtitle,
+                  icon: Icons.schedule_rounded,
+                  trailing: app.shiftModeActive
+                      ? text.shiftRangeLabel(
+                          app.serverConfig.shiftStartMinute,
+                          app.serverConfig.shiftEndMinute,
+                        )
+                      : text.shiftOffLabel,
+                  onTap: _openShiftHoursSettings,
+                  spotName: 'more.shiftHours',
+                ),
               ],
             ),
             _SettingsGroupData(
@@ -333,6 +346,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context) => _TableSettingsPage(
           initialCount: app.serverConfig.tableCount,
           onSave: (count) => app.updateTableCount(count),
+          text: text,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openShiftHoursSettings() async {
+    final app = AppScope.of(context);
+    final text = app.strings;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => _ShiftHoursPage(
+          initialEnabled: app.serverConfig.shiftHoursEnabled,
+          initialStartMinute: app.serverConfig.shiftStartMinute,
+          initialEndMinute: app.serverConfig.shiftEndMinute,
+          onSave: (startMinute, endMinute) =>
+              app.updateShiftHours(startMinute: startMinute, endMinute: endMinute),
+          onEnabledChanged: (value) => app.updateShiftHoursEnabled(value),
           text: text,
         ),
       ),
@@ -2824,7 +2855,139 @@ class _HeroMediaPageState extends State<_HeroMediaPage> {
                   ),
                 ],
               ),
-            ),
+),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shift hours (optional completed-orders range).
+
+class _ShiftHoursPage extends StatefulWidget {
+  const _ShiftHoursPage({
+    required this.initialEnabled,
+    required this.initialStartMinute,
+    required this.initialEndMinute,
+    required this.onSave,
+    required this.onEnabledChanged,
+    required this.text,
+  });
+
+  final bool initialEnabled;
+  final int? initialStartMinute;
+  final int? initialEndMinute;
+  final Future<void> Function(int? startMinute, int? endMinute) onSave;
+  final Future<void> Function(bool value) onEnabledChanged;
+  final AppStrings text;
+
+  @override
+  State<_ShiftHoursPage> createState() => _ShiftHoursPageState();
+}
+
+class _ShiftHoursPageState extends State<_ShiftHoursPage> {
+  late bool _enabled;
+  late int? _startMinute;
+  late int? _endMinute;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = widget.initialEnabled;
+    _startMinute = widget.initialStartMinute;
+    _endMinute = widget.initialEndMinute;
+  }
+
+  Future<void> _toggleEnabled(bool value) async {
+    if (value) {
+      _startMinute ??= 10 * 60;
+      _endMinute ??= 2 * 60;
+    }
+    setState(() => _enabled = value);
+    await widget.onEnabledChanged(value);
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final current = (isStart ? _startMinute : _endMinute) ?? 9 * 60;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: current ~/ 60, minute: current % 60),
+    );
+    if (picked == null || !mounted) return;
+    final minuteOfDay = picked.hour * 60 + picked.minute;
+    setState(() {
+      if (isStart) {
+        _startMinute = minuteOfDay;
+      } else {
+        _endMinute = minuteOfDay;
+      }
+    });
+    await widget.onSave(_startMinute, _endMinute);
+  }
+
+  Widget _timeRow({
+    required String label,
+    required int? value,
+    required bool isStart,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: TfText(label),
+      trailing: TfChip(
+        label: value == null
+            ? widget.text.shiftTodayFallback
+            : widget.text.formatShiftTime(value),
+        active: false,
+        small: true,
+        onTap: () => _pickTime(isStart: isStart),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.text;
+    return Scaffold(
+      appBar: AppBar(title: TfText(text.shiftHoursSetting), centerTitle: false),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: TfText(
+                  text.shiftHoursSetting,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: TfText(text.shiftHoursSubtitle),
+                value: _enabled,
+                onChanged: _toggleEnabled,
+              ),
+              if (_enabled) ...[
+                const SizedBox(height: 8),
+                _timeRow(
+                  label: text.openTimeLabel,
+                  value: _startMinute,
+                  isStart: true,
+                ),
+                _timeRow(
+                  label: text.closeTimeLabel,
+                  value: _endMinute,
+                  isStart: false,
+                ),
+                const SizedBox(height: 8),
+                TfText(
+                  text.shiftDayHint,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -60,11 +60,15 @@ def _load_guide_vocabulary() -> dict:
         return {}
     if not isinstance(data, dict):
         return {}
-    return {
+    loaded = {
         key: data[key]
         for key in GUIDE_KINDS
         if isinstance(data.get(key), (list, dict))
     }
+    version = data.get("version")
+    if isinstance(version, int) and version > 0:
+        loaded["version"] = version
+    return loaded
 
 
 GUIDE_VOCABULARY = _load_guide_vocabulary()
@@ -536,8 +540,13 @@ async def _guide_deeplinks(outlet_id: str, args: dict) -> dict:
         payload = {kind: GUIDE_VOCABULARY[kind]}
     else:
         return {"ok": False, "error": f"unknown kind '{kind}'"}
-    count = sum(len(value) if isinstance(value, list) else 1 for value in payload.values())
-    return {"ok": True, "version": 1, "kind": kind, "count": count, **payload}
+    count = sum(
+        len(value) if isinstance(value, list) else 1
+        for key, value in payload.items()
+        if key != "version"
+    )
+    version = GUIDE_VOCABULARY.get("version") or 1
+    return {"ok": True, "version": version, "kind": kind, "count": count, **payload}
 
 
 TOOLS: dict[str, ToolSpec] = {

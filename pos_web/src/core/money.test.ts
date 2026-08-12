@@ -64,4 +64,9 @@ describe('formatTk', () => {
   it('handles negatives', () => {
     expect(formatTk(-20)).toBe('-৳20');
   });
+  it('renders Bengali digits when bn is set', () => {
+    expect(formatTk(750, true)).toBe('৳৭৫০');
+    expect(formatTk(104253, true)).toBe('৳১,০৪,২৫৩');
+    expect(formatTk(428.57, true)).toBe('৳৪২৮.৫৭');
+  });
 });

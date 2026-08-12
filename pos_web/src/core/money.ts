@@ -55,12 +55,18 @@ export function computeTotals(opts: {
   return { subtotal, vatAmount, serviceChargeAmount, discountAmount, deliveryCharge, total };
 }
 
-export function formatTk(v: number): string {
+const BN_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+
+export function toBnDigits(s: string): string {
+  return s.replace(/[0-9]/g, (d) => BN_DIGITS[Number(d)]);
+}
+
+export function formatTk(v: number, bn = false): string {
   const negative = v < 0;
   const abs = Math.abs(v);
   const hasPaisa = Math.round(abs * 100) % 100 !== 0;
   const s = hasPaisa
     ? abs.toFixed(2)
     : Math.round(abs).toLocaleString('en-IN');
-  return `${negative ? '-' : ''}৳${s}`;
+  return `${negative ? '-' : ''}৳${bn ? toBnDigits(s) : s}`;
 }

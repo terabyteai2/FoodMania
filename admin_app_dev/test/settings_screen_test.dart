@@ -8,6 +8,7 @@ import 'package:local_pos/src/core/theme/app_theme.dart';
 import 'package:local_pos/src/features/settings/settings_screen.dart';
 import 'package:local_pos/src/models/account_role.dart';
 import 'package:local_pos/src/models/server_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// SettingsScreen no longer brings its own Scaffold/scroll view — it's
 /// embedded content now (shared by the mobile Settings tab and the desktop
@@ -261,6 +262,148 @@ void main() {
     await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
 
     expect(find.text('Wipe restaurant data'), findsNothing);
+
+    controller.dispose();
+  });
+
+  testWidgets('shift hours row shows Off when disabled and range when on', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..serverConfig = ServerConfig(
+        serverId: 'server-1',
+        restaurantId: 'restaurant-1',
+        outletId: 'outlet-1',
+        restaurantName: 'Cafe One',
+        outletName: 'Cafe One',
+        shiftHoursEnabled: true,
+        shiftStartMinute: 10 * 60,
+        shiftEndMinute: 2 * 60,
+      );
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+    await tester.scrollUntilVisible(
+      find.text('Shift hours'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('10:00 AM – 02:00 AM'), findsOneWidget);
+
+    await tester.tap(find.text('Shift hours'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open time'), findsOneWidget);
+    expect(find.text('Close time'), findsOneWidget);
+    expect(find.text('10:00 AM'), findsOneWidget);
+    expect(find.text('02:00 AM'), findsOneWidget);
+    expect(
+      find.textContaining("previous day's shift"),
+      findsOneWidget,
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Disabling the toggle via the controller's method (which notifies
+    // listeners) hides the range text.
+    await controller.updateShiftHoursEnabled(false);
+    await tester.pumpAndSettle();
+    expect(find.text('10:00 AM – 02:00 AM'), findsNothing);
+
+    controller.dispose();
+  });
+
+  testWidgets('shift hours toggle enables with default open/close times', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..serverConfig = ServerConfig(
+        serverId: 'server-1',
+        restaurantId: 'restaurant-1',
+        outletId: 'outlet-1',
+        restaurantName: 'Cafe One',
+        outletName: 'Cafe One',
+      );
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+    await tester.scrollUntilVisible(
+      find.text('Shift hours'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    // Other settings rows may also read "Off"; just confirm the shift row
+    // is not showing a configured range.
+    expect(find.textContaining('–'), findsNothing);
+
+    await tester.tap(find.text('Shift hours'));
+    await tester.pumpAndSettle();
+
+    // Mode off: pickers are hidden until the toggle flips on.
+    expect(find.text('Open time'), findsNothing);
+    expect(find.byType(Switch), findsOneWidget);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+
+    expect(controller.serverConfig.shiftHoursEnabled, isTrue);
+    // Enabling with no hours persists 10:00 AM – 02:00 AM defaults.
+    expect(controller.serverConfig.shiftStartMinute, 10 * 60);
+    expect(controller.serverConfig.shiftEndMinute, 2 * 60);
+    expect(find.text('Open time'), findsOneWidget);
+    expect(find.text('Close time'), findsOneWidget);
+    expect(find.text('10:00 AM'), findsOneWidget);
+    expect(find.text('02:00 AM'), findsOneWidget);
+
+    controller.dispose();
+  });
+
+  testWidgets('shift hours picker saves the open time immediately', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = PosAppController()
+      ..language = AppLanguage.en
+      ..serverConfig = ServerConfig(
+        serverId: 'server-1',
+        restaurantId: 'restaurant-1',
+        outletId: 'outlet-1',
+        restaurantName: 'Cafe One',
+        outletName: 'Cafe One',
+        shiftHoursEnabled: true,
+      );
+
+    await tester.pumpWidget(_scoped(controller, const SettingsScreen()));
+    await tester.scrollUntilVisible(
+      find.text('Shift hours'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Shift hours'));
+    await tester.pumpAndSettle();
+
+    // No minutes persisted, so both open and close chips fall back to "Today".
+    // and the picker starts at 9:00 AM.
+    expect(find.text('Today'), findsNWidgets(2));
+
+    await tester.tap(find.text('Today').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(controller.serverConfig.shiftStartMinute, 9 * 60);
+    expect(controller.serverConfig.shiftEndMinute, isNull);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('09:00 AM'), findsOneWidget);
 
     controller.dispose();
   });

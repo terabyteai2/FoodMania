@@ -5,38 +5,20 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ── Category card-tint palette ──
-// Four families chosen for the add-items picker cards:
-//   neutral  · warm & appetizing (red/orange/yellow) · fresh & healthy (green)
-//   · calm & premium (blue/purple/warm gray)
+// ── Category card-fill palette ──
+// Nine muted colors assigned to the add-items picker cards. Each category is
+// matched to one palette (random-but-persisted, see CategoryPaletteAssigner);
+// the background is the saturated fill, border is a darker shade of it, and
+// text is white except on the lightest fills (yellow/light green/light gray)
+// which take a dark ink instead.
+const Color kCategoryBgDefault = Color(0xFFFFFDF7);
 
-// Neutral base
-const Color kTintWarmVanilla = Color(0xFFFFFDF7);
-const Color kTintSoftPorcelain = Color(0xFFF8FAFC);
-const Color kTintWarmCream = Color(0xFFFAF7F2);
-const Color kTintCoolMist = Color(0xFFF3F4F6);
+/// Dark ink used for text on the lightest category fills.
+const Color kCategoryOnFillDark = Color(0xFF4A3B0A);
+const Color kCategoryTextWhite = Colors.white;
 
-// Warm & Appetizing
-const Color kTintSoftPeach = Color(0xFFFFF5F2);
-const Color kTintMutedCoral = Color(0xFFFFEEEA);
-const Color kTintButterYellow = Color(0xFFFFFBEB);
-const Color kTintWarmAmber = Color(0xFFFFF8E7);
-
-// Fresh & Healthy
-const Color kTintMintCream = Color(0xFFF0FDF4);
-const Color kTintSageTint = Color(0xFFF1F5F2);
-const Color kTintSoftOlive = Color(0xFFF4F7F4);
-
-// Calm & Premium
-const Color kTintIceBlue = Color(0xFFF0F7FF);
-const Color kTintSoftLavender = Color(0xFFF8F5FF);
-const Color kTintWarmSand = Color(0xFFF7F5F0);
-
-/// Fallback tint for unknown categories / 'General'.
-const Color kCategoryBgDefault = kTintWarmVanilla;
-
-/// One randomized category palette: pale card background, complementary chip
-/// border/text, and the saturated accent stripe color.
+/// One randomized category palette: saturated card background, complementary
+/// chip border, and the text color that stays readable on it.
 class CategoryPalette {
   const CategoryPalette({
     required this.background,
@@ -51,70 +33,64 @@ class CategoryPalette {
   final Color accent;
 }
 
-/// The ten palettes the assigner randomizes over — derived from the original
-/// eleven name-keyed entries. Desserts is omitted because it is identical to
-/// the vanilla [kCategoryBgDefault], which stays reserved for 'All' / 'General'
-/// / unknown categories.
+/// The nine palettes the assigner randomizes over. Backgrounds are the chosen
+/// palette; borders are the background darkened ~28%; text is white except on
+/// the three lightest fills (which exceed the 0.55 luminance threshold used by
+/// [onCategoryFill]).
 const List<CategoryPalette> kCategoryPalettes = [
   CategoryPalette(
-    background: kTintSoftPeach,
-    border: Color(0xFFFFC2B3),
-    text: Color(0xFF9E2A0B),
-    accent: Color(0xFFE0982E),
+    background: Color(0xFFA3BFDA),
+    border: Color(0xFF758A9D),
+    text: kCategoryTextWhite,
+    accent: Color(0xFFA3BFDA),
   ),
   CategoryPalette(
-    background: kTintMutedCoral,
-    border: Color(0xFFFFB8A8),
-    text: Color(0xFFB91C1C),
-    accent: Color(0xFFE0524E),
+    background: Color(0xFFAACF97),
+    border: Color(0xFF7A956D),
+    text: kCategoryOnFillDark,
+    accent: Color(0xFFAACF97),
   ),
   CategoryPalette(
-    background: kTintWarmAmber,
-    border: Color(0xFFF0D48F),
-    text: Color(0xFF7A4A0E),
-    accent: Color(0xFFD9722E),
+    background: Color(0xFF84C3B6),
+    border: Color(0xFF5F8C83),
+    text: kCategoryTextWhite,
+    accent: Color(0xFF84C3B6),
   ),
   CategoryPalette(
-    background: kTintButterYellow,
-    border: Color(0xFFFDE68A),
-    text: Color(0xFF92400E),
-    accent: Color(0xFFE0B33A),
+    background: Color(0xFFDE8893),
+    border: Color(0xFFA0626A),
+    text: kCategoryTextWhite,
+    accent: Color(0xFFDE8893),
   ),
   CategoryPalette(
-    background: kTintMintCream,
-    border: Color(0xFF86EFAC),
-    text: Color(0xFF166534),
-    accent: Color(0xFF5BA84F),
+    background: Color(0xFFA1C98A),
+    border: Color(0xFF749163),
+    text: kCategoryTextWhite,
+    accent: Color(0xFFA1C98A),
   ),
   CategoryPalette(
-    background: kTintSageTint,
-    border: Color(0xFFA8C3B0),
-    text: Color(0xFF2D4A36),
-    accent: Color(0xFF3FA85C),
+    background: Color(0xFFC2AACC),
+    border: Color(0xFF8C7A93),
+    text: kCategoryTextWhite,
+    accent: Color(0xFFC2AACC),
   ),
   CategoryPalette(
-    background: kTintSoftOlive,
-    border: Color(0xFFBCCAC0),
-    text: Color(0xFF3B4F40),
-    accent: Color(0xFF2BA7A7),
+    background: Color(0xFFF5DD7D),
+    border: Color(0xFFB09F5A),
+    text: kCategoryOnFillDark,
+    accent: Color(0xFFF5DD7D),
   ),
   CategoryPalette(
-    background: kTintSoftLavender,
-    border: Color(0xFFD8CBF2),
-    text: Color(0xFF57408C),
-    accent: Color(0xFF7C5CD6),
+    background: Color(0xFFBD9B7F),
+    border: Color(0xFF88705B),
+    text: kCategoryTextWhite,
+    accent: Color(0xFFBD9B7F),
   ),
   CategoryPalette(
-    background: kTintIceBlue,
-    border: Color(0xFFB9D3EE),
-    text: Color(0xFF1E4E78),
-    accent: Color(0xFF3E7BC0),
-  ),
-  CategoryPalette(
-    background: kTintWarmSand,
-    border: Color(0xFFE0D6C2),
-    text: Color(0xFF5F5540),
-    accent: Color(0xFF5A6475),
+    background: Color(0xFFCACCCB),
+    border: Color(0xFF919392),
+    text: kCategoryOnFillDark,
+    accent: Color(0xFFCACCCB),
   ),
 ];
 
@@ -156,12 +132,17 @@ class CategoryPaletteAssigner {
   }
 
   /// Palette index for [category], preferring the persisted assignment and
-  /// otherwise assigning a random not-yet-used palette (so the first ten
+  /// otherwise assigning a random not-yet-used palette (so the first nine
   /// categories are visually distinct). The assignment persists immediately.
+  /// Persisted indices are clamped to the current palette length so an
+  /// assignment made against an older, longer palette can never index
+  /// out of bounds.
   int paletteIndexFor(String category) {
     final existing = _assignments[category];
-    if (existing != null) return existing;
-    final used = _assignments.values.toSet();
+    if (existing != null) return existing % kCategoryPalettes.length;
+    final used = _assignments.values
+        .map((i) => i % kCategoryPalettes.length)
+        .toSet();
     final available = [
       for (var i = 0; i < kCategoryPalettes.length; i++)
         if (!used.contains(i)) i,
@@ -194,17 +175,17 @@ class CategoryPaletteAssigner {
 }
 
 const Map<String, Color> kCategoryBgTints = {
-  'Burgers': kTintSoftPeach,
-  'Pizza': kTintMutedCoral,
-  'Kebab': kTintWarmAmber,
-  'Breakfast': kTintButterYellow,
-  'Salads': kTintMintCream,
-  'Rice & Curry': kTintSageTint,
-  'Seafood': kTintSoftOlive,
-  'Beverages': kTintSoftLavender,
-  'Sides': kTintIceBlue,
-  'Combos': kTintWarmSand,
-  'Desserts': kTintWarmVanilla,
+  'Burgers': Color(0xFFA3BFDA),
+  'Pizza': Color(0xFFDE8893),
+  'Kebab': Color(0xFFF5DD7D),
+  'Breakfast': Color(0xFFAACF97),
+  'Salads': Color(0xFFA1C98A),
+  'Rice & Curry': Color(0xFF84C3B6),
+  'Seafood': Color(0xFFC2AACC),
+  'Beverages': Color(0xFFBD9B7F),
+  'Sides': Color(0xFFCACCCB),
+  'Combos': Color(0xFFA3BFDA),
+  'Desserts': Color(0xFFDE8893),
 };
 
 Color resolveCategoryBg(String category) {
@@ -224,7 +205,7 @@ Color resolveCategoryBg(String category) {
   return kCategoryBgDefault;
 }
 
-// ── Category chip pairing: bg tint + complementary border & text ──
+// ── Category chip pairing: bg fill + complementary border & text ──
 
 class CategoryChipColors {
   const CategoryChipColors({
@@ -240,66 +221,66 @@ class CategoryChipColors {
 
 /// Fallback chip pairing for unknown categories / 'All' / 'General'.
 const CategoryChipColors kCategoryChipDefault = CategoryChipColors(
-  background: kTintWarmVanilla,
+  background: kCategoryBgDefault,
   border: Color(0xFFEADCC9),
   text: Color(0xFF5C4A33),
 );
 
 const Map<String, CategoryChipColors> kCategoryChipColors = {
   'Burgers': CategoryChipColors(
-    background: kTintSoftPeach,
-    border: Color(0xFFFFC2B3),
-    text: Color(0xFF9E2A0B),
+    background: Color(0xFFA3BFDA),
+    border: Color(0xFF758A9D),
+    text: kCategoryTextWhite,
   ),
   'Pizza': CategoryChipColors(
-    background: kTintMutedCoral,
-    border: Color(0xFFFFB8A8),
-    text: Color(0xFFB91C1C),
+    background: Color(0xFFDE8893),
+    border: Color(0xFFA0626A),
+    text: kCategoryTextWhite,
   ),
   'Kebab': CategoryChipColors(
-    background: kTintWarmAmber,
-    border: Color(0xFFF0D48F),
-    text: Color(0xFF7A4A0E),
+    background: Color(0xFFF5DD7D),
+    border: Color(0xFFB09F5A),
+    text: kCategoryOnFillDark,
   ),
   'Breakfast': CategoryChipColors(
-    background: kTintButterYellow,
-    border: Color(0xFFFDE68A),
-    text: Color(0xFF92400E),
+    background: Color(0xFFAACF97),
+    border: Color(0xFF7A956D),
+    text: kCategoryOnFillDark,
   ),
   'Salads': CategoryChipColors(
-    background: kTintMintCream,
-    border: Color(0xFF86EFAC),
-    text: Color(0xFF166534),
+    background: Color(0xFFA1C98A),
+    border: Color(0xFF749163),
+    text: kCategoryTextWhite,
   ),
   'Rice & Curry': CategoryChipColors(
-    background: kTintSageTint,
-    border: Color(0xFFA8C3B0),
-    text: Color(0xFF2D4A36),
+    background: Color(0xFF84C3B6),
+    border: Color(0xFF5F8C83),
+    text: kCategoryTextWhite,
   ),
   'Seafood': CategoryChipColors(
-    background: kTintSoftOlive,
-    border: Color(0xFFBCCAC0),
-    text: Color(0xFF3B4F40),
+    background: Color(0xFFC2AACC),
+    border: Color(0xFF8C7A93),
+    text: kCategoryTextWhite,
   ),
   'Beverages': CategoryChipColors(
-    background: kTintSoftLavender,
-    border: Color(0xFFD8CBF2),
-    text: Color(0xFF57408C),
+    background: Color(0xFFBD9B7F),
+    border: Color(0xFF88705B),
+    text: kCategoryTextWhite,
   ),
   'Sides': CategoryChipColors(
-    background: kTintIceBlue,
-    border: Color(0xFFB9D3EE),
-    text: Color(0xFF1E4E78),
+    background: Color(0xFFCACCCB),
+    border: Color(0xFF919392),
+    text: kCategoryOnFillDark,
   ),
   'Combos': CategoryChipColors(
-    background: kTintWarmSand,
-    border: Color(0xFFE0D6C2),
-    text: Color(0xFF5F5540),
+    background: Color(0xFFA3BFDA),
+    border: Color(0xFF758A9D),
+    text: kCategoryTextWhite,
   ),
   'Desserts': CategoryChipColors(
-    background: kTintWarmVanilla,
-    border: Color(0xFFEADCC9),
-    text: Color(0xFF5C4A33),
+    background: Color(0xFFDE8893),
+    border: Color(0xFFA0626A),
+    text: kCategoryTextWhite,
   ),
 };
 
@@ -324,21 +305,21 @@ CategoryChipColors resolveCategoryChip(String category) {
   return kCategoryChipDefault;
 }
 
-/// Saturated per-category accent palette — distinct from the pale
-/// [kCategoryBgTints] image tints. Used as the left color-code stripe on the
-/// add-items picker cards so each category reads at a glance.
+/// Saturated per-category accent palette — the same background fills, used as
+/// the left color-code stripe on the add-items picker cards so each category
+/// reads at a glance.
 const Map<String, Color> kCategoryAccents = {
-  'Burgers': Color(0xFFE0982E),
-  'Pizza': Color(0xFFE0524E),
-  'Rice & Curry': Color(0xFF3FA85C),
-  'Kebab': Color(0xFFD9722E),
-  'Sides': Color(0xFF3E7BC0),
-  'Salads': Color(0xFF5BA84F),
-  'Beverages': Color(0xFF7C5CD6),
-  'Desserts': Color(0xFFE06AA6),
-  'Seafood': Color(0xFF2BA7A7),
-  'Breakfast': Color(0xFFE0B33A),
-  'Combos': Color(0xFF5A6475),
+  'Burgers': Color(0xFFA3BFDA),
+  'Pizza': Color(0xFFDE8893),
+  'Rice & Curry': Color(0xFF84C3B6),
+  'Kebab': Color(0xFFF5DD7D),
+  'Sides': Color(0xFFCACCCB),
+  'Salads': Color(0xFFA1C98A),
+  'Beverages': Color(0xFFBD9B7F),
+  'Desserts': Color(0xFFDE8893),
+  'Seafood': Color(0xFFC2AACC),
+  'Breakfast': Color(0xFFAACF97),
+  'Combos': Color(0xFFA3BFDA),
 };
 
 final _accentsList = kCategoryAccents.values.toList();

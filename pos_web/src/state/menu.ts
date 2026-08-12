@@ -11,11 +11,13 @@ export interface PosMenuItem {
   extras: MenuExtras;
   price: number; // after item discount tags
   category: string;
+  categoryBn: string | null;
 }
 
 interface MenuState {
   items: PosMenuItem[];
   categories: string[];
+  categoriesBn: string[];
   favorites: Set<string>;
   loading: boolean;
   error: string | null;
@@ -38,6 +40,7 @@ function loadFavorites(): Set<string> {
 export const useMenu = create<MenuState>((set, get) => ({
   items: [],
   categories: [],
+  categoriesBn: [],
   favorites: loadFavorites(),
   loading: false,
   error: null,
@@ -65,10 +68,12 @@ export const useMenu = create<MenuState>((set, get) => ({
           extras,
           price: effectiveUnitPrice(raw.price, extras),
           category: (raw.categoryEn || raw.category || 'Uncategorized').trim() || 'Uncategorized',
+          categoryBn: (raw.categoryBn || raw.categoryEn || raw.category)?.trim() || null,
         };
       });
     const categories = [...new Set(items.map((i) => i.category))].sort((a, b) => a.localeCompare(b));
-    set({ items, categories, loading: false });
+    const categoriesBn = categories.map((c) => items.find((i) => i.category === c)?.categoryBn || c);
+    set({ items, categories, categoriesBn, loading: false });
   },
 
   toggleFavorite: (itemId) => {
@@ -98,15 +103,4 @@ export const useMenu = create<MenuState>((set, get) => ({
 export function itemDisplayName(item: PosMenuItem, bn: boolean): string {
   const { raw } = item;
   return (bn ? raw.nameBn : raw.nameEn) || raw.name;
-}
-
-/**
- * Resolve a typed short-code entry (digits only) to an available menu item.
- * Returns null for blank/non-numeric input or when nothing matches.
- */
-export function matchShortCode(items: PosMenuItem[], input: string): PosMenuItem | null {
-  const trimmed = input.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-  const code = Number(trimmed);
-  return items.find((i) => i.raw.shortCode === code && i.raw.isAvailable) ?? null;
 }

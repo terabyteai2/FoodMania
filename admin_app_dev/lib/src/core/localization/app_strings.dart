@@ -585,6 +585,42 @@ class AppStrings {
       isBn ? 'কোনো চলমান অর্ডার নেই।' : 'No ongoing orders.';
   String get noCompletedOrders =>
       isBn ? 'এখনো কোনো সম্পন্ন অর্ডার নেই।' : 'No completed orders yet.';
+
+  // Orders — optional shift mode (completed tab + local "today" totals).
+  String get shiftHoursSetting => isBn ? 'শিফটের সময়' : 'Shift hours';
+  String get shiftHoursSubtitle =>
+      isBn ? 'সম্পন্ন অর্ডারের শিফটের রেঞ্জ' : 'Completed-orders shift range';
+  String get openTimeLabel => isBn ? 'খোলার সময়' : 'Open time';
+  String get closeTimeLabel => isBn ? 'বন্ধের সময়' : 'Close time';
+  String get shiftOffLabel => isBn ? 'বন্ধ' : 'Off';
+  String get currentShiftLabel => isBn ? 'বর্তমান শিফট' : 'Current shift';
+  String get allCompletedOrdersLabel =>
+      isBn ? 'সব সম্পন্ন অর্ডার' : 'All completed orders';
+  String get noCompletedThisShift => isBn
+      ? 'এই শিফটে এখনো কোনো সম্পন্ন অর্ডার নেই।'
+      : 'No completed orders in this shift yet.';
+  String get shiftTodayFallback => isBn ? 'আজ (সারাদিন)' : 'Today';
+  String get shiftDayHint => isBn
+      ? 'বন্ধের সময় খোলার সময়ের আগে হলে শিফটটি পরের দিন পর্যন্ত চলে (যেমন ১০:০০ AM – ০২:০০ AM)। রাত ১২টার পরের অর্ডারগুলো আগের দিনের শিফটে হিসাব হবে।'
+      : 'A close earlier than the open means the shift runs into the next day (e.g. 10:00 AM – 02:00 AM). Orders after midnight still count toward the previous day\'s shift.';
+
+  String formatShiftTime(int minuteOfDay) {
+    final hour = minuteOfDay ~/ 60;
+    final minute = minuteOfDay % 60;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    var displayHour = hour % 12;
+    if (displayHour == 0) displayHour = 12;
+    return _digits(
+      '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period',
+    );
+  }
+
+  String shiftRangeLabel(int? startMinute, int? endMinute) {
+    if (startMinute == null) return shiftTodayFallback;
+    final start = formatShiftTime(startMinute);
+    if (endMinute == null) return start;
+    return '$start – ${formatShiftTime(endMinute)}';
+  }
   // Relative age for order cards: "just now" / "5m ago" / "2h ago" / "yesterday" / "3d ago" / "2w ago" / "3mo ago" / "1y ago".
   String orderAgeAgo(DateTime createdAt) {
     final now = DateTime.now();
@@ -1637,6 +1673,16 @@ class AppStrings {
       ? '${_n(count)} টি পৃষ্ঠা স্ক্যান করুন'
       : 'Scan $count page${count == 1 ? '' : 's'}';
   String get countScanUnmatched => isBn ? 'মেলানো যায়নি' : 'Couldn\'t match';
+  String get scanReviewApply => isBn ? 'সব প্রয়োগ করুন' : 'Confirm & apply';
+  String scanReviewCount(int changed) => isBn
+      ? 'পর্যালোচনা করুন — ${_n(changed)}টি পরিবর্তন'
+      : 'Review $changed change${changed == 1 ? '' : 's'}';
+  String scanReviewDone(int count) => isBn
+      ? '${_n(count)}টি আইটেম আপডেট হয়েছে'
+      : 'Updated $count item${count == 1 ? '' : 's'}';
+  String stockScanNewItems(int count) => isBn
+      ? '${_n(count)}টি নতুন আইটেম যুক্ত হবে'
+      : '$count new item${count == 1 ? '' : 's'} will be added';
 
   // Daily report
   String get unexplainedVariance =>

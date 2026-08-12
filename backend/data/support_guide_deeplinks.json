@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "description": "Overlay-guide deeplink vocabulary for Volt Assistant. Each deeplink below is executable by the admin app (see admin_app_dev/lib/src/app.dart, _handleChatDeepLink). Use get_guide_deeplinks to fetch this vocabulary and build guide steps/actions with real targets only.",
+  "version": 2,
+  "description": "Overlay-guide deeplink vocabulary for Volt Assistant. Each deeplink below is executable by the admin app (see admin_app_dev/lib/src/app.dart, _handleChatDeepLink). Use get_guide_deeplinks to fetch this vocabulary and build guide steps/actions with real targets only. Spots may carry optional metadata: title/body (default step copy), shape (circle for round targets like the + FAB), role (owner|manager|waiter — who sees the element).",
   "tabs": [
     {
       "name": "analytics",
@@ -55,6 +55,14 @@
     {
       "name": "stock_count",
       "description": "End-of-day stock count."
+    },
+    {
+      "name": "settings",
+      "description": "Settings hub (the More tab): printer, chatbot, staff, audit, language, sign out."
+    },
+    {
+      "name": "control_tower",
+      "description": "Live operations Control Tower: attention alerts, daily summary, fleet."
     }
   ],
   "modals": [
@@ -70,31 +78,405 @@
   "spots": [
     {
       "name": "analytics.stats",
-      "description": "The stats headline card on the Analytics tab."
+      "description": "The stats headline card on the Analytics tab.",
+      "title": "Today at a glance",
+      "role": "owner"
     },
     {
-      "name": "menu.scanCta",
-      "description": "The 'Scan menu card' button on the Menu tab."
+      "name": "analytics.period",
+      "description": "The time-range selector (Today / 7 days / 30 days / custom) at the top of Analytics.",
+      "title": "Change the date range",
+      "body": "Switch between Today, 7 days, 30 days, or pick a custom range. Everything below updates.",
+      "role": "owner"
+    },
+    {
+      "name": "analytics.revenueChart",
+      "description": "The revenue-by-hour chart card on Analytics.",
+      "title": "Revenue by hour",
+      "body": "This chart shows how sales spread across the day.",
+      "role": "owner"
+    },
+    {
+      "name": "analytics.popularDishes",
+      "description": "The popular dishes list on Analytics.",
+      "title": "Popular dishes",
+      "body": "See which items sell the most, ranked by quantity.",
+      "role": "owner"
+    },
+    {
+      "name": "orders.search",
+      "description": "The search field on the Orders tab (opens from the search icon in the header).",
+      "title": "Search orders",
+      "body": "Type a serial number, item name, or customer name to filter the list.",
+      "role": "all"
+    },
+    {
+      "name": "orders.tabs",
+      "description": "The Ongoing / Completed tab strip on the Orders tab.",
+      "title": "Ongoing and Completed",
+      "body": "Ongoing holds pending + accepted orders; Completed holds finished ones.",
+      "role": "all"
+    },
+    {
+      "name": "orders.filters",
+      "description": "The filter (tune) icon button in the Orders header.",
+      "title": "Filter the feed",
+      "body": "Open filters to slice orders by source, service type, payment, or date.",
+      "role": "all"
     },
     {
       "name": "orders.newOrderFab",
-      "description": "The + new-order button on the Orders tab."
+      "description": "The + new-order button on the Orders tab.",
+      "title": "Create an order",
+      "body": "Tap + to build a new order: dine-in, parcel, or delivery, then pick items.",
+      "shape": "circle",
+      "role": "all"
+    },
+    {
+      "name": "orders.cardAccept",
+      "description": "The Accept button on a pending order card (sends the order to the kitchen).",
+      "title": "Accept the order",
+      "body": "Tap Accept to send the order to the kitchen and print its KOT.",
+      "role": "all"
+    },
+    {
+      "name": "orders.cardReject",
+      "description": "The Reject (X) button on a pending order card.",
+      "title": "Reject the order",
+      "body": "Tap X to reject a wrong or cancelled order; it leaves the active feed.",
+      "role": "all"
+    },
+    {
+      "name": "orders.cardKot",
+      "description": "The KOT (kitchen ticket) button on an accepted order card.",
+      "title": "Print the KOT",
+      "body": "Tap KOT to print the kitchen ticket again.",
+      "role": "all"
+    },
+    {
+      "name": "orders.cardBill",
+      "description": "The Bill (print bill) button on an accepted order card — completes the order.",
+      "title": "Print the bill",
+      "body": "Tap Bill to print the customer invoice and complete the order.",
+      "role": "all"
+    },
+    {
+      "name": "orders.cardOpen",
+      "description": "An order card on the Orders tab; tap an ongoing (accepted) order to edit it.",
+      "title": "Open an order",
+      "body": "Tap an accepted order to edit its items, discount, note, and order type. Pending orders open a read-only preview with Accept/Reject.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderSource",
+      "description": "The Dine-in / Parcel / Delivery tiles at the start of the new-order wizard.",
+      "title": "Choose where it's for",
+      "body": "Pick Dine-in, Parcel, or Delivery. Dine-in then asks for a table; Delivery asks for the customer's details.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderMenu",
+      "description": "The item grid in the new-order wizard's add-items step.",
+      "title": "Add items",
+      "body": "Tap items to add them to the order; tap again or use the counter to change quantity.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderCart",
+      "description": "The 'Review order' bar at the bottom of the add-items step in the new-order wizard.",
+      "title": "Review the order",
+      "body": "Tap to review the cart, add a kitchen note or discount, then create the order.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderKitchenNote",
+      "description": "The Kitchen note button on the review step of the new-order wizard.",
+      "title": "Add a kitchen note",
+      "body": "Tell the kitchen anything special: spice level, no onions, etc. It prints on the KOT.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderDiscount",
+      "description": "The Discount button on the review step of the new-order wizard.",
+      "title": "Add a discount",
+      "body": "Enter a flat discount in taka. Percent discounts are available when editing an existing order.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderDiscountField",
+      "description": "The discount amount field in the new-order wizard's discount sheet.",
+      "title": "Discount amount",
+      "body": "Type the flat discount in taka, then tap Save.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderDiscountSave",
+      "description": "The Save button in the new-order wizard's discount sheet.",
+      "title": "Save the discount",
+      "body": "Applies the discount to the order total.",
+      "role": "all"
+    },
+    {
+      "name": "orders.newOrderSubmit",
+      "description": "The 'Create order' button on the review step of the new-order wizard (sends the order to the kitchen).",
+      "title": "Create the order",
+      "body": "Tap to send the order to the kitchen and print the KOT.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editType",
+      "description": "The Dine-in / Parcel / Delivery tabs at the top of the edit-order sheet.",
+      "title": "Change the order type",
+      "body": "Switch a running order between Dine-in, Parcel, and Delivery. Dine-in shows the table number field; Delivery shows the customer details.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editNote",
+      "description": "The 'Order note' field in the edit-order sheet.",
+      "title": "Kitchen note",
+      "body": "Type any note for the kitchen; it prints on the KOT.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editDiscountAdd",
+      "description": "The 'Add discount' button in the edit-order sheet.",
+      "title": "Add a discount",
+      "body": "Tap to reveal the discount field — flat taka or percent, with a live total preview.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editDiscountField",
+      "description": "The discount value field in the edit-order sheet.",
+      "title": "Set the discount value",
+      "body": "Type the amount; use the menu on the right to switch between flat taka and percent.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editDiscountKind",
+      "description": "The discount type menu (৳ Flat / % Percent) beside the discount field in the edit-order sheet.",
+      "title": "Flat or percent",
+      "body": "Switch between a flat taka discount and a percent discount.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editParcel",
+      "description": "The per-item Parcel chip in the edit-order sheet.",
+      "title": "Make an item parcel",
+      "body": "Tap the Parcel chip on an item to charge it as a takeaway parcel.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editAddItem",
+      "description": "The 'Add item' button in the edit-order sheet.",
+      "title": "Add an item",
+      "body": "Pick more items from the menu to add to the order.",
+      "role": "all"
+    },
+    {
+      "name": "orders.editSave",
+      "description": "The Save button in the edit-order sheet.",
+      "title": "Save the changes",
+      "body": "Applies the edits — items, note, discount, and order type — to the running order.",
+      "role": "all"
+    },
+    {
+      "name": "orders.settleMethods",
+      "description": "The payment-method cards (Cash / Card / bKash / Nagad / Pay later) in the Settle & Save dialog.",
+      "title": "Pick the payment method",
+      "body": "Choose how the customer paid: Cash, Card, bKash, Nagad, or Pay later.",
+      "role": "all"
+    },
+    {
+      "name": "orders.settlePaid",
+      "description": "The 'Customer Paid' field in the Settle & Save dialog.",
+      "title": "Amount paid",
+      "body": "Enter what the customer handed over; the change to return is shown below.",
+      "role": "all"
+    },
+    {
+      "name": "orders.settleConfirm",
+      "description": "The 'Settle & Save' button in the Settle & Save dialog.",
+      "title": "Settle & Save",
+      "body": "Records the payment method and amount, then completes the order.",
+      "role": "all"
+    },
+    {
+      "name": "more.bkashNagadPayments",
+      "description": "The 'bKash/Nagad payments' toggle in Settings — shows the payment-method dialog when printing a bill.",
+      "title": "Enable bKash/Nagad payments",
+      "body": "Turn this on to choose a payment method (Cash, Card, bKash, Nagad) when you print the bill and complete an order.",
+      "role": "all"
     },
     {
       "name": "tables.grid",
-      "description": "The tables grid on the Tables tab."
+      "description": "The tables grid on the Tables tab.",
+      "title": "The tables",
+      "body": "Tap a free table to seat guests and take their order; tap an occupied one to see its running bill."
+    },
+    {
+      "name": "tables.modeTabs",
+      "description": "The Dine-in / Parcel / Delivery tabs on the Tables tab.",
+      "title": "Order modes",
+      "body": "Switch between dine-in tables, parcel orders, and delivery orders.",
+      "role": "waiter"
+    },
+    {
+      "name": "tables.counterMode",
+      "description": "The counter quick-sell mode on the Tables tab (when service mode is set to counter).",
+      "title": "Counter mode",
+      "body": "Quick-sell view: tap items to add them and bill customers fast.",
+      "role": "all"
+    },
+    {
+      "name": "menu.search",
+      "description": "The search field on the Menu tab.",
+      "title": "Find menu items",
+      "body": "Type an item name to filter the menu list.",
+      "role": "owner"
+    },
+    {
+      "name": "menu.categories",
+      "description": "The category filter chips on the Menu tab.",
+      "title": "Filter by category",
+      "body": "Tap a category chip to show only those items.",
+      "role": "owner"
+    },
+    {
+      "name": "menu.scanCta",
+      "description": "The 'Scan menu card' button on the Menu tab.",
+      "title": "Import a printed menu",
+      "body": "Photograph a printed menu and it gets added automatically.",
+      "role": "owner"
+    },
+    {
+      "name": "menu.newItem",
+      "description": "The 'New item' button on the Menu tab.",
+      "title": "Add a menu item",
+      "body": "Tap to create a new item with its name, price, and photo.",
+      "role": "owner"
+    },
+    {
+      "name": "stock.period",
+      "description": "The time-range selector (Today / 7 days / 30 days) at the top of the Stock tab.",
+      "title": "Stock time range",
+      "body": "Switch the stock table between today, 7 days, and 30 days of activity.",
+      "role": "manager"
+    },
+    {
+      "name": "stock.table",
+      "description": "The stock table on the Stock tab; tap a column header to sort.",
+      "title": "Your stock",
+      "body": "Every item with on-hand quantity, in/out movement, and cost. Tap a header to sort.",
+      "role": "manager"
+    },
+    {
+      "name": "stock.addItem",
+      "description": "The 'Add item' button under the stock table.",
+      "title": "Add an item",
+      "body": "Create a new inventory item (name, unit, threshold, cost).",
+      "role": "manager"
+    },
+    {
+      "name": "stock.variance",
+      "description": "The daily variance drill-down card on the Stock tab (Advanced).",
+      "title": "Daily variance",
+      "body": "Compare expected vs counted stock to spot losses.",
+      "role": "manager"
+    },
+    {
+      "name": "stock.suppliers",
+      "description": "The suppliers drill-down card on the Stock tab (Advanced).",
+      "title": "Suppliers",
+      "body": "Manage your supplier list and their contact details.",
+      "role": "manager"
+    },
+    {
+      "name": "more.helpGuide",
+      "description": "The support-chat row in Settings: 'Ask the assistant for a guided tour'.",
+      "title": "Ask for a guided tour",
+      "body": "Open the assistant and it will walk you through the app.",
+      "role": "all"
+    },
+    {
+      "name": "more.audit",
+      "description": "The Audit trail row in Settings (managers).",
+      "title": "Audit trail",
+      "body": "Every void, refund, comp, and discount override with who did it and why.",
+      "role": "manager"
+    },
+    {
+      "name": "more.staff",
+      "description": "The Staff row in Settings (managers).",
+      "title": "Manage staff",
+      "body": "Invite team members and control their access.",
+      "role": "manager"
+    },
+    {
+      "name": "more.language",
+      "description": "The Language row in Settings.",
+      "title": "English / বাংলা",
+      "body": "Switch the whole app between English and Bangla.",
+      "role": "all"
+    },
+    {
+      "name": "more.signOut",
+      "description": "The Sign out row in Settings.",
+      "title": "Sign out",
+      "body": "Leave this account; you can sign back in anytime.",
+      "role": "all"
+    },
+    {
+      "name": "staff.invite",
+      "description": "The 'Invite staff' button at the bottom of the Staff screen.",
+      "title": "Invite your team",
+      "body": "Send an invite by phone or email to add a waiter or manager.",
+      "role": "manager"
+    },
+    {
+      "name": "audit.filters",
+      "description": "The action filter chips (All / Void / Refund / Comp / Discount) on the Audit screen.",
+      "title": "Filter the audit log",
+      "body": "Show only the event types you care about.",
+      "role": "manager"
+    },
+    {
+      "name": "stockCount.finish",
+      "description": "The 'Finish count' button on the end-of-day stock count screen.",
+      "title": "Finish the count",
+      "body": "Save today's count; variance is computed against the expected stock.",
+      "role": "manager"
+    },
+    {
+      "name": "reports.performance",
+      "description": "The Performance report card on the Reports tab.",
+      "title": "Performance report",
+      "body": "Download daily sales, orders, and per-item totals for any period.",
+      "role": "owner"
+    },
+    {
+      "name": "controlTower.alerts",
+      "description": "The attention-alert cards (late orders, low stock) on the Control Tower (Live) tab.",
+      "title": "Attention alerts",
+      "body": "Late orders and low-stock items, tap one to jump to the source.",
+      "role": "owner"
     },
     {
       "name": "header.menu",
-      "description": "The menu button in the header that opens the sidebar/drawer."
+      "description": "The menu button in the header that opens the sidebar/drawer.",
+      "title": "Open the menu",
+      "body": "The drawer holds every destination and quick action."
     },
     {
       "name": "header.bell",
-      "description": "The notification bell in the header; new orders from Messenger and the website arrive here."
+      "description": "The notification bell in the header; new orders from Messenger and the website arrive here.",
+      "title": "Notifications",
+      "body": "New orders from Messenger and the website arrive here."
     },
     {
       "name": "header.avatar",
-      "description": "The avatar button in the header that opens profile/settings."
+      "description": "The avatar button in the header that opens profile/settings.",
+      "title": "Your profile",
+      "body": "Opens the account profile and options."
     }
   ],
   "navSpots": {
@@ -103,12 +485,13 @@
   },
   "conventions": [
     "tab:<name> switches the sidebar tab (roles see different sets).",
-    "screen:<name> opens a full screen (staff, audit, stock-in, end-of-day stock count).",
+    "screen:<name> opens a full screen (staff, audit, stock-in, end-of-day stock count, settings, control tower).",
     "modal:<name> opens the discount or delivery-charge editor sheet.",
     "highlight:<spot> lights up an exact element in the current screen.",
     "Each step auto-navigates: its target deeplink executes before the step is shown. The user advances by tapping the highlighted element itself; the app never advances by itself.",
     "Give every step a spot when an element exists to highlight — the spotlight points at the element the user must tap. A step with both target and spot navigates itself and then points at the element.",
     "Target-only steps (no spot) are only for opening a destination the next step will highlight; they show a Continue button the user taps to move on.",
-    "If a step's destination must be opened first, combine it in the same step: target opens the destination and the spot lights up the exact element."
+    "If a step's destination must be opened first, combine it in the same step: target opens the destination and the spot lights up the exact element.",
+    "Spots marked shape=circle (e.g. orders.newOrderFab) are round targets; the spotlight cuts a circle. Role metadata (owner|manager|waiter|all) says who sees the element — do not guide a role to a spot they cannot see."
   ]
 }

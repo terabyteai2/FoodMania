@@ -389,7 +389,6 @@ class CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp4),
@@ -397,21 +396,29 @@ class CategoryChips extends StatelessWidget {
         children: [
           for (var i = 0; i < categories.length; i++) ...[
             if (i > 0) const SizedBox(width: PosSpacing.sp2),
-            TfChip(
-              label: categories[i] == 'All'
-                  ? text.categoryAll
-                  : _chipLabel(categories[i], text.isBn),
-              count: counts?[categories[i]],
-              active: categories[i] == selected,
-              small: true,
-              customFill: resolveCategoryChip(categories[i]).background,
-              customBorder: resolveCategoryChip(categories[i]).border,
-              customText: resolveCategoryChip(categories[i]).text,
-              onTap: () => onSelected(categories[i]),
-            ),
+            _categoryChip(context, i),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _categoryChip(BuildContext context, int i) {
+    final text = AppScope.of(context).strings;
+    final chip = resolveCategoryChip(categories[i]);
+    return TfChip(
+      label: categories[i] == 'All'
+          ? text.categoryAll
+          : _chipLabel(categories[i], text.isBn),
+      count: counts?[categories[i]],
+      active: categories[i] == selected,
+      small: true,
+      // Chip fill is a pale tint of the same category color the cards use.
+      customFill: Color.lerp(chip.background, Colors.white, 0.7)!,
+      customBorder: chip.border,
+      customText: PosColors.primaryDark,
+      customCount: PosColors.primaryDark,
+      onTap: () => onSelected(categories[i]),
     );
   }
 
@@ -609,6 +616,7 @@ class _GridTile extends StatelessWidget {
     debugPrint('[QB-WIZARD] _GridTile: building ${item.id} ${item.name} cat=${item.category}');
     final inCart = qty > 0;
     final off = !item.isAvailable;
+    final bg = resolveCategoryBg(item.category);
     return GestureDetector(
       onTap: off ? null : onTap,
       onLongPress: () => _showItemActions(
@@ -622,12 +630,12 @@ class _GridTile extends StatelessWidget {
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: inCart ? PosColors.primarySoft : resolveCategoryBg(item.category),
+            color: bg,
             border: Border.all(
               color: inCart ? PosColors.primary : PosColors.line,
               width: inCart ? 1.8 : 1,
             ),
-            borderRadius: BorderRadius.circular(PosRadii.xl),
+            borderRadius: BorderRadius.circular(PosRadii.card),
             boxShadow: PosShadows.soft,
           ),
           child: Column(

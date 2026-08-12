@@ -17,6 +17,7 @@ import 'core/widgets/tf_design_system.dart';
 import 'models/app_update_info.dart';
 import 'models/pos_notification.dart';
 import 'models/account_role.dart';
+import 'models/receipt_scan.dart';
 import 'services/cloud_api_service.dart';
 import 'features/analytics/analytics_screen.dart';
 import 'features/audit/audit_screen.dart';
@@ -31,6 +32,7 @@ import 'features/menu/menu_scan_screen.dart';
 import 'features/more/more_screen.dart';
 import 'features/orders/orders_screen.dart';
 import 'features/reports/reports_hub_screen.dart';
+import 'features/settings/settings_screen.dart';
 import 'features/setup/tenant_setup_screen.dart';
 import 'features/splash/mode_intro_screen.dart';
 import 'features/staff/staff_screen.dart';
@@ -444,6 +446,7 @@ class _MainShellState extends State<MainShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   OverlayEntry? _scanOverlay;
   bool _useRail = false;
+  StockScanResult? _pendingStockScan;
 
   void _showScanOverlay(String message) {
     _hideScanOverlay();
@@ -591,6 +594,10 @@ class _MainShellState extends State<MainShell> {
       (_) => InventoryScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
+        pendingScan: _pendingStockScan,
+        onPendingScanResolved: () {
+          if (mounted) setState(() => _pendingStockScan = null);
+        },
       ),
       (_) => MoreScreen(
         onNavigateToOrders: goToOrders,
@@ -790,6 +797,16 @@ class _MainShellState extends State<MainShell> {
         unawaited(_pushThenRefreshInventory(const StockInScreen()));
       case 'screen:stock_count':
         unawaited(_pushThenRefreshInventory(const EndOfDayCountScreen()));
+      case 'screen:settings':
+        unawaited(_pushChatScreen(SettingsScreen(
+          onNavigateToOrders: () {},
+          onNavigateToTarget: _navigateNotificationTarget,
+        )));
+      case 'screen:control_tower':
+        unawaited(_pushChatScreen(ControlTowerScreen(
+          onNavigateToOrders: () {},
+          onNavigateToTarget: _navigateNotificationTarget,
+        )));
       case 'modal:menu_discounts':
         unawaited(showMenuDiscountsSheet(context));
       case 'modal:menu_delivery_charge':
@@ -809,11 +826,7 @@ class _MainShellState extends State<MainShell> {
   void _handleDrawerAction(_DrawerAction action) {
     switch (action) {
       case _DrawerAction.stockScan:
-        unawaited(runStockScanFlow(
-          context,
-          showScanOverlay: _showScanOverlay,
-          hideScanOverlay: _hideScanOverlay,
-        ));
+        unawaited(_handleStockScan());
       case _DrawerAction.stockIn:
         unawaited(_pushThenRefreshInventory(const StockInScreen()));
       case _DrawerAction.stockCount:
@@ -832,6 +845,21 @@ class _MainShellState extends State<MainShell> {
       context,
     ).push(MaterialPageRoute(builder: (_) => screen));
     if (mounted) await AppScope.read(context).refreshInventorySummary();
+  }
+
+  /// Drawer Stock ▸ Scan: run the capture + unified scan, then surface the
+  /// scanned changes directly on the Stock page table, where the user reviews
+  /// them (muted old value → green/red new) and confirms or cancels.
+  Future<void> _handleStockScan() async {
+    final result = await runStockScanFlow(
+      context,
+      showScanOverlay: _showScanOverlay,
+      hideScanOverlay: _hideScanOverlay,
+    );
+    if (result == null || result.items.isEmpty) return;
+    if (!mounted) return;
+    setState(() => _pendingStockScan = result);
+    _selectTab(_AppTab.stock);
   }
 
   void _consumeFcmNavigation(PosAppController app) {
@@ -1280,6 +1308,11 @@ class _AppNavDrawer extends StatelessWidget {
     void goTab(_AppTab tab) {
       close();
       onSelectTab(tab);
+    }
+
+    void goTarget(PosNotificationTarget target) {
+      close();
+      onNavigateTarget(target);
     }
 
     void goAction(_DrawerAction action) {

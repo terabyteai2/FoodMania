@@ -228,6 +228,15 @@ to a global rect at show time; unmounted spots are skipped silently).
   stats grid), manager (Orders overview + `+` FAB), waiter (Tables grid); shared
   header spots (`header.menu` / `header.bell` / `header.avatar`) in
   `TfGlobalTopBar`. Never navigates tabs mid-tour; role switch dismisses it.
+- **Spot vocabulary (v2):** the assistant's highlight vocabulary
+  (`backend_dev/data/support_guide_deeplinks.json`) covers every main screen —
+  Analytics, Orders (search/tabs/filters/card actions), Tables (mode tabs,
+  counter mode), Stock (period/table/add-item/variance/suppliers), Menu
+  (search/categories/new-item), More hub rows, and the pushed Staff, Audit,
+  stock-count, Reports, and Control Tower screens. Entries may carry
+  `title`/`body` (default copy), `shape: circle` (FABs) and `role` metadata;
+  the client still resolves every spot to a live element via
+  `TourSpotRegistry` — nothing is position-stored.
 
 ## 6. Screen acceptance (phone ≈ 410×880)
 

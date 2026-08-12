@@ -49,7 +49,7 @@ def _providers() -> list[_Provider]:
             name="deepseek",
             api_key=settings.DEEPSEEK_API_KEY.strip(),
             model=settings.MENU_SCAN_DEEPSEEK_MODEL.strip(),
-            url="https://api.deepseek.com/chat/completions",
+            url="https://api.deepseek.com/v1/chat/completions",
             supports_schema=False,
         ),
     ]
@@ -400,9 +400,10 @@ async def parse_receipt_text(
     provider = configured[0]
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
         logger.info(
-            "receipt scan llm request provider=%s model=%s pages=%s category=%s",
+            "receipt scan llm request provider=%s model=%s url=%s pages=%s category=%s",
             provider.name,
             provider.model,
+            provider.url,
             len(clean_pages),
             category or "auto",
         )
@@ -420,8 +421,20 @@ async def parse_receipt_text(
                     known_items=known_items,
                 ),
             )
+            logger.info(
+                "receipt scan llm response provider=%s status=%s",
+                provider.name,
+                response.status_code,
+            )
             response.raise_for_status()
             decoded = response.json()
+            raw_content = _message_content(decoded)
+            logger.info(
+                "receipt scan llm raw provider=%s content_chars=%s preview=%r",
+                provider.name,
+                len(raw_content),
+                raw_content[:300],
+            )
             resolved, items = _validated_items(
                 _message_content(decoded),
                 category=category,

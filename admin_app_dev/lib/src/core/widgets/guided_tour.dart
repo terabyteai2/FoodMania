@@ -56,6 +56,7 @@ class TourSpotRegistry {
   static Rect? rectOf(String name) {
     final list = _keys[name];
     if (list == null) return null;
+    final screenSize = _currentScreenSize;
     for (final key in list.reversed) {
       final context = key.currentContext;
       if (context == null || !_isVisible(context)) continue;
@@ -63,9 +64,32 @@ class TourSpotRegistry {
       if (box is! RenderBox || !box.attached || !box.hasSize) continue;
       final size = box.size;
       if (size.isEmpty) continue;
-      return box.localToGlobal(Offset.zero) & size;
+      final rect = box.localToGlobal(Offset.zero) & size;
+      if (screenSize != null) {
+        final screen = Offset.zero & screenSize;
+        if (rect.right <= 0 ||
+            rect.left >= screen.width ||
+            rect.bottom <= 0 ||
+            rect.top >= screen.height) {
+          continue;
+        }
+      }
+      return rect;
     }
     return null;
+  }
+
+  /// Cached screen logical size sourced from the first platform view.
+  /// Stays valid for the lifespan of the isolate (mobile POS devices are
+  /// single-screen); returns null on pre-3.10 Flutters where the
+  /// platform-dispatcher views list is unavailable (skips the bounds check).
+  static Size? get _currentScreenSize {
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.views.first;
+      return view.physicalSize / view.devicePixelRatio;
+    } catch (_) {
+      return null;
+    }
   }
 
   static bool has(String name) => rectOf(name) != null;

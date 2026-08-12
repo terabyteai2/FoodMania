@@ -194,6 +194,9 @@ class _OrdersScreenState extends State<OrdersScreen>
   int? _lastPendingCount;
   OrderListFilters _filters = OrderListFilters.none;
   _OrdersDerivation? _cachedDerivation;
+  // Completed tab defaults to the optional "shift" scope (completed orders
+  // since the configured shift start). Lifting it shows every completed order.
+  bool _seeAllCompleted = false;
   // Search collapses to a top-bar icon; the field row mounts while open or
   // while a query is active (so a typed query can't vanish under the user).
   bool _searchOpen = false;
@@ -227,7 +230,12 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   void _onTabChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        // Leaving the Completed tab returns it to the shift scope next visit.
+        if (_tabs.index != 1) _seeAllCompleted = false;
+      });
+    }
   }
 
   @override
@@ -244,14 +252,33 @@ class _OrdersScreenState extends State<OrdersScreen>
     // Orders home reads orders (+ hasMore/loadingMore, both in the orders
     // aspect), language, and menu availability — not printer/sync/inventory.
     final app = AppScope.selectMany(context, const [
+      // `settings` because the completed-tab shift scope reads serverConfig.
       AppAspect.orders,
       AppAspect.language,
       AppAspect.menu,
+      AppAspect.settings,
     ]);
     final rawOrders = app.ordersFor();
     final language = app.language;
     final searchQuery = _searchController.text.trim();
-    final derived = _deriveOrders(rawOrders, _filters, searchQuery, language);
+    final completedBounds = _seeAllCompleted
+        ? null
+        : OrderListFilters.shiftBoundsFor(
+            DateTime.now(),
+            startMinute: app.shiftModeActive
+                ? app.serverConfig.shiftStartMinute
+                : null,
+            endMinute: app.shiftModeActive
+                ? app.serverConfig.shiftEndMinute
+                : null,
+          );
+    final derived = _deriveOrders(
+      rawOrders,
+      _filters,
+      searchQuery,
+      language,
+      completedBounds,
+    );
     final ongoingOrders = derived.ongoingOrders;
     final completedOrders = derived.completedOrders;
 
@@ -271,6 +298,12 @@ class _OrdersScreenState extends State<OrdersScreen>
       currentSearchBase: derived.searchBaseCompleted,
       currentUnfiltered: derived.unfilteredCompleted,
       searchActive: searchQuery.isNotEmpty,
+      seeAllShortcut: _seeAllCompleted || _completedOrders(rawOrders).isEmpty
+          ? null
+          : _EmptyShortcut(
+              label: text.seeAll,
+              onTap: () => setState(() => _seeAllCompleted = true),
+            ),
     );
     _syncTabWithPendingOrders(pendingCount, ongoingOrders.length);
 
@@ -296,19 +329,25 @@ class _OrdersScreenState extends State<OrdersScreen>
               // suppresses `dark`, so the pair flips together.
               extraActions: [
                 if (app.isOwner) ...[
-                  TfIconButton(
-                    icon: TfNavIcon.search,
-                    tooltip: text.orderSearchHint,
-                    bare: !_searchRowVisible,
-                    dark: _searchRowVisible,
-                    onPressed: _toggleSearch,
+                  TourSpot(
+                    name: 'orders.search',
+                    child: TfIconButton(
+                      icon: TfNavIcon.search,
+                      tooltip: text.orderSearchHint,
+                      bare: !_searchRowVisible,
+                      dark: _searchRowVisible,
+                      onPressed: _toggleSearch,
+                    ),
                   ),
-                  TfIconButton(
-                    icon: Icons.tune_rounded,
-                    tooltip: text.filterOrders,
-                    bare: !_filters.isActive,
-                    dark: _filters.isActive,
-                    onPressed: () => _openOrderFilters(context),
+                  TourSpot(
+                    name: 'orders.filters',
+                    child: TfIconButton(
+                      icon: Icons.tune_rounded,
+                      tooltip: text.filterOrders,
+                      bare: !_filters.isActive,
+                      dark: _filters.isActive,
+                      onPressed: () => _openOrderFilters(context),
+                    ),
                   ),
                 ],
               ],
@@ -316,20 +355,26 @@ class _OrdersScreenState extends State<OrdersScreen>
             if (_searchRowVisible)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: TfSearchField(
-                  controller: _searchController,
-                  hintText: text.orderSearchHint,
-                  autofocus: true,
-                  onChanged: (_) => setState(() {}),
-                  onClear: _toggleSearch,
+                child: TourSpot(
+                  name: 'orders.search',
+                  child: TfSearchField(
+                    controller: _searchController,
+                    hintText: text.orderSearchHint,
+                    autofocus: true,
+                    onChanged: (_) => setState(() {}),
+                    onClear: _toggleSearch,
+                  ),
                 ),
               )
             else
               const SizedBox(height: PosSpacing.sp1),
-            _TabStrip(
-              controller: _tabs,
-              ongoingCount: ongoingOrders.length,
-              completedCount: completedOrders.length,
+            TourSpot(
+              name: 'orders.tabs',
+              child: _TabStrip(
+                controller: _tabs,
+                ongoingCount: ongoingOrders.length,
+                completedCount: completedOrders.length,
+              ),
             ),
             Expanded(
               child: TabBarView(
@@ -358,8 +403,13 @@ class _OrdersScreenState extends State<OrdersScreen>
                   ),
                   _OrderList(
                     orders: completedOrders,
-                    emptyTitle: text.noCompletedOrders,
+                    emptyTitle: app.shiftModeActive && !_seeAllCompleted
+                        ? text.noCompletedThisShift
+                        : text.noCompletedOrders,
                     completedTab: true,
+                    shiftStartMinute: app.shiftModeActive
+                        ? app.serverConfig.shiftStartMinute
+                        : null,
                     canCreate: canCreate,
                     onCreate: () => openNewOrderForm(
                       context,
@@ -373,6 +423,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     onCompletedLongPress: (o) =>
                         _showCompletedOrderActions(context, o),
+                    seeAllCompleted: _seeAllCompleted,
+                    onToggleShiftScope: () => setState(
+                      () => _seeAllCompleted = !_seeAllCompleted,
+                    ),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
                     onLoadMore: app.loadMoreOrders,
@@ -446,6 +500,30 @@ class _OrdersScreenState extends State<OrdersScreen>
         .toList(growable: false);
   }
 
+  /// Completed orders whose local [OrderModel.createdAt] falls inside the
+  /// optional shift window; a null window keeps every completed order.
+  List<OrderModel> _completedOrdersInScope(
+    List<OrderModel> orders,
+    ({DateTime? startInclusive, DateTime? endExclusive})? bounds,
+  ) {
+    if (bounds == null) return _completedOrders(orders);
+    return orders
+        .where((o) {
+          if (o.status.adminStatus != OrderStatus.completed) return false;
+          final at = o.createdAt.toLocal();
+          if (bounds.startInclusive != null &&
+              at.isBefore(bounds.startInclusive!)) {
+            return false;
+          }
+          if (bounds.endExclusive != null &&
+              !at.isBefore(bounds.endExclusive!)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
   /// Memoized derivation of the six filtered/sorted views needed by [build].
   /// Cache key is the identity of [raw] + [filters] plus the search/language
   /// strings, so unchanged inputs (the common case during sync churn or tab
@@ -455,13 +533,15 @@ class _OrdersScreenState extends State<OrdersScreen>
     OrderListFilters filters,
     String searchQuery,
     AppLanguage language,
+    ({DateTime? startInclusive, DateTime? endExclusive})? completedBounds,
   ) {
     final cached = _cachedDerivation;
     if (cached != null &&
         identical(cached.raw, raw) &&
         identical(cached.filters, filters) &&
         cached.searchQuery == searchQuery &&
-        cached.language == language) {
+        cached.language == language &&
+        cached.completedBounds == completedBounds) {
       return cached;
     }
     final filterMatched = raw
@@ -471,8 +551,12 @@ class _OrdersScreenState extends State<OrdersScreen>
         .where((o) => _matchesOrderSearch(o, searchQuery, language))
         .toList(growable: false);
     final ongoingOrders = _ongoingOrders(allOrders)..sort(_sortOrders);
-    final completedOrders = _completedOrders(allOrders)
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final completedOrders =
+        _completedOrdersInScope(allOrders, completedBounds)
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final unfilteredCompleted = _completedOrdersInScope(raw, completedBounds);
+    final searchBaseCompleted =
+        _completedOrdersInScope(filterMatched, completedBounds);
     if (kDebugMode) {
       debugPrint(
         '[QB-ORDERS-DIAG] derive raw=${raw.length} '
@@ -480,11 +564,12 @@ class _OrdersScreenState extends State<OrdersScreen>
         'afterSearch=${allOrders.length} '
         'ongoing=${ongoingOrders.length} completed=${completedOrders.length} '
         'unfilteredOngoing=${_ongoingOrders(raw).length} '
-        'unfilteredCompleted=${_completedOrders(raw).length} '
+        'unfilteredCompleted=${unfilteredCompleted.length} '
         'searchBaseOngoing=${_ongoingOrders(filterMatched).length} '
-        'searchBaseCompleted=${_completedOrders(filterMatched).length} '
+        'searchBaseCompleted=${searchBaseCompleted.length} '
         'query="$searchQuery" filtersActive=${filters.isActive} '
         'dateRange=${filters.dateRange.name} source=${filters.source?.name} '
+        'shift=${completedBounds == null ? "all" : "scope"} '
         '${_ordersDiagSummary(raw)}',
       );
       // When filters/search hide everything but raw had orders, dump statuses
@@ -510,12 +595,13 @@ class _OrdersScreenState extends State<OrdersScreen>
       filters: filters,
       searchQuery: searchQuery,
       language: language,
+      completedBounds: completedBounds,
       filterMatched: filterMatched,
       allOrders: allOrders,
       unfilteredOngoing: _ongoingOrders(raw),
-      unfilteredCompleted: _completedOrders(raw),
+      unfilteredCompleted: unfilteredCompleted,
       searchBaseOngoing: _ongoingOrders(filterMatched),
-      searchBaseCompleted: _completedOrders(filterMatched),
+      searchBaseCompleted: searchBaseCompleted,
       ongoingOrders: ongoingOrders,
       completedOrders: completedOrders,
     );
@@ -529,6 +615,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     required List<OrderModel> currentSearchBase,
     required List<OrderModel> currentUnfiltered,
     required bool searchActive,
+    _EmptyShortcut? seeAllShortcut,
   }) {
     if (currentFiltered.isNotEmpty) return null;
     final text = AppScope.of(context).strings;
@@ -541,6 +628,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         }),
       );
     }
+    if (seeAllShortcut != null) return seeAllShortcut;
     if (_filters.isActive && currentUnfiltered.isNotEmpty) {
       return _EmptyShortcut(
         label: text.clearFiltersShortcut,
@@ -626,7 +714,12 @@ class _OrdersScreenState extends State<OrdersScreen>
           _OrdersFilterSheet(initial: _filters, strings: app.strings),
     );
     if (result != null && mounted) {
-      setState(() => _filters = result);
+      setState(() {
+        _filters = result;
+        // A picked date range takes over the completed tab from the shift
+        // scope; choosing "all" hands control back to the shift.
+        _seeAllCompleted = result.dateRange != OrderDateRange.all;
+      });
     }
   }
 
@@ -871,6 +964,7 @@ class _OrdersDerivation {
     required this.filters,
     required this.searchQuery,
     required this.language,
+    required this.completedBounds,
     required this.filterMatched,
     required this.allOrders,
     required this.unfilteredOngoing,
@@ -885,6 +979,7 @@ class _OrdersDerivation {
   final OrderListFilters filters;
   final String searchQuery;
   final AppLanguage language;
+  final ({DateTime? startInclusive, DateTime? endExclusive})? completedBounds;
   final List<OrderModel> filterMatched;
   final List<OrderModel> allOrders;
   final List<OrderModel> unfilteredOngoing;
@@ -1149,6 +1244,9 @@ class _OrderList extends StatelessWidget {
     this.onCompletedLongPress,
     this.showDateHeaders = true,
     this.completedTab = false,
+    this.shiftStartMinute,
+    this.seeAllCompleted = false,
+    this.onToggleShiftScope,
     this.hasMore = false,
     this.loadingMore = false,
     this.onLoadMore,
@@ -1173,6 +1271,17 @@ class _OrderList extends StatelessWidget {
   /// grid extent (width ≥ 700) follows this.
   final bool completedTab;
 
+  /// When the completed tab follows shift mode, date headers group by the
+  /// shift's opening day (an order at 1:30 AM headers under yesterday).
+  final int? shiftStartMinute;
+
+  /// Completed tab: true while the shift scope is lifted (all completed).
+  final bool seeAllCompleted;
+
+  /// Flips the completed tab between the shift scope and "all completed".
+  /// Only meaningful on the completed tab.
+  final VoidCallback? onToggleShiftScope;
+
   /// Whether the underlying `orders` list has more pages available.
   final bool hasMore;
 
@@ -1188,16 +1297,19 @@ class _OrderList extends StatelessWidget {
     List<OrderModel> orders,
     bool showFooter,
     bool showDateHeaders,
+    int? shiftStartMinute,
     AppStrings text,
   ) {
     final entries = <_ListEntry>[];
     DateTime? lastDate;
     for (final order in orders) {
       if (showDateHeaders) {
-        final d = order.createdAt.toLocal();
-        final orderDate = DateTime(d.year, d.month, d.day);
+        final local = order.createdAt.toLocal();
+        final orderDate = shiftStartMinute == null
+            ? DateTime(local.year, local.month, local.day)
+            : OrderListFilters.shiftDayFor(local, shiftStartMinute);
         if (lastDate == null || orderDate != lastDate) {
-          entries.add(_DateHeaderEntry(text.formatDateHeader(d)));
+          entries.add(_DateHeaderEntry(text.formatDateHeader(orderDate)));
           lastDate = orderDate;
         }
       }
@@ -1209,6 +1321,22 @@ class _OrderList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final toggle = completedTab ? onToggleShiftScope : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (toggle != null && seeAllCompleted)
+          _CompletedScopeBar(onToggleShiftScope: toggle),
+        Expanded(
+          child: _buildBody(context),
+        ),
+        if (toggle != null && !seeAllCompleted && orders.isNotEmpty)
+          _SeeAllCompletedBar(onToggleShiftScope: toggle),
+      ],
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     if (orders.isEmpty) {
       if (kDebugMode) {
         debugPrint(
@@ -1279,6 +1407,7 @@ class _OrderList extends StatelessWidget {
                     orders,
                     _showFooter,
                     showDateHeaders,
+                    shiftStartMinute,
                     app.strings,
                   );
                   return ListView.builder(
@@ -1337,6 +1466,63 @@ class _LoadMoreFooter extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2.4),
               )
             : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+/// Pinned bottom CTA on the Completed tab while the shift scope is on:
+/// lifts to "all completed orders".
+class _SeeAllCompletedBar extends StatelessWidget {
+  const _SeeAllCompletedBar({required this.onToggleShiftScope});
+
+  final VoidCallback onToggleShiftScope;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: TfButton(
+        label: text.seeAll,
+        icon: Icons.unfold_more_rounded,
+        variant: TfButtonVariant.ghost,
+        fullWidth: true,
+        onPressed: onToggleShiftScope,
+      ),
+    );
+  }
+}
+
+/// Top scope bar on the Completed tab while "all completed" is showing:
+/// makes it obvious the shift is lifted and offers a way back.
+class _CompletedScopeBar extends StatelessWidget {
+  const _CompletedScopeBar({required this.onToggleShiftScope});
+
+  final VoidCallback onToggleShiftScope;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Row(
+        children: [
+          const Icon(Icons.history_rounded, size: 18, color: PosColors.muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TfText(
+              text.allCompletedOrdersLabel,
+              style: TfTextStyles.bodyMuted,
+            ),
+          ),
+          TfChip(
+            label: text.currentShiftLabel,
+            active: true,
+            small: true,
+            onTap: onToggleShiftScope,
+          ),
+        ],
       ),
     );
   }
@@ -1564,21 +1750,24 @@ class _OrderCardState extends State<_OrderCard> {
       padded: false,
       clip: true,
       borderColor: isPending ? PosColors.pendingBorder : PosColors.line,
-      child: InkWell(
-        onTap: widget.onOpen,
-        onLongPress: isCompleted
-            ? widget.onCompletedLongPress
-            : (canPrint && isAccepted ? widget.onPrintBill : null),
-        child: Padding(
-          padding: const EdgeInsets.all(PosDensity.cardPad),
-          child: isCompleted
-              ? _completedBody(context, canPrint: canPrint)
-              : _ongoingBody(
-                  context,
-                  isPending: isPending,
-                  isAccepted: isAccepted,
-                  canPrint: canPrint,
-                ),
+      child: TourSpot(
+        name: 'orders.cardOpen',
+        child: InkWell(
+          onTap: widget.onOpen,
+          onLongPress: isCompleted
+              ? widget.onCompletedLongPress
+              : (canPrint && isAccepted ? widget.onPrintBill : null),
+          child: Padding(
+            padding: const EdgeInsets.all(PosDensity.cardPad),
+            child: isCompleted
+                ? _completedBody(context, canPrint: canPrint)
+                : _ongoingBody(
+                    context,
+                    isPending: isPending,
+                    isAccepted: isAccepted,
+                    canPrint: canPrint,
+                  ),
+          ),
         ),
       ),
     );
@@ -1742,33 +1931,39 @@ class _OrderCardState extends State<_OrderCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              InkWell(
-                onTap: () => widget.onStatus(OrderStatus.rejected),
-                borderRadius: BorderRadius.circular(PosRadii.sm),
-                child: Container(
-                  width: 40,
-                  height: 36,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: PosColors.surface,
-                    borderRadius: BorderRadius.circular(PosRadii.sm),
-                    border: Border.all(color: PosColors.lineStrong, width: 1),
-                  ),
-                  child: const Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: PosColors.danger,
+              TourSpot(
+                name: 'orders.cardReject',
+                child: InkWell(
+                  onTap: () => widget.onStatus(OrderStatus.rejected),
+                  borderRadius: BorderRadius.circular(PosRadii.sm),
+                  child: Container(
+                    width: 40,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(PosRadii.sm),
+                      border: Border.all(color: PosColors.lineStrong, width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: PosColors.danger,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: PosSpacing.sp2),
-              TfButton(
-                label: text.acceptAndSendToKitchen,
-                icon: TfNavIcon.check,
-                variant: TfButtonVariant.success,
-                size: TfButtonSize.sm,
-                fullWidth: false,
-                onPressed: () => widget.onStatus(OrderStatus.accepted),
+              TourSpot(
+                name: 'orders.cardAccept',
+                child: TfButton(
+                  label: text.acceptAndSendToKitchen,
+                  icon: TfNavIcon.check,
+                  variant: TfButtonVariant.success,
+                  size: TfButtonSize.sm,
+                  fullWidth: false,
+                  onPressed: () => widget.onStatus(OrderStatus.accepted),
+                ),
               ),
             ],
           ),
@@ -1780,13 +1975,16 @@ class _OrderCardState extends State<_OrderCard> {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  TfButton(
-                    label: text.kotAction,
-                    icon: TfNavIcon.printer,
-                    variant: TfButtonVariant.ghost,
-                    size: TfButtonSize.sm,
-                    fullWidth: false,
-                    onPressed: widget.onPrintKot,
+                  TourSpot(
+                    name: 'orders.cardKot',
+                    child: TfButton(
+                      label: text.kotAction,
+                      icon: TfNavIcon.printer,
+                      variant: TfButtonVariant.ghost,
+                      size: TfButtonSize.sm,
+                      fullWidth: false,
+                      onPressed: widget.onPrintKot,
+                    ),
                   ),
                   // Small green dot = this order's KOT is already printed
                   // (replaces the old "KOT not printed" badge).
@@ -1810,13 +2008,16 @@ class _OrderCardState extends State<_OrderCard> {
                 ],
               ),
               const SizedBox(width: PosSpacing.sp2),
-              TfButton(
-                label: text.printBillAction,
-                icon: Icons.receipt_long_outlined,
-                variant: TfButtonVariant.primary,
-                size: TfButtonSize.sm,
-                fullWidth: false,
-                onPressed: widget.onPrintBill,
+              TourSpot(
+                name: 'orders.cardBill',
+                child: TfButton(
+                  label: text.printBillAction,
+                  icon: Icons.receipt_long_outlined,
+                  variant: TfButtonVariant.primary,
+                  size: TfButtonSize.sm,
+                  fullWidth: false,
+                  onPressed: widget.onPrintBill,
+                ),
               ),
             ],
           ),
@@ -2683,14 +2884,17 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
               const SizedBox(height: PosDensity.sectionGap),
               // Underline tabs for the service type — DESIGN.md §7c
               // nav-primitive rule (no pill segments for in-content nav).
-              TfTabs(
-                activeIndex: OrderServiceType.values.indexOf(_serviceType),
-                onChanged: (i) =>
-                    setState(() => _serviceType = OrderServiceType.values[i]),
-                items: [
-                  for (final type in OrderServiceType.values)
-                    TfTabItem(label: type.label, labelBn: type.banglaLabel),
-                ],
+              TourSpot(
+                name: 'orders.editType',
+                child: TfTabs(
+                  activeIndex: OrderServiceType.values.indexOf(_serviceType),
+                  onChanged: (i) =>
+                      setState(() => _serviceType = OrderServiceType.values[i]),
+                  items: [
+                    for (final type in OrderServiceType.values)
+                      TfTabItem(label: type.label, labelBn: type.banglaLabel),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               if (_serviceType == OrderServiceType.dineIn)
@@ -2700,11 +2904,14 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                   controller: _tableCtrl,
                   keyboardType: TextInputType.number,
                 ),
-              TfField(
-                label: 'Order note',
-                labelBn: 'অর্ডার নোট',
-                controller: _noteCtrl,
-                maxLines: 2,
+              TourSpot(
+                name: 'orders.editNote',
+                child: TfField(
+                  label: 'Order note',
+                  labelBn: 'অর্ডার নোট',
+                  controller: _noteCtrl,
+                  maxLines: 2,
+                ),
               ),
               if (isDelivery) ...[
                 TfField(
@@ -2738,15 +2945,18 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                     ),
                   ),
                   if (!_discountRevealed)
-                    TextButton.icon(
-                      onPressed: () => setState(() {
-                        _discountRevealed = true;
-                        _discountKind = _EditDiscountKind.flat;
-                        _discountAutofocus = true;
-                      }),
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: TfText(
-                        text.isBn ? 'ছাড় যোগ করুন' : 'Add discount',
+                    TourSpot(
+                      name: 'orders.editDiscountAdd',
+                      child: TextButton.icon(
+                        onPressed: () => setState(() {
+                          _discountRevealed = true;
+                          _discountKind = _EditDiscountKind.flat;
+                          _discountAutofocus = true;
+                        }),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: TfText(
+                          text.isBn ? 'ছাড় যোগ করুন' : 'Add discount',
+                        ),
                       ),
                     ),
                 ],
@@ -2757,28 +2967,34 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: TfField(
-                        label: text.isBn ? 'ছাড়ের পরিমাণ' : 'Discount value',
-                        controller: _discountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        autofocus: _discountAutofocus,
-                        onChanged: (_) => setState(() {}),
-                        hint: _discountKind == _EditDiscountKind.percent
-                            ? '10'
-                            : '50',
-                        hintBn: _discountKind == _EditDiscountKind.percent
-                            ? '১০'
-                            : '৫০',
-                        errorText: _discountError(text),
-                        hintHelper: _computedDiscount > 0
-                            ? '−${tfFormatCurrency(context, _computedDiscount, decimalDigits: 2)}'
-                            : null,
-                        suffix: _DiscountKindMenu(
-                          kind: _discountKind,
-                          onSelected: (kind) =>
-                              setState(() => _discountKind = kind),
+                      child: TourSpot(
+                        name: 'orders.editDiscountField',
+                        child: TfField(
+                          label: text.isBn ? 'ছাড়ের পরিমাণ' : 'Discount value',
+                          controller: _discountCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          autofocus: _discountAutofocus,
+                          onChanged: (_) => setState(() {}),
+                          hint: _discountKind == _EditDiscountKind.percent
+                              ? '10'
+                              : '50',
+                          hintBn: _discountKind == _EditDiscountKind.percent
+                              ? '১০'
+                              : '৫০',
+                          errorText: _discountError(text),
+                          hintHelper: _computedDiscount > 0
+                              ? '−${tfFormatCurrency(context, _computedDiscount, decimalDigits: 2)}'
+                              : null,
+                          suffix: TourSpot(
+                            name: 'orders.editDiscountKind',
+                            child: _DiscountKindMenu(
+                              kind: _discountKind,
+                              onSelected: (kind) =>
+                                  setState(() => _discountKind = kind),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -2814,10 +3030,13 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                       ),
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: () => _addItemFlow(context),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: TfText(text.isBn ? 'যোগ করুন' : 'Add item'),
+                  TourSpot(
+                    name: 'orders.editAddItem',
+                    child: TextButton.icon(
+                      onPressed: () => _addItemFlow(context),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: TfText(text.isBn ? 'যোগ করুন' : 'Add item'),
+                    ),
                   ),
                 ],
               ),
@@ -2863,12 +3082,15 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                         ),
                       ),
                       const SizedBox(width: PosSpacing.sp2),
-                      TfChip(
-                        label: text.takeaway,
-                        small: true,
-                        active: _itemParcel[entry.key] ?? false,
-                        leading: const Icon(Icons.shopping_bag_outlined),
-                        onTap: () => _toggleParcel(entry.key),
+                      TourSpot(
+                        name: 'orders.editParcel',
+                        child: TfChip(
+                          label: text.takeaway,
+                          small: true,
+                          active: _itemParcel[entry.key] ?? false,
+                          leading: const Icon(Icons.shopping_bag_outlined),
+                          onTap: () => _toggleParcel(entry.key),
+                        ),
                       ),
                       const SizedBox(width: PosSpacing.sp1),
                       IconButton(
@@ -2998,9 +3220,11 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: TfButton(
-                      label: text.isBn ? 'সেভ' : 'Save',
-                      icon: TfNavIcon.check,
+                    child: TourSpot(
+                      name: 'orders.editSave',
+                      child: TfButton(
+                        label: text.isBn ? 'সেভ' : 'Save',
+                        icon: TfNavIcon.check,
                       onPressed: _itemQty.isEmpty
                           ? null
                           : () {
@@ -3081,6 +3305,7 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                                 ),
                               );
                             },
+                      ),
                     ),
                   ),
                 ],
@@ -4457,35 +4682,38 @@ class _SourceAndTableStep extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SourceTile(
-                        icon: Icons.table_restaurant_outlined,
-                        source: OrderServiceType.dineIn,
-                        selected: source == OrderServiceType.dineIn,
-                        onTap: () => onSelectSource(OrderServiceType.dineIn),
+                TourSpot(
+                  name: 'orders.newOrderSource',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _SourceTile(
+                          icon: Icons.table_restaurant_outlined,
+                          source: OrderServiceType.dineIn,
+                          selected: source == OrderServiceType.dineIn,
+                          onTap: () => onSelectSource(OrderServiceType.dineIn),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _SourceTile(
-                        icon: Icons.takeout_dining_outlined,
-                        source: OrderServiceType.takeaway,
-                        selected: source == OrderServiceType.takeaway,
-                        onTap: () => onSelectSource(OrderServiceType.takeaway),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _SourceTile(
+                          icon: Icons.takeout_dining_outlined,
+                          source: OrderServiceType.takeaway,
+                          selected: source == OrderServiceType.takeaway,
+                          onTap: () => onSelectSource(OrderServiceType.takeaway),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _SourceTile(
-                        icon: Icons.delivery_dining_outlined,
-                        source: OrderServiceType.delivery,
-                        selected: source == OrderServiceType.delivery,
-                        onTap: () => onSelectSource(OrderServiceType.delivery),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _SourceTile(
+                          icon: Icons.delivery_dining_outlined,
+                          source: OrderServiceType.delivery,
+                          selected: source == OrderServiceType.delivery,
+                          onTap: () => onSelectSource(OrderServiceType.delivery),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 // Delivery details are collected by the bottom sheet opened
                 // from the Delivery tile (delivery_details_sheet.dart).
@@ -4771,31 +4999,37 @@ class _ReviewStep extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: TfButton(
-                    label: noteCtrl.text.isEmpty
-                        ? text.kitchenNote
-                        : noteCtrl.text,
-                    icon: Icons.notes_outlined,
-                    variant: TfButtonVariant.ghost,
-                    size: TfButtonSize.sm,
-                    fullWidth: true,
-                    onPressed: () => _showKitchenNoteSheet(context, noteCtrl),
+                  child: TourSpot(
+                    name: 'orders.newOrderKitchenNote',
+                    child: TfButton(
+                      label: noteCtrl.text.isEmpty
+                          ? text.kitchenNote
+                          : noteCtrl.text,
+                      icon: Icons.notes_outlined,
+                      variant: TfButtonVariant.ghost,
+                      size: TfButtonSize.sm,
+                      fullWidth: true,
+                      onPressed: () => _showKitchenNoteSheet(context, noteCtrl),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: TfButton(
-                    label: discount > 0.005
-                        ? '-${tfFormatCurrency(context, discount)}'
-                        : (text.isBn ? 'ডিসকাউন্ট' : 'Discount'),
-                    icon: Icons.local_offer_outlined,
-                    variant: TfButtonVariant.ghost,
-                    size: TfButtonSize.sm,
-                    fullWidth: true,
-                    onPressed: () => _showDiscountSheet(
-                      context,
-                      discountCtrl,
-                      onDiscountChanged,
+                  child: TourSpot(
+                    name: 'orders.newOrderDiscount',
+                    child: TfButton(
+                      label: discount > 0.005
+                          ? '-${tfFormatCurrency(context, discount)}'
+                          : (text.isBn ? 'ডিসকাউন্ট' : 'Discount'),
+                      icon: Icons.local_offer_outlined,
+                      variant: TfButtonVariant.ghost,
+                      size: TfButtonSize.sm,
+                      fullWidth: true,
+                      onPressed: () => _showDiscountSheet(
+                        context,
+                        discountCtrl,
+                        onDiscountChanged,
+                      ),
                     ),
                   ),
                 ),
@@ -4807,10 +5041,13 @@ class _ReviewStep extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final hasDiscount = discount > 0.005;
-              final action = TfButton(
-                label: creating ? '...' : text.sendToKitchen,
-                size: TfButtonSize.lg,
-                onPressed: creating ? null : () => onCreate(),
+              final action = TourSpot(
+                name: 'orders.newOrderSubmit',
+                child: TfButton(
+                  label: creating ? '...' : text.sendToKitchen,
+                  size: TfButtonSize.lg,
+                  onPressed: creating ? null : () => onCreate(),
+                ),
               );
               final summaryCol = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -5439,23 +5676,23 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
             const SizedBox(height: PosDensity.sectionGap),
             // Payment-mode radio cards, two per row (Petpooja target).
             GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: PosDensity.gridGap,
-              crossAxisSpacing: PosDensity.gridGap,
-              childAspectRatio: 3.1,
-              children: [
-                for (final method in OrderPaymentMethod.values)
-                  if (method != OrderPaymentMethod.split)
-                    _ModeTile(
-                    method: method,
-                    selected: method == _method,
-                    isBn: isBn,
-                    onTap: () => setState(() => _method = method),
-                  ),
-              ],
-            ),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                mainAxisSpacing: PosDensity.gridGap,
+                crossAxisSpacing: PosDensity.gridGap,
+                childAspectRatio: 3.1,
+                children: [
+                  for (final method in OrderPaymentMethod.values)
+                    if (method != OrderPaymentMethod.split)
+                      _ModeTile(
+                        method: method,
+                        selected: method == _method,
+                        isBn: isBn,
+                        onTap: () => setState(() => _method = method),
+                      ),
+                ],
+              ),
             const SizedBox(height: PosDensity.sectionGap),
             TextField(
               controller: _paidCtrl,

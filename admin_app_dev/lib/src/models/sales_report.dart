@@ -1,3 +1,4 @@
+import '../features/orders/order_list_filters.dart';
 import 'order_model.dart';
 
 class SalesReport {
@@ -35,9 +36,21 @@ class SalesReport {
     required List<OrderModel> orders,
     required int days,
     DateTime? now,
+    bool shiftMode = false,
+    int? shiftStartMinute,
+    int? shiftEndMinute,
   }) {
     final current = now ?? DateTime.now();
-    final todayStart = DateTime(current.year, current.month, current.day);
+    // Under shift mode the report window is the running-shift window (so an
+    // order after midnight still belongs to the previous day's shift) and
+    // the per-day buckets follow the shift's opening day.
+    final todayStart = shiftMode && shiftStartMinute != null
+        ? OrderListFilters.shiftBoundsFor(
+            current,
+            startMinute: shiftStartMinute,
+            endMinute: shiftEndMinute,
+          ).startInclusive!
+        : DateTime(current.year, current.month, current.day);
     final startAt = todayStart.subtract(Duration(days: days - 1));
     final endAt = todayStart.add(Duration(days: 1));
     final scoped = orders
@@ -70,7 +83,12 @@ class SalesReport {
           : totalSales / revenueOrders.length,
       totalItemsSold: topItems.fold<int>(0, (total, item) => total + item.qty),
       topItems: topItems,
-      dailyBreakdown: _dailyBreakdown(revenueOrders, startAt, days),
+      dailyBreakdown: _dailyBreakdown(
+        revenueOrders,
+        startAt,
+        days,
+        shiftMode ? shiftStartMinute : null,
+      ),
     );
   }
 
@@ -95,8 +113,9 @@ class SalesReport {
   static List<SalesDailySummary> _dailyBreakdown(
     List<OrderModel> orders,
     DateTime startAt,
-    int days,
-  ) {
+    int days, [
+    int? shiftStartMinute,
+  ]) {
     final values = <DateTime, SalesDailySummary>{
       for (var index = 0; index < days; index++)
         startAt.add(Duration(days: index)): SalesDailySummary(
@@ -106,11 +125,16 @@ class SalesReport {
         ),
     };
     for (final order in orders) {
-      final day = DateTime(
-        order.createdAt.year,
-        order.createdAt.month,
-        order.createdAt.day,
-      );
+      final day = shiftStartMinute == null
+          ? DateTime(
+              order.createdAt.year,
+              order.createdAt.month,
+              order.createdAt.day,
+            )
+          : OrderListFilters.shiftDayFor(
+              order.createdAt,
+              shiftStartMinute,
+            );
       final current = values[day];
       if (current == null) continue;
       values[day] = SalesDailySummary(

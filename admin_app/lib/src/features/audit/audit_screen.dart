@@ -5,6 +5,7 @@ import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/audit_entry.dart';
 
@@ -121,26 +122,29 @@ class _FilterChips extends StatelessWidget {
     ];
     return SizedBox(
       height: 36,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          TfChip(
-            label: text.auditAllFilter,
-            active: selected == null,
-            small: true,
-            onTap: () => onSelected(null),
-          ),
-          for (final a in actions) ...[
-            const SizedBox(width: 8),
+      child: TourSpot(
+        name: 'audit.filters',
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
             TfChip(
-              label: a.label,
-              labelBn: a.labelBn,
-              active: selected == a,
+              label: text.auditAllFilter,
+              active: selected == null,
               small: true,
-              onTap: () => onSelected(a),
+              onTap: () => onSelected(null),
             ),
+            for (final a in actions) ...[
+              const SizedBox(width: 8),
+              TfChip(
+                label: a.label,
+                labelBn: a.labelBn,
+                active: selected == a,
+                small: true,
+                onTap: () => onSelected(a),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

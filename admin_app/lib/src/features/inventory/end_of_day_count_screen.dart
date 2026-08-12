@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../models/inventory_item.dart';
@@ -223,11 +224,14 @@ class _EndOfDayCountScreenState extends State<EndOfDayCountScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: TfButton(
-                label: text.finishCount(_done),
-                size: TfButtonSize.lg,
-                busy: _saving,
-                onPressed: _saving || _scanning ? null : _save,
+              child: TourSpot(
+                name: 'stockCount.finish',
+                child: TfButton(
+                  label: text.finishCount(_done),
+                  size: TfButtonSize.lg,
+                  busy: _saving,
+                  onPressed: _saving || _scanning ? null : _save,
+                ),
               ),
             ),
           ],

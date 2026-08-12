@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../core/widgets/tf_global_top_bar.dart';
 import '../../core/widgets/tf_timeframe_selector.dart';
@@ -106,13 +107,16 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                 children: [
-                  _LaunchCard(
-                    icon: Icons.insights_outlined,
-                    tint: PosColors.tintGreen,
-                    iconColor: PosColors.iconGreen,
-                    title: text.performanceReport,
-                    subtitle: text.performanceReportHint,
-                    onTap: () => _push(const PerformanceReportScreen()),
+                  TourSpot(
+                    name: 'reports.performance',
+                    child: _LaunchCard(
+                      icon: Icons.insights_outlined,
+                      tint: PosColors.tintGreen,
+                      iconColor: PosColors.iconGreen,
+                      title: text.performanceReport,
+                      subtitle: text.performanceReportHint,
+                      onTap: () => _push(const PerformanceReportScreen()),
+                    ),
                   ),
                   const SizedBox(height: 18),
                   FutureBuilder<_Buckets>(

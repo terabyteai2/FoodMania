@@ -10,7 +10,6 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['fonts/*.ttf'],
       manifest: {
         name: 'QuickBytes POS',
         short_name: 'QuickBytes',

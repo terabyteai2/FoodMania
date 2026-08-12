@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_tints.dart';
+import '../../core/widgets/guided_tour.dart';
 import '../../core/widgets/menu_image_view.dart';
 import '../../core/widgets/tf_design_system.dart';
 import '../../models/menu_item.dart';
@@ -388,7 +389,6 @@ class CategoryChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = AppScope.of(context).strings;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: PosSpacing.sp4),
@@ -396,21 +396,29 @@ class CategoryChips extends StatelessWidget {
         children: [
           for (var i = 0; i < categories.length; i++) ...[
             if (i > 0) const SizedBox(width: PosSpacing.sp2),
-            TfChip(
-              label: categories[i] == 'All'
-                  ? text.categoryAll
-                  : _chipLabel(categories[i], text.isBn),
-              count: counts?[categories[i]],
-              active: categories[i] == selected,
-              small: true,
-              customFill: resolveCategoryChip(categories[i]).background,
-              customBorder: resolveCategoryChip(categories[i]).border,
-              customText: resolveCategoryChip(categories[i]).text,
-              onTap: () => onSelected(categories[i]),
-            ),
+            _categoryChip(context, i),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _categoryChip(BuildContext context, int i) {
+    final text = AppScope.of(context).strings;
+    final chip = resolveCategoryChip(categories[i]);
+    return TfChip(
+      label: categories[i] == 'All'
+          ? text.categoryAll
+          : _chipLabel(categories[i], text.isBn),
+      count: counts?[categories[i]],
+      active: categories[i] == selected,
+      small: true,
+      // Chip fill is a pale tint of the same category color the cards use.
+      customFill: Color.lerp(chip.background, Colors.white, 0.7)!,
+      customBorder: chip.border,
+      customText: PosColors.primaryDark,
+      customCount: PosColors.primaryDark,
+      onTap: () => onSelected(categories[i]),
     );
   }
 
@@ -476,36 +484,39 @@ class _MenuContent extends StatelessWidget {
       );
     }
 
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            PosSpacing.sp4,
-            0,
-            PosSpacing.sp4,
-            PosDensity.sectionGap,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: PosDensity.gridGap,
-              crossAxisSpacing: PosDensity.gridGap,
-              mainAxisExtent: PosDensity.tileMenu,
+    return TourSpot(
+      name: 'orders.newOrderMenu',
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              PosSpacing.sp4,
+              0,
+              PosSpacing.sp4,
+              PosDensity.sectionGap,
             ),
-            delegate: SliverChildBuilderDelegate((_, i) {
-              final item = items[i];
-              return _GridTile(
-                item: item,
-                qty: cart[item.id] ?? 0,
-                onTap: () => onTap(item),
-                onDecrement: () => onDecrement(item.id),
-                onToggleFavorite: () => onToggleFavorite(item),
-                onSetShortCode: () => onSetShortCode(item),
-              );
-            }, childCount: items.length),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: PosDensity.gridGap,
+                crossAxisSpacing: PosDensity.gridGap,
+                mainAxisExtent: PosDensity.tileMenu,
+              ),
+              delegate: SliverChildBuilderDelegate((_, i) {
+                final item = items[i];
+                return _GridTile(
+                  item: item,
+                  qty: cart[item.id] ?? 0,
+                  onTap: () => onTap(item),
+                  onDecrement: () => onDecrement(item.id),
+                  onToggleFavorite: () => onToggleFavorite(item),
+                  onSetShortCode: () => onSetShortCode(item),
+                );
+              }, childCount: items.length),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -605,6 +616,7 @@ class _GridTile extends StatelessWidget {
     debugPrint('[QB-WIZARD] _GridTile: building ${item.id} ${item.name} cat=${item.category}');
     final inCart = qty > 0;
     final off = !item.isAvailable;
+    final bg = resolveCategoryBg(item.category);
     return GestureDetector(
       onTap: off ? null : onTap,
       onLongPress: () => _showItemActions(
@@ -618,12 +630,12 @@ class _GridTile extends StatelessWidget {
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: inCart ? PosColors.primarySoft : resolveCategoryBg(item.category),
+            color: bg,
             border: Border.all(
               color: inCart ? PosColors.primary : PosColors.line,
               width: inCart ? 1.8 : 1,
             ),
-            borderRadius: BorderRadius.circular(PosRadii.xl),
+            borderRadius: BorderRadius.circular(PosRadii.card),
             boxShadow: PosShadows.soft,
           ),
           child: Column(
@@ -637,26 +649,25 @@ class _GridTile extends StatelessWidget {
                         padding: const EdgeInsets.all(PosSpacing.sp4),
                         child: Stack(
                           children: [
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  TfText(
-                                    item.localizedName(app.language),
-                                    textAlign: TextAlign.start,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
-                                  ),
-                                  if (!off) ...[
-                                    const SizedBox(height: 2),
-                                    _PriceTag(price: item.price),
+                            Positioned.fill(
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    TfText(
+                                      item.localizedName(app.language),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
+                                    ),
+                                    if (!off) ...[
+                                      const SizedBox(height: 2),
+                                      _PriceTag(price: item.price),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                             if (off)
@@ -669,42 +680,38 @@ class _GridTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // In cart: minus button beside the count badge, bottom-
+                    // In cart: minus button top-left, running count badge top-
                     // right of the card, overlaying the padding edge — same
                     // treatment as the short-code list rows.
-                    if (inCart)
+                    if (inCart) ...[
                       Positioned(
-                        bottom: PosSpacing.sp2,
-                        right: PosSpacing.sp2,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: onDecrement,
-                              behavior: HitTestBehavior.opaque,
-                              child: Padding(
-                                padding: const EdgeInsets.all(3),
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: PosColors.surface,
-                                    border: Border.all(color: PosColors.lineStrong),
-                                    borderRadius: BorderRadius.circular(PosRadii.chip),
-                                  ),
-                                  child: Icon(
-                                    Icons.remove_rounded,
-                                    size: 16,
-                                    color: PosColors.primaryDark,
-                                  ),
-                                ),
-                              ),
+                        top: PosSpacing.sp1,
+                        left: PosSpacing.sp1,
+                        child: GestureDetector(
+                          onTap: onDecrement,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: PosColors.surface,
+                              border: Border.all(color: PosColors.lineStrong),
+                              borderRadius: BorderRadius.circular(PosRadii.chip),
                             ),
-                            const SizedBox(width: 4),
-                            _CountBadge(qty: qty),
-                          ],
+                            child: Icon(
+                              Icons.remove_rounded,
+                              size: 16,
+                              color: PosColors.primaryDark,
+                            ),
+                          ),
                         ),
                       ),
+                      Positioned(
+                        top: PosSpacing.sp1,
+                        right: PosSpacing.sp1,
+                        child: _CountBadge(qty: qty),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -755,6 +762,7 @@ class _PriceTag extends StatelessWidget {
   Widget build(BuildContext context) {
     return TfText(
       '৳ ${tfFormatNumber(context, price)}',
+      textAlign: TextAlign.center,
       style: TfTextStyles.rowMoney.copyWith(color: PosColors.primaryDark),
     );
   }
@@ -1011,11 +1019,14 @@ class CartFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = AppScope.of(context).strings;
-    return TfStickyCTA(
-      child: TfButton(
-        label: '${text.reviewOrder} · ${tfFormatCurrency(context, total)}',
-        size: TfButtonSize.lg,
-        onPressed: onSubmit,
+    return TourSpot(
+      name: 'orders.newOrderCart',
+      child: TfStickyCTA(
+        child: TfButton(
+          label: '${text.reviewOrder} · ${tfFormatCurrency(context, total)}',
+          size: TfButtonSize.lg,
+          onPressed: onSubmit,
+        ),
       ),
     );
   }

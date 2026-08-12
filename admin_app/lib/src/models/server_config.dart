@@ -10,6 +10,9 @@ class ServerConfig {
     this.tableCount = 10,
     this.customerMenuTheme = 'sultans_hearth',
     this.deliveryCharge = 0,
+    this.shiftHoursEnabled = false,
+    this.shiftStartMinute,
+    this.shiftEndMinute,
     this.logoUrl,
     this.logoBitmapUrl,
   });
@@ -26,6 +29,16 @@ class ServerConfig {
   final int tableCount;
   final String customerMenuTheme;
   final double deliveryCharge;
+
+  /// Optional operating shift for the completed-orders list and the app's
+  /// local "today" totals. While [shiftHoursEnabled] is false the calendar
+  /// day applies; enabling it honors the open/close window below, where a
+  /// shift crossing midnight still counts the after-midnight orders (up to
+  /// close) toward the previous day's shift. Minutes are since local
+  /// midnight; null means unset.
+  final bool shiftHoursEnabled;
+  final int? shiftStartMinute;
+  final int? shiftEndMinute;
   final String? logoUrl;
   final String? logoBitmapUrl;
 
@@ -40,6 +53,9 @@ class ServerConfig {
     int? tableCount,
     String? customerMenuTheme,
     double? deliveryCharge,
+    bool? shiftHoursEnabled,
+    Object? shiftStartMinute = _sentinel,
+    Object? shiftEndMinute = _sentinel,
     Object? logoUrl = _sentinel,
     Object? logoBitmapUrl = _sentinel,
   }) {
@@ -54,6 +70,13 @@ class ServerConfig {
       tableCount: tableCount ?? this.tableCount,
       customerMenuTheme: customerMenuTheme ?? this.customerMenuTheme,
       deliveryCharge: deliveryCharge ?? this.deliveryCharge,
+      shiftHoursEnabled: shiftHoursEnabled ?? this.shiftHoursEnabled,
+      shiftStartMinute: identical(shiftStartMinute, _sentinel)
+          ? this.shiftStartMinute
+          : shiftStartMinute as int?,
+      shiftEndMinute: identical(shiftEndMinute, _sentinel)
+          ? this.shiftEndMinute
+          : shiftEndMinute as int?,
       logoUrl: identical(logoUrl, _sentinel)
           ? this.logoUrl
           : logoUrl as String?,

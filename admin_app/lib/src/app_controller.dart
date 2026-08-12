@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:audioplayers/audioplayers.dart';
@@ -18,6 +19,7 @@ import 'core/localization/app_strings.dart';
 import 'core/theme/category_tints.dart';
 import 'core/utils/bounded_string_set.dart';
 import 'core/widgets/support_chat_overlay.dart';
+import 'features/orders/order_list_filters.dart';
 import 'models/account_role.dart';
 import 'models/admin_blocking_notice.dart';
 import 'models/app_update_info.dart';
@@ -332,6 +334,12 @@ class PosAppController extends ChangeNotifier {
   String devOtpCodeHint = '000000';
   bool isLoggedIn = false;
   AccountRole accountRole = AccountRole.manager;
+
+  /// The account's genuine role from the authenticated session. Unlike
+  /// [accountRole] it is never overwritten by the "view as" demo switch, so
+  /// permission checks (invite roles, Settings, stock) always reflect the real
+  /// account rather than the locally previewed role.
+  AccountRole realAccountRole = AccountRole.manager;
   String accountId = '';
   String accountDisplayName = '';
   bool notificationSoundEnabled = true;
@@ -427,13 +435,13 @@ class PosAppController extends ChangeNotifier {
 
   bool get isCloudReady =>
       cloudConfig.hasDeviceToken && cloudConfig.hasValidBaseUrl;
-  bool get isManager => accountRole.isManager;
+  bool get isManager => realAccountRole.isManager;
 
   /// Owner-only — full Analytics, Settings, invite any role.
-  bool get isOwner => accountRole.isOwner;
+  bool get isOwner => realAccountRole.isOwner;
 
   /// Floor-only role (Tables · Orders · More).
-  bool get isWaiter => accountRole.isWaiter;
+  bool get isWaiter => realAccountRole.isWaiter;
 
   /// Settings is owner-only (spec §RBAC).
   bool get canManageSettings => isOwner;
@@ -666,6 +674,10 @@ class PosAppController extends ChangeNotifier {
         customerMenuTheme:
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
         deliveryCharge: preferences.getDouble(_deliveryChargeKey) ?? 0,
+        shiftHoursEnabled:
+            preferences.getBool(_shiftHoursEnabledKey) ?? false,
+        shiftStartMinute: preferences.getInt(_shiftStartMinuteKey),
+        shiftEndMinute: preferences.getInt(_shiftEndMinuteKey),
         logoUrl: preferences.getString(_logoUrlKey),
         logoBitmapUrl: preferences.getString(_logoBitmapUrlKey),
       );
@@ -708,6 +720,12 @@ class PosAppController extends ChangeNotifier {
       if (accountRole == AccountRole.manager &&
           (preferences.getString(_deviceTokenKey) ?? '').isEmpty) {
         accountRole = AccountRole.owner;
+      }
+      realAccountRole = AccountRole.parse(
+        preferences.getString(_realAccountRoleKey) ?? '',
+      );
+      if (realAccountRole == AccountRole.manager) {
+        realAccountRole = accountRole;
       }
       _ownerViewPreview =
           preferences.getBool(_ownerViewPreviewKey) ?? false;
@@ -904,14 +922,33 @@ class PosAppController extends ChangeNotifier {
 
   DashboardMetrics get metrics {
     final now = DateTime.now();
+    // Under shift mode the "today" window starts at the running shift's open
+    // time (anchored to yesterday when now is before the open hour), so
+    // after-midnight orders still count toward the previous day's shift.
+    final todayStart = shiftModeActive
+        ? OrderListFilters.shiftBoundsFor(
+            now,
+            startMinute: serverConfig.shiftStartMinute,
+            endMinute: serverConfig.shiftEndMinute,
+          ).startInclusive!
+        : DateTime(now.year, now.month, now.day);
+    final todayEndExclusive = shiftModeActive
+        ? OrderListFilters.shiftBoundsFor(
+            now,
+            startMinute: serverConfig.shiftStartMinute,
+            endMinute: serverConfig.shiftEndMinute,
+          ).endExclusive
+        : null;
     final todaysOrders = orders
         .where((order) {
-          return order.createdAt.year == now.year &&
-              order.createdAt.month == now.month &&
-              order.createdAt.day == now.day;
+          if (order.createdAt.isBefore(todayStart)) return false;
+          if (todayEndExclusive != null &&
+              !order.createdAt.isBefore(todayEndExclusive)) {
+            return false;
+          }
+          return true;
         })
         .toList(growable: false);
-    final todayStart = DateTime(now.year, now.month, now.day);
     final sevenDayStart = todayStart.subtract(Duration(days: 6));
     final thirtyDayStart = todayStart.subtract(Duration(days: 29));
 
@@ -931,7 +968,13 @@ class PosAppController extends ChangeNotifier {
   }
 
   SalesReport salesReportForDays(int days) {
-    return SalesReport.fromOrders(orders: orders, days: days);
+    return SalesReport.fromOrders(
+      orders: orders,
+      days: days,
+      shiftMode: shiftModeActive,
+      shiftStartMinute: serverConfig.shiftStartMinute,
+      shiftEndMinute: serverConfig.shiftEndMinute,
+    );
   }
 
   List<String> get categories {
@@ -2809,6 +2852,7 @@ class PosAppController extends ChangeNotifier {
     );
     accountId = result.accountId;
     accountDisplayName = result.displayName ?? '';
+    realAccountRole = result.role;
     if (result.role == AccountRole.owner) {
       _ownerViewPreview = true;
       accountRole = AccountRole.manager;
@@ -2892,7 +2936,9 @@ class PosAppController extends ChangeNotifier {
     // Drop any owner "view as manager" preview so the next session's switch
     // visibility is derived solely from the freshly authenticated role.
     _ownerViewPreview = false;
+    realAccountRole = AccountRole.manager;
     await preferences.remove(_ownerViewPreviewKey);
+    await preferences.remove(_realAccountRoleKey);
     selectedSubscriptionPlan = '';
     // Tear down the realtime WebSocket so the next login forces a fresh
     // connection with the new device token — otherwise the stale socket
@@ -3099,25 +3145,6 @@ class PosAppController extends ChangeNotifier {
 
   double inventoryTodaySpend = 0;
 
-  Future<void> _pushInventoryItemToCloud(InventoryItem item) async {
-    if (!cloudConfig.canSync) return;
-    try {
-      await cloudApiService.pushInventoryItem(item);
-    } catch (_) {}
-  }
-
-  Future<void> _pushLatestInventoryAdjustment(String inventoryItemId) async {
-    if (!cloudConfig.canSync) return;
-    try {
-      final rows = await database.getStockAdjustments(
-        inventoryItemId,
-        limit: 1,
-      );
-      if (rows.isEmpty) return;
-      await cloudApiService.pushInventoryAdjustment(rows.first);
-    } catch (_) {}
-  }
-
   Future<void> saveInventoryItem(InventoryItem item) async {
     if (!isManager) throw Exception('Only managers can edit inventory items.');
     final normalized = item.copyWith(
@@ -3126,7 +3153,7 @@ class PosAppController extends ChangeNotifier {
     );
     await database.upsertInventoryItem(normalized);
     await refreshInventory();
-    await _pushInventoryItemToCloud(normalized);
+    unawaited(syncService.syncNow());
   }
 
   Future<void> deleteInventoryItem(String id) async {
@@ -3135,11 +3162,7 @@ class PosAppController extends ChangeNotifier {
     }
     await database.deleteInventoryItem(id);
     await refreshInventory();
-    if (cloudConfig.canSync) {
-      try {
-        await cloudApiService.deleteInventoryItemCloud(id);
-      } catch (_) {}
-    }
+    unawaited(syncService.syncNow());
   }
 
   Future<InventoryItem> recordInventoryPurchase({
@@ -3164,11 +3187,10 @@ class PosAppController extends ChangeNotifier {
       supplierName: supplierName,
       billRef: billRef,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3188,11 +3210,10 @@ class PosAppController extends ChangeNotifier {
       note: note,
       reason: reason,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3201,34 +3222,22 @@ class PosAppController extends ChangeNotifier {
     required String reason,
     String note = '',
   }) async {
-    final rows = <StockAdjustment>[];
-    final updatedItems = <InventoryItem>[];
     for (final entry in quantities.entries) {
       if (entry.value <= 0) continue;
-      updatedItems.add(
-        await database.adjustStock(
-          inventoryItemId: entry.key,
-          delta: -entry.value,
-          type: reason == 'spoiled'
-              ? AdjustmentType.waste.value
-              : AdjustmentType.usage.value,
-          note: note,
-          reason: reason,
-          createdByAccountId: accountId.isEmpty ? null : accountId,
-          createdByRole: accountRole.value,
-        ),
+      await database.adjustStock(
+        inventoryItemId: entry.key,
+        delta: -entry.value,
+        type: reason == 'spoiled'
+            ? AdjustmentType.waste.value
+            : AdjustmentType.usage.value,
+        note: note,
+        reason: reason,
+        createdByAccountId: accountId.isEmpty ? null : accountId,
+        createdByRole: realAccountRole.value,
       );
-      rows.add((await database.getStockAdjustments(entry.key, limit: 1)).first);
     }
     await refreshInventory();
-    if (cloudConfig.canSync && rows.isNotEmpty) {
-      try {
-        await cloudApiService.pushInventoryAdjustments(rows);
-        for (final item in updatedItems) {
-          await cloudApiService.pushInventoryItem(item);
-        }
-      } catch (_) {}
-    }
+    unawaited(syncService.syncNow());
   }
 
   Future<void> saveInventorySupplier(InventorySupplier supplier) async {
@@ -3250,11 +3259,10 @@ class PosAppController extends ChangeNotifier {
       inventoryItemId: inventoryItemId,
       quantity: quantity,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    unawaited(syncService.syncNow());
     return updated;
   }
 
@@ -3274,17 +3282,120 @@ class PosAppController extends ChangeNotifier {
     final updated = await database.adjustStock(
       inventoryItemId: inventoryItemId,
       delta: delta,
-      type: AdjustmentType.correction.value,
+      type: delta > 0
+          ? AdjustmentType.restock.value
+          : AdjustmentType.usage.value,
       note: note,
       reason: 'manual',
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
     );
     await refreshInventory();
-    await refreshInventorySummary();
-    await _pushLatestInventoryAdjustment(inventoryItemId);
-    await _pushInventoryItemToCloud(updated);
+    _applyInventorySummaryEdit(
+      inventoryItemId: inventoryItemId,
+      delta: delta,
+      costPerUnit: null,
+    );
+    unawaited(syncService.syncNow());
     return updated;
+  }
+
+  Future<InventoryItem> setInventoryCostPrice({
+    required String inventoryItemId,
+    required double newCostPerUnit,
+  }) async {
+    if (!isManager) throw Exception('Only managers can edit inventory items.');
+    if (newCostPerUnit < 0) throw Exception('Unit price cannot be negative.');
+    final current = inventoryItems
+        .where((row) => row.id == inventoryItemId)
+        .firstOrNull;
+    if (current == null) throw Exception('Inventory item not found.');
+    if ((current.costPerUnit - newCostPerUnit).abs() < 0.0001) return current;
+    final updated = current.copyWith(
+      costPerUnit: newCostPerUnit,
+      updatedAt: DateTime.now(),
+    );
+    await database.upsertInventoryItem(updated);
+    await refreshInventory();
+    _applyInventorySummaryEdit(
+      inventoryItemId: inventoryItemId,
+      delta: null,
+      costPerUnit: newCostPerUnit,
+    );
+    unawaited(syncService.syncNow());
+    return updated;
+  }
+
+  /// Optimistically applies an inline stock edit to the in-memory summary so
+  /// the stock table reflects the change immediately, even offline. The server
+  /// summary re-fetch on the next sync reconciles any drift.
+  void _applyInventorySummaryEdit({
+    required String inventoryItemId,
+    required double? delta,
+    required double? costPerUnit,
+  }) {
+    final summary = inventorySummary;
+    if (summary == null) return;
+    var changed = false;
+    var stockValueBdt = 0.0;
+    var alerts = 0;
+    final items = summary.items.map((row) {
+      if (row.id != inventoryItemId) {
+        stockValueBdt += row.onHand * row.costPerUnit;
+        if (row.varianceStatus == 'out' ||
+            row.varianceStatus == 'low' ||
+            row.varianceStatus == 'variance') {
+          alerts++;
+        }
+        return row;
+      }
+      changed = true;
+      final onHand = delta == null
+          ? row.onHand
+          : math.max(0.0, row.onHand + delta);
+      final todayIn = delta != null && delta > 0
+          ? row.todayIn + delta
+          : row.todayIn;
+      final todayOut = delta != null && delta < 0
+          ? row.todayOut - delta
+          : row.todayOut;
+      final unitPrice = costPerUnit ?? row.costPerUnit;
+      final threshold = row.minThreshold;
+      final status =
+          onHand <= 0
+              ? 'out'
+              : threshold > 0 && onHand <= threshold
+              ? 'low'
+              : 'ok';
+      stockValueBdt += onHand * unitPrice;
+      if (status != 'ok') alerts++;
+      return InventorySummaryItem(
+        id: row.id,
+        nameEn: row.nameEn,
+        nameBn: row.nameBn,
+        category: row.category,
+        unit: row.unit,
+        onHand: onHand,
+        minThreshold: row.minThreshold,
+        todayIn: todayIn,
+        todayOut: todayOut,
+        todaySpendBdt: row.todaySpendBdt,
+        varianceQty: 0,
+        varianceStatus: status,
+        costPerUnit: unitPrice,
+      );
+    }).toList(growable: false);
+    if (!changed) return;
+    inventorySummary = InventorySummary(
+      asOf: summary.asOf,
+      stockValueBdt: stockValueBdt,
+      varianceTodayBdt: summary.varianceTodayBdt,
+      varianceItemCount: summary.varianceItemCount,
+      alerts: alerts,
+      categories: summary.categories,
+      items: items,
+    );
+    notifyListeners();
   }
 
   Future<double?> yesterdayClosingQuantity(String inventoryItemId) async {
@@ -3327,7 +3438,7 @@ class PosAppController extends ChangeNotifier {
           : 0,
       source: OrderSource.manual,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
       // All manually-created orders (both manager and staff) go straight to
       // accepted so they are ready to serve immediately.
       initialStatus: OrderStatus.accepted,
@@ -3364,7 +3475,7 @@ class PosAppController extends ChangeNotifier {
       shiftId: shift.id,
       vatRatePercent: settings.vatRatePercent,
       createdByAccountId: accountId.isEmpty ? null : accountId,
-      createdByRole: accountRole.value,
+      createdByRole: realAccountRole.value,
       initialStatus: OrderStatus.accepted,
     );
     unawaited(syncService.syncNow());
@@ -3635,6 +3746,69 @@ class PosAppController extends ChangeNotifier {
       } catch (error) {
         debugPrint('[QB-TABLES] could not sync table count: $error');
       }
+    }
+  }
+
+    /// Whether the completed-orders list and local "today" totals should
+  /// follow the configured operating shift (open/close window) instead of
+  /// the calendar day.
+  bool get shiftModeActive =>
+      serverConfig.shiftHoursEnabled && serverConfig.shiftStartMinute != null;
+
+  /// Optional operating-shift window used by the completed-orders list.
+  /// Minutes since local midnight; null clears the value (falls back to
+  /// today). End at/before start means the shift wraps past midnight.
+  Future<void> updateShiftHours({
+    int? startMinute,
+    int? endMinute,
+  }) async {
+    final start = startMinute?.clamp(0, 1439);
+    final end = endMinute?.clamp(0, 1439);
+    if (serverConfig.shiftStartMinute == start &&
+        serverConfig.shiftEndMinute == end) {
+      return;
+    }
+    serverConfig = serverConfig.copyWith(
+      shiftStartMinute: start,
+      shiftEndMinute: end,
+    );
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    if (start == null) {
+      await preferences.remove(_shiftStartMinuteKey);
+    } else {
+      await preferences.setInt(_shiftStartMinuteKey, start);
+    }
+    if (end == null) {
+      await preferences.remove(_shiftEndMinuteKey);
+    } else {
+      await preferences.setInt(_shiftEndMinuteKey, end);
+    }
+  }
+
+  /// Turns the operating-shift mode on or off. Enabling with no open/close
+  /// minutes configured persists sensible defaults (10:00 AM – 02:00 AM).
+  Future<void> updateShiftHoursEnabled(bool value) async {
+    if (serverConfig.shiftHoursEnabled == value) return;
+    var start = serverConfig.shiftStartMinute;
+    var end = serverConfig.shiftEndMinute;
+    if (value && start == null) {
+      start = 10 * 60;
+      end = 2 * 60;
+    }
+    serverConfig = serverConfig.copyWith(
+      shiftHoursEnabled: value,
+      shiftStartMinute: start,
+      shiftEndMinute: end,
+    );
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_shiftHoursEnabledKey, value);
+    if (start != null) {
+      await preferences.setInt(_shiftStartMinuteKey, start);
+    }
+    if (end != null) {
+      await preferences.setInt(_shiftEndMinuteKey, end);
     }
   }
 
@@ -4675,6 +4849,7 @@ class PosAppController extends ChangeNotifier {
     await preferences.setString(_accountIdKey, accountId);
     await preferences.setString(_accountDisplayNameKey, accountDisplayName);
     await preferences.setString(_accountRoleKey, accountRole.value);
+    await preferences.setString(_realAccountRoleKey, realAccountRole.value);
     await preferences.setBool(_accountLoggedInKey, isLoggedIn);
   }
 
@@ -4824,6 +4999,7 @@ class PosAppController extends ChangeNotifier {
   static final String _accountIdKey = 'local_pos_account_id';
   static final String _accountDisplayNameKey = 'local_pos_account_display_name';
   static final String _accountRoleKey = 'local_pos_account_role';
+  static final String _realAccountRoleKey = 'local_pos_real_account_role';
   static final String _ownerViewPreviewKey = 'local_pos_owner_view_preview';
   static final String _accountLoggedInKey = 'local_pos_account_logged_in';
   static final String _notificationSoundEnabledKey =
@@ -4837,6 +5013,9 @@ class PosAppController extends ChangeNotifier {
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
   static final String _deliveryChargeKey = 'local_pos_delivery_charge';
+  static final String _shiftHoursEnabledKey = 'local_pos_shift_hours_enabled';
+  static final String _shiftStartMinuteKey = 'local_pos_shift_start_minute';
+  static final String _shiftEndMinuteKey = 'local_pos_shift_end_minute';
   static final String _logoUrlKey = 'local_pos_logo_url';
   static final String _logoBitmapUrlKey = 'local_pos_logo_bitmap_url';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';

@@ -17,10 +17,11 @@ class StockScanScreen extends StatefulWidget {
     super.key,
   });
 
-  /// When provided, the screen pops immediately after capturing images and
-  /// delegates the async scan to this callback. When null, the original
-  /// blocking-dialog behaviour is used.
-  final Future<void> Function(List<MenuScanPageUpload> uploads)? onScan;
+  /// When provided, the screen delegates the async scan to this callback and
+  /// pops with the returned result. When null, the original blocking-dialog
+  /// behaviour is used.
+  final Future<StockScanResult?> Function(List<MenuScanPageUpload> uploads)?
+  onScan;
 
   @override
   State<StockScanScreen> createState() => _StockScanScreenState();
@@ -167,8 +168,8 @@ class _StockScanScreenState extends State<StockScanScreen> {
         .toList(growable: false);
 
     if (widget.onScan != null) {
-      widget.onScan!(uploads);
-      if (mounted) Navigator.of(context).pop();
+      final result = await widget.onScan!(uploads);
+      if (mounted) Navigator.of(context).pop(result);
       return;
     }
 

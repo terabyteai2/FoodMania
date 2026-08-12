@@ -435,6 +435,21 @@ class SyncService {
       case 'pos_audit':
         await _cloudApi.pushDesktopAudit(event.entityId, payload);
         return;
+      case 'inventory_item':
+        if (event.action == 'delete') {
+          await _cloudApi.deleteInventoryItemCloud(event.entityId);
+        } else {
+          await _cloudApi.pushInventoryItem(InventoryItem.fromMap(payload));
+        }
+        return;
+      case 'inventory_adjustment':
+        await _cloudApi.pushInventoryAdjustment(
+          StockAdjustment.fromMap(payload),
+        );
+        return;
+      case 'inventory_daily_count':
+        await _cloudApi.pushDailyStockCount(DailyStockCount.fromMap(payload));
+        return;
       default:
         throw CloudApiException('Unknown sync entity ${event.entityType}.');
     }

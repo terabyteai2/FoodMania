@@ -110,7 +110,7 @@ Widget _scoped(PosAppController controller) {
 }
 
 void main() {
-  testWidgets('tapping the qty value opens an inline field, not the row',
+  testWidgets('tapping the qty value opens the scrubber panel, not the row',
       (tester) async {
     final controller = _RecordingController();
     await tester.pumpWidget(_scoped(controller));
@@ -123,10 +123,15 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    // The tapped value now opens the anchored scrubber panel (slider +
+    // editor); the row's detail screen must NOT be pushed.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('5'), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
     expect(find.byType(StockInScreen), findsNothing);
     expect(controller.commits, isEmpty);
+    // Cell + panel label + panel editor each show the current value while
+    // the delta is 0.
+    expect(find.text('5'), findsNWidgets(3));
 
     controller.dispose();
   });
@@ -149,8 +154,12 @@ void main() {
     expect(controller.commits, hasLength(1));
     expect(controller.commits.single.itemId, 'item-1');
     expect(controller.commits.single.qty, 12);
-    expect(find.text('12'), findsOneWidget);
+    expect(find.text('12'), findsWidgets);
     expect(find.byType(TextField), findsNothing);
+    // The struck-old / colored-new pair flashes ~1s, then settles.
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('5'), findsNothing);
 
     controller.dispose();
   });
@@ -165,12 +174,15 @@ void main() {
     await tester.pump();
 
     await tester.enterText(find.byType(TextField), '3');
-    await tester.tap(find.text('ITEM'));
+    // Tap a point clearly outside the panel (barrier commits + closes).
+    await tester.tapAt(const Offset(30, 300));
     await tester.pump();
     await tester.pump();
 
     expect(controller.commits, hasLength(1));
     expect(controller.commits.single.qty, 3);
+    expect(find.byType(TextField), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
 
     controller.dispose();
   });
@@ -190,14 +202,15 @@ void main() {
     await tester.pump();
 
     expect(controller.commits, isEmpty);
+    expect(find.byType(TextField), findsNothing);
     expect(find.text('5'), findsOneWidget);
 
     controller.dispose();
   });
 
   testWidgets('waiter role cannot edit quantities', (tester) async {
-    final controller = _RecordingController();
-    controller.accountRole = AccountRole.waiter;
+    final controller = _RecordingController()
+      ..realAccountRole = AccountRole.waiter;
     await tester.pumpWidget(_scoped(controller));
     await tester.pump();
 
@@ -206,6 +219,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(TextField), findsNothing);
+    expect(find.byType(Slider), findsNothing);
     expect(controller.commits, isEmpty);
 
     controller.dispose();

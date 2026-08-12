@@ -135,16 +135,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             if (!widget.reduced) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                child: TfPeriodWithCalendar(
-                  options: [
-                    ('today', text.rangeToday),
-                    ('week', text.range7Days),
-                    ('month', text.range30Days),
-                  ],
-                  value: _range,
-                  start: _rangeStart,
-                  end: _rangeEnd,
-                  onChanged: _setRange,
+                child: TourSpot(
+                  name: 'analytics.period',
+                  child: TfPeriodWithCalendar(
+                    options: [
+                      ('today', text.rangeToday),
+                      ('week', text.range7Days),
+                      ('month', text.range30Days),
+                    ],
+                    value: _range,
+                    start: _rangeStart,
+                    end: _rangeEnd,
+                    onChanged: _setRange,
+                  ),
                 ),
               ),
               Padding(
@@ -234,7 +237,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       return [
         ..._diagnosticWidgets(),
         if (d.trend.isNotEmpty) ...[
-          _RevenueChartCard(trend: d.trend, text: text),
+          TourSpot(
+            name: 'analytics.revenueChart',
+            child: _RevenueChartCard(trend: d.trend, text: text),
+          ),
           const SizedBox(height: PosSpacing.sp3),
         ],
         TourSpot(
@@ -323,7 +329,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ],
         ),
         const SizedBox(height: PosSpacing.sp3),
-        _PopularDishes(dishes: d.popular, text: text),
+        TourSpot(
+          name: 'analytics.popularDishes',
+          child: _PopularDishes(dishes: d.popular, text: text),
+        ),
         const SizedBox(height: PosSpacing.sp4),
         _ExportRow(
           onPdf: () => _exportPdf(context, text, d),

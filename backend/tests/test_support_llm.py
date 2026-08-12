@@ -188,6 +188,25 @@ def test_clean_step_requires_content_and_validates():
     )
     assert step == {"title": "A", "body": "B", "target": "tab:analytics", "spot": "nav.analytics"}
     assert "target" not in _clean_step({"title": "A", "body": "B", "target": "bogus"})
+    assert _clean_step({"title": "A", "body": "B", "shape": "bogus"}) == {
+        "title": "A",
+        "body": "B",
+    }
+
+
+def test_clean_step_passes_through_valid_shape():
+    step = _clean_step(
+        {
+            "title": "A",
+            "body": "B",
+            "spot": "orders.newOrderFab",
+            "shape": "circle",
+        }
+    )
+    assert step["shape"] == "circle"
+    assert _clean_step(
+        {"title": "A", "body": "B", "spot": "orders.cardBill", "shape": "roundedRect"}
+    )["shape"] == "roundedRect"
 
 
 def test_vocabulary_validation():
@@ -195,6 +214,10 @@ def test_vocabulary_validation():
     assert _valid_target("screen:staff")
     assert _valid_target("modal:menu_discounts")
     assert _valid_target("highlight:menu.scanCta")
+    assert _valid_target("screen:control_tower")
+    assert _valid_target("screen:settings")
+    assert _valid_target("highlight:stock.table")
+    assert _valid_target("highlight:more.helpGuide")
     assert not _valid_target("tab:nope")
     assert not _valid_target("screen:xyz")
     assert not _valid_target("")

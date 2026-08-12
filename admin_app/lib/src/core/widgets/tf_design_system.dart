@@ -1544,6 +1544,7 @@ class TfChip extends StatelessWidget {
     this.customFill,
     this.customText,
     this.customBorder,
+    this.customCount,
     super.key,
   });
 
@@ -1559,6 +1560,7 @@ class TfChip extends StatelessWidget {
   final Color? customFill;
   final Color? customText;
   final Color? customBorder;
+  final Color? customCount;
   final VoidCallback onTap;
 
   @override
@@ -1629,7 +1631,7 @@ class TfChip extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                     color: active
                         ? textColor.withValues(alpha: 0.7)
-                        : PosColors.muted,
+                        : customCount ?? PosColors.muted,
                   ),
                 ),
               ],

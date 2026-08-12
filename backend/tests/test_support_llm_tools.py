@@ -392,17 +392,24 @@ def test_tools_schema_round_trips_through_validate_arguments():
 async def test_get_guide_deeplinks_returns_full_vocabulary():
     result = await tools.execute_tool("get_guide_deeplinks", {}, "outlet-1")
     assert result["ok"] is True
-    assert result["version"] == 1
+    assert result["version"] == 2
     assert result["kind"] == "all"
     tabs = result["tabs"]
     assert any(t["name"] == "analytics" and t["description"] for t in tabs)
     assert any(t["name"] == "orders" for t in tabs)
     screens = {s["name"] for s in result["screens"]}
-    assert {"staff", "audit", "stock_in", "stock_count"} <= screens
+    assert {"staff", "audit", "stock_in", "stock_count", "settings", "control_tower"} <= screens
     modals = {m["name"] for m in result["modals"]}
     assert {"menu_discounts", "menu_delivery_charge"} <= modals
     spots = {s["name"] for s in result["spots"]}
     assert "orders.newOrderFab" in spots and "header.bell" in spots
+    for spot in result["spots"]:
+        assert spot["name"] and spot["description"]
+        for meta in ("title", "body", "shape", "role"):
+            if meta in spot:
+                assert spot[meta]
+    circle = {s["name"] for s in result["spots"] if s.get("shape") == "circle"}
+    assert "orders.newOrderFab" in circle
     assert result["count"] == (
         len(tabs) + len(screens) + len(modals) + len(spots)
         + len(result["conventions"]) + 1

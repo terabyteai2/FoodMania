@@ -17,7 +17,7 @@ class CloudDefaults {
   /// Build override: `--dart-define=POS_CLOUD_API_URL=https://other.example.com`
   static const String _cloudApiUrlFromEnvironment = String.fromEnvironment(
     'POS_CLOUD_API_URL',
-    defaultValue: 'https://quickbytes.buzz',
+    defaultValue: 'https://dev.quickbytes.buzz',
   );
 
   /// Public API base used when no `POS_CLOUD_API_URL` build override is set.

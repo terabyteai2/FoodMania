@@ -13,6 +13,7 @@ import '../models/admin_blocking_notice.dart';
 import '../models/app_update_info.dart';
 import '../models/audit_entry.dart';
 import '../models/daily_report.dart';
+import '../models/daily_stock_count.dart';
 import '../models/dashboard_summary.dart';
 import '../models/facebook_chatbot_config.dart';
 import '../models/inventory_item.dart';
@@ -1720,6 +1721,20 @@ class CloudApiService {
       body: {'adjustments': adjustments.map((row) => row.toMap()).toList()},
       idempotencyKey:
           'inventory-adj-batch-${adjustments.map((row) => row.id).join("-")}',
+    );
+  }
+
+  Future<void> pushDailyStockCount(DailyStockCount count) async {
+    final config = _requireServerConfig();
+    final uri = _uri('/outlets/${config.outletId}/inventory/daily-counts');
+    if (uri == null) {
+      throw CloudApiException('Cloud API URL is empty or invalid.');
+    }
+    await _sendJson(
+      'POST',
+      uri,
+      body: count.toMap(),
+      idempotencyKey: 'inventory-count-${count.id}',
     );
   }
 

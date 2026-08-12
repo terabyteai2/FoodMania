@@ -132,7 +132,6 @@ class KotTicketData {
     this.tableLabel,
     this.tableValue,
     this.serverName,
-    this.orderNote,
   });
 
   final String restaurantName;
@@ -153,7 +152,6 @@ class KotTicketData {
   final String noteLabel;
   final String serverLabel;
   final String? serverName;
-  final String? orderNote;
 }
 
 class UtilityTicketSection {
@@ -198,11 +196,9 @@ class TicketBitmapRenderer {
   }
 
   static Future<Uint8List> renderKot(KotTicketData data) async {
-    final hasOrderNote = data.orderNote?.trim().isNotEmpty == true;
     final noteCount = data.items
-            .where((item) => item.note?.trim().isNotEmpty == true)
-            .length +
-        (hasOrderNote ? 1 : 0);
+        .where((item) => item.note?.trim().isNotEmpty == true)
+        .length;
     final dynamicRows = data.items.length * 44;
     final noteRows = noteCount == 0 ? 0 : 46 + (noteCount * 38);
     final hasTable =
@@ -281,7 +277,7 @@ class TicketBitmapRenderer {
       for (final item in data.items)
         if (item.note?.trim().isNotEmpty == true) item,
     ];
-    if (hasOrderNote || notedItems.isNotEmpty) {
+    if (notedItems.isNotEmpty) {
       y = _rule(canvas, y + 8);
       y = _text(
         canvas,
@@ -290,15 +286,6 @@ class TicketBitmapRenderer {
         fontSize: 28,
         weight: FontWeight.w700,
       );
-      if (hasOrderNote) {
-        y = _text(
-          canvas,
-          data.orderNote!.trim(),
-          y,
-          fontSize: 25,
-          weight: FontWeight.w700,
-        );
-      }
       for (final item in notedItems) {
         y = _text(
           canvas,

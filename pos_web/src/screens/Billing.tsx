@@ -1,9 +1,9 @@
-// Billing screen — petpooja13/14: category rail · item grid w/ search + short code ·
+// Billing screen — petpooja13/14: item grid w/ category chips + search ·
 // cart panel (service tabs, lines, totals, payment strip, actions).
 
 import { useMemo, useRef, useState } from 'react';
 import { useSession } from '../state/session';
-import { useMenu, itemDisplayName, matchShortCode, type PosMenuItem } from '../state/menu';
+import { useMenu, itemDisplayName, type PosMenuItem } from '../state/menu';
 import { useCart, type CartLine } from '../state/cart';
 import { usePos } from '../state/pos';
 import { usePrinters } from '../print/printManager';
@@ -18,11 +18,7 @@ import { SplitModal } from '../components/SplitModal';
 import { ShiftModal } from '../components/ShiftModal';
 import './billing.css';
 
-function catHue(cat: string): number {
-  let h = 0;
-  for (let i = 0; i < cat.length; i++) h = cat.charCodeAt(i) + ((h << 5) - h);
-  return ((h % 360) + 360) % 360;
-}
+const CAT_COLORS = ['#a3bfda', '#aacf97', '#84c3b6', '#de8893', '#a1c98a', '#c2aacc', '#f5dd7d', '#bd9b7f', '#cacccb'];
 
 const PAYMENT_IDS: PaymentMethod[] = ['cash', 'card', 'bkash', 'nagad', 'pay_later'];
 
@@ -46,8 +42,6 @@ export function Billing() {
   const printers = usePrinters();
 
   const [category, setCategory] = useState<string>('__all');
-  const [search, setSearch] = useState('');
-  const [shortCode, setShortCode] = useState('');
   const [modal, setModal] = useState<ModalKind>(null);
   const [toast, setToast] = useState<{ msg: string; bad?: boolean } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
@@ -65,25 +59,24 @@ export function Billing() {
   };
 
   const visibleItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return menu.items.filter((it) => {
-      if (!it.raw.isAvailable && !q) return false;
-      if (q) {
-        const hay = `${it.raw.name} ${it.raw.nameEn ?? ''} ${it.raw.nameBn ?? ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-        return true;
-      }
+      if (!it.raw.isAvailable) return false;
       if (category === '__fav') return menu.favorites.has(it.raw.id);
       if (category === '__all') return true;
       return it.category === category;
     });
-  }, [menu.items, menu.favorites, category, search]);
+  }, [menu.items, menu.favorites, category]);
 
   const cartCounts = useMemo(() => {
     const m = new Map<string, number>();
     for (const l of cart.lines) if (l.menuItemId) m.set(l.menuItemId, (m.get(l.menuItemId) ?? 0) + l.qty);
     return m;
   }, [cart.lines]);
+  const catBg = useMemo(() => {
+    const m = new Map<string, string>();
+    menu.categories.forEach((c, i) => m.set(c, CAT_COLORS[i % CAT_COLORS.length]));
+    return m;
+  }, [menu.categories]);
   const totals = cart.totals();
 
   // ---------- item entry ----------
@@ -106,18 +99,6 @@ export function Billing() {
   const tapItem = (item: PosMenuItem) => {
     if (needsCustomization(item.extras)) setModal({ kind: 'customize', item });
     else addItem(item);
-  };
-
-  const submitShortCode = () => {
-    const trimmed = shortCode.trim();
-    if (trimmed === '') return;
-    const item = matchShortCode(menu.items, trimmed);
-    if (!item) {
-      notify(t('foh.noShortCode', lang) + trimmed, true);
-      return;
-    }
-    tapItem(item);
-    setShortCode('');
   };
 
   // ---------- actions ----------
@@ -154,7 +135,7 @@ export function Billing() {
       }
     })();
 
-  const doSettle = (lines?: PosSettlementLineWire[]) => {
+  const doSettle = (lines?: PosSettlementLineWire[], print = cart.autoPrint) => {
     if (!pos.shift || pos.shift.status !== 'open') {
       setModal({ kind: 'shiftOpen', then: () => doSettle(lines) });
       return;
@@ -164,7 +145,7 @@ export function Billing() {
         lines ?? [{ eventId: crypto.randomUUID(), paymentMethod: cart.paymentMethod, amount: totals.total, payerLabel: null }];
       const settled = await cart.settle(settlements);
       notify(t('foh.billSettled', lang) + settled.serialNumber + t('foh.settled', lang) + formatTk(settled.totalAmount));
-      if (cart.autoPrint) {
+      if (print) {
         const canvas = renderReceipt(printers.paperDots(), ticketCtx, settled, {
           paid: true,
           paymentLabel: settlements.length === 1 ? settlements[0].paymentMethod : 'split',
@@ -182,45 +163,31 @@ export function Billing() {
   ];
 
   return (
-    <div className="billing-root">
-      {/* ---------- category rail ---------- */}
-      <aside className="cat-rail">
-        <button
-          className={`cat-item cat-fav ${category === '__fav' && !search ? 'active' : ''}`}
-          onClick={() => { setCategory('__fav'); setSearch(''); }}
-        >{t('foh.favItems', lang)}</button>
-        <button
-          className={`cat-item ${category === '__all' && !search ? 'active' : ''}`}
-          onClick={() => { setCategory('__all'); setSearch(''); }}
-        >{t('foh.allItems', lang)}</button>
-        {menu.categories.map((c) => (
-          <button
-            key={c}
-            className={`cat-item ${category === c && !search ? 'active' : ''}`}
-            onClick={() => { setCategory(c); setSearch(''); }}
-          >{c}</button>
-        ))}
-      </aside>
-
+    <div className={`billing-root${bn ? ' bn' : ''}`}>
       {/* ---------- item grid ---------- */}
       <section className="item-pane">
-        <div className="item-search-row">
-          <input
-            className="input item-search" placeholder={t('foh.searchItem', lang)}
-            value={search} onChange={(e) => setSearch(e.target.value)}
-          />
-          <input
-            className="input item-shortcode" placeholder={t('foh.shortCode', lang)}
-            value={shortCode} inputMode="numeric"
-            onChange={(e) => setShortCode(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submitShortCode(); }}
-          />
+        <div className="cat-chip-row">
+          <button
+            className={`cat-chip ${category === '__fav' ? 'active' : ''}`}
+            onClick={() => setCategory('__fav')}
+          >{t('foh.favItems', lang)}</button>
+          <button
+            className={`cat-chip ${category === '__all' ? 'active' : ''}`}
+            onClick={() => setCategory('__all')}
+          >{t('foh.allItems', lang)}</button>
+          {menu.categories.map((c, i) => (
+            <button
+              key={c}
+              className={`cat-chip ${category === c ? 'active' : ''}`}
+              onClick={() => setCategory(c)}
+            >{bn ? menu.categoriesBn[i] ?? c : c}</button>
+          ))}
         </div>
         {menu.loading ? (
           <div className="item-empty">{t('foh.loadingMenu', lang)}</div>
         ) : visibleItems.length === 0 ? (
           <div className="item-empty">
-            {category === '__fav' && !search
+            {category === '__fav'
               ? t('foh.noFav', lang)
               : t('foh.noItems', lang)}
           </div>
@@ -230,10 +197,10 @@ export function Billing() {
               <button
                 key={item.raw.id}
                 className={`item-tile ${cartCounts.has(item.raw.id) ? 'in-cart' : ''} ${!item.raw.isAvailable ? 'unavailable' : ''}`}
-                style={{ '--cat-hue': catHue(item.category) } as React.CSSProperties}
+                style={{ '--cat-bg': catBg.get(item.category) ?? '#cacccb' } as React.CSSProperties}
                 onClick={() => item.raw.isAvailable && tapItem(item)}
                 onContextMenu={(e) => { e.preventDefault(); menu.toggleFavorite(item.raw.id); }}
-                title={`${itemDisplayName(item, bn)}${item.raw.shortCode != null ? ` · ${t('foh.code', lang)} ${item.raw.shortCode}` : ''}`}
+                title={itemDisplayName(item, bn)}
               >
                 {menu.favorites.has(item.raw.id) && <span className="item-fav-dot">♥</span>}
                 {cartCounts.get(item.raw.id)! > 0 && <>
@@ -241,6 +208,7 @@ export function Billing() {
                   <span className="item-count-badge">{cartCounts.get(item.raw.id)}</span>
                 </>}
                 <span className="item-name">{itemDisplayName(item, bn)}</span>
+                <span className="item-price">{formatTk(item.price, bn)}</span>
               </button>
             ))}
           </div>
@@ -345,9 +313,10 @@ export function Billing() {
         </div>
 
         <div className="cart-actions">
-          <button className="btn btn-dark" disabled={cart.busy || cart.lines.every((l) => l.kotSentAt !== null)} onClick={() => doKot(cart.autoPrint)}>{t('foh.kot', lang)}</button>
-          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSave(cart.autoPrint)}>{t('foh.printBill', lang)}</button>
-          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSettle()}>{t('foh.settleBill', lang)}</button>
+          <button className="btn btn-outline" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSave(false)}>{t('save', lang)}</button>
+          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSettle(undefined, true)}>{t('foh.settleBill', lang)}</button>
+          <button className="btn btn-primary" disabled={cart.busy} onClick={() => doKot(cart.autoPrint)}>{t('foh.kot', lang)}</button>
+          <button className="btn btn-primary" disabled={cart.busy || cart.lines.length === 0} onClick={() => doSave(true)}>{t('foh.printBill', lang)}</button>
         </div>
       </aside>
 

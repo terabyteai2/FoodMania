@@ -221,6 +221,22 @@ def test_menu_scan_prompt_requests_bilingual_items_and_ignores_noise():
     assert "sandwich" in joined
 
 
+def test_menu_scan_prompt_lists_known_items_and_forbids_re_extraction():
+    messages = menu_scan._prompt(
+        ["Chicken Biryani 220\nTea 50"],
+        known_items=["Chicken Biryani", "Tea", "tea"],
+    )
+    joined = "\n".join(message["content"] for message in messages)
+
+    assert "ALREADY been extracted" in joined
+    assert "Do NOT include any of these already-known items" in joined
+    assert "Only output items that are NOT in the list above" in joined
+    known_section = joined.split("ALREADY been extracted")[-1]
+    assert known_section.count("Chicken Biryani") == 1
+    assert known_section.count("Tea") == 1
+    assert "\nChicken Biryani\nTea\n" in known_section
+
+
 def test_menu_scan_uses_json_object_mode_for_deepseek():
     deepseek = next(provider for provider in menu_scan._providers() if provider.name == "deepseek")
 
@@ -415,15 +431,18 @@ async def test_menu_scan_llm_raises_on_deepseek_rejection(monkeypatch):
 async def test_menu_scan_single_image_two_trips_dedup(monkeypatch):
     ocr_calls = 0
     llm_calls = 0
+    trip_2_known: list[str] | None = None
 
     async def fake_ocr(pages):
         nonlocal ocr_calls
         ocr_calls += 1
         return ["Chicken 250\nTea 50\nCoffee 80"]
 
-    async def fake_parse(page_texts):
-        nonlocal llm_calls
+    async def fake_parse(page_texts, known_item_names=None):
+        nonlocal llm_calls, trip_2_known
         llm_calls += 1
+        if llm_calls == 2:
+            trip_2_known = known_item_names
         if llm_calls == 1:
             items = [
                 MenuScanCandidate(
@@ -473,11 +492,61 @@ async def test_menu_scan_single_image_two_trips_dedup(monkeypatch):
 
     assert ocr_calls == 2
     assert llm_calls == 2
+    assert trip_2_known == ["Chicken Curry"]
     assert len(result.items) == 2
     names = [item.nameEn for item in result.items]
     assert "Chicken Curry" in names
     assert "Tea" in names
     assert any("Deduplication" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_menu_scan_known_names_reach_llm_request(monkeypatch):
+    sent_known: list[str] | None = None
+
+    async def fake_ocr(pages):
+        return ["Chicken 250\nTea 50"]
+
+    async def fake_parse(page_texts, known_item_names=None):
+        nonlocal sent_known
+        sent_known = known_item_names
+        return menu_scan.MenuScanParseResult(
+            items=[
+                MenuScanCandidate(
+                    nameEn="Tea",
+                    nameBn="চা",
+                    descriptionEn="Milk tea.",
+                    descriptionBn="দুধ চা।",
+                    categoryEn="Drinks",
+                    categoryBn="ড্রিংকস",
+                    price=50,
+                    isAvailable=True,
+                )
+            ],
+            provider="deepseek",
+            warnings=[],
+        )
+
+    monkeypatch.setattr(menu_scan, "extract_menu_page_texts", fake_ocr)
+    monkeypatch.setattr(menu_scan, "parse_menu_text", fake_parse)
+
+    await menu_scan.scan_image_once(
+        b"image", "image/png", known_item_names=["Chicken Curry", "Tea"]
+    )
+
+    assert sent_known == ["Chicken Curry", "Tea"]
+
+
+def test_menu_scan_dedup_names_and_prompt_cap():
+    assert menu_scan._dedup_names(["Tea", "tea", "", "  "]) == ["Tea"]
+    joined = "\n".join(
+        m["content"]
+        for m in menu_scan._prompt(
+            ["Tea 50"],
+            known_items=[f"Item {i}" for i in range(500)],
+        )
+    )
+    assert joined.count("Item ") == menu_scan.KNOWN_ITEMS_PROMPT_LIMIT
 
 
 @pytest.mark.asyncio
@@ -502,8 +571,10 @@ async def test_menu_scan_route_accepts_manager_access_variants(
         f"scan-role-{uuid.uuid4()}", stored_role
     )
 
-    async def fake_scan(image_bytes, content_type):
+    async def fake_scan(image_bytes, content_type, known_item_names=None):
         assert content_type == "image/png"
+        if known_item_names:
+            return menu_scan.MenuScanParseResult(items=[], provider="test", warnings=[])
         return menu_scan.MenuScanParseResult(
             items=[
                 MenuScanCandidate(
@@ -521,7 +592,7 @@ async def test_menu_scan_route_accepts_manager_access_variants(
             warnings=[],
         )
 
-    monkeypatch.setattr(menu, "scan_single_image_with_dedup", fake_scan)
+    monkeypatch.setattr(menu, "scan_image_once", fake_scan)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -554,12 +625,21 @@ async def test_menu_scan_route_accepts_manager_access_variants(
 @pytest.mark.asyncio(loop_scope="session")
 async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
     outlet_id, token = await _bootstrap_scan_tenant(f"scan-pages-{uuid.uuid4()}")
-    seen_calls: list[tuple[bytes, str]] = []
+    seen_calls: list[tuple[bytes, str, list[str] | None]] = []
     broadcast_calls: list[tuple[str, dict]] = []
+    scan_calls = 0
 
-    async def fake_scan(image_bytes, content_type):
-        seen_calls.append((image_bytes, content_type))
-        if len(seen_calls) == 1:
+    async def fake_scan(image_bytes, content_type, known_item_names=None):
+        nonlocal scan_calls
+        scan_calls += 1
+        seen_calls.append(
+            (
+                image_bytes,
+                content_type,
+                list(known_item_names) if known_item_names else None,
+            )
+        )
+        if scan_calls == 1:
             item = MenuScanCandidate(
                 nameEn="Tea",
                 nameBn="চা",
@@ -571,7 +651,7 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
                 isAvailable=True,
                 iconKey="drink",
             )
-        else:
+        elif scan_calls == 3:
             item = MenuScanCandidate(
                 nameEn="Coffee",
                 nameBn="কফি",
@@ -583,12 +663,14 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
                 isAvailable=True,
                 iconKey="drink",
             )
+        else:
+            return menu_scan.MenuScanParseResult(items=[], provider="xai", warnings=[])
         return menu_scan.MenuScanParseResult(items=[item], provider="xai", warnings=[])
 
     async def fake_broadcast(outlet_id, event):
         broadcast_calls.append((outlet_id, event))
 
-    monkeypatch.setattr(menu, "scan_single_image_with_dedup", fake_scan)
+    monkeypatch.setattr(menu, "scan_image_once", fake_scan)
     monkeypatch.setattr(menu.manager, "broadcast", fake_broadcast)
 
     transport = ASGITransport(app=app)
@@ -607,7 +689,17 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
     assert data["createdCount"] == 2
     assert data["skippedDuplicateCount"] == 0
     assert data["totalPages"] == 2
-    assert seen_calls == [(b"first", "image/png"), (b"second", "image/jpeg")]
+    assert len(seen_calls) == 4
+    assert [(image, content_type) for image, content_type, _ in seen_calls] == [
+        (b"first", "image/png"),
+        (b"first", "image/png"),
+        (b"second", "image/jpeg"),
+        (b"second", "image/jpeg"),
+    ]
+    assert seen_calls[0][2] is None
+    assert seen_calls[1][2] == ["Tea"]
+    assert seen_calls[2][2] is None
+    assert seen_calls[3][2] == ["Tea", "Coffee"]
 
     async with AsyncSessionLocal() as db:
         rows = (
@@ -624,9 +716,10 @@ async def test_menu_scan_route_hands_multiple_images_to_ocr(monkeypatch):
     progress_events = [
         event for _, event in broadcast_calls if event["type"] == "menu_scan_progress"
     ]
-    assert len(progress_events) == 2
-    assert [event["data"]["pageIndex"] for event in progress_events] == [1, 2]
-    assert [event["data"]["createdCount"] for event in progress_events] == [1, 1]
+    assert len(progress_events) == 4
+    assert [event["data"]["pageIndex"] for event in progress_events] == [1, 1, 2, 2]
+    assert [event["data"]["tripIndex"] for event in progress_events] == [1, 2, 1, 2]
+    assert [event["data"]["createdCount"] for event in progress_events] == [1, 0, 1, 0]
     menu_events = [
         event for _, event in broadcast_calls if event["type"] == "menu_updated"
     ]
@@ -656,35 +749,41 @@ async def test_menu_scan_route_skips_duplicate_of_existing_item(monkeypatch):
         )
         await db.commit()
 
-    async def fake_scan(image_bytes, content_type):
-        return menu_scan.MenuScanParseResult(
-            items=[
-                MenuScanCandidate(
-                    nameEn="Tea",
-                    nameBn="চা",
-                    descriptionEn="Fresh milk tea.",
-                    descriptionBn="তাজা দুধ চা।",
-                    categoryEn="Drinks",
-                    categoryBn="ড্রিংকস",
-                    price=50,
-                    isAvailable=True,
-                ),
-                MenuScanCandidate(
-                    nameEn="Coffee",
-                    nameBn="কফি",
-                    descriptionEn="Black coffee.",
-                    descriptionBn="ব্ল্যাক কফি।",
-                    categoryEn="Drinks",
-                    categoryBn="ড্রিংকস",
-                    price=80,
-                    isAvailable=True,
-                ),
-            ],
-            provider="xai",
-            warnings=[],
-        )
+    scan_calls = 0
 
-    monkeypatch.setattr(menu, "scan_single_image_with_dedup", fake_scan)
+    async def fake_scan(image_bytes, content_type, known_item_names=None):
+        nonlocal scan_calls
+        scan_calls += 1
+        if scan_calls == 1:
+            return menu_scan.MenuScanParseResult(
+                items=[
+                    MenuScanCandidate(
+                        nameEn="Tea",
+                        nameBn="চা",
+                        descriptionEn="Fresh milk tea.",
+                        descriptionBn="তাজা দুধ চা।",
+                        categoryEn="Drinks",
+                        categoryBn="ড্রিংকস",
+                        price=50,
+                        isAvailable=True,
+                    ),
+                    MenuScanCandidate(
+                        nameEn="Coffee",
+                        nameBn="কফি",
+                        descriptionEn="Black coffee.",
+                        descriptionBn="ব্ল্যাক কফি।",
+                        categoryEn="Drinks",
+                        categoryBn="ড্রিংকস",
+                        price=80,
+                        isAvailable=True,
+                    ),
+                ],
+                provider="xai",
+                warnings=[],
+            )
+        return menu_scan.MenuScanParseResult(items=[], provider="xai", warnings=[])
+
+    monkeypatch.setattr(menu, "scan_image_once", fake_scan)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

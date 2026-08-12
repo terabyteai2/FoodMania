@@ -19,6 +19,7 @@ import 'core/localization/app_strings.dart';
 import 'core/theme/category_tints.dart';
 import 'core/utils/bounded_string_set.dart';
 import 'core/widgets/support_chat_overlay.dart';
+import 'features/orders/order_list_filters.dart';
 import 'models/account_role.dart';
 import 'models/admin_blocking_notice.dart';
 import 'models/app_update_info.dart';
@@ -673,6 +674,10 @@ class PosAppController extends ChangeNotifier {
         customerMenuTheme:
             preferences.getString(_customerMenuThemeKey) ?? 'sultans_hearth',
         deliveryCharge: preferences.getDouble(_deliveryChargeKey) ?? 0,
+        shiftHoursEnabled:
+            preferences.getBool(_shiftHoursEnabledKey) ?? false,
+        shiftStartMinute: preferences.getInt(_shiftStartMinuteKey),
+        shiftEndMinute: preferences.getInt(_shiftEndMinuteKey),
         logoUrl: preferences.getString(_logoUrlKey),
         logoBitmapUrl: preferences.getString(_logoBitmapUrlKey),
       );
@@ -917,14 +922,33 @@ class PosAppController extends ChangeNotifier {
 
   DashboardMetrics get metrics {
     final now = DateTime.now();
+    // Under shift mode the "today" window starts at the running shift's open
+    // time (anchored to yesterday when now is before the open hour), so
+    // after-midnight orders still count toward the previous day's shift.
+    final todayStart = shiftModeActive
+        ? OrderListFilters.shiftBoundsFor(
+            now,
+            startMinute: serverConfig.shiftStartMinute,
+            endMinute: serverConfig.shiftEndMinute,
+          ).startInclusive!
+        : DateTime(now.year, now.month, now.day);
+    final todayEndExclusive = shiftModeActive
+        ? OrderListFilters.shiftBoundsFor(
+            now,
+            startMinute: serverConfig.shiftStartMinute,
+            endMinute: serverConfig.shiftEndMinute,
+          ).endExclusive
+        : null;
     final todaysOrders = orders
         .where((order) {
-          return order.createdAt.year == now.year &&
-              order.createdAt.month == now.month &&
-              order.createdAt.day == now.day;
+          if (order.createdAt.isBefore(todayStart)) return false;
+          if (todayEndExclusive != null &&
+              !order.createdAt.isBefore(todayEndExclusive)) {
+            return false;
+          }
+          return true;
         })
         .toList(growable: false);
-    final todayStart = DateTime(now.year, now.month, now.day);
     final sevenDayStart = todayStart.subtract(Duration(days: 6));
     final thirtyDayStart = todayStart.subtract(Duration(days: 29));
 
@@ -944,7 +968,13 @@ class PosAppController extends ChangeNotifier {
   }
 
   SalesReport salesReportForDays(int days) {
-    return SalesReport.fromOrders(orders: orders, days: days);
+    return SalesReport.fromOrders(
+      orders: orders,
+      days: days,
+      shiftMode: shiftModeActive,
+      shiftStartMinute: serverConfig.shiftStartMinute,
+      shiftEndMinute: serverConfig.shiftEndMinute,
+    );
   }
 
   List<String> get categories {
@@ -3719,6 +3749,69 @@ class PosAppController extends ChangeNotifier {
     }
   }
 
+    /// Whether the completed-orders list and local "today" totals should
+  /// follow the configured operating shift (open/close window) instead of
+  /// the calendar day.
+  bool get shiftModeActive =>
+      serverConfig.shiftHoursEnabled && serverConfig.shiftStartMinute != null;
+
+  /// Optional operating-shift window used by the completed-orders list.
+  /// Minutes since local midnight; null clears the value (falls back to
+  /// today). End at/before start means the shift wraps past midnight.
+  Future<void> updateShiftHours({
+    int? startMinute,
+    int? endMinute,
+  }) async {
+    final start = startMinute?.clamp(0, 1439);
+    final end = endMinute?.clamp(0, 1439);
+    if (serverConfig.shiftStartMinute == start &&
+        serverConfig.shiftEndMinute == end) {
+      return;
+    }
+    serverConfig = serverConfig.copyWith(
+      shiftStartMinute: start,
+      shiftEndMinute: end,
+    );
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    if (start == null) {
+      await preferences.remove(_shiftStartMinuteKey);
+    } else {
+      await preferences.setInt(_shiftStartMinuteKey, start);
+    }
+    if (end == null) {
+      await preferences.remove(_shiftEndMinuteKey);
+    } else {
+      await preferences.setInt(_shiftEndMinuteKey, end);
+    }
+  }
+
+  /// Turns the operating-shift mode on or off. Enabling with no open/close
+  /// minutes configured persists sensible defaults (10:00 AM – 02:00 AM).
+  Future<void> updateShiftHoursEnabled(bool value) async {
+    if (serverConfig.shiftHoursEnabled == value) return;
+    var start = serverConfig.shiftStartMinute;
+    var end = serverConfig.shiftEndMinute;
+    if (value && start == null) {
+      start = 10 * 60;
+      end = 2 * 60;
+    }
+    serverConfig = serverConfig.copyWith(
+      shiftHoursEnabled: value,
+      shiftStartMinute: start,
+      shiftEndMinute: end,
+    );
+    notifyListeners();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_shiftHoursEnabledKey, value);
+    if (start != null) {
+      await preferences.setInt(_shiftStartMinuteKey, start);
+    }
+    if (end != null) {
+      await preferences.setInt(_shiftEndMinuteKey, end);
+    }
+  }
+
   Future<void> _startPushNotifications() async {
     if (_pushNotificationsStarted) return;
     _pushNotificationsStarted = true;
@@ -4920,6 +5013,9 @@ class PosAppController extends ChangeNotifier {
   static final String _tableCountKey = 'local_pos_table_count';
   static final String _customerMenuThemeKey = 'local_pos_customer_menu_theme';
   static final String _deliveryChargeKey = 'local_pos_delivery_charge';
+  static final String _shiftHoursEnabledKey = 'local_pos_shift_hours_enabled';
+  static final String _shiftStartMinuteKey = 'local_pos_shift_start_minute';
+  static final String _shiftEndMinuteKey = 'local_pos_shift_end_minute';
   static final String _logoUrlKey = 'local_pos_logo_url';
   static final String _logoBitmapUrlKey = 'local_pos_logo_bitmap_url';
   static final String _subscriptionStateKey = 'local_pos_subscription_state';

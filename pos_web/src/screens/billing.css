@@ -3,25 +3,26 @@
 .billing-root {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: var(--rail-w) 1fr var(--cart-w);
+  grid-template-columns: 1fr var(--cart-w);
   grid-template-rows: 1fr;
 }
 
-/* ---------- category rail (dark slate, petpooja13 left) ---------- */
-.cat-rail {
-  background: var(--rail-bg);
-  overflow-y: auto;
-  display: flex; flex-direction: column;
-  min-height: 0;
+/* ---------- category chips (above item grid) ---------- */
+.cat-chip-row {
+  display: flex; gap: 8px;
+  padding: 10px; background: var(--surface);
+  border-bottom: 1px solid var(--line); flex: none;
+  overflow-x: auto; scrollbar-width: none;
 }
-.cat-item {
-  background: var(--rail-item);
-  border: none; border-bottom: 1px solid var(--rail-line);
-  color: #fff; text-align: left;
-  padding: 14px 14px; font-size: var(--fs-14); font-weight: 600;
+.cat-chip-row::-webkit-scrollbar { display: none; }
+.cat-chip { flex: none; }
+.cat-chip {
+  background: #c7c9c8; color: #000;
+  border: none; border-radius: var(--r-sm);
+  padding: 10px; font-size: var(--fs-15); font-weight: 600;
 }
-.cat-item:hover { background: var(--primary); }
-.cat-item.active { background: var(--success); }
+.cat-chip:hover { filter: brightness(0.96); }
+.cat-chip.active { background: #a7a7a5; }
 
 /* ---------- item pane ---------- */
 .item-pane {
@@ -29,42 +30,28 @@
   border-right: 1px solid var(--line);
   background: var(--bg);
 }
-.item-search-row {
-  display: flex; gap: 10px; padding: 10px;
-  background: var(--surface); border-bottom: 1px solid var(--line);
-}
-.item-search { flex: 2; }
-.item-shortcode { flex: 1; max-width: 180px; }
 
 .item-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px 5px; padding: 10px; overflow-y: auto; align-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 8px; padding: 10px; overflow-y: auto; align-content: start;
 }
 .item-tile {
   position: relative;
-  background: hsl(var(--cat-hue), 25%, 96%);
-  border: 1px solid hsl(var(--cat-hue), 30%, 80%);
-  border-left: 4px solid hsl(var(--cat-hue), 50%, 40%);
+  background: var(--cat-bg, #cacccb);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: var(--r-sm);
-  padding: 2px 8px;
-  display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  text-align: left; cursor: pointer;
-  height: 80px;
-  width: 165px;
+  padding: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  text-align: center; cursor: pointer;
+  height: 150px;
   box-sizing: border-box;
 }
-.item-tile:hover {
-  background: hsl(var(--cat-hue), 30%, 92%);
-  border-color: hsl(var(--cat-hue), 35%, 72%);
-  border-left-color: hsl(var(--cat-hue), 55%, 35%);
-}
-.item-tile.in-cart {
-  background: hsl(var(--cat-hue), 40%, 90%);
-  border-left: 5px solid var(--primary);
-}
+.item-tile:hover { filter: brightness(0.96); }
+.item-tile.in-cart { box-shadow: inset 0 0 0 2px var(--primary); }
 .item-tile.unavailable { opacity: 0.45; cursor: not-allowed; }
-.item-name { font-size: var(--fs-12); font-weight: 600; color: var(--ink); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-name { font-size: var(--fs-16); font-weight: 600; color: #000; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.item-price { font-size: var(--fs-16); font-weight: 400; color: #000; font-variant-numeric: tabular-nums; }
 .item-fav-dot { position: absolute; top: 4px; right: 6px; font-size: 10px; color: var(--danger); }
 .item-minus-btn {
   position: absolute; top: -5px; right: 20px;
@@ -194,11 +181,11 @@
 
 /* ---------- action buttons ---------- */
 .cart-actions {
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(2, 1fr);
   gap: 6px; padding: 8px 10px 10px; flex: none;
   background: var(--strip-bg);
 }
-.cart-actions .btn { height: 40px; font-size: var(--fs-13); padding: 0 8px; }
+.cart-actions .btn { height: 45px; font-size: var(--fs-15); padding: 0 8px; }
 .cart-actions .btn-outline { background: var(--surface); }
 
 /* ---------- modal internals ---------- */

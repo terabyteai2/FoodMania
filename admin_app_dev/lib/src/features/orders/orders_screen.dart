@@ -194,6 +194,9 @@ class _OrdersScreenState extends State<OrdersScreen>
   int? _lastPendingCount;
   OrderListFilters _filters = OrderListFilters.none;
   _OrdersDerivation? _cachedDerivation;
+  // Completed tab defaults to the optional "shift" scope (completed orders
+  // since the configured shift start). Lifting it shows every completed order.
+  bool _seeAllCompleted = false;
   // Search collapses to a top-bar icon; the field row mounts while open or
   // while a query is active (so a typed query can't vanish under the user).
   bool _searchOpen = false;
@@ -227,7 +230,12 @@ class _OrdersScreenState extends State<OrdersScreen>
   }
 
   void _onTabChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        // Leaving the Completed tab returns it to the shift scope next visit.
+        if (_tabs.index != 1) _seeAllCompleted = false;
+      });
+    }
   }
 
   @override
@@ -244,14 +252,33 @@ class _OrdersScreenState extends State<OrdersScreen>
     // Orders home reads orders (+ hasMore/loadingMore, both in the orders
     // aspect), language, and menu availability — not printer/sync/inventory.
     final app = AppScope.selectMany(context, const [
+      // `settings` because the completed-tab shift scope reads serverConfig.
       AppAspect.orders,
       AppAspect.language,
       AppAspect.menu,
+      AppAspect.settings,
     ]);
     final rawOrders = app.ordersFor();
     final language = app.language;
     final searchQuery = _searchController.text.trim();
-    final derived = _deriveOrders(rawOrders, _filters, searchQuery, language);
+    final completedBounds = _seeAllCompleted
+        ? null
+        : OrderListFilters.shiftBoundsFor(
+            DateTime.now(),
+            startMinute: app.shiftModeActive
+                ? app.serverConfig.shiftStartMinute
+                : null,
+            endMinute: app.shiftModeActive
+                ? app.serverConfig.shiftEndMinute
+                : null,
+          );
+    final derived = _deriveOrders(
+      rawOrders,
+      _filters,
+      searchQuery,
+      language,
+      completedBounds,
+    );
     final ongoingOrders = derived.ongoingOrders;
     final completedOrders = derived.completedOrders;
 
@@ -271,6 +298,12 @@ class _OrdersScreenState extends State<OrdersScreen>
       currentSearchBase: derived.searchBaseCompleted,
       currentUnfiltered: derived.unfilteredCompleted,
       searchActive: searchQuery.isNotEmpty,
+      seeAllShortcut: _seeAllCompleted || _completedOrders(rawOrders).isEmpty
+          ? null
+          : _EmptyShortcut(
+              label: text.seeAll,
+              onTap: () => setState(() => _seeAllCompleted = true),
+            ),
     );
     _syncTabWithPendingOrders(pendingCount, ongoingOrders.length);
 
@@ -370,8 +403,13 @@ class _OrdersScreenState extends State<OrdersScreen>
                   ),
                   _OrderList(
                     orders: completedOrders,
-                    emptyTitle: text.noCompletedOrders,
+                    emptyTitle: app.shiftModeActive && !_seeAllCompleted
+                        ? text.noCompletedThisShift
+                        : text.noCompletedOrders,
                     completedTab: true,
+                    shiftStartMinute: app.shiftModeActive
+                        ? app.serverConfig.shiftStartMinute
+                        : null,
                     canCreate: canCreate,
                     onCreate: () => openNewOrderForm(
                       context,
@@ -385,6 +423,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                     onStatus: (o, s) => _changeStatus(context, o, s),
                     onCompletedLongPress: (o) =>
                         _showCompletedOrderActions(context, o),
+                    seeAllCompleted: _seeAllCompleted,
+                    onToggleShiftScope: () => setState(
+                      () => _seeAllCompleted = !_seeAllCompleted,
+                    ),
                     hasMore: app.hasMoreOrders,
                     loadingMore: app.loadingMoreOrders,
                     onLoadMore: app.loadMoreOrders,
@@ -458,6 +500,30 @@ class _OrdersScreenState extends State<OrdersScreen>
         .toList(growable: false);
   }
 
+  /// Completed orders whose local [OrderModel.createdAt] falls inside the
+  /// optional shift window; a null window keeps every completed order.
+  List<OrderModel> _completedOrdersInScope(
+    List<OrderModel> orders,
+    ({DateTime? startInclusive, DateTime? endExclusive})? bounds,
+  ) {
+    if (bounds == null) return _completedOrders(orders);
+    return orders
+        .where((o) {
+          if (o.status.adminStatus != OrderStatus.completed) return false;
+          final at = o.createdAt.toLocal();
+          if (bounds.startInclusive != null &&
+              at.isBefore(bounds.startInclusive!)) {
+            return false;
+          }
+          if (bounds.endExclusive != null &&
+              !at.isBefore(bounds.endExclusive!)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
   /// Memoized derivation of the six filtered/sorted views needed by [build].
   /// Cache key is the identity of [raw] + [filters] plus the search/language
   /// strings, so unchanged inputs (the common case during sync churn or tab
@@ -467,13 +533,15 @@ class _OrdersScreenState extends State<OrdersScreen>
     OrderListFilters filters,
     String searchQuery,
     AppLanguage language,
+    ({DateTime? startInclusive, DateTime? endExclusive})? completedBounds,
   ) {
     final cached = _cachedDerivation;
     if (cached != null &&
         identical(cached.raw, raw) &&
         identical(cached.filters, filters) &&
         cached.searchQuery == searchQuery &&
-        cached.language == language) {
+        cached.language == language &&
+        cached.completedBounds == completedBounds) {
       return cached;
     }
     final filterMatched = raw
@@ -483,8 +551,12 @@ class _OrdersScreenState extends State<OrdersScreen>
         .where((o) => _matchesOrderSearch(o, searchQuery, language))
         .toList(growable: false);
     final ongoingOrders = _ongoingOrders(allOrders)..sort(_sortOrders);
-    final completedOrders = _completedOrders(allOrders)
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final completedOrders =
+        _completedOrdersInScope(allOrders, completedBounds)
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final unfilteredCompleted = _completedOrdersInScope(raw, completedBounds);
+    final searchBaseCompleted =
+        _completedOrdersInScope(filterMatched, completedBounds);
     if (kDebugMode) {
       debugPrint(
         '[QB-ORDERS-DIAG] derive raw=${raw.length} '
@@ -492,11 +564,12 @@ class _OrdersScreenState extends State<OrdersScreen>
         'afterSearch=${allOrders.length} '
         'ongoing=${ongoingOrders.length} completed=${completedOrders.length} '
         'unfilteredOngoing=${_ongoingOrders(raw).length} '
-        'unfilteredCompleted=${_completedOrders(raw).length} '
+        'unfilteredCompleted=${unfilteredCompleted.length} '
         'searchBaseOngoing=${_ongoingOrders(filterMatched).length} '
-        'searchBaseCompleted=${_completedOrders(filterMatched).length} '
+        'searchBaseCompleted=${searchBaseCompleted.length} '
         'query="$searchQuery" filtersActive=${filters.isActive} '
         'dateRange=${filters.dateRange.name} source=${filters.source?.name} '
+        'shift=${completedBounds == null ? "all" : "scope"} '
         '${_ordersDiagSummary(raw)}',
       );
       // When filters/search hide everything but raw had orders, dump statuses
@@ -522,12 +595,13 @@ class _OrdersScreenState extends State<OrdersScreen>
       filters: filters,
       searchQuery: searchQuery,
       language: language,
+      completedBounds: completedBounds,
       filterMatched: filterMatched,
       allOrders: allOrders,
       unfilteredOngoing: _ongoingOrders(raw),
-      unfilteredCompleted: _completedOrders(raw),
+      unfilteredCompleted: unfilteredCompleted,
       searchBaseOngoing: _ongoingOrders(filterMatched),
-      searchBaseCompleted: _completedOrders(filterMatched),
+      searchBaseCompleted: searchBaseCompleted,
       ongoingOrders: ongoingOrders,
       completedOrders: completedOrders,
     );
@@ -541,6 +615,7 @@ class _OrdersScreenState extends State<OrdersScreen>
     required List<OrderModel> currentSearchBase,
     required List<OrderModel> currentUnfiltered,
     required bool searchActive,
+    _EmptyShortcut? seeAllShortcut,
   }) {
     if (currentFiltered.isNotEmpty) return null;
     final text = AppScope.of(context).strings;
@@ -553,6 +628,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         }),
       );
     }
+    if (seeAllShortcut != null) return seeAllShortcut;
     if (_filters.isActive && currentUnfiltered.isNotEmpty) {
       return _EmptyShortcut(
         label: text.clearFiltersShortcut,
@@ -638,7 +714,12 @@ class _OrdersScreenState extends State<OrdersScreen>
           _OrdersFilterSheet(initial: _filters, strings: app.strings),
     );
     if (result != null && mounted) {
-      setState(() => _filters = result);
+      setState(() {
+        _filters = result;
+        // A picked date range takes over the completed tab from the shift
+        // scope; choosing "all" hands control back to the shift.
+        _seeAllCompleted = result.dateRange != OrderDateRange.all;
+      });
     }
   }
 
@@ -883,6 +964,7 @@ class _OrdersDerivation {
     required this.filters,
     required this.searchQuery,
     required this.language,
+    required this.completedBounds,
     required this.filterMatched,
     required this.allOrders,
     required this.unfilteredOngoing,
@@ -897,6 +979,7 @@ class _OrdersDerivation {
   final OrderListFilters filters;
   final String searchQuery;
   final AppLanguage language;
+  final ({DateTime? startInclusive, DateTime? endExclusive})? completedBounds;
   final List<OrderModel> filterMatched;
   final List<OrderModel> allOrders;
   final List<OrderModel> unfilteredOngoing;
@@ -1161,6 +1244,9 @@ class _OrderList extends StatelessWidget {
     this.onCompletedLongPress,
     this.showDateHeaders = true,
     this.completedTab = false,
+    this.shiftStartMinute,
+    this.seeAllCompleted = false,
+    this.onToggleShiftScope,
     this.hasMore = false,
     this.loadingMore = false,
     this.onLoadMore,
@@ -1185,6 +1271,17 @@ class _OrderList extends StatelessWidget {
   /// grid extent (width ≥ 700) follows this.
   final bool completedTab;
 
+  /// When the completed tab follows shift mode, date headers group by the
+  /// shift's opening day (an order at 1:30 AM headers under yesterday).
+  final int? shiftStartMinute;
+
+  /// Completed tab: true while the shift scope is lifted (all completed).
+  final bool seeAllCompleted;
+
+  /// Flips the completed tab between the shift scope and "all completed".
+  /// Only meaningful on the completed tab.
+  final VoidCallback? onToggleShiftScope;
+
   /// Whether the underlying `orders` list has more pages available.
   final bool hasMore;
 
@@ -1200,16 +1297,19 @@ class _OrderList extends StatelessWidget {
     List<OrderModel> orders,
     bool showFooter,
     bool showDateHeaders,
+    int? shiftStartMinute,
     AppStrings text,
   ) {
     final entries = <_ListEntry>[];
     DateTime? lastDate;
     for (final order in orders) {
       if (showDateHeaders) {
-        final d = order.createdAt.toLocal();
-        final orderDate = DateTime(d.year, d.month, d.day);
+        final local = order.createdAt.toLocal();
+        final orderDate = shiftStartMinute == null
+            ? DateTime(local.year, local.month, local.day)
+            : OrderListFilters.shiftDayFor(local, shiftStartMinute);
         if (lastDate == null || orderDate != lastDate) {
-          entries.add(_DateHeaderEntry(text.formatDateHeader(d)));
+          entries.add(_DateHeaderEntry(text.formatDateHeader(orderDate)));
           lastDate = orderDate;
         }
       }
@@ -1221,6 +1321,22 @@ class _OrderList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final toggle = completedTab ? onToggleShiftScope : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (toggle != null && seeAllCompleted)
+          _CompletedScopeBar(onToggleShiftScope: toggle),
+        Expanded(
+          child: _buildBody(context),
+        ),
+        if (toggle != null && !seeAllCompleted && orders.isNotEmpty)
+          _SeeAllCompletedBar(onToggleShiftScope: toggle),
+      ],
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     if (orders.isEmpty) {
       if (kDebugMode) {
         debugPrint(
@@ -1291,6 +1407,7 @@ class _OrderList extends StatelessWidget {
                     orders,
                     _showFooter,
                     showDateHeaders,
+                    shiftStartMinute,
                     app.strings,
                   );
                   return ListView.builder(
@@ -1349,6 +1466,63 @@ class _LoadMoreFooter extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2.4),
               )
             : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+/// Pinned bottom CTA on the Completed tab while the shift scope is on:
+/// lifts to "all completed orders".
+class _SeeAllCompletedBar extends StatelessWidget {
+  const _SeeAllCompletedBar({required this.onToggleShiftScope});
+
+  final VoidCallback onToggleShiftScope;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: TfButton(
+        label: text.seeAll,
+        icon: Icons.unfold_more_rounded,
+        variant: TfButtonVariant.ghost,
+        fullWidth: true,
+        onPressed: onToggleShiftScope,
+      ),
+    );
+  }
+}
+
+/// Top scope bar on the Completed tab while "all completed" is showing:
+/// makes it obvious the shift is lifted and offers a way back.
+class _CompletedScopeBar extends StatelessWidget {
+  const _CompletedScopeBar({required this.onToggleShiftScope});
+
+  final VoidCallback onToggleShiftScope;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Row(
+        children: [
+          const Icon(Icons.history_rounded, size: 18, color: PosColors.muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TfText(
+              text.allCompletedOrdersLabel,
+              style: TfTextStyles.bodyMuted,
+            ),
+          ),
+          TfChip(
+            label: text.currentShiftLabel,
+            active: true,
+            small: true,
+            onTap: onToggleShiftScope,
+          ),
+        ],
       ),
     );
   }
@@ -3045,9 +3219,9 @@ class _EditOrderSheetState extends State<_EditOrderSheet> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  TourSpot(
-                    name: 'orders.editSave',
-                    child: Expanded(
+                  Expanded(
+                    child: TourSpot(
+                      name: 'orders.editSave',
                       child: TfButton(
                         label: text.isBn ? 'সেভ' : 'Save',
                         icon: TfNavIcon.check,
@@ -4824,9 +4998,9 @@ class _ReviewStep extends StatelessWidget {
             top: false,
             child: Row(
               children: [
-                TourSpot(
-                  name: 'orders.newOrderKitchenNote',
-                  child: Expanded(
+                Expanded(
+                  child: TourSpot(
+                    name: 'orders.newOrderKitchenNote',
                     child: TfButton(
                       label: noteCtrl.text.isEmpty
                           ? text.kitchenNote
@@ -4840,9 +5014,9 @@ class _ReviewStep extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                TourSpot(
-                  name: 'orders.newOrderDiscount',
-                  child: Expanded(
+                Expanded(
+                  child: TourSpot(
+                    name: 'orders.newOrderDiscount',
                     child: TfButton(
                       label: discount > 0.005
                           ? '-${tfFormatCurrency(context, discount)}'
@@ -5108,62 +5282,56 @@ class _ReviewStep extends StatelessWidget {
                     ],
                   ),
                 ),
-                TourSpot(
-                  name: 'orders.newOrderDiscountField',
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                    child: TextField(
-                      controller: controller,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      autofocus: true,
-                      style: TfTextStyles.rowTitle.copyWith(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    autofocus: true,
+                    style: TfTextStyles.rowTitle.copyWith(
+                      fontFamily: tfFontFamily(context),
+                      fontWeight: FontWeight.w400,
+                      color: PosColors.slate,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      hintStyle: TfTextStyles.rowTitle.copyWith(
                         fontFamily: tfFontFamily(context),
                         fontWeight: FontWeight.w400,
-                        color: PosColors.slate,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: PosColors.muted,
                       ),
-                      decoration: InputDecoration(
-                        hintText: '0',
-                        hintStyle: TfTextStyles.rowTitle.copyWith(
-                          fontFamily: tfFontFamily(context),
-                          fontWeight: FontWeight.w400,
-                          color: PosColors.muted,
-                        ),
-                        prefixIcon: const Icon(
-                          Icons.local_offer_outlined,
-                          size: 18,
-                          color: PosColors.muted,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(PosRadii.md),
-                          borderSide: const BorderSide(color: PosColors.lineStrong),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(PosRadii.md),
-                          borderSide: const BorderSide(color: PosColors.primary),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 14,
-                          horizontal: 12,
-                        ),
+                      prefixIcon: const Icon(
+                        Icons.local_offer_outlined,
+                        size: 18,
+                        color: PosColors.muted,
                       ),
-                      onChanged: (_) => onChanged(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        borderSide: const BorderSide(color: PosColors.lineStrong),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(PosRadii.md),
+                        borderSide: const BorderSide(color: PosColors.primary),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 12,
+                      ),
                     ),
+                    onChanged: (_) => onChanged(),
                   ),
                 ),
-                TourSpot(
-                  name: 'orders.newOrderDiscountSave',
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                    child: TfButton(
-                      label: text.isBn ? 'সেভ করুন' : 'Save',
-                      variant: TfButtonVariant.primary,
-                      size: TfButtonSize.lg,
-                      fullWidth: true,
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  child: TfButton(
+                    label: text.isBn ? 'সেভ করুন' : 'Save',
+                    variant: TfButtonVariant.primary,
+                    size: TfButtonSize.lg,
+                    fullWidth: true,
+                    onPressed: () => Navigator.pop(ctx),
                   ),
                 ),
               ],
@@ -5507,9 +5675,7 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
             ),
             const SizedBox(height: PosDensity.sectionGap),
             // Payment-mode radio cards, two per row (Petpooja target).
-            TourSpot(
-              name: 'orders.settleMethods',
-              child: GridView.count(
+            GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: 2,
@@ -5527,19 +5693,15 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
                       ),
                 ],
               ),
-            ),
             const SizedBox(height: PosDensity.sectionGap),
-            TourSpot(
-              name: 'orders.settlePaid',
-              child: TextField(
-                controller: _paidCtrl,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: isBn ? 'কাস্টমার দিয়েছে' : 'Customer Paid',
-                ),
+            TextField(
+              controller: _paidCtrl,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: isBn ? 'কাস্টমার দিয়েছে' : 'Customer Paid',
               ),
             ),
             const SizedBox(height: PosDensity.sectionGap),
@@ -5586,13 +5748,10 @@ class _SettleSaveDialogState extends State<_SettleSaveDialog> {
                   ),
                 ),
                 const SizedBox(width: PosDensity.gridGap),
-                TourSpot(
-                  name: 'orders.settleConfirm',
-                  child: Expanded(
-                    child: TfButton(
-                      label: isBn ? 'সেটেল ও সেভ' : 'Settle & Save',
-                      onPressed: () => Navigator.pop(context, _method),
-                    ),
+                Expanded(
+                  child: TfButton(
+                    label: isBn ? 'সেটেল ও সেভ' : 'Settle & Save',
+                    onPressed: () => Navigator.pop(context, _method),
                   ),
                 ),
               ],
