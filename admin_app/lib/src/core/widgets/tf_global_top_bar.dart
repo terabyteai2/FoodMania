@@ -191,11 +191,7 @@ class _AvatarDropdown extends StatelessWidget {
   static String _initials(String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '👤';
-    final parts = trimmed.split(RegExp(r'\s+'));
-    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return trimmed.substring(0, trimmed.length >= 2 ? 2 : 1).toUpperCase();
+    return trimmed[0].toUpperCase();
   }
 
   @override

@@ -758,8 +758,8 @@ class TfUnifiedTopNav extends StatelessWidget {
                 Wrap(
                   alignment: WrapAlignment.end,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: PosSpacing.sp2,
-                  runSpacing: PosSpacing.sp2,
+                  spacing: PosSpacing.sp1,
+                  runSpacing: PosSpacing.sp1,
                   children: trailing,
                 ),
               ],
@@ -2016,18 +2016,23 @@ class TfIconButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 class TfBarButton extends StatelessWidget {
   const TfBarButton({
-    required this.icon,
+    this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.label,
     this.badge,
     this.accent = false,
     this.dot = false,
     this.bare = false,
     this.iconColor,
     super.key,
-  });
+  }) : assert(icon != null || label != null);
 
-  final TfSourceIconName icon;
+  /// Line glyph; ignored when [label] is set.
+  final TfSourceIconName? icon;
+
+  /// Optional text shown instead of the glyph (e.g. an "AI" chip).
+  final String? label;
   final String tooltip;
   final VoidCallback? onPressed;
   final int? badge;
@@ -2070,13 +2075,29 @@ class TfBarButton extends StatelessWidget {
                             ),
                     ),
                     child: Center(
-                      child: TfSourceIcon(
-                        name: icon,
-                        size: bare ? 22 : 20,
-                        color: iconColor ?? (accent
-                            ? PosColors.accentInk
-                            : PosColors.primaryDark),
-                      ),
+                      child: label != null
+                          ? TfText(
+                              label!,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontFamily: tfFontFamily(context),
+                                fontSize: bare ? 13 : 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.4,
+                                color: iconColor ??
+                                    (accent
+                                        ? PosColors.accentInk
+                                        : PosColors.primaryDark),
+                              ),
+                            )
+                          : TfSourceIcon(
+                              name: icon!,
+                              size: bare ? 22 : 20,
+                              color: iconColor ??
+                                  (accent
+                                      ? PosColors.accentInk
+                                      : PosColors.primaryDark),
+                            ),
                     ),
                   ),
                 ),

@@ -975,7 +975,7 @@ class HeaderSupportChatButton extends StatelessWidget {
       builder: (context, _) {
         final controller = SupportChatController.instance;
         return TfBarButton(
-          icon: TfSourceIconName.chat,
+          label: 'AI',
           tooltip: AppStrings.of(AppScope.read(context).language).supportChatTooltip,
           badge: controller.unread,
           bare: true,
