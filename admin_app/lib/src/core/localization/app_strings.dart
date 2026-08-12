@@ -574,12 +574,12 @@ class AppStrings {
   String get completedTab => isBn ? 'সম্পন্ন' : 'Completed';
   String get onTheFloorNow => isBn ? 'এখন ফ্লোরে' : 'On the floor now';
   String get completedPaid => isBn ? 'সম্পন্ন · পেইড' : 'Completed · paid';
-  String get printKotAction => isBn ? 'KOT প্রিন্ট' : 'Print KOT';
+  String get printKotAction => isBn ? 'কিচেন প্রিন্ট' : 'Print KOT';
   // Short order-card action labels (the card drops the "Print" verb).
-  String get kotAction => 'KOT';
-  String get billAction => isBn ? 'বিল' : 'Bill';
+  String get kotAction => isBn ? 'কিচেন' : 'KOT';
+  String get billAction => isBn ? 'বিল প্রিন্ট' : 'Bill';
   String kotPrinted(String seq) =>
-      isBn ? '${_digits(seq)}-এর KOT প্রিন্ট হয়েছে' : 'KOT printed for $seq';
+      isBn ? '${_digits(seq)}-এর কিচেন প্রিন্ট হয়েছে' : 'KOT printed for $seq';
   String get kotNotPrinted => isBn ? 'KOT প্রিন্ট হয়নি' : 'KOT not printed';
   String get noOngoingOrders =>
       isBn ? 'কোনো চলমান অর্ডার নেই।' : 'No ongoing orders.';
@@ -701,7 +701,7 @@ class AppStrings {
   String get rejectOrderAction => isBn ? 'রিজেক্ট' : 'Reject';
   String get acceptAndSendToKitchen => isBn ? 'অ্যাকসেপ্ট' : 'Accept';
   String get reprintAction => isBn ? 'রিপ্রিন্ট' : 'Reprint';
-  String get printBillAction => isBn ? 'বিল প্রিন্ট' : 'Print Bill';
+  String get printBillAction => isBn ? 'বিল প্রিন্ট' : 'Bill';
   String get printReceiptAction => isBn ? 'রিসিট প্রিন্ট' : 'Print receipt';
   String get servedAction => isBn ? 'পরিবেশিত' : 'Served';
   String get orderStatusPending => isBn ? 'পেন্ডিং' : 'Pending';

@@ -2,7 +2,8 @@
 // Prod: same origin (app is served at the site root). Dev: set VITE_API_BASE.
 
 import type {
-  AdminAccessResult, AnalyticsRange, AnalyticsSummaryWire, ApiEnvelope, AuthPayload,
+  AdminAccessResult, AnalyticsInsightsWire, AnalyticsItemDetailWire, AnalyticsRange,
+  AnalyticsSummaryWire, ApiEnvelope, AuthPayload,
   BlockingNotice, BlockingNoticeRespondRequest, UpgradeInfo,
   DailyStockCountPayload, DailyStockCountResult, DashboardSummaryWire,
   InventoryDailyReportWire, InventoryItemPayload,
@@ -129,6 +130,21 @@ export const api = {
     request<AnalyticsSummaryWire>(`/outlets/${outletId}/analytics/summary${qs({
       range: params.range, start: params.start, end: params.end,
       service: params.service, payment_method: params.paymentMethod,
+    })}`),
+  fetchAnalyticsInsights: (
+    outletId: string,
+    params: { range: AnalyticsRange; start?: string; end?: string },
+  ) =>
+    request<AnalyticsInsightsWire>(`/outlets/${outletId}/analytics${qs({
+      range: params.range, start: params.start, end: params.end,
+    })}`),
+  fetchAnalyticsItemDetail: (
+    outletId: string,
+    menuItemId: string,
+    params: { range: AnalyticsRange; start?: string; end?: string },
+  ) =>
+    request<AnalyticsItemDetailWire>(`/outlets/${outletId}/analytics/item/${encodeURIComponent(menuItemId)}${qs({
+      range: params.range, start: params.start, end: params.end,
     })}`),
   fetchOrderBuckets: (outletId: string, range: AnalyticsRange, start?: string, end?: string) =>
     request<OrderBucketsWire>(`/outlets/${outletId}/reports/order-buckets${qs({ range, start, end })}`),

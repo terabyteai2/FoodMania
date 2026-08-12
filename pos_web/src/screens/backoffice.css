@@ -94,3 +94,23 @@
 .bo-attn-row.low { background: var(--danger-soft); }
 .bo-attn-title { font-weight: 700; font-size: var(--fs-13); }
 .bo-attn-body { font-size: var(--fs-12); color: var(--ink-2); }
+
+/* live indicator (dashboard subtitle) */
+.bo-live { display: inline-flex; align-items: center; gap: 5px; color: var(--success); font-weight: 700; }
+.bo-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+
+/* chart legend (today vs ghost series) */
+.bo-legend { display: flex; gap: 14px; font-size: var(--fs-12); color: var(--muted); }
+.bo-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.bo-legend-swatch { width: 14px; height: 3px; border-radius: 2px; background: var(--primary); }
+.bo-legend-swatch.ghost { background: var(--line-strong); }
+
+/* clickable rank rows (item drill-down) */
+.bo-rank-row.clickable { cursor: pointer; border-radius: var(--r-md); padding-left: 6px; padding-right: 6px; margin-left: -6px; margin-right: -6px; }
+.bo-rank-row.clickable:hover { background: var(--surface-sunk); }
+
+/* growth / margin badges inside rank rows */
+.bo-badges { display: inline-flex; gap: 6px; margin-left: 8px; }
+.bo-badge { font-size: var(--fs-12); font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-sunk); color: var(--muted); white-space: nowrap; }
+.bo-badge.up { background: var(--success-soft, var(--surface-sunk)); color: var(--success); }
+.bo-badge.down { background: var(--danger-soft); color: var(--danger); }

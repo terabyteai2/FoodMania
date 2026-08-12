@@ -1081,7 +1081,7 @@ class TfButton extends StatelessWidget {
         };
     final isCompact = effHeight <= 38;
     final fontSize = isCompact ? 13.0 : (effHeight >= 50 ? 15.0 : 14.0);
-    final radius = isCompact ? PosRadii.sm : PosRadii.md;
+    final radius = 6.0;
 
     final isBn = tfIsBn(context);
     final text = isBn && (labelBn?.isNotEmpty ?? false) ? labelBn! : label;
@@ -1545,6 +1545,7 @@ class TfChip extends StatelessWidget {
     this.customText,
     this.customBorder,
     this.customCount,
+    this.customRadius,
     super.key,
   });
 
@@ -1561,6 +1562,9 @@ class TfChip extends StatelessWidget {
   final Color? customText;
   final Color? customBorder;
   final Color? customCount;
+
+  /// Corner radius override; defaults to the pill chip shape.
+  final double? customRadius;
   final VoidCallback onTap;
 
   @override
@@ -1587,7 +1591,7 @@ class TfChip extends StatelessWidget {
 
     return Material(
       color: fillColor,
-      borderRadius: BorderRadius.circular(PosRadii.chip),
+      borderRadius: BorderRadius.circular(customRadius ?? PosRadii.chip),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -1597,7 +1601,7 @@ class TfChip extends StatelessWidget {
             vertical: small ? PosSpacing.sp2 : PosDensity.cardPad,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PosRadii.chip),
+            borderRadius: BorderRadius.circular(customRadius ?? PosRadii.chip),
             border: Border.all(color: borderColor, width: 1),
           ),
           child: Row(

@@ -1935,14 +1935,14 @@ class _OrderCardState extends State<_OrderCard> {
                 name: 'orders.cardReject',
                 child: InkWell(
                   onTap: () => widget.onStatus(OrderStatus.rejected),
-                  borderRadius: BorderRadius.circular(PosRadii.sm),
+                  borderRadius: BorderRadius.circular(6),
                   child: Container(
                     width: 40,
                     height: 36,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(PosRadii.sm),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: PosColors.lineStrong, width: 1),
                     ),
                     child: const Icon(

@@ -1,27 +1,33 @@
 // Analytics — Sales Breakdown + Item-wise report (petpooja10/18 aesthetic) fed by
-// GET /analytics/summary. Includes the range-scoped Tax Summary (petpooja11 intent).
+// GET /analytics/summary, layered with owner insights from GET /analytics
+// (channels, dayparts, prev-period ghost, forecast, growth/margin). Includes the
+// range-scoped Tax Summary (petpooja11 intent). The insights fetch is isolated:
+// if it fails, the page still renders from the summary alone.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useSession } from '../state/session';
-import { t } from '../i18n/strings';
+import { t, type StringKey } from '../i18n/strings';
 import { usePos } from '../state/pos';
 import { usePrinters } from '../print/printManager';
 import { renderTaxSummary, type TicketContext } from '../print/ticketRenderer';
 import { formatTk } from '../core/money';
 import { downloadCsv } from '../core/csv';
+import { deltaPct, itemInsightById } from '../core/insights';
 import { StatCard } from '../components/StatCard';
 import { PeriodPicker, type Period } from '../components/PeriodPicker';
 import { AreaTrend } from '../components/charts/AreaTrend';
 import { BarChart, type BarDatum } from '../components/charts/BarChart';
 import { Donut, type DonutDatum } from '../components/charts/Donut';
-import type { AnalyticsSummaryWire } from '../api/types';
+import { ItemDrilldownModal } from '../components/ItemDrilldownModal';
+import type { AnalyticsInsightsWire, AnalyticsSummaryWire } from '../api/types';
 import './backoffice.css';
 
 const SERVICE_COLORS: Record<string, string> = {
   dineIn: 'var(--primary)', takeaway: 'var(--warning)', delivery: 'var(--success)',
 };
 const PALETTE = ['var(--primary)', 'var(--warning)', 'var(--success)', 'var(--secondary)', 'var(--favorite)', 'var(--line-strong)'];
+const DAYPART_LABEL: Record<string, StringKey> = { lunch: 'an.dpLunch', dinner: 'an.dpDinner', late: 'an.dpLate' };
 
 export function Analytics() {
   const session = useSession((s) => s.session)!;
@@ -31,10 +37,12 @@ export function Analytics() {
 
   const [period, setPeriod] = useState<Period>({ range: 'today' });
   const [data, setData] = useState<AnalyticsSummaryWire | null>(null);
+  const [insights, setInsights] = useState<AnalyticsInsightsWire | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<'sales' | 'items'>('sales');
   const [trendMode, setTrendMode] = useState<'revenue' | 'orders'>('revenue');
+  const [drilldown, setDrilldown] = useState<{ id: string; name: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const load = () => {
@@ -43,6 +51,10 @@ export function Analytics() {
       .then(setData)
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+    // Insights layer — failure hides the extra panels, never breaks the page.
+    api.fetchAnalyticsInsights(session.outletId, { range: period.range, start: period.start, end: period.end })
+      .then(setInsights)
+      .catch(() => setInsights(null));
   };
   useEffect(load, [session.outletId, period.range, period.start, period.end]);
 
@@ -60,12 +72,26 @@ export function Analytics() {
     [data, trendMode],
   );
   const trendLabels = useMemo(() => (data?.trend ?? []).map((t) => t.date.slice(5)), [data]);
+  // Ghost series — /analytics trends are in ৳ thousands; scale to ৳ and only
+  // overlay in revenue mode when both series cover the same 7-day window.
+  const trendGhost = useMemo(() => {
+    if (trendMode !== 'revenue' || !insights) return undefined;
+    if (insights.prevSalesTrend.length !== trendVals.length) return undefined;
+    return insights.prevSalesTrend.map((v) => v * 1000);
+  }, [insights, trendMode, trendVals.length]);
   const serviceBars: BarDatum[] = (data?.serviceWise ?? []).map((s) => ({
     label: s.label, value: s.valueBdt, color: SERVICE_COLORS[s.key] ?? 'var(--primary)',
   }));
   const collectionDonut: DonutDatum[] = (data?.collection ?? []).map((c, i) => ({
     label: c.label, value: c.valueBdt, color: PALETTE[i % PALETTE.length],
   }));
+  const channelDonut: DonutDatum[] = (insights?.channels ?? []).map((c, i) => ({
+    label: c.label, value: c.valueBdt, color: PALETTE[i % PALETTE.length],
+  }));
+  const channelTotal = channelDonut.reduce((s, d) => s + d.value, 0);
+  const revDelta = insights ? deltaPct(insights.revenue, insights.prevRevenue) : null;
+  const insightsById = useMemo(() => itemInsightById(insights?.products), [insights]);
+  const forecast = insights?.advanced?.forecast ?? null;
 
   const ticketCtx: TicketContext = {
     restaurantName: session.restaurantName, outletName: session.outletName, serverRole: session.role,
@@ -143,7 +169,13 @@ export function Analytics() {
             <StatCard title={t('an.discountAndCommission', lang)} value={formatTk(data.discountAndCommission)} sub={t('an.given', lang)} />
             <StatCard title={t('an.otherIncome', lang)} value={formatTk(data.otherIncome)} sub={t('an.servicePlusDelivery', lang)} />
             <StatCard title={t('an.taxAndDuty', lang)} value={formatTk(data.taxAndDuty)} sub={t('an.vatCollected', lang)} />
-            <StatCard title={t('an.totalCollection', lang)} value={formatTk(data.totalCollection)} accent sub={t('an.allPayments', lang)} />
+            <StatCard
+              title={t('an.totalCollection', lang)} value={formatTk(data.totalCollection)} accent
+              sub={revDelta != null
+                ? `${revDelta >= 0 ? '▲' : '▼'} ${Math.abs(revDelta)}% ${t('an.vsPrev', lang)}`
+                : t('an.allPayments', lang)}
+              subTone={revDelta != null ? (revDelta >= 0 ? 'up' : 'down') : ''}
+            />
             {data.dueReceivable != null && (
               <StatCard title={t('an.dueReceivable', lang)} value={formatTk(data.dueReceivable)} sub={t('an.payLater', lang)} />
             )}
@@ -152,12 +184,20 @@ export function Analytics() {
           <section className="card bo-panel">
             <div className="bo-chart-head">
               <h3>{t('an.revenueTrend', lang)}</h3>
-              <div className="bo-toggle">
-                <button className={trendMode === 'revenue' ? 'active' : ''} onClick={() => setTrendMode('revenue')}>{t('an.revenue', lang)}</button>
-                <button className={trendMode === 'orders' ? 'active' : ''} onClick={() => setTrendMode('orders')}>{t('an.ordersCompleted', lang)}</button>
+              <div className="bo-head-actions">
+                {trendGhost && (
+                  <div className="bo-legend">
+                    <span className="bo-legend-item"><span className="bo-legend-swatch" />{t('an.revenue', lang)}</span>
+                    <span className="bo-legend-item"><span className="bo-legend-swatch ghost" />{t('an.prevPeriod', lang)}</span>
+                  </div>
+                )}
+                <div className="bo-toggle">
+                  <button className={trendMode === 'revenue' ? 'active' : ''} onClick={() => setTrendMode('revenue')}>{t('an.revenue', lang)}</button>
+                  <button className={trendMode === 'orders' ? 'active' : ''} onClick={() => setTrendMode('orders')}>{t('an.ordersCompleted', lang)}</button>
+                </div>
               </div>
             </div>
-            <AreaTrend values={trendVals} labels={trendLabels} height={170} />
+            <AreaTrend values={trendVals} compare={trendGhost} labels={trendLabels} height={170} />
           </section>
 
           <div className="bo-cols">
@@ -172,6 +212,42 @@ export function Analytics() {
                 ? <Donut data={collectionDonut} format={formatTk} centerValue={formatTk(data.totalCollection)} centerLabel={t('an.collected', lang)} />
                 : <p className="bo-muted">{t('an.noCollections', lang)}</p>}
             </section>
+
+            {insights && channelDonut.length > 0 && (
+              <section className="card bo-panel">
+                <h3>{t('an.channels', lang)}</h3>
+                <Donut data={channelDonut} format={formatTk} centerValue={formatTk(channelTotal)} centerLabel={t('an.revenue', lang)} />
+              </section>
+            )}
+
+            {insights && insights.orders > 0 && (
+              <section className="card bo-panel">
+                <h3>{t('an.dayparts', lang)}</h3>
+                {insights.dayparts.map((d) => (
+                  <div className="bo-line" key={d.key}>
+                    <span>{t(DAYPART_LABEL[d.key] ?? 'an.dayparts', lang)} <span className="bo-line-sub">{d.time}</span></span>
+                    <span>
+                      {Math.round(d.share * 100)}% · {t('de.orders', lang).replace('{n}', String(d.orders))}
+                      {d.marginPct != null && ` · ${d.marginPct}% ${t('an.margin', lang)}`}
+                    </span>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {forecast && (
+              <section className="card bo-panel">
+                <h3>{t('an.forecast', lang)}</h3>
+                <div className="bo-line"><span>{t('an.projected', lang)}</span><span>{formatTk(forecast.projected)}</span></div>
+                <div className="bo-line"><span>{t('an.target', lang)}</span><span>{forecast.target != null ? formatTk(forecast.target) : '—'}</span></div>
+                {forecast.pace != null && (
+                  <div className={`bo-line strong ${forecast.pace >= 1 ? 'pos' : 'neg'}`}>
+                    <span>{t('an.pace', lang)}</span>
+                    <span>{t(forecast.pace >= 1 ? 'an.onTrack' : 'an.behind', lang).replace('{p}', String(forecast.pace))}</span>
+                  </div>
+                )}
+              </section>
+            )}
 
             <section className="card bo-panel">
               <h3>{t('an.profitEstimation', lang)}</h3>
@@ -225,17 +301,47 @@ export function Analytics() {
                 <span className="bo-cat-meta">{cat.units} {t('an.units', lang)} · {formatTk(cat.totalPrice)}</span>
               </div>
               <div className="bo-rank">
-                {cat.items.map((it) => (
-                  <div className="bo-rank-row" key={it.menuItemId}>
-                    <span className="bo-rank-name">{it.name}</span>
-                    <span className="bo-rank-qty">{it.units} × {formatTk(it.avgUnitPrice)}</span>
-                    <span className="bo-rank-val">{formatTk(it.totalPrice)}</span>
-                  </div>
-                ))}
+                {cat.items.map((it) => {
+                  const insight = insightsById.get(it.menuItemId);
+                  return (
+                    <div
+                      className="bo-rank-row clickable" key={it.menuItemId}
+                      onClick={() => setDrilldown({ id: it.menuItemId, name: it.name })}
+                    >
+                      <span className="bo-rank-name">
+                        {it.name}
+                        {insight && (
+                          <span className="bo-badges">
+                            {insight.growthPct !== 0 && (
+                              <span className={`bo-badge ${insight.growthPct > 0 ? 'up' : 'down'}`}>
+                                {insight.growthPct > 0 ? '▲' : '▼'} {Math.abs(insight.growthPct)}%
+                              </span>
+                            )}
+                            {insight.marginPct != null && (
+                              <span className="bo-badge">{insight.marginPct}% {t('an.margin', lang)}</span>
+                            )}
+                          </span>
+                        )}
+                      </span>
+                      <span className="bo-rank-qty">{it.units} × {formatTk(it.avgUnitPrice)}</span>
+                      <span className="bo-rank-val">{formatTk(it.totalPrice)}</span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           ))}
         </div>
+      )}
+
+      {drilldown && (
+        <ItemDrilldownModal
+          outletId={session.outletId}
+          menuItemId={drilldown.id}
+          fallbackName={drilldown.name}
+          period={period}
+          onClose={() => setDrilldown(null)}
+        />
       )}
 
       {toast && <div className="bo-toast">{toast}</div>}

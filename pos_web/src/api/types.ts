@@ -266,11 +266,23 @@ export interface DashRightNowWire {
   lateOrders: number; lateMinThreshold: number; needsAttention: DashNeedsAttentionWire[];
   todaySoFarBdt: number; todaySoFarDeltaPct: number;
 }
+// Review block — today-scoped extras the dashboard consumes (backend also sends
+// hero/itemsSold/issues/staff/fleet for the Flutter control tower; not typed here).
+export interface DashReviewKpisWire { orders: number; covers: number; avgTicketBdt: number; foodCostPct: number | null; }
+export interface DashRevenueByHourWire {
+  startHour: number; today: number[]; avg7: number[]; peakIndex: number; peakLabel: string;
+}
+export interface DashPaymentSourceWire { key: string; label: string; valueBdt: number; pct: number; }
+export interface DashReviewWire {
+  kpis: DashReviewKpisWire;
+  revenueByHour: DashRevenueByHourWire;
+  bySource: DashPaymentSourceWire[];
+}
 export interface DashboardSummaryWire {
   asOf: string;
   moneyFirst: DashMoneyFirstWire;
   rightNow: DashRightNowWire;
-  review?: Record<string, unknown> | null;
+  review?: DashReviewWire | null;
 }
 
 // ---------- Phase B: analytics summary (Sales Breakdown report) ----------
@@ -299,6 +311,47 @@ export interface AnalyticsSummaryWire {
   profit: AnalyticsProfitWire;
   popularDishes: { name: string; qty: number; salesBdt: number }[];
   itemWise: AnalyticsCategoryWire[];
+}
+
+// ---------- Owner analytics insights (GET /analytics) ----------
+// Richer range-scoped read layered onto the sales-breakdown page. Null-graceful
+// blocks: margin/forecast come back null when the underlying data doesn't exist.
+export interface InsightsChannelWire { key: string; label: string; valueBdt: number; pct: number; }
+export interface InsightsProductWire {
+  menuItemId: string; name: string; category: string;
+  qty: number; salesBdt: number; marginPct: number | null; growthPct: number;
+}
+export interface InsightsDaypartWire {
+  key: string; name: string; time: string; share: number; orders: number; marginPct: number | null;
+}
+export interface InsightsForecastWire { projected: number; target: number | null; pace: number | null; }
+export interface AnalyticsInsightsWire {
+  range: string;
+  periodStart: string;
+  periodEnd: string;
+  revenue: number;
+  prevRevenue: number;
+  orders: number;
+  aov: number;
+  margin: number | null;
+  salesTrend: number[];
+  prevSalesTrend: number[];
+  trendLabels: string[];
+  peakHours: number[];
+  channels: InsightsChannelWire[];
+  payments: InsightsChannelWire[];
+  products: InsightsProductWire[];
+  dayparts: InsightsDaypartWire[];
+  advanced: { forecast: InsightsForecastWire | null } | null;
+}
+
+// ---------- Item drill-down (GET /analytics/item/{menuItemId}) ----------
+export interface AnalyticsItemDetailWire {
+  menuItemId: string;
+  name: string;
+  totalBdt: number;
+  units: number;
+  dailySales: { date: string; salesBdt: number }[];
 }
 
 // ---------- Phase B: reports hub ----------

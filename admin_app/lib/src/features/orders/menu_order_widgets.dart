@@ -405,7 +405,8 @@ class CategoryChips extends StatelessWidget {
 
   Widget _categoryChip(BuildContext context, int i) {
     final text = AppScope.of(context).strings;
-    final chip = resolveCategoryChip(categories[i]);
+    // Chip source design: uniform gray fill, least corner rounding in scale,
+    // primaryDark label + count.
     return TfChip(
       label: categories[i] == 'All'
           ? text.categoryAll
@@ -413,9 +414,9 @@ class CategoryChips extends StatelessWidget {
       count: counts?[categories[i]],
       active: categories[i] == selected,
       small: true,
-      // Chip fill is a pale tint of the same category color the cards use.
-      customFill: Color.lerp(chip.background, Colors.white, 0.7)!,
-      customBorder: chip.border,
+      customFill: const Color(0xFFC7C9C8),
+      customBorder: const Color(0xFFC7C9C8),
+      customRadius: PosRadii.xs,
       customText: PosColors.primaryDark,
       customCount: PosColors.primaryDark,
       onTap: () => onSelected(categories[i]),
@@ -635,7 +636,7 @@ class _GridTile extends StatelessWidget {
               color: inCart ? PosColors.primary : PosColors.line,
               width: inCart ? 1.8 : 1,
             ),
-            borderRadius: BorderRadius.circular(PosRadii.card),
+            borderRadius: BorderRadius.circular(PosRadii.xs),
             boxShadow: PosShadows.soft,
           ),
           child: Column(
@@ -658,9 +659,9 @@ class _GridTile extends StatelessWidget {
                                     TfText(
                                       item.localizedName(app.language),
                                       textAlign: TextAlign.center,
-                                      maxLines: 1,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
+style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
                                     ),
                                     if (!off) ...[
                                       const SizedBox(height: 2),
