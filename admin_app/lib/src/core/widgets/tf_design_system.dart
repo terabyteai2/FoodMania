@@ -2410,6 +2410,9 @@ class TfSearchField extends StatelessWidget {
     this.prefixIcon = Icons.search_rounded,
     this.autofocus = false,
     this.onClear,
+    this.trailingIcon,
+    this.onTrailingPressed,
+    this.trailingIconActive = false,
     super.key,
   });
 
@@ -2423,6 +2426,14 @@ class TfSearchField extends StatelessWidget {
   /// When set, shows a trailing ✕ that hands clearing/closing to the caller
   /// (used by collapsible search rows).
   final VoidCallback? onClear;
+
+  /// Optional trailing action shown while [onClear] is null (e.g. a filter
+  /// icon next to an always-visible search bar).
+  final IconData? trailingIcon;
+  final VoidCallback? onTrailingPressed;
+
+  /// Tints the trailing icon (e.g. an active filter state).
+  final bool trailingIconActive;
 
   @override
   Widget build(BuildContext context) {
@@ -2451,16 +2462,28 @@ class TfSearchField extends StatelessWidget {
           ),
           prefixIcon: Icon(prefixIcon, size: 20, color: PosColors.textSec),
           prefixIconConstraints: const BoxConstraints(minWidth: 44),
-          suffixIcon: onClear == null
-              ? null
-              : IconButton(
+          suffixIcon: onClear != null
+              ? IconButton(
                   onPressed: onClear,
                   icon: const Icon(
                     TfNavIcon.close,
                     size: 18,
                     color: PosColors.textSec,
                   ),
-                ),
+                )
+              : trailingIcon != null && onTrailingPressed != null
+                  ? IconButton(
+                      onPressed: onTrailingPressed,
+                      tooltip: 'Filter',
+                      icon: Icon(
+                        trailingIcon,
+                        size: 20,
+                        color: trailingIconActive
+                            ? PosColors.primary
+                            : PosColors.textSec,
+                      ),
+                    )
+                  : null,
           filled: true,
           fillColor: PosColors.surface,
           contentPadding: const EdgeInsets.symmetric(
