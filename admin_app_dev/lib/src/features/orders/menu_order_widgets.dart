@@ -100,7 +100,7 @@ class _MenuStepState extends State<MenuStep> {
   // The top-bar search icon toggles short-code (⚡) mode; the search bar shows
   // whenever code mode is active or a query is live (so a typed query can't
   // vanish), and its close button returns to the plain grid.
-  bool get _showSearchBar => widget.codeMode || widget.query.isNotEmpty;
+  bool get _showSearchBar => true;
 
   void _toggleSearch() {
     widget.onToggleCodeMode();
@@ -499,8 +499,8 @@ class _MenuContent extends StatelessWidget {
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                mainAxisSpacing: PosDensity.gridGap,
-                crossAxisSpacing: PosDensity.gridGap,
+                mainAxisSpacing: PosDensity.gridGap + 2,
+                crossAxisSpacing: PosDensity.gridGap + 1,
                 mainAxisExtent: PosDensity.tileMenu,
               ),
               delegate: SliverChildBuilderDelegate((_, i) {
@@ -633,11 +633,11 @@ class _GridTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: bg,
             border: Border.all(
-              color: inCart ? PosColors.primary : PosColors.line,
+              color: inCart ? PosColors.primary : Colors.transparent,
               width: inCart ? 1.8 : 1,
             ),
-            borderRadius: BorderRadius.circular(PosRadii.xs),
-            boxShadow: PosShadows.soft,
+borderRadius: BorderRadius.circular(6),
+boxShadow: PosShadows.flash,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -647,7 +647,7 @@ class _GridTile extends StatelessWidget {
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.all(PosSpacing.sp4),
+                        padding: const EdgeInsets.all(PosSpacing.sp4 - 2),
                         child: Stack(
                           children: [
                             Positioned.fill(
@@ -1234,7 +1234,7 @@ class _MobileItemSheetState extends State<_MobileItemSheet> {
                           height: 18,
                           decoration: BoxDecoration(
                             color: PosColors.surfaceSunk,
-                            borderRadius: BorderRadius.circular(PosRadii.xs),
+borderRadius: BorderRadius.circular(PosRadii.xs),
                           ),
                           alignment: Alignment.center,
                           child: TfText(

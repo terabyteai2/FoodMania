@@ -3,7 +3,7 @@
 .billing-root {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: 1fr var(--cart-w);
+  grid-template-columns: 3fr 2fr;
   grid-template-rows: 1fr;
 }
 
@@ -40,7 +40,7 @@
   position: relative;
   background: var(--cat-bg, #cacccb);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-tile);
   padding: 6px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   text-align: center; cursor: pointer;

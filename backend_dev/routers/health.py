@@ -13,7 +13,11 @@ from database import AsyncSessionLocal
 from models import Outlet, OutletSubscription
 from schemas import BlockingNoticeRespondRequest, ok
 from services import phone_otp
-from services.blocking_notice import get_blocking_notice, respond_to_blocking_notice
+from services.blocking_notice import (
+    acknowledge_blocking_notice,
+    get_blocking_notice,
+    respond_to_blocking_notice,
+)
 from subscription_service import blocking_notice_for_subscription
 
 router = APIRouter()
@@ -142,6 +146,11 @@ async def admin_blocking_notice(
                 notice = await blocking_notice_for_subscription(db, sub)
                 if notice.get("enabled"):
                     return ok(notice)
+                notice = await get_blocking_notice(db, outlet_id=outlet_id)
+                if notice.get("enabled"):
+                    await acknowledge_blocking_notice(db, outlet_id)
+                    await db.commit()
+                return ok(notice)
         return ok(await get_blocking_notice(db))
 
 

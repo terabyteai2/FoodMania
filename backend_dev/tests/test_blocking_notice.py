@@ -2,16 +2,62 @@ import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
+from auth import create_device_token
 from main import app
 from routers import health as health_router
 from schemas import PlatformBlockingNoticeRequest
 from services import blocking_notice as svc
 from services.blocking_notice import (
     DEFAULT_BLOCKING_NOTICE_TITLE,
+    ACKNOWLEDGED_OUTLETS_KEY,
+    _acknowledged_outlet_ids,
+    _target_outlet_ids,
+    acknowledge_blocking_notice,
     blocking_notice_from_json,
     disabled_blocking_notice,
+    get_blocking_notice,
     set_blocking_notice,
 )
+
+
+class _FakeResult:
+    def __init__(self, config):
+        self._config = config
+
+    def scalar_one_or_none(self):
+        return self._config
+
+
+class _FakeConfig:
+    def __init__(self, raw: str):
+        self.value = raw
+        self.updated_at = None
+
+
+class _FakeSession:
+    def __init__(self, config=None):
+        self._config = config
+        self.added = []
+
+    async def execute(self, _statement):
+        return _FakeResult(self._config)
+
+    async def commit(self):
+        pass
+
+    def add(self, obj):
+        self.added.append(obj)
+
+
+def _enabled_raw(**overrides) -> str:
+    payload = {
+        "enabled": True,
+        "title": "Trial",
+        "message": "Trial ends soon",
+        "updatedAt": "2026-08-13T00:00:00+00:00",
+    }
+    payload.update(overrides)
+    return __import__("json").dumps(payload, ensure_ascii=False)
 
 
 def test_disabled_blocking_notice():
@@ -95,6 +141,99 @@ def test_blocking_notice_uses_default_title():
     assert parsed["title"] == DEFAULT_BLOCKING_NOTICE_TITLE
 
 
+def test_blocking_notice_from_json_ignores_ack_key():
+    parsed = blocking_notice_from_json(
+        '{"enabled":true,"message":"Hi","_acknowledgedOutlets":["outlet-1"]}'
+    )
+
+    assert parsed["enabled"] is True
+    assert ACKNOWLEDGED_OUTLETS_KEY not in parsed
+
+
+def test_acknowledged_outlet_ids_parsing():
+    raw = _enabled_raw(_acknowledgedOutlets=["outlet-1", "outlet-2"])
+    assert _acknowledged_outlet_ids(raw) == {"outlet-1", "outlet-2"}
+    assert _acknowledged_outlet_ids(None) == set()
+    assert _acknowledged_outlet_ids("not json") == set()
+    assert _acknowledged_outlet_ids('{"enabled":true,"message":"x"}') == set()
+
+
+@pytest.mark.asyncio
+async def test_get_blocking_notice_filters_acknowledged_outlet():
+    raw = _enabled_raw(_acknowledgedOutlets=["outlet-1"])
+    session = _FakeSession(_FakeConfig(raw))
+
+    assert (await get_blocking_notice(session))["enabled"] is True
+    assert (await get_blocking_notice(session, outlet_id="outlet-2"))["enabled"] is True
+    assert (await get_blocking_notice(session, outlet_id="outlet-1"))["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_blocking_notice_persists_idempotently():
+    raw = _enabled_raw()
+    config = _FakeConfig(raw)
+    session = _FakeSession(config)
+
+    first = await acknowledge_blocking_notice(session, "outlet-1")
+    assert first["enabled"] is True
+    assert _acknowledged_outlet_ids(config.value) == {"outlet-1"}
+
+    second = await acknowledge_blocking_notice(session, "outlet-1")
+    assert second["enabled"] is True
+    assert _acknowledged_outlet_ids(config.value) == {"outlet-1"}
+
+    assert (await get_blocking_notice(session, outlet_id="outlet-1"))["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_blocking_notice_preserves_targets():
+    raw = _enabled_raw(_outletIds=["outlet-1", "outlet-2"])
+    config = _FakeConfig(raw)
+    session = _FakeSession(config)
+
+    await acknowledge_blocking_notice(session, "outlet-1")
+
+    assert _acknowledged_outlet_ids(config.value) == {"outlet-1"}
+    assert _target_outlet_ids(config.value) == {"outlet-1", "outlet-2"}
+    assert (await get_blocking_notice(session, outlet_id="outlet-2"))["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_blocking_notice_noop_when_disabled():
+    config = _FakeConfig('{"enabled":false,"message":""}')
+    session = _FakeSession(config)
+
+    result = await acknowledge_blocking_notice(session, "outlet-1")
+    assert result == disabled_blocking_notice()
+    assert _acknowledged_outlet_ids(config.value) == set()
+
+
+@pytest.mark.asyncio
+async def test_acknowledge_blocking_notice_noop_without_config():
+    session = _FakeSession(None)
+
+    result = await acknowledge_blocking_notice(session, "outlet-1")
+    assert result == disabled_blocking_notice()
+
+
+def test_target_outlet_ids_parsing():
+    raw = _enabled_raw(_outletIds=["outlet-1", "outlet-2"])
+    assert _target_outlet_ids(raw) == {"outlet-1", "outlet-2"}
+    assert _target_outlet_ids(_enabled_raw()) is None
+    assert _target_outlet_ids(None) is None
+    assert _target_outlet_ids("not json") is None
+
+
+@pytest.mark.asyncio
+async def test_get_blocking_notice_only_serves_targeted_outlets():
+    raw = _enabled_raw(_outletIds=["outlet-1"])
+    session = _FakeSession(_FakeConfig(raw))
+
+    assert (await get_blocking_notice(session, outlet_id="outlet-1"))["enabled"] is True
+    assert (await get_blocking_notice(session, outlet_id="outlet-2"))["enabled"] is False
+    assert (await get_blocking_notice(session))["enabled"] is True
+
+
 @pytest.mark.asyncio
 async def test_blocking_notice_rejects_empty_message():
     with pytest.raises(HTTPException):
@@ -162,3 +301,61 @@ async def test_public_blocking_notice_endpoint_does_not_require_auth(monkeypatch
     assert response.json()["data"]["message"] == "Please wait."
     assert response.json()["data"]["imageUrl"] is None
     assert response.json()["data"]["inputField"] is False
+
+
+@pytest.mark.asyncio
+async def test_admin_blocking_notice_get_acks_then_disables(monkeypatch):
+    acknowledged: list[str] = []
+
+    class FakeSessionContext:
+        async def __aenter__(self):
+            return _FakeSession(None)
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    async def fake_subscription_notice(_db, _sub):
+        return disabled_blocking_notice()
+
+    async def fake_get_blocking_notice(_db, outlet_id=None):
+        if outlet_id in acknowledged:
+            return disabled_blocking_notice()
+        return {
+            "enabled": True,
+            "title": "Trial",
+            "message": "Trial ends soon",
+            "imageUrl": None,
+            "inputField": False,
+            "inputLabel": None,
+            "updatedAt": None,
+            "type": "adminNotice",
+            "ctaLabel": None,
+            "ctaUrl": None,
+            "dismissible": False,
+        }
+
+    async def fake_ack(_db, outlet_id):
+        acknowledged.append(outlet_id)
+
+    monkeypatch.setattr(health_router, "AsyncSessionLocal", FakeSessionContext)
+    monkeypatch.setattr(
+        health_router, "blocking_notice_for_subscription", fake_subscription_notice
+    )
+    monkeypatch.setattr(health_router, "get_blocking_notice", fake_get_blocking_notice)
+    monkeypatch.setattr(
+        health_router, "acknowledge_blocking_notice", fake_ack
+    )
+
+    token = create_device_token("outlet-1")
+    headers = {"Authorization": f"Bearer {token}"}
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        first = await client.get("/admin/blocking-notice", headers=headers)
+        second = await client.get("/admin/blocking-notice", headers=headers)
+
+    assert first.status_code == 200
+    assert first.json()["data"]["enabled"] is True
+    assert acknowledged == ["outlet-1"]
+    assert second.status_code == 200
+    assert second.json()["data"]["enabled"] is False
