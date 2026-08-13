@@ -758,8 +758,8 @@ class TfUnifiedTopNav extends StatelessWidget {
                 Wrap(
                   alignment: WrapAlignment.end,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: PosSpacing.sp2,
-                  runSpacing: PosSpacing.sp2,
+                  spacing: PosSpacing.sp1,
+                  runSpacing: PosSpacing.sp1,
                   children: trailing,
                 ),
               ],
@@ -1092,7 +1092,7 @@ class TfButton extends StatelessWidget {
         };
     final isCompact = effHeight <= 38;
     final fontSize = isCompact ? 13.0 : (effHeight >= 50 ? 15.0 : 14.0);
-    final radius = isCompact ? PosRadii.sm : PosRadii.md;
+    final radius = 6.0;
 
     final isBn = tfIsBn(context);
     final text = isBn && (labelBn?.isNotEmpty ?? false) ? labelBn! : label;
@@ -2027,18 +2027,23 @@ class TfIconButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 class TfBarButton extends StatelessWidget {
   const TfBarButton({
-    required this.icon,
+    this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.label,
     this.badge,
     this.accent = false,
     this.dot = false,
     this.bare = false,
     this.iconColor,
     super.key,
-  });
+  }) : assert(icon != null || label != null);
 
-  final TfSourceIconName icon;
+  /// Line glyph; ignored when [label] is set.
+  final TfSourceIconName? icon;
+
+  /// Optional text shown instead of the glyph (e.g. an "AI" chip).
+  final String? label;
   final String tooltip;
   final VoidCallback? onPressed;
   final int? badge;
@@ -2081,13 +2086,29 @@ class TfBarButton extends StatelessWidget {
                             ),
                     ),
                     child: Center(
-                      child: TfSourceIcon(
-                        name: icon,
-                        size: bare ? 22 : 20,
-                        color: iconColor ?? (accent
-                            ? PosColors.accentInk
-                            : PosColors.primaryDark),
-                      ),
+                      child: label != null
+                          ? TfText(
+                              label!,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontFamily: tfFontFamily(context),
+                                fontSize: bare ? 13 : 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.4,
+                                color: iconColor ??
+                                    (accent
+                                        ? PosColors.accentInk
+                                        : PosColors.primaryDark),
+                              ),
+                            )
+                          : TfSourceIcon(
+                              name: icon!,
+                              size: bare ? 22 : 20,
+                              color: iconColor ??
+                                  (accent
+                                      ? PosColors.accentInk
+                                      : PosColors.primaryDark),
+                            ),
                     ),
                   ),
                 ),
@@ -2421,6 +2442,9 @@ class TfSearchField extends StatelessWidget {
     this.prefixIcon = Icons.search_rounded,
     this.autofocus = false,
     this.onClear,
+    this.trailingIcon,
+    this.onTrailingPressed,
+    this.trailingIconActive = false,
     super.key,
   });
 
@@ -2434,6 +2458,14 @@ class TfSearchField extends StatelessWidget {
   /// When set, shows a trailing ✕ that hands clearing/closing to the caller
   /// (used by collapsible search rows).
   final VoidCallback? onClear;
+
+  /// Optional trailing action shown while [onClear] is null (e.g. a filter
+  /// icon next to an always-visible search bar).
+  final IconData? trailingIcon;
+  final VoidCallback? onTrailingPressed;
+
+  /// Tints the trailing icon (e.g. an active filter state).
+  final bool trailingIconActive;
 
   @override
   Widget build(BuildContext context) {
@@ -2462,16 +2494,28 @@ class TfSearchField extends StatelessWidget {
           ),
           prefixIcon: Icon(prefixIcon, size: 20, color: PosColors.textSec),
           prefixIconConstraints: const BoxConstraints(minWidth: 44),
-          suffixIcon: onClear == null
-              ? null
-              : IconButton(
+          suffixIcon: onClear != null
+              ? IconButton(
                   onPressed: onClear,
                   icon: const Icon(
                     TfNavIcon.close,
                     size: 18,
                     color: PosColors.textSec,
                   ),
-                ),
+                )
+              : trailingIcon != null && onTrailingPressed != null
+                  ? IconButton(
+                      onPressed: onTrailingPressed,
+                      tooltip: 'Filter',
+                      icon: Icon(
+                        trailingIcon,
+                        size: 20,
+                        color: trailingIconActive
+                            ? PosColors.primary
+                            : PosColors.textSec,
+                      ),
+                    )
+                  : null,
           filled: true,
           fillColor: PosColors.surface,
           contentPadding: const EdgeInsets.symmetric(

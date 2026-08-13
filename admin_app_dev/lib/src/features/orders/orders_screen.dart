@@ -197,22 +197,12 @@ class _OrdersScreenState extends State<OrdersScreen>
   // Completed tab defaults to the optional "shift" scope (completed orders
   // since the configured shift start). Lifting it shows every completed order.
   bool _seeAllCompleted = false;
-  // Search collapses to a top-bar icon; the field row mounts while open or
-  // while a query is active (so a typed query can't vanish under the user).
-  bool _searchOpen = false;
-
-  bool get _searchRowVisible =>
-      _searchOpen || _searchController.text.trim().isNotEmpty;
-
-  void _toggleSearch() {
+  // Completed-tab search/filter (owner-only backoffice). The search bar is
+  // persistent inside the Completed tab; filters open from its trailing icon.
+  void _clearSearch() {
     setState(() {
-      if (_searchRowVisible) {
-        _searchOpen = false;
-        _searchController.clear();
-        FocusManager.instance.primaryFocus?.unfocus();
-      } else {
-        _searchOpen = true;
-      }
+      _searchController.clear();
+      FocusManager.instance.primaryFocus?.unfocus();
     });
   }
   // Ongoing cards show a live age with escalation; one screen-level tick
@@ -257,10 +247,15 @@ class _OrdersScreenState extends State<OrdersScreen>
       AppAspect.language,
       AppAspect.menu,
       AppAspect.settings,
+      AppAspect.account,
     ]);
     final rawOrders = app.ordersFor();
     final language = app.language;
-    final searchQuery = _searchController.text.trim();
+    // Search/filter (top-bar icons) are owner-only in backoffice mode — hidden
+    // for managers and when an owner switches to the manager ("manage") view.
+    final canSearch = app.isOwner && app.accountRole == AccountRole.owner;
+    final searchQuery =
+        canSearch ? _searchController.text.trim() : '';
     final completedBounds = _seeAllCompleted
         ? null
         : OrderListFilters.shiftBoundsFor(
@@ -325,49 +320,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             TfGlobalTopBar(
               title: text.orders,
               onNavigateToTarget: widget.onNavigateToTarget,
-              // bare glyph when idle, dark box while active — `bare`
-              // suppresses `dark`, so the pair flips together.
-              extraActions: [
-                if (app.isOwner) ...[
-                  TourSpot(
-                    name: 'orders.search',
-                    child: TfIconButton(
-                      icon: TfNavIcon.search,
-                      tooltip: text.orderSearchHint,
-                      bare: !_searchRowVisible,
-                      dark: _searchRowVisible,
-                      onPressed: _toggleSearch,
-                    ),
-                  ),
-                  TourSpot(
-                    name: 'orders.filters',
-                    child: TfIconButton(
-                      icon: Icons.tune_rounded,
-                      tooltip: text.filterOrders,
-                      bare: !_filters.isActive,
-                      dark: _filters.isActive,
-                      onPressed: () => _openOrderFilters(context),
-                    ),
-                  ),
-                ],
-              ],
             ),
-            if (_searchRowVisible)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: TourSpot(
-                  name: 'orders.search',
-                  child: TfSearchField(
-                    controller: _searchController,
-                    hintText: text.orderSearchHint,
-                    autofocus: true,
-                    onChanged: (_) => setState(() {}),
-                    onClear: _toggleSearch,
-                  ),
-                ),
-              )
-            else
-              const SizedBox(height: PosSpacing.sp1),
+            const SizedBox(height: PosSpacing.sp1),
             TourSpot(
               name: 'orders.tabs',
               child: _TabStrip(
@@ -401,35 +355,62 @@ class _OrdersScreenState extends State<OrdersScreen>
                     loadingMore: app.loadingMoreOrders,
                     onLoadMore: app.loadMoreOrders,
                   ),
-                  _OrderList(
-                    orders: completedOrders,
-                    emptyTitle: app.shiftModeActive && !_seeAllCompleted
-                        ? text.noCompletedThisShift
-                        : text.noCompletedOrders,
-                    completedTab: true,
-                    shiftStartMinute: app.shiftModeActive
-                        ? app.serverConfig.shiftStartMinute
-                        : null,
-                    canCreate: canCreate,
-                    onCreate: () => openNewOrderForm(
-                      context,
-                      onCreated: () => _tabs.index = 0,
-                    ),
-                    shortcut: completedShortcut,
-                    searchQuery: searchQuery,
-                    onPrintBill: (o) => _printBill(context, o),
-                    onPrintKot: (o) => _printKot(context, o),
-                    onOpen: null,
-                    onStatus: (o, s) => _changeStatus(context, o, s),
-                    onCompletedLongPress: (o) =>
-                        _showCompletedOrderActions(context, o),
-                    seeAllCompleted: _seeAllCompleted,
-                    onToggleShiftScope: () => setState(
-                      () => _seeAllCompleted = !_seeAllCompleted,
-                    ),
-                    hasMore: app.hasMoreOrders,
-                    loadingMore: app.loadingMoreOrders,
-                    onLoadMore: app.loadMoreOrders,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (canSearch)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                          child: TourSpot(
+                            name: 'orders.search',
+                            child: TfSearchField(
+                              controller: _searchController,
+                              hintText: text.orderSearchHint,
+                              onChanged: (_) => setState(() {}),
+                              // Filter icon while idle; ✕ while typing.
+                              onClear: _searchController.text.trim().isEmpty
+                                  ? null
+                                  : _clearSearch,
+                              trailingIcon: Icons.tune_rounded,
+                              onTrailingPressed: () =>
+                                  _openOrderFilters(context),
+                              trailingIconActive: _filters.isActive,
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: _OrderList(
+                          orders: completedOrders,
+                          emptyTitle: app.shiftModeActive && !_seeAllCompleted
+                              ? text.noCompletedThisShift
+                              : text.noCompletedOrders,
+                          completedTab: true,
+                          shiftStartMinute: app.shiftModeActive
+                              ? app.serverConfig.shiftStartMinute
+                              : null,
+                          canCreate: canCreate,
+                          onCreate: () => openNewOrderForm(
+                            context,
+                            onCreated: () => _tabs.index = 0,
+                          ),
+                          shortcut: completedShortcut,
+                          searchQuery: searchQuery,
+                          onPrintBill: (o) => _printBill(context, o),
+                          onPrintKot: (o) => _printKot(context, o),
+                          onOpen: null,
+                          onStatus: (o, s) => _changeStatus(context, o, s),
+                          onCompletedLongPress: (o) =>
+                              _showCompletedOrderActions(context, o),
+                          seeAllCompleted: _seeAllCompleted,
+                          onToggleShiftScope: () => setState(
+                            () => _seeAllCompleted = !_seeAllCompleted,
+                          ),
+                          hasMore: app.hasMoreOrders,
+                          loadingMore: app.loadingMoreOrders,
+                          onLoadMore: app.loadMoreOrders,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -624,7 +605,6 @@ class _OrdersScreenState extends State<OrdersScreen>
         label: text.clearSearch,
         onTap: () => setState(() {
           _searchController.clear();
-          _searchOpen = false;
         }),
       );
     }
@@ -1935,14 +1915,14 @@ class _OrderCardState extends State<_OrderCard> {
                 name: 'orders.cardReject',
                 child: InkWell(
                   onTap: () => widget.onStatus(OrderStatus.rejected),
-                  borderRadius: BorderRadius.circular(PosRadii.sm),
+                  borderRadius: BorderRadius.circular(6),
                   child: Container(
                     width: 40,
                     height: 36,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(PosRadii.sm),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: PosColors.lineStrong, width: 1),
                     ),
                     child: const Icon(

@@ -234,7 +234,7 @@ class PosRadii {
   static const double xl = 16;
   static const double pill = 999;
   // Backward-compatible aliases
-  static const double card = lg;
+  static const double card = 6;
   static const double input = md;
   static const double tile = lg;
   static const double chip = pill;
@@ -436,7 +436,7 @@ class AppTheme {
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PosRadii.card),
+          borderRadius: BorderRadius.circular(6),
           side: BorderSide(color: ln, width: 1),
         ),
       ),
@@ -480,7 +480,7 @@ class AppTheme {
           background: PosColors.primary,
           foreground: PosColors.accentInk,
           height: s(48),
-          radius: PosRadii.md,
+          radius: 6,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -488,7 +488,7 @@ class AppTheme {
           background: PosColors.primary,
           foreground: PosColors.accentInk,
           height: s(48),
-          radius: PosRadii.md,
+          radius: 6,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -499,7 +499,7 @@ class AppTheme {
           side: BorderSide(color: ln2, width: 1),
           padding: EdgeInsets.symmetric(horizontal: s(16), vertical: s(12)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(PosRadii.md),
+            borderRadius: BorderRadius.circular(6),
           ),
           textStyle: TextStyle(
             fontSize: s(14),

@@ -636,7 +636,7 @@ class _GridTile extends StatelessWidget {
               color: inCart ? PosColors.primary : PosColors.line,
               width: inCart ? 1.8 : 1,
             ),
-            borderRadius: BorderRadius.circular(PosRadii.card),
+            borderRadius: BorderRadius.circular(PosRadii.xs),
             boxShadow: PosShadows.soft,
           ),
           child: Column(
@@ -659,9 +659,9 @@ class _GridTile extends StatelessWidget {
                                     TfText(
                                       item.localizedName(app.language),
                                       textAlign: TextAlign.center,
-                                      maxLines: 1,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
+style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
                                     ),
                                     if (!off) ...[
                                       const SizedBox(height: 2),

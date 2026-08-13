@@ -191,13 +191,13 @@ class _AvatarDropdown extends StatelessWidget {
   static String _initials(String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '👤';
-    return trimmed.substring(0, 1).toUpperCase();
+    return trimmed[0].toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final initials = _initials(app.restaurantName);
+    final initials = _initials(app.accountDisplayName);
     final canOpenSettings = onNavigateToTarget != null;
 
     return PopupMenuButton<_TopAction>(
