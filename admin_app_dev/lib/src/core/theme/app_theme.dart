@@ -212,7 +212,7 @@ class PosDensity {
   static const double rowMin = 48;
 
   /// Menu/order-build grid tile mainAxisExtent (≥8 tiles per phone screen).
-  static const double tileMenu = 90;
+  static const double tileMenu = 110;
 
   /// FOH table tile childAspectRatio (square, packed with state data).
   static const double tileTableAspect = 1.0;
@@ -279,17 +279,12 @@ class PosShadows {
   static const List<BoxShadow> card = soft;
 static const List<BoxShadow> flash = [
   // 1. Soft, ambient drop shadow (main depth)
-  BoxShadow(
-    color: Color(0x1A141928), // ~10% opacity black-blue
-    blurRadius: 16,
-    offset: Offset(0, 4),
-    spreadRadius: -4, // Keeps it tight to the bottom edge
-  ),
+
   // 2. Tight core shadow (adds the sharp definition right at the bottom rim)
   BoxShadow(
-    color: Color(0x26141928), // ~15% opacity
+    color: Color(0x80141928), // ~15% opacity
     blurRadius: 6,
-    offset: Offset(0, 2),
+    offset: Offset(0, 4),
     spreadRadius: -2,
   ),
 ];

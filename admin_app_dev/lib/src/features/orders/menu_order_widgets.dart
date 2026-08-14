@@ -416,7 +416,7 @@ class CategoryChips extends StatelessWidget {
       small: true,
       customFill: const Color(0xFFC7C9C8),
       customBorder: const Color(0xFFC7C9C8),
-      customRadius: PosRadii.xs,
+      customRadius: PosRadii.xs + 2,
       customText: PosColors.primaryDark,
       customCount: PosColors.primaryDark,
       onTap: () => onSelected(categories[i]),
@@ -498,9 +498,9 @@ class _MenuContent extends StatelessWidget {
             ),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: PosDensity.gridGap + 2,
-                crossAxisSpacing: PosDensity.gridGap + 1,
+                crossAxisCount: 3,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
                 mainAxisExtent: PosDensity.tileMenu,
               ),
               delegate: SliverChildBuilderDelegate((_, i) {
@@ -636,8 +636,7 @@ class _GridTile extends StatelessWidget {
               color: inCart ? PosColors.primary : Colors.transparent,
               width: inCart ? 1.8 : 1,
             ),
-borderRadius: BorderRadius.circular(6),
-boxShadow: PosShadows.flash,
+borderRadius: BorderRadius.circular(4),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -661,10 +660,14 @@ boxShadow: PosShadows.flash,
                                       textAlign: TextAlign.center,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-style: TfTextStyles.rowTitle.copyWith(color: PosColors.primaryDark),
+style: TfTextStyles.rowTitle.copyWith(
+                                        color: Colors.black,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     if (!off) ...[
-                                      const SizedBox(height: 2),
+                                      const SizedBox(height: 0),
                                       _PriceTag(price: item.price),
                                     ],
                                   ],
@@ -764,7 +767,11 @@ class _PriceTag extends StatelessWidget {
     return TfText(
       '৳ ${tfFormatNumber(context, price)}',
       textAlign: TextAlign.center,
-      style: TfTextStyles.rowMoney.copyWith(color: PosColors.primaryDark),
+      style: TfTextStyles.rowMoney.copyWith(
+        color: Colors.black,
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+      ),
     );
   }
 }
