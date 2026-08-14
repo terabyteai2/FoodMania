@@ -20,6 +20,21 @@ import '../desktop_pos/widgets/menu_line_customizer.dart';
 
 // ── Menu add-items step (search, categories, content, cart footer) ──
 
+/// The four rendering modes of the add-items picker.
+enum MenuViewMode {
+  /// 3-column color-coded card grid (current default).
+  colorGrid,
+
+  /// 2-column grid without category color coding.
+  plainGrid,
+
+  /// 2-column grid with item images.
+  imageGrid,
+
+  /// ⚡ numeric short-code quick-pick list.
+  shortCode,
+}
+
 class MenuStep extends StatefulWidget {
   const MenuStep({
     required this.visibleItems,
@@ -31,9 +46,9 @@ class MenuStep extends StatefulWidget {
     required this.totalQty,
     required this.searchCtrl,
     required this.query,
-    required this.codeMode,
+    required this.viewMode,
     required this.onSearchChanged,
-    required this.onToggleCodeMode,
+    required this.onViewModeChanged,
     required this.onCodeSubmit,
     required this.onCategorySelected,
     required this.onTap,
@@ -62,16 +77,16 @@ class MenuStep extends StatefulWidget {
   final TextEditingController searchCtrl;
   final String query;
 
-  /// When true the search bar becomes a numeric short-code entry and the body
-  /// switches from the card grid to the short-code list (the ⚡ quick-pick mode).
-  final bool codeMode;
+  /// When [MenuViewMode.shortCode] the search bar becomes a numeric short-code
+  /// entry and the body switches from the card grid to the short-code list.
+  final MenuViewMode viewMode;
   final Map<String, int>? categoryCounts;
 
   /// Bilingual (en/bn) display names per category — chips show the active
   /// language's name instead of the raw English category.
   final Map<String, ({String en, String bn})>? categoryLabels;
   final ValueChanged<String> onSearchChanged;
-  final VoidCallback onToggleCodeMode;
+  final ValueChanged<MenuViewMode> onViewModeChanged;
   final ValueChanged<String> onCodeSubmit;
   final ValueChanged<String> onCategorySelected;
   final ValueChanged<MenuItem> onTap;
@@ -102,8 +117,13 @@ class _MenuStepState extends State<MenuStep> {
   // vanish), and its close button returns to the plain grid.
   bool get _showSearchBar => true;
 
+  bool get _isCode => widget.viewMode == MenuViewMode.shortCode;
+
   void _toggleSearch() {
-    widget.onToggleCodeMode();
+    // Search icon currently maps to short-code (⚡) quick-pick mode.
+    widget.onViewModeChanged(
+      _isCode ? MenuViewMode.colorGrid : MenuViewMode.shortCode,
+    );
   }
 
   @override
@@ -124,13 +144,15 @@ class _MenuStepState extends State<MenuStep> {
           _MenuSearchBar(
             searchCtrl: widget.searchCtrl,
             query: widget.query,
-            codeMode: widget.codeMode,
+            codeMode: _isCode,
             onSearchChanged: widget.onSearchChanged,
             onCodeSubmit: widget.onCodeSubmit,
-            onToggleCode: widget.onToggleCodeMode,
+            onToggleCode: () => widget.onViewModeChanged(
+              _isCode ? MenuViewMode.colorGrid : MenuViewMode.shortCode,
+            ),
           ),
         ],
-        if (!widget.codeMode) ...[
+        if (!_isCode) ...[
           const SizedBox(height: PosSpacing.sp3),
           CategoryChips(
             categories: widget.categories,
@@ -142,22 +164,41 @@ class _MenuStepState extends State<MenuStep> {
         ],
         const SizedBox(height: PosSpacing.sp3),
         Expanded(
-          child: widget.codeMode
-              ? _ShortCodeList(
-                  items: widget.visibleItems,
-                  cart: widget.cart,
-                  onTap: widget.onTap,
-                  onDecrement: widget.onDecrement,
-                )
-              : _MenuContent(
-                  items: widget.visibleItems,
-                  cart: widget.cart,
-                  onTap: widget.onTap,
-                  onDecrement: widget.onDecrement,
-                  onToggleFavorite: widget.onToggleFavorite,
-                  onSetShortCode: widget.onSetShortCode,
-                  onResetFilters: widget.onResetFilters,
-                ),
+          child: switch (widget.viewMode) {
+            MenuViewMode.shortCode => _ShortCodeList(
+                items: widget.visibleItems,
+                cart: widget.cart,
+                onTap: widget.onTap,
+                onDecrement: widget.onDecrement,
+              ),
+            MenuViewMode.colorGrid => _MenuContent(
+                items: widget.visibleItems,
+                cart: widget.cart,
+                onTap: widget.onTap,
+                onDecrement: widget.onDecrement,
+                onToggleFavorite: widget.onToggleFavorite,
+                onSetShortCode: widget.onSetShortCode,
+                onResetFilters: widget.onResetFilters,
+              ),
+            MenuViewMode.plainGrid => _PlainGrid(
+                items: widget.visibleItems,
+                cart: widget.cart,
+                onTap: widget.onTap,
+                onDecrement: widget.onDecrement,
+                onToggleFavorite: widget.onToggleFavorite,
+                onSetShortCode: widget.onSetShortCode,
+                onResetFilters: widget.onResetFilters,
+              ),
+            MenuViewMode.imageGrid => _ImageGrid(
+                items: widget.visibleItems,
+                cart: widget.cart,
+                onTap: widget.onTap,
+                onDecrement: widget.onDecrement,
+                onToggleFavorite: widget.onToggleFavorite,
+                onSetShortCode: widget.onSetShortCode,
+                onResetFilters: widget.onResetFilters,
+              ),
+          },
         ),
         CartFooter(total: widget.total, onSubmit: widget.onSubmit),
       ],
@@ -522,6 +563,224 @@ class _MenuContent extends StatelessWidget {
   }
 }
 
+// ── Plain 2-col grid (no category color coding) — layout TBD ──
+
+class _PlainGrid extends StatelessWidget {
+  const _PlainGrid({
+    required this.items,
+    required this.cart,
+    required this.onTap,
+    required this.onDecrement,
+    required this.onToggleFavorite,
+    required this.onSetShortCode,
+    this.onResetFilters,
+  });
+
+  final List<MenuItem> items;
+  final Map<String, int> cart;
+  final ValueChanged<MenuItem> onTap;
+  final ValueChanged<String> onDecrement;
+  final ValueChanged<MenuItem> onToggleFavorite;
+  final ValueChanged<MenuItem> onSetShortCode;
+  final VoidCallback? onResetFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GridView(
+      items: items,
+      cart: cart,
+      onTap: onTap,
+      onDecrement: onDecrement,
+      onResetFilters: onResetFilters,
+      showImage: false,
+    );
+  }
+}
+
+// ── 2-col grid with item images — layout TBD ──
+
+class _ImageGrid extends StatelessWidget {
+  const _ImageGrid({
+    required this.items,
+    required this.cart,
+    required this.onTap,
+    required this.onDecrement,
+    required this.onToggleFavorite,
+    required this.onSetShortCode,
+    this.onResetFilters,
+  });
+
+  final List<MenuItem> items;
+  final Map<String, int> cart;
+  final ValueChanged<MenuItem> onTap;
+  final ValueChanged<String> onDecrement;
+  final ValueChanged<MenuItem> onToggleFavorite;
+  final ValueChanged<MenuItem> onSetShortCode;
+  final VoidCallback? onResetFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GridView(
+      items: items,
+      cart: cart,
+      onTap: onTap,
+      onDecrement: onDecrement,
+      onResetFilters: onResetFilters,
+      showImage: true,
+    );
+  }
+}
+
+// ── Minimal shared grid for the two new modes (layout pending). ──
+
+class _GridView extends StatelessWidget {
+  const _GridView({
+    required this.items,
+    required this.cart,
+    required this.onTap,
+    required this.onDecrement,
+    required this.showImage,
+    this.onResetFilters,
+  });
+
+  final List<MenuItem> items;
+  final Map<String, int> cart;
+  final ValueChanged<MenuItem> onTap;
+  final ValueChanged<String> onDecrement;
+  final bool showImage;
+  final VoidCallback? onResetFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = AppScope.of(context).strings;
+    if (items.isEmpty) {
+      return CustomScrollView(
+        slivers: [
+          SliverFillRemaining(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TfText(
+                    text.noItemsInCategory,
+                    style: TfTextStyles.bodyMuted,
+                  ),
+                  if (onResetFilters != null) ...[
+                    const SizedBox(height: PosSpacing.sp3),
+                    TfButton(
+                      label: text.isBn ? 'সব দেখান' : 'Show all',
+                      variant: TfButtonVariant.ghost,
+                      size: TfButtonSize.sm,
+                      fullWidth: false,
+                      onPressed: onResetFilters,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        PosSpacing.sp4,
+        0,
+        PosSpacing.sp4,
+        PosDensity.sectionGap,
+      ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        mainAxisExtent: PosDensity.tileMenu,
+      ),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final item = items[i];
+        return _PlainTile(
+          item: item,
+          qty: cart[item.id] ?? 0,
+          showImage: showImage,
+          onTap: () => onTap(item),
+          onDecrement: () => onDecrement(item.id),
+        );
+      },
+    );
+  }
+}
+
+// ── Minimal stub tile for the two new modes (layout pending). ──
+
+class _PlainTile extends StatelessWidget {
+  const _PlainTile({
+    required this.item,
+    required this.qty,
+    required this.showImage,
+    required this.onTap,
+    required this.onDecrement,
+  });
+
+  final MenuItem item;
+  final int qty;
+  final bool showImage;
+  final VoidCallback onTap;
+  final VoidCallback onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final off = !item.isAvailable;
+    return InkWell(
+      onTap: off ? null : onTap,
+      borderRadius: const BorderRadius.all(Radius.circular(6)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          border: Border.all(
+            color: qty > 0 ? PosColors.primary : PosColors.line,
+          ),
+          borderRadius: const BorderRadius.all(Radius.circular(6)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (showImage) ...[
+              SizedBox(
+                height: 40,
+                width: 40,
+                child: ItemImage(
+                  url: item.imageUrl ?? '',
+                  iconKey: item.extras.iconKey ?? '',
+                  category: item.category,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+            TfText(
+              item.localizedName(app.language),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TfTextStyles.rowTitle.copyWith(color: PosColors.text),
+            ),
+            const SizedBox(height: 2),
+            TfText(
+              '৳ ${tfFormatNumber(context, item.price)}',
+              style: TfTextStyles.rowMoney.copyWith(
+                color: PosColors.primaryDark,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Qty stepper (item sheet) ──
 
 class _QtyStepperInline extends StatelessWidget {
@@ -655,21 +914,17 @@ borderRadius: BorderRadius.circular(4),
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    TfText(
+TfText(
                                       item.localizedName(app.language),
                                       textAlign: TextAlign.center,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-style: TfTextStyles.rowTitle.copyWith(
+                                      style: TfTextStyles.rowTitle.copyWith(
                                         color: Colors.black,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    if (!off) ...[
-                                      const SizedBox(height: 0),
-                                      _PriceTag(price: item.price),
-                                    ],
                                   ],
                                 ),
                               ),

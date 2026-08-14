@@ -369,7 +369,7 @@ class _CounterModeState extends State<_CounterMode> {
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   String _query = '';
-  bool _codeMode = false;
+  MenuViewMode _viewMode = MenuViewMode.colorGrid;
 
   // ── Computed ──────────────────────────────────────────────────
 
@@ -421,14 +421,14 @@ class _CounterModeState extends State<_CounterMode> {
     final rawQuery = _query.trim();
     final lowerQuery = rawQuery.toLowerCase();
     final selectedCategory = _selectedCategory;
-    final codeMode = _codeMode;
+    final isCode = _viewMode == MenuViewMode.shortCode;
     return _partitionedMenu
         .where((i) {
           if (selectedCategory != 'All' && i.category != selectedCategory) {
             return false;
           }
           if (rawQuery.isEmpty) return true;
-          if (codeMode) {
+          if (isCode) {
             return (i.shortCode?.toString() ?? '').startsWith(rawQuery);
           }
           return (_searchBlobs[i.id] ?? '').contains(lowerQuery);
@@ -506,9 +506,9 @@ class _CounterModeState extends State<_CounterMode> {
     });
   }
 
-  void _toggleCodeMode() {
+  void _setViewMode(MenuViewMode mode) {
     setState(() {
-      _codeMode = !_codeMode;
+      _viewMode = mode;
       _query = '';
       _searchCtrl.clear();
     });
@@ -644,10 +644,10 @@ class _CounterModeState extends State<_CounterMode> {
             totalQty: _totalQty,
             searchCtrl: _searchCtrl,
             query: _query,
-            codeMode: _codeMode,
+            viewMode: _viewMode,
             categoryCounts: categoryCounts,
             onSearchChanged: _onSearchChanged,
-            onToggleCodeMode: _toggleCodeMode,
+            onViewModeChanged: _setViewMode,
             onCodeSubmit: _onCodeSubmit,
             onCategorySelected: (c) => setState(() => _selectedCategory = c),
             onTap: _tap,
