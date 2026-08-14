@@ -2937,6 +2937,7 @@ class TfNavIcon {
   static const IconData back = Icons.arrow_back_rounded;
   static const IconData check = Icons.check_rounded;
   static const IconData search = Icons.search_rounded;
+  static const IconData grid = Icons.grid_view_rounded;
   static const IconData camera = Icons.camera_alt_outlined;
   static const IconData printer = Icons.print_outlined;
   static const IconData bluetooth = Icons.bluetooth;

@@ -778,7 +778,7 @@ class TfUnifiedTopNav extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Source top-bar icons — small 20x20 line glyphs from bytes-shared.jsx.
 // ---------------------------------------------------------------------------
-enum TfSourceIconName { back, chat, bell, bolt }
+enum TfSourceIconName { back, chat, bell, bolt, support }
 
 class TfSourceIcon extends StatelessWidget {
   const TfSourceIcon({
@@ -873,6 +873,17 @@ class _TfSourceIconPainter extends CustomPainter {
           ..cubicTo(8.9, 17.2, 11.1, 17.2, 11.5, 16);
       case TfSourceIconName.bolt:
         return _boltPath();
+      case TfSourceIconName.support:
+        // Desk phone: trapezoid base with an arched handset resting on it.
+        return Path()
+          ..moveTo(4, 9)
+          ..lineTo(5, 14)
+          ..quadraticBezierTo(5.5, 15, 10, 15)
+          ..quadraticBezierTo(14.5, 15, 15, 14)
+          ..lineTo(16, 9)
+          ..moveTo(7, 9)
+          ..quadraticBezierTo(7, 4.5, 10, 4.5)
+          ..quadraticBezierTo(13, 4.5, 13, 9);
     }
   }
 
@@ -2926,6 +2937,7 @@ class TfNavIcon {
   static const IconData back = Icons.arrow_back_rounded;
   static const IconData check = Icons.check_rounded;
   static const IconData search = Icons.search_rounded;
+  static const IconData grid = Icons.grid_view_rounded;
   static const IconData camera = Icons.camera_alt_outlined;
   static const IconData printer = Icons.print_outlined;
   static const IconData bluetooth = Icons.bluetooth;

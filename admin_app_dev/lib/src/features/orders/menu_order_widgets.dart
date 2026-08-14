@@ -112,17 +112,34 @@ class MenuStep extends StatefulWidget {
 }
 
 class _MenuStepState extends State<MenuStep> {
-  // The top-bar search icon toggles short-code (⚡) mode; the search bar shows
-  // whenever code mode is active or a query is live (so a typed query can't
-  // vanish), and its close button returns to the plain grid.
-  bool get _showSearchBar => true;
-
   bool get _isCode => widget.viewMode == MenuViewMode.shortCode;
+
+  bool get _isPlain => widget.viewMode == MenuViewMode.plainGrid;
+
+  // Search bar is hidden in the plain (no-color) grid mode; the top-bar
+  // search icon still jumps to short-code mode where the bar reappears.
+  bool get _showSearchBar => !_isPlain;
 
   void _toggleSearch() {
     // Search icon currently maps to short-code (⚡) quick-pick mode.
     widget.onViewModeChanged(
       _isCode ? MenuViewMode.colorGrid : MenuViewMode.shortCode,
+    );
+  }
+
+  // Grid icon cycles color grid → plain grid → image grid → back.
+  void _cycleView() {
+    if (_isCode) {
+      widget.onViewModeChanged(MenuViewMode.colorGrid);
+      return;
+    }
+    widget.onViewModeChanged(
+      switch (widget.viewMode) {
+        MenuViewMode.colorGrid => MenuViewMode.plainGrid,
+        MenuViewMode.plainGrid => MenuViewMode.imageGrid,
+        MenuViewMode.imageGrid => MenuViewMode.colorGrid,
+        MenuViewMode.shortCode => MenuViewMode.colorGrid,
+      },
     );
   }
 
@@ -137,6 +154,7 @@ class _MenuStepState extends State<MenuStep> {
           quickBillMode: widget.quickBillMode,
           onToggleQuickBill: widget.onToggleQuickBill,
           onToggleSearch: _toggleSearch,
+          onToggleView: _cycleView,
         ),
         // Rendered conditionally — no animation on show/hide.
         if (_showSearchBar) ...[
@@ -160,6 +178,8 @@ class _MenuStepState extends State<MenuStep> {
             counts: widget.categoryCounts,
             categoryLabels: widget.categoryLabels,
             onSelected: widget.onCategorySelected,
+            whiteChips: _isPlain ||
+                widget.viewMode == MenuViewMode.imageGrid,
           ),
         ],
         const SizedBox(height: PosSpacing.sp3),
@@ -216,6 +236,7 @@ class _TopControls extends StatelessWidget {
     this.quickBillMode = false,
     this.onToggleQuickBill,
     this.onToggleSearch,
+    this.onToggleView,
   });
 
   final String? title;
@@ -227,6 +248,9 @@ class _TopControls extends StatelessWidget {
   /// Toggles short-code (⚡) mode; a bare search glyph — the mode's close
   /// lives inside the search bar itself.
   final VoidCallback? onToggleSearch;
+
+  /// Cycles the menu view mode (color grid → plain grid → image grid → back).
+  final VoidCallback? onToggleView;
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +288,22 @@ class _TopControls extends StatelessWidget {
             )
           else
             const Spacer(),
+          // View-mode toggle: bare glyph — cycles color/plain/image grids.
+          if (onToggleView != null) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: onToggleView,
+              child: const SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(
+                  TfNavIcon.grid,
+                  size: 22,
+                  color: PosColors.accentInk,
+                ),
+              ),
+            ),
+          ],
           // Search toggle: bare glyph — toggles short-code mode.
           if (onToggleSearch != null) ...[
             const SizedBox(width: 10),
@@ -419,6 +459,7 @@ class CategoryChips extends StatelessWidget {
     required this.onSelected,
     this.counts,
     this.categoryLabels,
+    this.whiteChips = false,
     super.key,
   });
 
@@ -427,6 +468,10 @@ class CategoryChips extends StatelessWidget {
   final Map<String, int>? counts;
   final Map<String, ({String en, String bn})>? categoryLabels;
   final ValueChanged<String> onSelected;
+
+  /// Plain white chip fill (surface token) — used in the plain and image
+  /// grid modes; the color-coded grid keeps the gray source fill.
+  final bool whiteChips;
 
   @override
   Widget build(BuildContext context) {
@@ -455,8 +500,9 @@ class CategoryChips extends StatelessWidget {
       count: counts?[categories[i]],
       active: categories[i] == selected,
       small: true,
-      customFill: const Color(0xFFC7C9C8),
-      customBorder: const Color(0xFFC7C9C8),
+      customFill: whiteChips ? PosColors.surface : const Color(0xFFC7C9C8),
+      customBorder:
+          whiteChips ? PosColors.line : const Color(0xFFC7C9C8),
       customRadius: PosRadii.xs + 2,
       customText: PosColors.primaryDark,
       customCount: PosColors.primaryDark,
@@ -682,28 +728,46 @@ class _GridView extends StatelessWidget {
         ],
       );
     }
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        PosSpacing.sp4,
-        0,
-        PosSpacing.sp4,
-        PosDensity.sectionGap,
-      ),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        mainAxisExtent: PosDensity.tileMenu,
-      ),
-      itemCount: items.length,
-      itemBuilder: (_, i) {
-        final item = items[i];
-        return _PlainTile(
-          item: item,
-          qty: cart[item.id] ?? 0,
-          showImage: showImage,
-          onTap: () => onTap(item),
-          onDecrement: () => onDecrement(item.id),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Image mode: landscape 16:9 image + white text section below.
+        final gap = showImage ? 16.0 : 8.0;
+        final tileWidth =
+            (constraints.maxWidth - PosSpacing.sp4 * 2 - gap) / 2;
+        final extent = showImage
+            ? tileWidth * 9 / 16 + 60
+            : PosDensity.tileMenu;
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(
+            PosSpacing.sp4,
+            0,
+            PosSpacing.sp4,
+            PosDensity.sectionGap,
+          ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: showImage ? 16 : 8,
+            crossAxisSpacing: showImage ? 16 : 8,
+            mainAxisExtent: extent,
+          ),
+          itemCount: items.length,
+          itemBuilder: (_, i) {
+            final item = items[i];
+            if (showImage) {
+              return _ImageTile(
+                item: item,
+                qty: cart[item.id] ?? 0,
+                onTap: () => onTap(item),
+                onDecrement: () => onDecrement(item.id),
+              );
+            }
+            return _PlainTile(
+              item: item,
+              qty: cart[item.id] ?? 0,
+              onTap: () => onTap(item),
+              onDecrement: () => onDecrement(item.id),
+            );
+          },
         );
       },
     );
@@ -716,71 +780,311 @@ class _PlainTile extends StatelessWidget {
   const _PlainTile({
     required this.item,
     required this.qty,
-    required this.showImage,
     required this.onTap,
     required this.onDecrement,
   });
 
   final MenuItem item;
   final int qty;
-  final bool showImage;
   final VoidCallback onTap;
   final VoidCallback onDecrement;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final inCart = qty > 0;
     final off = !item.isAvailable;
-    return InkWell(
+    return GestureDetector(
       onTap: off ? null : onTap,
-      borderRadius: const BorderRadius.all(Radius.circular(6)),
-      child: Container(
-        decoration: BoxDecoration(
-          color: PosColors.surface,
-          border: Border.all(
-            color: qty > 0 ? PosColors.primary : PosColors.line,
+      child: Opacity(
+        opacity: off ? 0.5 : 1.0,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: inCart ? PosColors.primarySoft : PosColors.surface,
+            border: Border.all(
+              color: inCart ? PosColors.primary : PosColors.line,
+              width: inCart ? 1.8 : 1,
+            ),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: PosShadows.soft,
           ),
-          borderRadius: const BorderRadius.all(Radius.circular(6)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (showImage) ...[
-              SizedBox(
-                height: 40,
-                width: 40,
-                child: ItemImage(
-                  url: item.imageUrl ?? '',
-                  iconKey: item.extras.iconKey ?? '',
-                  category: item.category,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(PosSpacing.sp2),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            TfText(
+                              item.localizedName(app.language),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowTitle.copyWith(
+                                color: PosColors.primaryDark,
+                              ),
+                            ),
+                            if (!off) ...[
+                              const SizedBox(height: 2),
+                              _PriceTag(price: item.price),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (off)
+                      const Positioned(
+                        bottom: PosSpacing.sp2,
+                        left: PosSpacing.sp2,
+                        child: _OffBadge(),
+                      ),
+                    if (inCart) ...[
+                      Positioned(
+                        top: PosSpacing.sp1,
+                        right: PosSpacing.sp1,
+                        child: _CountBadge(qty: qty),
+                      ),
+                      Positioned(
+                        top: PosSpacing.sp1,
+                        left: PosSpacing.sp1,
+                        child: GestureDetector(
+                          onTap: onDecrement,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: PosColors.surface,
+                              border:
+                                  Border.all(color: PosColors.lineStrong),
+                              borderRadius:
+                                  BorderRadius.circular(PosRadii.chip),
+                            ),
+                            child: Icon(
+                              Icons.remove_rounded,
+                              size: 16,
+                              color: PosColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (!inCart)
+                      Positioned(
+                        bottom: PosSpacing.sp2,
+                        right: PosSpacing.sp2,
+                        child: _AddButton(
+                          onTap: off ? null : onTap,
+                          inCart: false,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
             ],
-            TfText(
-              item.localizedName(app.language),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TfTextStyles.rowTitle.copyWith(color: PosColors.text),
-            ),
-            const SizedBox(height: 2),
-            TfText(
-              '৳ ${tfFormatNumber(context, item.price)}',
-              style: TfTextStyles.rowMoney.copyWith(
-                color: PosColors.primaryDark,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
+// ── 2-col image tile: landscape 16:9 image on top, white name+price below. ──
+
+/// True when the URL is the backend-assigned menu-creation placeholder
+/// (empty, or a `menu_placeholders/...` asset URL) rather than a real photo.
+bool _isPlaceholderUrl(String url) {
+  final trimmed = url.trim();
+  return trimmed.isEmpty || trimmed.toLowerCase().contains('menu_placeholders');
+}
+
+class _ImageTile extends StatelessWidget {
+  const _ImageTile({
+    required this.item,
+    required this.qty,
+    required this.onTap,
+    required this.onDecrement,
+  });
+
+  final MenuItem item;
+  final int qty;
+  final VoidCallback onTap;
+  final VoidCallback onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final inCart = qty > 0;
+    final off = !item.isAvailable;
+    final placeholder = _isPlaceholderUrl(item.imageUrl ?? '');
+    final designStyle = resolveDesignCategoryStyle(item.category);
+    return GestureDetector(
+      onTap: off ? null : onTap,
+      child: Opacity(
+        opacity: off ? 0.5 : 1.0,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: inCart ? PosColors.primarySoft : PosColors.surface,
+            border: Border.all(
+              color: inCart ? PosColors.primary : PosColors.line,
+              width: inCart ? 1.8 : 1,
+            ),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: PosShadows.soft,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      color: designStyle.background,
+                      child: placeholder
+                          ? Center(
+                              child: Icon(
+                                designStyle.icon,
+                                size: 56,
+                                color: designStyle.foreground,
+                              ),
+                            )
+                          : ItemImage(
+                              url: item.imageUrl ?? '',
+                              iconKey: item.extras.iconKey ?? '',
+                              category: item.category,
+                            ),
+                    ),
+                    if (inCart) ...[
+                      Positioned(
+                        top: PosSpacing.sp1,
+                        left: PosSpacing.sp1,
+                        child: _CountBadge(qty: qty),
+                      ),
+                      Positioned(
+                        top: PosSpacing.sp1,
+                        right: PosSpacing.sp1,
+                        child: GestureDetector(
+                          onTap: onDecrement,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: PosColors.surface,
+                              border: Border.all(color: PosColors.lineStrong),
+                              borderRadius:
+                                  BorderRadius.circular(PosRadii.chip),
+                            ),
+                            child: Icon(
+                              Icons.remove_rounded,
+                              size: 16,
+                              color: PosColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    PosSpacing.sp2,
+                    PosSpacing.sp2,
+                    PosSpacing.sp2,
+                    PosSpacing.sp2,
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TfText(
+                              item.localizedName(app.language),
+                              textAlign: TextAlign.start,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowTitle.copyWith(
+                                color: PosColors.primaryDark,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            if (!off) ...[
+                              const SizedBox(height: 2),
+                              TfText(
+                                '৳ ${tfFormatNumber(context, item.price)}',
+                                style: TfTextStyles.rowMoney.copyWith(
+                                  color: PosColors.primaryDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (off)
+                        const Positioned(
+                          bottom: 0,
+                          left: 0,
+                          child: _OffBadge(),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Circular plus button, bottom-right of the item card.
+class _AddButton extends StatelessWidget {
+  const _AddButton({this.onTap, this.inCart = false});
+  final VoidCallback? onTap;
+  final bool inCart;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: inCart ? PosColors.addBlue : PosColors.addBg,
+          shape: BoxShape.circle,
+          border: inCart ? null : Border.all(color: PosColors.addBlue, width: 1.5),
+        ),
+        child: Icon(
+          Icons.add_rounded,
+          size: 20,
+          color: inCart ? Colors.white : PosColors.addBlue,
+        ),
+      ),
+    );
+  }
+}
+
+// Full-width white qty stepper, flush with card edges.
 // ── Qty stepper (item sheet) ──
 
 class _QtyStepperInline extends StatelessWidget {
@@ -1021,10 +1325,8 @@ class _PriceTag extends StatelessWidget {
   Widget build(BuildContext context) {
     return TfText(
       '৳ ${tfFormatNumber(context, price)}',
-      textAlign: TextAlign.center,
       style: TfTextStyles.rowMoney.copyWith(
-        color: Colors.black,
-        fontSize: 13,
+        color: PosColors.primaryDark,
         fontWeight: FontWeight.w400,
       ),
     );

@@ -159,104 +159,6 @@ const ANALYTICS = {
 
 window.ANALYTICS_EXT = true;
 
-/* ---- analytics: global filter dimensions (shift / terminal / user) ----
-   Shares are fractions of net sales; selecting one scopes every metric
-   on the page (same multiplier model as channel/daypart). ---- */
-const SHIFTS = ['Morning', 'Evening', 'Night'];
-const TERMINALS = ['Counter 1', 'Counter 2'];
-const SHIFT_SHARE = { 'Morning': 0.27, 'Evening': 0.53, 'Night': 0.20 };
-const TERMINAL_SHARE = { 'Counter 1': 0.58, 'Counter 2': 0.42 };
-/* per-staff share of attributed sales (waiters + managers who ring orders) */
-const STAFF_SHARE = { 'Sabbir Ahmed': 0.31, 'Tania Akter': 0.24, 'Nadia Islam': 0.27, 'Rakib Hasan': 0.18 };
-const ANALYTICS_STAFF = ['Sabbir Ahmed', 'Tania Akter', 'Nadia Islam', 'Rakib Hasan'];
-
-/* Service-type split — Dine-in / Takeaway / Delivery (share of net sales). */
-const SERVICE_TYPES = [
-  ['Dine-in', 0.46, '#99FF47'],
-  ['Delivery', 0.32, '#3E6FE0'],
-  ['Takeaway', 0.22, '#B0760A'],
-];
-
-/* Accounting waterfall — each ratio is relative to Net Sales (the hero figure).
-   grossUp lifts net back to gross sales; the rest are deductions from net. */
-const ACCT_RATIOS = {
-  grossUp: 1.068,      // net ÷ → gross (discounts ≈ 6.4% of gross)
-  serviceCharge: 0.05,
-  taxes: 0.05,         // VAT
-  customerFee: 0.012,
-  deliveryCharge: 0.031,
-  prepCost: 0.378,     // COGS / preparation
-  wastage: 0.022,
-  paymentFees: 0.017,
-};
-function acctBreakdown(net) {
-  const gross = Math.round(net * ACCT_RATIOS.grossUp);
-  const discounts = gross - net;
-  const serviceCharge = Math.round(net * ACCT_RATIOS.serviceCharge);
-  const taxes = Math.round(net * ACCT_RATIOS.taxes);
-  const customerFee = Math.round(net * ACCT_RATIOS.customerFee);
-  const deliveryCharge = Math.round(net * ACCT_RATIOS.deliveryCharge);
-  const prepCost = Math.round(net * ACCT_RATIOS.prepCost);
-  const wastage = Math.round(net * ACCT_RATIOS.wastage);
-  const paymentFees = Math.round(net * ACCT_RATIOS.paymentFees);
-  const grossProfit = net - serviceCharge - taxes - customerFee - deliveryCharge - prepCost - wastage - paymentFees;
-  return [
-    { k: 'gross', label: 'Gross sales', val: gross, type: 'base' },
-    { k: 'discounts', label: 'Discounts', val: -discounts, type: 'sub' },
-    { k: 'net', label: 'Net sales', val: net, type: 'total' },
-    { k: 'service', label: 'Service charge', val: -serviceCharge, type: 'sub' },
-    { k: 'taxes', label: 'Taxes (VAT)', val: -taxes, type: 'sub' },
-    { k: 'custfee', label: 'Customer fee', val: -customerFee, type: 'sub' },
-    { k: 'delivery', label: 'Delivery charge', val: -deliveryCharge, type: 'sub' },
-    { k: 'prep', label: 'Preparation cost', val: -prepCost, type: 'sub' },
-    { k: 'wastage', label: 'Wastage', val: -wastage, type: 'sub' },
-    { k: 'payfee', label: 'Payment fees', val: -paymentFees, type: 'sub' },
-    { k: 'profit', label: 'Gross profit', val: grossProfit, type: 'profit' },
-  ];
-}
-
-/* Master sales dataset — item rows split across service/channel/shift/staff/
-   terminal/daypart so the filtered sales table has real dimensions to slice. */
-function buildSalesRows() {
-  const channels = ['POS', 'Messenger', 'Website'];
-  const services = ['Dine-in', 'Takeaway', 'Delivery'];
-  const shifts = ['Morning', 'Evening', 'Night'];
-  const terminals = ['Counter 1', 'Counter 2'];
-  const dayparts = ['Lunch', 'Dinner', 'Late'];
-  const staff = ANALYTICS_STAFF;
-  const rows = [];
-  let k = 0;
-  MENU.forEach((m, mi) => {
-    const splits = 2 + (mi % 2); // 2 or 3 rows per item
-    let remaining = m.sold;
-    for (let s = 0; s < splits; s++) {
-      const seed = mi * 7 + s * 3;
-      const units = s === splits - 1 ? remaining : Math.max(1, Math.round(m.sold * (s === 0 ? 0.5 : 0.3)));
-      remaining -= units;
-      if (units <= 0) continue;
-      const svc = services[seed % 3];
-      const rev = units * m.price;
-      const cost = units * m.cost;
-      const orders = Math.max(1, Math.round(units / (2 + (seed % 3))));
-      rows.push({
-        id: 'sr' + (k++),
-        name: m.name, cat: m.cat,
-        service: svc,
-        channel: svc === 'Dine-in' ? 'POS' : channels[(seed + 1) % 3],
-        units, orders, rev, cost,
-        profit: rev - cost,
-        margin: (rev - cost) / rev,
-        aov: Math.round(rev / orders),
-        shift: shifts[seed % 3],
-        staff: staff[seed % staff.length],
-        terminal: terminals[seed % 2],
-        daypart: svc === 'Delivery' ? dayparts[(seed + 2) % 3] : dayparts[seed % 3],
-      });
-    }
-  });
-  return rows;
-}
-
 /* ---- Messenger chatbot escalations (manager hand-off) ----
    The Facebook bot auto-answers; when it hits something it can't
    resolve (photo request, delivery quote for a far area, custom
@@ -352,4 +254,4 @@ function seedSuppliers() {
   ];
 }
 
-Object.assign(window, { MENU, CATS, MODS, TABLES, UNITS, makeLine, lineUnit, lineTotal, modSummary, seedOrders, seedInventory, ANALYTICS, seedChats, seedNotifs, seedStaff, seedAudit, seedSuppliers, DELIVERY_AREAS, DISCOUNT_PRESETS, MENU_THEMES, SHIFTS, TERMINALS, SHIFT_SHARE, TERMINAL_SHARE, STAFF_SHARE, ANALYTICS_STAFF, SERVICE_TYPES, ACCT_RATIOS, acctBreakdown, buildSalesRows });
+Object.assign(window, { MENU, CATS, MODS, TABLES, UNITS, makeLine, lineUnit, lineTotal, modSummary, seedOrders, seedInventory, ANALYTICS, seedChats, seedNotifs, seedStaff, seedAudit, seedSuppliers, DELIVERY_AREAS, DISCOUNT_PRESETS, MENU_THEMES });

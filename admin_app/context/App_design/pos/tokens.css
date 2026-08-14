@@ -1,0 +1,141 @@
+/* ============================================================================
+   VOLT · RESTAURANT POS DESIGN SYSTEM — TOKENS
+   Signature: electric lime (#99FF47), ink text always sits ON the lime.
+   Light theme = front/back office. Dark theme = service terminal.
+   Source of truth — maps 1:1 to a Flutter ThemeExtension.
+   ========================================================================== */
+
+:root {
+
+  /* ---- 1 · LIME RAMP (brand / "go") ------------------------------------ */
+  --lime-50:  #F3FDE7;
+  --lime-100: #E4FBC9;
+  --lime-200: #CDF79B;
+  --lime-300: #B4F46E;
+  --lime-400: #99FF47;   /* ← signature swatch */
+  --lime-500: #84F02C;   /* hover / pressed surface */
+  --lime-600: #67C81E;
+  --lime-700: #498F18;   /* "go" TEXT on light (AA 4.6:1) */
+  --lime-800: #2F5E14;
+  --lime-900: #1E3D0F;
+
+  --accent:        var(--lime-400);
+  --accent-press:  var(--lime-500);
+  --accent-strong: var(--lime-700);   /* lime text/links on white */
+  --accent-ink:    #14180E;           /* text/icon ON lime — ALWAYS dark */
+  --accent-tint:   #EAF7D6;           /* selected chip / row fill (light) */
+  --accent-tint-2: var(--lime-200);
+  --accent-glow:   none;              /* enterprise: no neon glow on CTAs */
+
+  /* ---- 2 · INK + NEUTRALS (light theme — faint green-black) ------------ */
+  --bg:          #F3F5EE;   /* app background */
+  --surface:     #FFFFFF;   /* cards, fields, sheets */
+  --surface-2:   #ECEFE4;   /* tiles, insets, placeholders */
+  --surface-3:   #E2E6D8;   /* pressed inset, track */
+  --ink:         #14180E;   /* primary text  (white 16.3:1 AAA) */
+  --ink-2:       #4C5142;   /* secondary     (white 8.0:1 AAA) */
+  --muted:       #7C8270;   /* captions       (white 4.4:1 AA) */
+  --placeholder: #A4A997;   /* input placeholder */
+  --line:        #E6E9DD;   /* hairline border / divider */
+  --line-2:      #D4D8C7;   /* field border / strong divider */
+
+  /* ---- 3 · SIGNALS (one green family = lime; rest avoid green) --------- */
+  --success:      var(--lime-700);  /* paid / in-stock / positive (text) */
+  --success-soft: var(--lime-100);
+  --warning:      #B0760A;          /* low stock / nearing limit */
+  --warning-soft: #FBEFCD;
+  --danger:       #D43A3F;          /* void / error / unavailable */
+  --danger-soft:  #FBE3E2;
+  --info:         #3E6FE0;          /* sync / neutral notice */
+  --info-soft:    #E3EAFC;
+
+  /* ---- 4 · DATA-VIZ ---------------------------------------------------- */
+  --viz-1: #84F02C;   /* lime    */
+  --viz-2: #3E6FE0;   /* blue    */
+  --viz-3: #E0A019;   /* amber   */
+  --viz-4: #E0617A;   /* coral   */
+  --viz-5: #1FA89B;   /* teal    */
+  --viz-6: #8B6FE0;   /* violet  */
+
+  /* ---- 5 · TYPE (Inter everywhere · tabular figures for numbers) ------- */
+  --font:      "Inter", system-ui, -apple-system, sans-serif;
+  --font-disp: "Inter", system-ui, sans-serif;   /* display = same family, heavier weight */
+  --font-num:  "Inter", system-ui, sans-serif;   /* money: pair with font-variant-numeric: tabular-nums */
+
+  --w-regular: 400;
+  --w-medium:  500;
+  --w-semibold:600;
+  --w-bold:    700;
+
+  --t-display:  34px;   /* cover / onboarding hero */
+  --t-money-xl: 30px;   /* dominant money number */
+  --t-h1:       22px;   /* screen title */
+  --t-h2:       18px;   /* section / panel title */
+  --t-money:    17px;   /* list amount, KPI */
+  --t-title:    15px;   /* card / row title */
+  --t-body:     14px;   /* body (dense, operational) */
+  --t-body-s:   13px;   /* secondary body */
+  --t-label:    12px;   /* labels, captions */
+  --t-micro:    11px;   /* timestamps, legal */
+
+  --lh-tight: 1.1;
+  --lh-snug:  1.28;
+  --lh-body:  1.5;
+  --ls-tight: -0.02em;
+  --ls-wide:  0.05em;   /* eyebrows */
+
+  /* ---- 6 · RADIUS (enterprise crisp — square-leaning) ----------------- */
+  --r-xs:   3px;
+  --r-sm:   5px;
+  --r-md:   7px;
+  --r-lg:   9px;
+  --r-xl:   12px;
+  --r-pill: 999px;   /* reserved for toggles & status dots only */
+
+  /* ---- 7 · SPACING (base 4) ------------------------------------------- */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s8: 40px;
+
+  /* ---- 8 · SHADOW (flat enterprise — borders do the work) ------------- */
+  --e0: none;
+  --e1: 0 1px 1px rgba(16,20,14,.04);          /* barely-there lift */
+  --e2: 0 2px 8px rgba(16,20,14,.07);          /* dropdowns, hover */
+  --e3: 0 12px 30px rgba(16,20,14,.16);        /* sheets, modals */
+  --e-up: 0 -4px 16px rgba(16,20,14,.05);
+
+  /* ---- 9 · MOTION ----------------------------------------------------- */
+  --d-fast: 120ms; --d-base: 210ms; --d-slow: 320ms;
+  --ease:        cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+
+/* ============================================================================
+   DARK THEME — service terminal. Apply [data-theme="dark"] on a container.
+   Lime stays identical so it reads as the same brand signal.
+   ========================================================================== */
+[data-theme="dark"] {
+  --bg:          #0E120D;
+  --surface:     #181D16;
+  --surface-2:   #212720;
+  --surface-3:   #2A312A;
+  --ink:         #F1F4EC;
+  --ink-2:       #AEB4A4;
+  --muted:       #7E8576;
+  --placeholder: #69705F;
+  --line:        rgba(255,255,255,.09);
+  --line-2:      rgba(255,255,255,.16);
+
+  --accent-tint:   rgba(153,255,71,.16);
+  --accent-tint-2: rgba(153,255,71,.26);
+  --success:      var(--lime-400);
+  --success-soft: rgba(153,255,71,.16);
+  --warning-soft: rgba(224,160,25,.18);
+  --danger-soft:  rgba(212,58,63,.20);
+  --info-soft:    rgba(62,111,224,.20);
+  --e1: 0 1px 2px rgba(0,0,0,.5);
+  --e2: 0 6px 16px rgba(0,0,0,.45);
+  --e3: 0 18px 44px rgba(0,0,0,.6);
+}
+
+* { box-sizing: border-box; }
+.v-num { font-family: var(--font-num); font-variant-numeric: tabular-nums lining-nums; }

@@ -44,6 +44,7 @@ dependencies:
   firebase_messaging: ^15.2.0
   flutter_bluetooth_serial: ^0.4.0
   flutter_background_service: ^5.1.0
+  lucide_flutter: ^1.28.0
 
 dev_dependencies:
   flutter_test:

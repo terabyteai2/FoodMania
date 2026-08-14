@@ -74,7 +74,7 @@ function App() {
       orderDetail: OrderDetail, orderBuild: OrderBuild, review: ReviewScreen, deliveryInfo: DeliveryInfo, printOut: PrintOut,
       itemEdit: ItemEdit, menu: MenuManageScreen, stockIn: StockIn, startCount: StartCount, itemDetail: ItemDetail, variance: VarianceScreen, suppliers: SuppliersScreen,
       analytics: AnalyticsScreen, tower: ControlTower, messages: MessagesScreen, chatThread: ChatThread,
-      categoryAll: CategoryAllScreen, productsAll: ProductsAllScreen, salesTable: SalesTableScreen,
+      categoryAll: CategoryAllScreen, productsAll: ProductsAllScreen,
       settings: SettingsScreen, deliveryAreas: DeliveryAreasScreen, discountPresets: DiscountPresetsScreen, themePicker: ThemePicker, staff: StaffScreen, audit: AuditScreen,
     }[top.screen];
     body = S ? <S {...top} /> : <div style={{ padding: 20 }}>?</div>;

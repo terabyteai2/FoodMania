@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Category card-fill palette ──
@@ -339,4 +340,83 @@ Color resolveCategoryAccent(String category) {
     if (entry.key.toLowerCase() == key) return entry.value;
   }
   return _accentsList[(key.hashCode & 0x7FFFFFFF) % _accentsList.length];
+}
+
+// ── Design category tint + icon (soft pastel fill, strong ink, line icon) ──
+
+/// One design-style category visual: soft tinted background, strong ink for
+/// the icon, and a Lucide line icon. Mirrors the Bytes POS CAT_TINT set.
+class DesignCategoryStyle {
+  const DesignCategoryStyle({
+    required this.background,
+    required this.foreground,
+    required this.icon,
+  });
+
+  final Color background;
+  final Color foreground;
+  final IconData icon;
+}
+
+const DesignCategoryStyle kDesignCategoryFallback = DesignCategoryStyle(
+  background: Color(0xFFECEFE4),
+  foreground: Color(0xFF7C8270),
+  icon: LucideIcons.utensils,
+);
+
+const Map<String, DesignCategoryStyle> kDesignCategoryStyles = {
+  'Burgers': DesignCategoryStyle(
+    background: Color(0xFFFBEFCD),
+    foreground: Color(0xFFB0760A),
+    icon: LucideIcons.hamburger,
+  ),
+  'Pizza': DesignCategoryStyle(
+    background: Color(0xFFFBE3E2),
+    foreground: Color(0xFFD43A3F),
+    icon: LucideIcons.pizza,
+  ),
+  'Rice & Curry': DesignCategoryStyle(
+    background: Color(0xFFE4FBC9),
+    foreground: Color(0xFF498F18),
+    icon: LucideIcons.soup,
+  ),
+  'Kebab': DesignCategoryStyle(
+    background: Color(0xFFFBE3E2),
+    foreground: Color(0xFFB0760A),
+    icon: LucideIcons.drumstick,
+  ),
+  'Sides': DesignCategoryStyle(
+    background: Color(0xFFE3EAFC),
+    foreground: Color(0xFF3E6FE0),
+    icon: LucideIcons.popcorn,
+  ),
+  'Salads': DesignCategoryStyle(
+    background: Color(0xFFE4FBC9),
+    foreground: Color(0xFF498F18),
+    icon: LucideIcons.salad,
+  ),
+  'Beverages': DesignCategoryStyle(
+    background: Color(0xFFE3EAFC),
+    foreground: Color(0xFF3E6FE0),
+    icon: LucideIcons.cupSoda,
+  ),
+  'Desserts': DesignCategoryStyle(
+    background: Color(0xFFFBEFCD),
+    foreground: Color(0xFFB0760A),
+    icon: LucideIcons.iceCreamBowl,
+  ),
+};
+
+/// Default style — one reserved slot (kitchen icon on the default tint) for
+/// unmatched categories; other unknown categories get a stable random pick.
+DesignCategoryStyle resolveDesignCategoryStyle(String category) {
+  final key = category.trim().toLowerCase();
+  if (key.isEmpty || key == 'all' || key == 'general') {
+    return kDesignCategoryFallback;
+  }
+  for (final entry in kDesignCategoryStyles.entries) {
+    if (entry.key.toLowerCase() == key) return entry.value;
+  }
+  final list = kDesignCategoryStyles.values.toList();
+  return list[(key.hashCode & 0x7FFFFFFF) % list.length];
 }

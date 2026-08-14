@@ -58,9 +58,6 @@ function Delta({ v }) {
 const TF_OPTS = [['today', 'Today'], ['week', '7 days'], ['month', '30 days'], ['custom', 'Custom']];
 const CH_FILTERS = ['All channels', 'Dine-in', 'Delivery', 'Pickup', 'Counter'];
 const DP_FILTERS = ['All day', 'Lunch', 'Dinner', 'Late'];
-const SH_FILTERS = ['All shifts', ...SHIFTS];
-const TM_FILTERS = ['All terminals', ...TERMINALS];
-const ST_FILTERS = ['All staff', ...ANALYTICS_STAFF];
 
 function AnalyticsScreen({ tabMode }) {
   const b = useBytes();
@@ -72,27 +69,18 @@ function AnalyticsScreen({ tabMode }) {
   const [filters, setFilters] = useState(false);
   const [ch, setCh] = useState('All channels');
   const [dp, setDp] = useState('All day');
-  const [sh, setSh] = useState('All shifts');
-  const [term, setTerm] = useState('All terminals');
-  const [stf, setStf] = useState('All staff');
-  const [acctOpen, setAcctOpen] = useState(false);
   const compare = advanced; // comparisons live inside Advanced now
 
   const chMul = ch === 'All channels' ? 1 : (a.channelMix.find((c) => c[0] === ch) || [0, 100])[1] / 100;
   const dpMul = dp === 'All day' ? 1 : (a.dayparts.find((d) => d[0] === dp) || [0, 0, 1])[2];
-  const shMul = sh === 'All shifts' ? 1 : (SHIFT_SHARE[sh] || 1);
-  const tmMul = term === 'All terminals' ? 1 : (TERMINAL_SHARE[term] || 1);
-  const stfMul = stf === 'All staff' ? 1 : (STAFF_SHARE[stf] || 1);
-  const fMul = chMul * dpMul * shMul * tmMul * stfMul;
   const tfMul = { today: 1, week: 6.4, month: 27.5, custom: 7.8 }[tf];
   const tfLabel = { today: 'Today', week: 'This week', month: 'This month', custom: range }[tf];
-  const rev = Math.round(a.today.revenue * tfMul * fMul);
-  const prevRev = Math.round(a.today.prevRevenue * tfMul * fMul);
-  const orders = Math.round(a.today.orders * tfMul * fMul);
+  const rev = Math.round(a.today.revenue * tfMul * chMul * dpMul);
+  const prevRev = Math.round(a.today.prevRevenue * tfMul * chMul * dpMul);
+  const orders = Math.round(a.today.orders * tfMul * chMul * dpMul);
   const growth = Math.round((rev - prevRev) / prevRev * 100);
   const maxHr = Math.max(...a.peakHours);
-  const filterState = { tf, range, ch, dp, sh, term, stf };
-  const activeFilters = (ch !== 'All channels' ? 1 : 0) + (dp !== 'All day' ? 1 : 0) + (sh !== 'All shifts' ? 1 : 0) + (term !== 'All terminals' ? 1 : 0) + (stf !== 'All staff' ? 1 : 0);
+  const activeFilters = (ch !== 'All channels' ? 1 : 0) + (dp !== 'All day' ? 1 : 0);
 
   const GROW = { 'Chicken Biryani': 14, 'Coke 250ml': 6, 'Masala Fries': 9, 'Borhani': 5, 'Beef Tehari': -3, 'Kacchi Biryani': 11, 'Beef Smash Burger': 7 };
   const CATMETA = { 'Rice & Curry': [0.61, 12], 'Burgers': [0.57, 8], 'Kebab': [0.59, -3], 'Beverages': [0.66, 5], 'Sides': [0.70, 9], 'Desserts': [0.64, 2] };
@@ -133,10 +121,7 @@ function AnalyticsScreen({ tabMode }) {
         <div className="chiprow noscroll" style={{ padding: 0, flex: 1 }}>
           {ch !== 'All channels' && <button className="chip tint active" onClick={() => setCh('All channels')} style={{ height: 36 }}>{ch}<Icon name="x" size={13} /></button>}
           {dp !== 'All day' && <button className="chip tint active" onClick={() => setDp('All day')} style={{ height: 36 }}>{dp}<Icon name="x" size={13} /></button>}
-          {sh !== 'All shifts' && <button className="chip tint active" onClick={() => setSh('All shifts')} style={{ height: 36 }}>{sh}<Icon name="x" size={13} /></button>}
-          {term !== 'All terminals' && <button className="chip tint active" onClick={() => setTerm('All terminals')} style={{ height: 36 }}>{term}<Icon name="x" size={13} /></button>}
-          {stf !== 'All staff' && <button className="chip tint active" onClick={() => setStf('All staff')} style={{ height: 36 }}>{stf}<Icon name="x" size={13} /></button>}
-          {!activeFilters && <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, alignSelf: 'center' }}>All channels · all day · all shifts</span>}
+          {!activeFilters && <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, alignSelf: 'center' }}>All channels · all day</span>}
         </div>
       </div>
 
@@ -197,22 +182,6 @@ function AnalyticsScreen({ tabMode }) {
           </div>
         </div>
 
-        {/* service-type split — Dine-in / Takeaway / Delivery */}
-        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-          <SectionTitle note="share of net sales">Service type</SectionTitle>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-            {SERVICE_TYPES.map(([name, share, color], i) => (
-              <div key={name}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13, marginBottom: 5 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--ink-2)', display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: color }} />{name}</span>
-                  <span className="tab" style={{ color: 'var(--muted)', fontWeight: 600 }}>{money(Math.round(rev * share))} · {Math.round(share * 100)}%</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden' }}><div style={{ width: (share / SERVICE_TYPES[0][1] * 100) + '%', height: '100%', borderRadius: 4, background: i === 0 ? 'var(--accent)' : i === 1 ? 'var(--accent-tint-2)' : 'var(--surface-3)' }} /></div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* product performance — sortable */}
         <div className="card" style={{ padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
@@ -249,16 +218,6 @@ function AnalyticsScreen({ tabMode }) {
           {advanced && <button style={{ width: '100%', marginTop: 12, padding: '10px', border: '1px solid var(--line-2)', borderRadius: 'var(--r-md)', background: 'var(--surface)', cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--ink-2)', fontFamily: 'var(--font)' }}>Full menu report · export CSV</button>}
         </div>
 
-        {/* detailed sales table entry */}
-        <button onClick={() => b.push({ screen: 'salesTable', filterState })} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--line-2)', background: 'var(--surface)', borderRadius: 'var(--r-lg)', padding: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', fontFamily: 'var(--font)' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--accent-tint)', display: 'grid', placeItems: 'center', flex: '0 0 38px' }}><Icon name="list" size={20} color="var(--accent-strong)" /></div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700 }}>Detailed sales table</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }} className="ell">Filter, sort &amp; export every line</div>
-          </div>
-          <Icon name="chev" size={18} color="var(--muted)" />
-        </button>
-
         {/* channel + payment mix side by side */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
           <div className="card" style={{ flex: 1, padding: 14, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -293,44 +252,6 @@ function AnalyticsScreen({ tabMode }) {
           </div>
         </div>
 
-        {/* accounting breakdown — collapsible waterfall */}
-        <div className="card" style={{ padding: acctOpen ? 16 : '4px 16px', marginBottom: 12 }}>
-          <button onClick={() => setAcctOpen((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: acctOpen ? '0 0 4px' : '12px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font)' }}>
-            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>Accounting breakdown</div>
-              {!acctOpen && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>Gross sales → gross profit</div>}
-            </div>
-            {!acctOpen && <span className="tab" style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent-strong)' }}>{money(acctBreakdown(rev).find((r) => r.k === 'profit').val)}</span>}
-            <Icon name={acctOpen ? 'chevu' : 'chevd'} size={18} color="var(--muted)" />
-          </button>
-          {acctOpen && (
-            <div style={{ marginTop: 12 }}>
-              {acctBreakdown(rev).map((r) => {
-                const isTotal = r.type === 'total', isProfit = r.type === 'profit', isBase = r.type === 'base';
-                const sign = r.type === 'sub' ? '−' : '';
-                return (
-                  <div key={r.k} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                    padding: isProfit ? '12px 12px' : '8px 0',
-                    marginTop: isProfit ? 8 : 0,
-                    borderTop: isTotal ? '1px solid var(--line-2)' : 'none',
-                    background: isProfit ? 'var(--accent-tint)' : 'transparent',
-                    borderRadius: isProfit ? 'var(--r-md)' : 0,
-                  }}>
-                    <span style={{ fontSize: isTotal || isProfit ? 14 : 13, fontWeight: isTotal || isProfit ? 700 : (r.type === 'sub' ? 400 : 600), color: isProfit ? 'var(--accent-strong)' : (r.type === 'sub' ? 'var(--ink-2)' : 'var(--ink)'), paddingLeft: r.type === 'sub' ? 10 : 0 }}>
-                      {(isTotal || isProfit) ? '= ' : ''}{r.label}
-                    </span>
-                    <span className="tab" style={{ fontSize: isTotal || isProfit ? 15.5 : 13.5, fontWeight: 700, color: isProfit ? 'var(--accent-strong)' : (r.type === 'sub' ? 'var(--ink-2)' : 'var(--ink)') }}>
-                      {sign}{money(Math.abs(r.val))}
-                    </span>
-                  </div>
-                );
-              })}
-              <div style={{ fontSize: 11, color: 'var(--placeholder)', marginTop: 10, textAlign: 'right' }}>{tfLabel} · scoped to active filters</div>
-            </div>
-          )}
-        </div>
-
         {advanced && <AdvancedAnalytics a={a} tfMul={tfMul} />}
 
         {/* peak hours — demoted, compact */}
@@ -351,30 +272,18 @@ function AnalyticsScreen({ tabMode }) {
       {/* filters sheet */}
       {filters && (
         <Sheet open onClose={() => setFilters(false)}>
-          <div className="scrollY noscroll" style={{ padding: '4px 18px 16px', maxHeight: '100%' }}>
+          <div style={{ padding: '4px 18px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <span style={{ fontSize: 18, fontWeight: 700 }}>Filters</span>
-              <button onClick={() => { setCh('All channels'); setDp('All day'); setSh('All shifts'); setTerm('All terminals'); setStf('All staff'); }} style={{ border: 'none', background: 'transparent', color: 'var(--accent-strong)', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>Reset</button>
+              <button onClick={() => { setCh('All channels'); setDp('All day'); }} style={{ border: 'none', background: 'transparent', color: 'var(--accent-strong)', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>Reset</button>
             </div>
             <div className="eyebrow" style={{ marginBottom: 9 }}>Channel</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
               {CH_FILTERS.map((c) => <button key={c} className={'chip tint' + (ch === c ? ' active' : '')} onClick={() => setCh(c)} style={{ height: 38 }}>{c}</button>)}
             </div>
             <div className="eyebrow" style={{ marginBottom: 9 }}>Daypart</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-              {DP_FILTERS.map((d) => <button key={d} className={'chip tint' + (dp === d ? ' active' : '')} onClick={() => setDp(d)} style={{ height: 38 }}>{d}</button>)}
-            </div>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>Shift</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-              {SH_FILTERS.map((s) => <button key={s} className={'chip tint' + (sh === s ? ' active' : '')} onClick={() => setSh(s)} style={{ height: 38 }}>{s}</button>)}
-            </div>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>Terminal</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-              {TM_FILTERS.map((tm) => <button key={tm} className={'chip tint' + (term === tm ? ' active' : '')} onClick={() => setTerm(tm)} style={{ height: 38 }}>{tm}</button>)}
-            </div>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>Staff / user</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-              {ST_FILTERS.map((st) => <button key={st} className={'chip tint' + (stf === st ? ' active' : '')} onClick={() => setStf(st)} style={{ height: 38 }}>{st}</button>)}
+              {DP_FILTERS.map((d) => <button key={d} className={'chip tint' + (dp === d ? ' active' : '')} onClick={() => setDp(d)} style={{ height: 38 }}>{d}</button>)}
             </div>
             <button className="btn btn-primary btn-block btn-lg" onClick={() => setFilters(false)}>Apply filters</button>
           </div>

@@ -3865,7 +3865,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _custPhoneCtrl = TextEditingController();
   final _custAddrCtrl = TextEditingController();
   String _query = '';
-  late bool _codeMode;
+  MenuViewMode _viewMode = MenuViewMode.colorGrid;
   OrderModel? _createdOrder;
   bool _creating = false;
   Timer? _closeTimer;
@@ -3873,7 +3873,9 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   @override
   void initState() {
     super.initState();
-    _codeMode = widget.startWithCodeMode;
+    _viewMode = widget.startWithCodeMode
+        ? MenuViewMode.shortCode
+        : MenuViewMode.colorGrid;
     debugPrint('[QB-WIZARD] initState: menuItems=${widget.menuItems.length} cats=${widget.menuItems.map((i) => i.category).toSet()}');
     _cartLines.addAll(widget.initialCartLines ?? const []);
     final validIds = widget.menuItems.map((item) => item.id).toSet();
@@ -4089,21 +4091,21 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     final rawQuery = _query.trim();
     final lowerQuery = rawQuery.toLowerCase();
     final selectedCategory = _selectedCategory;
-    final codeMode = _codeMode;
+    final isCode = _viewMode == MenuViewMode.shortCode;
     final result = _sortedMenu
         .where((i) {
           if (selectedCategory != '' && selectedCategory != 'All' && i.category != selectedCategory) {
             return false;
           }
           if (rawQuery.isEmpty) return true;
-          if (codeMode) {
+          if (isCode) {
             // Code mode: match the short code by prefix.
             return (i.shortCode?.toString() ?? '').startsWith(rawQuery);
           }
           return (_searchBlobs[i.id] ?? '').contains(lowerQuery);
         })
         .toList(growable: false);
-    debugPrint('[QB-WIZARD] _visibleItems: cat=$selectedCategory query=\'$rawQuery\' code=$codeMode count=${result.length}');
+    debugPrint('[QB-WIZARD] _visibleItems: cat=$selectedCategory query=\'$rawQuery\' mode=${_viewMode.name} count=${result.length}');
     if (result.isNotEmpty && result.length <= 5) {
       debugPrint('[QB-WIZARD] _visibleItems sample: ${result.map((i) => "${i.id}:${i.name}:cat=${i.category}").join(" | ")}');
     }
@@ -4185,9 +4187,9 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     });
   }
 
-  void _toggleCodeMode() {
+  void _setViewMode(MenuViewMode mode) {
     setState(() {
-      _codeMode = !_codeMode;
+      _viewMode = mode;
       _query = '';
       _searchCtrl.clear();
     });
@@ -4398,8 +4400,8 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                     totalQty: _totalQty,
                     searchCtrl: _searchCtrl,
                     query: _query,
-                    codeMode: _codeMode,
-                    quickBillMode: _codeMode,
+                    viewMode: _viewMode,
+                    quickBillMode: _viewMode == MenuViewMode.shortCode,
                     categoryCounts: _categoryCounts,
                     title: _tableLabel.isEmpty
                         ? (text.isBn ? 'মেনু' : 'Menu')
@@ -4409,8 +4411,12 @@ class _NewOrderPageState extends State<_NewOrderPage> {
                         : () => Navigator.pop(context),
                     leadingIsClose: _step <= firstReachableStep,
                     onSearchChanged: (value) => setState(() => _query = value),
-                    onToggleCodeMode: _toggleCodeMode,
-                    onToggleQuickBill: _toggleCodeMode,
+                    onViewModeChanged: _setViewMode,
+                    onToggleQuickBill: () => _setViewMode(
+                      _viewMode == MenuViewMode.shortCode
+                          ? MenuViewMode.colorGrid
+                          : MenuViewMode.shortCode,
+                    ),
                     onCodeSubmit: _onCodeSubmit,
                     onCategorySelected: (c) =>
                         setState(() => _selectedCategory = c),
