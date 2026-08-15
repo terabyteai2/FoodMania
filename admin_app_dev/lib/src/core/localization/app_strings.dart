@@ -1810,4 +1810,6 @@ class AppStrings {
       isBn ? 'বার্তা পাঠানো যায়নি' : 'Could not send message';
   String get supportChatNewMessage =>
       isBn ? 'নতুন সাপোর্ট বার্তা' : 'New support message';
+  String get supportChatMuteAudio => isBn ? 'ভয়েস বন্ধ করুন' : 'Mute voice';
+  String get supportChatUnmuteAudio => isBn ? 'ভয়েস চালু করুন' : 'Unmute voice';
 }

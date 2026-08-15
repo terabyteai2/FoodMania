@@ -101,6 +101,14 @@ class Settings(BaseSettings):
     SUPPORT_CHAT_LLM_API_KEY: str = ""
     SUPPORT_CHAT_LLM_MODEL: str = ""
 
+    # Proactive assistant messages (low-stock alerts, end-of-day summary).
+    # The LLM stays DeepSeek; Sarvam is used only for TTS.
+    SUPPORT_PROACTIVE_ENABLED: bool = True
+    SUPPORT_PROACTIVE_SCAN_SECONDS: int = 900  # scheduler cadence
+    SUPPORT_PROACTIVE_COOLDOWN_SECONDS: int = 600  # min gap between messages
+    SUPPORT_PROACTIVE_LOW_STOCK_COOLDOWN_HOURS: int = 12
+    SUPPORT_PROACTIVE_EOD_HOUR: int = 22  # end-of-day summary hour (BDT, UTC+6)
+
     # Facebook Messenger chatbot
     FACEBOOK_APP_ID: str = ""
     FACEBOOK_APP_SECRET: str = ""

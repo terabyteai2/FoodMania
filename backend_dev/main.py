@@ -17,6 +17,7 @@ from database import AsyncSessionLocal, create_tables
 from models import OutletSubscription
 from routers import admin, app_download, chatbot, customer, dashboard, devices, health, inventory, menu, orders, payments, platform, pos, sarvam_voice, software_downloads, support_chat, tenants, voice, voice_agent_tools, ws
 from services.facebook_chatbot import start_batch_worker, stop_batch_worker
+from services.support_proactive import proactive_loop
 from subscription_service import maybe_expire_subscription
 
 FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
@@ -125,6 +126,7 @@ async def lifespan(app: FastAPI):
         datefmt="%H:%M:%S",
     )
     expiry_task = asyncio.create_task(_expire_stale_subscriptions_loop())
+    proactive_task = asyncio.create_task(proactive_loop())
     start_batch_worker()
 
     public_url = _start_ngrok()
@@ -149,6 +151,11 @@ async def lifespan(app: FastAPI):
     expiry_task.cancel()
     try:
         await expiry_task
+    except asyncio.CancelledError:
+        pass
+    proactive_task.cancel()
+    try:
+        await proactive_task
     except asyncio.CancelledError:
         pass
     await stop_batch_worker()

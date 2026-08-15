@@ -140,7 +140,17 @@ async def _handle_client_message(ws: WebSocket, outlet_id: str, raw: str) -> Non
         payload = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return
-    if not isinstance(payload, dict) or payload.get("type") != "support_msg":
+    if not isinstance(payload, dict):
+        return
+    mtype = payload.get("type")
+    if mtype == "support_tts_mute":
+        data = payload.get("data")
+        if isinstance(data, dict):
+            from services.support_tts import set_muted
+
+            set_muted(outlet_id, bool(data.get("muted")))
+        return
+    if mtype != "support_msg":
         return
     data = payload.get("data")
     if not isinstance(data, dict):

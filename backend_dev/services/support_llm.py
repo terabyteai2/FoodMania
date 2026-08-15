@@ -219,6 +219,20 @@ def _contract_section() -> str:
     )
 
 
+def _proactive_section() -> str:
+    return (
+        "### PROACTIVE MESSAGES\n"
+        "Sometimes you start the conversation yourself: the user's message is "
+        "a trigger note (e.g. low-stock alert or end-of-day summary), not "
+        "something they typed. Reply with a SHORT warm Bangla message (up to "
+        "~120 words): state what happened, why it matters, and offer 1–2 "
+        "concrete next steps. Use a data tool (get_stock, get_daily_sales, "
+        "get_outlet_overview) when the trigger needs live numbers — never "
+        "invent figures. At most 2 actions or steps; most proactive replies "
+        "need none."
+    )
+
+
 def build_system_prompt() -> str:
     """Assembles the system prompt from pluggable sections.
 
@@ -233,6 +247,7 @@ def build_system_prompt() -> str:
         _identity_section(),
         _behavior_section(),
         _contract_section(),
+        _proactive_section(),
     ]
     return "\n\n".join(sections)
 
@@ -919,6 +934,9 @@ async def auto_reply(outlet_id: str) -> None:
                 outlet_id,
                 {"type": "support_msg", "data": _support_message_dict(message)},
             )
+            from services.support_tts import stream_support_audio
+
+            asyncio.create_task(stream_support_audio(outlet_id, message.id, reply))
             await _record_outcome(
                 trigger.id,
                 status=OUTCOME_REPLIED,
@@ -943,6 +961,86 @@ async def auto_reply(outlet_id: str) -> None:
         logger.error(
             "[support_llm] auto_reply failed for outlet %s: %s",
             outlet_id,
+            exc,
+            exc_info=True,
+        )
+
+
+# --- Proactive (scheduler-initiated) assistant messages ---
+
+_last_proactive_at: dict[str, float] = {}
+
+
+async def proactive_message(outlet_id: str, trigger: str, context: str = "") -> None:
+    """Generates and delivers one assistant message not tied to a user message.
+
+    Used by the proactive scheduler (low-stock alerts, end-of-day summaries).
+    Shares the in-flight guard with auto_reply so the two never overlap, and
+    applies its own longer cooldown so suggestions stay useful, not spammy.
+    Failures are logged, never raised.
+    """
+    try:
+        now = time.monotonic()
+        if _in_flight.get(outlet_id):
+            logger.info("[support_llm] proactive skipped outlet=%s trigger=%s reason=in_flight", outlet_id, trigger)
+            return
+        cooldown = settings.SUPPORT_PROACTIVE_COOLDOWN_SECONDS
+        if now - _last_proactive_at.get(outlet_id, 0.0) < cooldown:
+            logger.info("[support_llm] proactive skipped outlet=%s trigger=%s reason=cooldown", outlet_id, trigger)
+            return
+        config = _llm_config()
+        if config is None:
+            logger.error("[support_llm] proactive skipped outlet=%s trigger=%s reason=no_config", outlet_id, trigger)
+            return
+        _in_flight[outlet_id] = True
+        try:
+            base_url, api_key, model = config
+            system_prompt = build_system_prompt()
+            user_message = f"[trigger: {trigger}] {context}".strip()
+            parsed, tool_calls, used_tools = await _complete_with_tools(
+                system_prompt,
+                [{"role": "user", "content": user_message}],
+                outlet_id,
+            )
+            sanitized = sanitize_guide(parsed)
+            reply = sanitized["reply"][:SUPPORT_LLM_MAX_REPLY_CHARS]
+            if not reply:
+                logger.warning("[support_llm] proactive empty reply outlet=%s trigger=%s", outlet_id, trigger)
+                return
+            from routers.ws import _persist_support_message, _support_message_dict, manager
+
+            message = await _persist_support_message(
+                outlet_id=outlet_id,
+                role="server",
+                sender_name=ASSISTANT_NAME,
+                text=reply,
+                actions=sanitized.get("actions"),
+                steps=sanitized.get("steps"),
+            )
+            await manager.broadcast(
+                outlet_id,
+                {"type": "support_msg", "data": _support_message_dict(message)},
+            )
+            from services.support_tts import stream_support_audio
+
+            asyncio.create_task(stream_support_audio(outlet_id, message.id, reply))
+            _last_proactive_at[outlet_id] = time.monotonic()
+            logger.info(
+                "[support_llm] proactive delivered outlet=%s trigger=%s (%d chars, %d tool calls)",
+                outlet_id,
+                trigger,
+                len(reply),
+                tool_calls,
+            )
+        finally:
+            _in_flight[outlet_id] = False
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.error(
+            "[support_llm] proactive failed outlet=%s trigger=%s: %s",
+            outlet_id,
+            trigger,
             exc,
             exc_info=True,
         )

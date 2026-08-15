@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app_scope.dart';
 import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
+import '../../services/support_tts_controller.dart';
 import 'guided_tour.dart';
 import 'notification_center.dart';
 import 'tf_design_system.dart';
@@ -178,9 +179,11 @@ class SupportChatController extends ChangeNotifier {
   }
 
   /// Wires a long-lived host context (the shell) used for toast + overlay
-  /// insertion. Guarded by `mounted` at use sites.
+  /// insertion. Guarded by `mounted` at use sites. Also boots the spoken
+  /// assistant (loads persisted mute state and syncs it to the server).
   void attachHost(BuildContext context) {
     _hostContext = context;
+    unawaited(SupportTtsController.instance.attachHost(context));
   }
 
   void _refreshConnection() {
@@ -441,11 +444,13 @@ class _SupportChatOverlayState extends State<SupportChatOverlay> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onChanged);
+    SupportTtsController.instance.addListener(_onChanged);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
+    SupportTtsController.instance.removeListener(_onChanged);
     _input.dispose();
     super.dispose();
   }
@@ -583,13 +588,38 @@ class _Header extends StatelessWidget {
               TfText(strings.supportChatTitle, style: TfTextStyles.appBarTitle),
               const SizedBox(width: PosSpacing.sp2),
               _ConnectionDot(connected: controller.connected),
+              if (SupportTtsController.instance.speaking) ...[
+                const SizedBox(width: PosSpacing.sp2),
+                Icon(
+                  Icons.graphic_eq_rounded,
+                  size: 16,
+                  color: PosColors.primary,
+                ),
+              ],
             ],
           ),
-          TfIconButton(
-            icon: Icons.close_rounded,
-            tooltip: strings.supportChatTitle,
-            bare: true,
-            onPressed: controller.close,
+          Row(
+            children: [
+              TfIconButton(
+                icon: SupportTtsController.instance.muted
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
+                tooltip: SupportTtsController.instance.muted
+                    ? strings.supportChatUnmuteAudio
+                    : strings.supportChatMuteAudio,
+                bare: true,
+                onPressed: () {
+                  unawaited(SupportTtsController.instance
+                      .setMuted(!SupportTtsController.instance.muted));
+                },
+              ),
+              TfIconButton(
+                icon: Icons.close_rounded,
+                tooltip: strings.supportChatTitle,
+                bare: true,
+                onPressed: controller.close,
+              ),
+            ],
           ),
         ],
       ),
