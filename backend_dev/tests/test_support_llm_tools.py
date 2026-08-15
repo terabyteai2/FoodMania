@@ -5,6 +5,7 @@ columns swapped to plain JSON.
 """
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
@@ -481,3 +482,162 @@ async def test_get_outlet_info_reads_name_plan_and_tables(db_session):
     }
     missing = await tools.execute_tool("get_outlet_info", {}, "outlet-info-999")
     assert missing == {"ok": False, "error": "outlet not found"}
+
+
+# --- Stock-management proposals (never write; the app confirms) -----------
+
+
+async def _seed_proposal_stock(db_session):
+    async with db_session() as session:
+        _seed_stock(session, id="s1", outlet="outlet-1", name="Rice", quantity=10, unit="kg")
+        _seed_stock(session, id="s2", outlet="outlet-1", name="Chicken", quantity=3, unit="kg")
+        await session.commit()
+
+
+async def test_stock_in_proposal_matched(db_session):
+    await _seed_proposal_stock(db_session)
+
+    result = await tools.execute_tool(
+        "stock_in",
+        {"name": "Rice", "qty": 5, "totalCostBdt": 50, "unit": "kg"},
+        "outlet-1",
+    )
+    assert result["ok"] is True
+    assert result["category"] == "stock_in"
+    assert result["warnings"] == []
+    (line,) = result["items"]
+    assert line["nameEn"] == "Rice"
+    assert line["matchedInventoryItemId"] == "s1"
+    assert line["qty"] == 5.0
+    assert line["unit"] == "kg"
+    assert line["unitPriceBdt"] == 10.0
+    assert line["totalBdt"] == 50.0
+
+    async with db_session() as session:
+        item = await session.get(InventoryItem, "s1")
+    assert item.quantity == 10.0  # proposal never changed stock
+
+
+async def test_stock_in_proposal_case_insensitive_exact_name(db_session):
+    await _seed_proposal_stock(db_session)
+    result = await tools.execute_tool(
+        "stock_in", {"name": "rice", "qty": 2}, "outlet-1", account="manager"
+    )
+    assert result["ok"] is True
+    assert result["items"][0]["matchedInventoryItemId"] == "s1"
+
+
+async def test_stock_in_proposal_never_fuzzy_matches(db_session):
+    await _seed_proposal_stock(db_session)
+    result = await tools.execute_tool(
+        "stock_in", {"name": "Rice 5kg", "qty": 2}, "outlet-1"
+    )
+    assert result["ok"] is True
+    (line,) = result["items"]
+    assert line["matchedInventoryItemId"] is None  # not a substring match
+    assert line["nameEn"] == "Rice 5kg"
+    assert line["unit"] == "pcs"
+    assert line["unitPriceBdt"] == 0.0
+    assert result["warnings"] == ["new item — created on confirmation"]
+
+
+async def test_stock_in_proposal_errors(db_session):
+    await _seed_proposal_stock(db_session)
+
+    no_name = await tools.execute_tool("stock_in", {"qty": 5}, "outlet-1")
+    assert no_name["ok"] is False
+
+    zero_qty = await tools.execute_tool(
+        "stock_in", {"name": "Rice", "qty": 0}, "outlet-1"
+    )
+    assert zero_qty["ok"] is False
+
+    negative = await tools.execute_tool(
+        "stock_in", {"name": "Rice", "qty": -3}, "outlet-1"
+    )
+    assert negative["ok"] is False
+
+
+async def test_stock_count_proposal_matched_and_unmatched(db_session):
+    await _seed_proposal_stock(db_session)
+
+    matched = await tools.execute_tool(
+        "stock_count", {"name": "Rice", "qty": 7}, "outlet-1"
+    )
+    assert matched["ok"] is True
+    assert matched["category"] == "count"
+    assert matched["countDate"] == TODAY.isoformat()
+    (line,) = matched["items"]
+    assert line["matchedInventoryItemId"] == "s1"
+    assert line["qty"] == 7.0
+    assert line["unit"] == "kg"
+
+    with_date = await tools.execute_tool(
+        "stock_count",
+        {"name": "Rice", "qty": 7, "countDate": "2026-01-05"},
+        "outlet-1",
+    )
+    assert with_date["countDate"] == "2026-01-05"
+
+    bad_date = await tools.execute_tool(
+        "stock_count", {"name": "Rice", "qty": 7, "countDate": "bogus"}, "outlet-1"
+    )
+    assert bad_date["ok"] is False
+
+    unknown = await tools.execute_tool(
+        "stock_count", {"name": "Onion", "qty": 7}, "outlet-1"
+    )
+    assert unknown["ok"] is False
+
+    async with db_session() as session:
+        item = await session.get(InventoryItem, "s1")
+    assert item.quantity == 10.0  # proposal never changed stock
+
+
+async def test_execute_tool_gates_management_tools(db_session):
+    await _seed_proposal_stock(db_session)
+
+    args = {"name": "Rice", "qty": 2}
+    denied = await tools.execute_tool("stock_in", args, "outlet-1", account=SimpleNamespace(role="waiter"))
+    assert denied == {"ok": False, "error": "Only the owner or manager can manage stock."}
+    denied_role = await tools.execute_tool("stock_count", args, "outlet-1", account="cashier")
+    assert denied_role["ok"] is False
+
+    as_manager = await tools.execute_tool("stock_in", args, "outlet-1", account=SimpleNamespace(role="manager"))
+    assert as_manager["ok"] is True
+    as_owner = await tools.execute_tool("stock_count", args, "outlet-1", account=SimpleNamespace(role="owner"))
+    assert as_owner["ok"] is True
+    bootstrap = await tools.execute_tool("stock_in", args, "outlet-1")
+    assert bootstrap["ok"] is True
+    system = await tools.execute_tool("stock_in", args, "outlet-1", account="system")
+    assert system["ok"] is False
+
+    read_tools_open = await tools.execute_tool(
+        "get_stock", {"query": None, "lowStockOnly": False, "limit": 20},
+        "outlet-1",
+        account=SimpleNamespace(role="waiter"),
+    )
+    assert read_tools_open["ok"] is True
+
+
+async def test_stock_float_arguments_clamp_and_validate():
+    spec = tools.TOOLS["stock_in"]
+    cleaned = tools.validate_arguments(
+        spec,
+        {"name": "Rice", "qty": "3.5", "totalCostBdt": 99999999999, "hack": 1},
+    )
+    assert cleaned["qty"] == 3.5
+    assert cleaned["totalCostBdt"] == 1_000_000_000.0
+    assert "hack" not in cleaned
+    assert cleaned["unit"] is None
+
+    schema = tools.tools_schema()
+    stock_in_schema = next(
+        t for t in schema if t["function"]["name"] == "stock_in"
+    )["function"]["parameters"]["properties"]
+    assert stock_in_schema["qty"] == {
+        "type": "number",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 1_000_000,
+    }

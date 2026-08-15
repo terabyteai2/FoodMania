@@ -42,6 +42,7 @@ SUPPORT_LLM_MAX_HISTORY = 2
 SUPPORT_LLM_COOLDOWN_SECONDS = 3.0
 SUPPORT_LLM_MAX_ACTIONS = 3
 SUPPORT_LLM_MAX_STEPS = 4
+SUPPORT_LLM_MAX_PROPOSAL_ITEMS = 50
 SUPPORT_LLM_MAX_TOOL_ITERATIONS = 4
 SUPPORT_LLM_MAX_REPLY_CHARS = 1200
 SUPPORT_LLM_MAX_ATTEMPTS = 3
@@ -192,6 +193,24 @@ def _contract_section() -> str:
         "keep calling tools until you have what you need. Guide tip: before "
         "emitting steps or actions, always call get_guide_deeplinks — its "
         "results are the only valid targets.\n"
+        "### STOCK MANAGEMENT\n"
+        "stock_in and stock_count are proposal tools for the OWNER or "
+        "MANAGER only. They NEVER change stock — the user confirms the "
+        "proposal in the app. Follow this protocol: (1) call get_stock "
+        "first and copy item names from its result VERBATIM — never guess "
+        "or approximate a name; (2) call the proposal tool once per item "
+        "(multiple calls in one message are fine) with the exact name and "
+        "the quantity the user stated — if the user gave a total cost, "
+        "pass totalCostBdt, never compute a price yourself; (3) reply "
+        "restating every item and quantity, explain that nothing has been "
+        "changed yet, and attach ONE action with target "
+        "\"screen:stock_in\" (or \"screen:stock_count\") whose \"proposal\" "
+        "carries the category and items from the tool results so the user "
+        "can review and confirm; (4) after the user confirms in the app "
+        "and reports back, confirm what changed. If the user is not the "
+        "owner/manager, or the item name is not in stock for stock_count, "
+        "say so plainly and offer the guide path instead. A name missing "
+        "from stock_in becomes a new item on confirmation — tell the user.\n"
         "### ANSWER FORMAT\n"
         "End the exchange by writing ONLY a JSON object as your final "
         "content: {\"reply\": string, \"actions\": [{\"label\": string, "
@@ -202,7 +221,10 @@ def _contract_section() -> str:
         '- "reply" is REQUIRED: always a non-empty plain conversational '
         "message, in Bangla by default (English only when the user writes in "
         "English) — no markdown.\n"
-        '- "actions" are one-tap shortcut buttons.\n'
+        '- "actions" are one-tap shortcut buttons. An action may carry a '
+        '"proposal" object (category: "stock_in"|"count" + items) only for '
+        'the stock-management flow described above — the app opens the '
+        'review screen with those exact lines.\n'
         '- "steps" are an ordered guided walkthrough (max 4). "target" '
         'auto-navigates ("tab:<name>", "screen:<name>", "modal:<name>", '
         '"highlight:<spot>"); "spot" lights up the exact element the user '
@@ -255,6 +277,20 @@ def build_system_prompt() -> str:
 # --- Reply sanitization (never trust the model's targets) ---
 
 
+PROPOSAL_ITEM_KEYS = {
+    "nameEn": str,
+    "nameBn": str,
+    "qty": (int, float),
+    "unit": str,
+    "unitPriceBdt": (int, float),
+    "totalBdt": (int, float),
+    "matchedInventoryItemId": str,
+}
+PROPOSAL_ITEM_TEXT_KEYS = frozenset(
+    {"nameEn", "nameBn", "unit", "matchedInventoryItemId"}
+)
+
+
 def _clean_step(raw: object) -> dict | None:
     if not isinstance(raw, dict):
         return None
@@ -282,7 +318,48 @@ def _clean_action(raw: object) -> dict | None:
     target = str(raw.get("target") or "").strip()
     if not label or not target or not _valid_target(target):
         return None
-    return {"label": label, "target": target}
+    action: dict = {"label": label, "target": target}
+    proposal = _clean_proposal(raw.get("proposal"))
+    if proposal:
+        action["proposal"] = proposal
+    return action
+
+
+def _clean_proposal(raw: object) -> dict | None:
+    """Validates a stock proposal attached to an action (stock-scan wire
+    format): category (stock_in|count) plus capped, type-checked lines."""
+    if not isinstance(raw, dict):
+        return None
+    category = str(raw.get("category") or "").strip()
+    if category not in ("stock_in", "count"):
+        return None
+    raw_items = raw.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        return None
+    items: list[dict] = []
+    for raw_line in raw_items[:SUPPORT_LLM_MAX_PROPOSAL_ITEMS]:
+        if not isinstance(raw_line, dict):
+            continue
+        line: dict = {}
+        for key, types in PROPOSAL_ITEM_KEYS.items():
+            value = raw_line.get(key)
+            if isinstance(value, bool) or not isinstance(value, types):
+                continue
+            if key in PROPOSAL_ITEM_TEXT_KEYS:
+                text = str(value).strip()
+                if text:
+                    line[key] = text
+            else:
+                line[key] = round(float(value), 2)
+        if "qty" in line and ("nameEn" in line or "matchedInventoryItemId" in line):
+            items.append(line)
+    if not items:
+        return None
+    proposal: dict = {"category": category, "items": items}
+    count_date = str(raw.get("countDate") or "").strip()
+    if count_date:
+        proposal["countDate"] = count_date[:10]
+    return proposal
 
 
 def sanitize_guide(parsed: dict) -> dict:
@@ -567,6 +644,7 @@ async def _complete_with_tools(
     system_prompt: str,
     history: list[dict],
     outlet_id: str,
+    account=None,
 ) -> tuple[dict, int, list[str]]:
     """Conventional agent loop over the native function-calling protocol.
 
@@ -613,7 +691,7 @@ async def _complete_with_tools(
             if arguments is None:
                 result = {"ok": False, "error": "invalid tool arguments JSON"}
             else:
-                result = await execute_tool(name, arguments, outlet_id)
+                result = await execute_tool(name, arguments, outlet_id, account=account)
             messages.append(
                 _tool_result_message(str(call.get("id") or ""), result)
             )
@@ -806,14 +884,16 @@ async def diagnostics(outlet_id: str) -> dict:
     }
 
 
-async def auto_reply(outlet_id: str) -> None:
+async def auto_reply(outlet_id: str, account=None) -> None:
     """Generates one assistant reply for the outlet's latest client message.
 
-    Fire-and-forget friendly: every failure is logged, never raised, and the
-    outcome (replied / skipped / failed + reason) is recorded on the
-    triggering client message so missing replies are diagnosable. A per-outlet
-    in-flight guard prevents overlapping replies and a short cooldown stops
-    message spam from queuing repeated LLM calls.
+    ``account`` is the sender's AdminAccount (resolved by the caller from
+    the device token) or None; it gates the management-only stock proposal
+    tools. Fire-and-forget friendly: every failure is logged, never raised,
+    and the outcome (replied / skipped / failed + reason) is recorded on
+    the triggering client message so missing replies are diagnosable. A
+    per-outlet in-flight guard prevents overlapping replies and a short
+    cooldown stops message spam from queuing repeated LLM calls.
     """
     try:
         rows = await _load_history(outlet_id)
@@ -852,6 +932,7 @@ async def auto_reply(outlet_id: str) -> None:
                     system_prompt,
                     _history_to_messages(rows),
                     outlet_id,
+                    account=account,
                 )
             except Exception as exc:
                 reason, error = _classify_llm_error(exc)
@@ -1001,6 +1082,7 @@ async def proactive_message(outlet_id: str, trigger: str, context: str = "") -> 
                 system_prompt,
                 [{"role": "user", "content": user_message}],
                 outlet_id,
+                account="system",
             )
             sanitized = sanitize_guide(parsed)
             reply = sanitized["reply"][:SUPPORT_LLM_MAX_REPLY_CHARS]

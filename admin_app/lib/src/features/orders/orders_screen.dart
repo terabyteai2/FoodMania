@@ -397,10 +397,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                           searchQuery: searchQuery,
                           onPrintBill: (o) => _printBill(context, o),
                           onPrintKot: (o) => _printKot(context, o),
-                          onOpen: null,
+                          onOpen: (o) => _openEditOrderSheet(context, o),
                           onStatus: (o, s) => _changeStatus(context, o, s),
-                          onCompletedLongPress: (o) =>
-                              _showCompletedOrderActions(context, o),
                           seeAllCompleted: _seeAllCompleted,
                           onToggleShiftScope: () => setState(
                             () => _seeAllCompleted = !_seeAllCompleted,
@@ -785,55 +783,6 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   Future<void> _openEditOrderSheet(BuildContext context, OrderModel order) =>
       openEditOrderSheet(context, order);
-
-  Future<void> _showCompletedOrderActions(
-    BuildContext context,
-    OrderModel order,
-  ) async {
-    final text = AppScope.read(context).strings;
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_outlined, color: PosColors.slate),
-              title: TfText(text.isBn ? 'সম্পাদনা' : 'Edit'),
-              onTap: () {
-                Navigator.pop(context);
-                _openEditOrderSheet(context, order);
-              },
-            ),
-            Divider(height: 1, color: PosColors.line),
-            ListTile(
-              leading: const Icon(Icons.print_outlined, color: PosColors.slate),
-              title: TfText(text.reprintAction),
-              onTap: () {
-                Navigator.pop(context);
-                _printBill(context, order);
-              },
-            ),
-            Divider(height: 1, color: PosColors.line),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline_rounded,
-                color: PosColors.danger,
-              ),
-              title: TfText(
-                text.isBn ? 'মুছে ফেলুন' : 'Delete',
-                style: TfTextStyles.body.copyWith(color: PosColors.danger),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _changeStatus(context, order, OrderStatus.rejected);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _showPendingOrderDetails(
     BuildContext context,
@@ -1221,7 +1170,6 @@ class _OrderList extends StatelessWidget {
     required this.onPrintKot,
     required this.onOpen,
     required this.onStatus,
-    this.onCompletedLongPress,
     this.showDateHeaders = true,
     this.completedTab = false,
     this.shiftStartMinute,
@@ -1242,7 +1190,6 @@ class _OrderList extends StatelessWidget {
   final void Function(OrderModel) onPrintKot;
   final void Function(OrderModel)? onOpen;
   final void Function(OrderModel, OrderStatus) onStatus;
-  final void Function(OrderModel)? onCompletedLongPress;
 
   /// Whether to group cards under day headers. Off for Ongoing (no dates there).
   final bool showDateHeaders;
@@ -1375,9 +1322,6 @@ class _OrderList extends StatelessWidget {
                       onPrintKot: () => onPrintKot(orders[i]),
                       onOpen: onOpen == null ? null : () => onOpen!(orders[i]),
                       onStatus: (s) => onStatus(orders[i], s),
-                      onCompletedLongPress: onCompletedLongPress == null
-                          ? null
-                          : () => onCompletedLongPress!(orders[i]),
                     );
                   },
                 )
@@ -1413,9 +1357,6 @@ class _OrderList extends StatelessWidget {
                             onPrintKot: () => onPrintKot(o),
                             onOpen: onOpen == null ? null : () => onOpen!(o),
                             onStatus: (s) => onStatus(o, s),
-                            onCompletedLongPress: onCompletedLongPress == null
-                                ? null
-                                : () => onCompletedLongPress!(o),
                           ),
                         ),
                         _FooterEntry() => _LoadMoreFooter(loading: loadingMore),
@@ -1687,7 +1628,6 @@ class _OrderCard extends StatefulWidget {
     required this.onPrintKot,
     required this.onOpen,
     required this.onStatus,
-    this.onCompletedLongPress,
     this.dense = false,
     super.key,
   });
@@ -1697,7 +1637,6 @@ class _OrderCard extends StatefulWidget {
   final VoidCallback onPrintKot;
   final VoidCallback? onOpen;
   final ValueChanged<OrderStatus> onStatus;
-  final VoidCallback? onCompletedLongPress;
 
   /// Fixed-extent grid tile (width ≥ 700): completed cards cap their item
   /// rows statically because the tile cannot grow.
@@ -1734,9 +1673,7 @@ class _OrderCardState extends State<_OrderCard> {
         name: 'orders.cardOpen',
         child: InkWell(
           onTap: widget.onOpen,
-          onLongPress: isCompleted
-              ? widget.onCompletedLongPress
-              : (canPrint && isAccepted ? widget.onPrintBill : null),
+          onLongPress: canPrint && isAccepted ? widget.onPrintBill : null,
           child: Padding(
             padding: const EdgeInsets.all(PosDensity.cardPad),
             child: isCompleted
@@ -3865,7 +3802,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
   final _custPhoneCtrl = TextEditingController();
   final _custAddrCtrl = TextEditingController();
   String _query = '';
-  MenuViewMode _viewMode = MenuViewMode.colorGrid;
+  MenuViewMode _viewMode = MenuViewMode.imageGrid;
   OrderModel? _createdOrder;
   bool _creating = false;
   Timer? _closeTimer;
@@ -3875,7 +3812,7 @@ class _NewOrderPageState extends State<_NewOrderPage> {
     super.initState();
     _viewMode = widget.startWithCodeMode
         ? MenuViewMode.shortCode
-        : MenuViewMode.colorGrid;
+        : MenuViewMode.imageGrid;
     debugPrint('[QB-WIZARD] initState: menuItems=${widget.menuItems.length} cats=${widget.menuItems.map((i) => i.category).toSet()}');
     _cartLines.addAll(widget.initialCartLines ?? const []);
     final validIds = widget.menuItems.map((item) => item.id).toSet();

@@ -3096,6 +3096,7 @@ class TfPeriodSelector extends StatelessWidget {
     required this.onChanged,
     this.customValue,
     this.customIcon,
+    this.compact = false,
     super.key,
   });
 
@@ -3105,14 +3106,18 @@ class TfPeriodSelector extends StatelessWidget {
   final String? customValue;
   final IconData? customIcon;
 
+  /// Slimmer variant for tight rows (e.g. next to inline action buttons):
+  /// thinner padding and smaller label/icon.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final hasIconSegment = customValue != null && customIcon != null;
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.all(compact ? 3 : 4),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(PosRadii.tile),
+        borderRadius: BorderRadius.circular(PosRadii.card),
         border: Border.all(color: PosColors.line, width: 1),
         boxShadow: PosShadows.soft,
       ),
@@ -3125,10 +3130,10 @@ class TfPeriodSelector extends StatelessWidget {
                 onTap: () => onChanged(opt.$1),
                 behavior: HitTestBehavior.opaque,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: EdgeInsets.symmetric(vertical: compact ? 6 : 8),
                   decoration: BoxDecoration(
                     color: on ? PosColors.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(PosRadii.tag),
+                    borderRadius: BorderRadius.circular(PosRadii.card),
                   ),
                   alignment: Alignment.center,
                   child: FittedBox(
@@ -3140,7 +3145,7 @@ class TfPeriodSelector extends StatelessWidget {
                           opt.$2,
                           maxLines: 1,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: compact ? 12 : 13,
                             fontWeight: on ? FontWeight.w700 : FontWeight.w600,
                             color: on ? PosColors.accentInk : PosColors.textSec,
                             letterSpacing: -0.1,
@@ -3170,18 +3175,18 @@ class TfPeriodSelector extends StatelessWidget {
               onTap: () => onChanged(customValue!),
               behavior: HitTestBehavior.opaque,
               child: Container(
-                width: 40,
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                width: compact ? 34 : 40,
+                padding: EdgeInsets.symmetric(vertical: compact ? 6 : 8),
                 decoration: BoxDecoration(
                   color: value == customValue
                       ? PosColors.primary
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(PosRadii.tag),
+                  borderRadius: BorderRadius.circular(PosRadii.card),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
                   customIcon,
-                  size: 16,
+                  size: compact ? 15 : 16,
                   color: value == customValue
                       ? PosColors.accentInk
                       : PosColors.textSec,

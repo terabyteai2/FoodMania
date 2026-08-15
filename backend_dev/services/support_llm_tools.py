@@ -1,4 +1,4 @@
-"""Read-only business-data tools for Volt Assistant (the in-app support LLM).
+"""Business-data tools for Volt Assistant (the in-app support LLM).
 
 API-native function calling (the conventional agent-loop format, see
 services/support_llm.py): ``tools_schema()`` derives OpenAI-style ``tools``
@@ -7,10 +7,17 @@ JSON schemas from the [TOOLS] registry; the model replies with
 JSON result as a ``role: "tool"`` message, and loops until the model
 returns a final reply.
 
-Every tool is READ-ONLY, outlet-scoped, and capped — never trust the model's
-names or arguments. To add a function: write an async handler with the
-signature ``async def handler(outlet_id: str, args: dict) -> dict`` and
-register a [ToolSpec] in [TOOLS].
+Most tools are READ-ONLY, outlet-scoped, and capped — never trust the model's
+names or arguments. The stock-management tools (``stock_in``,
+``stock_count``) never write either: they resolve items by EXACT name
+(no fuzzy matching) and return a *proposal* the client shows in the
+stock-scan review flow; only the manager's confirmation in the app applies
+it through the existing inventory APIs. They are management-only: the model
+may only use them for an owner/manager account (see [execute_tool]).
+
+To add a function: write an async handler with the signature
+``async def handler(outlet_id: str, args: dict) -> dict`` and register a
+[ToolSpec] in [TOOLS].
 """
 
 import json
@@ -41,6 +48,8 @@ ORDER_STATUSES = {
     "cancelled",
 }
 COMPLETED_STATUSES = ("completed", "served")
+
+MANAGEMENT_ROLES = frozenset({"owner", "manager"})
 
 # --- Overlay-guide deeplink vocabulary (see data/support_guide_deeplinks.json) ---
 
@@ -97,22 +106,47 @@ class ToolSpec:
     """Declarative tool registration.
 
     ``args`` maps argument name -> rules:
-      - kind: "int" | "bool" | "str" (default "str")
+      - kind: "int" | "float" | "bool" | "str" (default "str")
       - default: used when the model omits the argument
-      - min / max: int clamps; max_len: string truncation
+      - min / max: int/float clamps; max_len: string truncation
+
+    ``management_only`` marks tools that must only run for an owner/manager
+    account; [execute_tool] enforces it.
     """
 
-    def __init__(self, name: str, description: str, handler, args: dict | None = None):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        handler,
+        args: dict | None = None,
+        *,
+        management_only: bool = False,
+    ):
         self.name = name
         self.description = description
         self.handler = handler
         self.args = args or {}
+        self.management_only = management_only
 
 
 def _clean_int(raw, rules: dict) -> int:
     default = int(rules.get("default", 0))
     try:
         value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    if "min" in rules:
+        value = max(rules["min"], value)
+    if "max" in rules:
+        value = min(rules["max"], value)
+    return value
+
+
+def _clean_float(raw, rules: dict) -> float:
+    default = float(rules.get("default", 0))
+    try:
+        value = round(float(raw), 2)
     except (TypeError, ValueError):
         return default
     if "min" in rules:
@@ -150,6 +184,8 @@ def validate_arguments(spec: ToolSpec, raw) -> dict:
         kind = rules.get("kind", "str")
         if kind == "int":
             cleaned[name] = _clean_int(raw.get(name), rules)
+        elif kind == "float":
+            cleaned[name] = _clean_float(raw.get(name), rules)
         elif kind == "bool":
             cleaned[name] = _clean_bool(raw.get(name), rules)
         else:
@@ -162,6 +198,12 @@ def _arg_schema(rules: dict) -> dict:
     kind = rules.get("kind", "str")
     if kind == "int":
         schema: dict = {"type": "integer"}
+        if "min" in rules:
+            schema["minimum"] = rules["min"]
+        if "max" in rules:
+            schema["maximum"] = rules["max"]
+    elif kind == "float":
+        schema: dict = {"type": "number"}
         if "min" in rules:
             schema["minimum"] = rules["min"]
         if "max" in rules:
@@ -486,6 +528,150 @@ async def _stock(outlet_id: str, args: dict) -> dict:
     }
 
 
+def _normalize_lookup_key(value: str) -> str:
+    """Lowercase alphanumeric key for EXACT-name comparison only.
+
+    Not fuzzy matching: no substring, no aliases, no transliteration. The
+    model is expected to copy names verbatim from get_stock; this only
+    absorbs case/punctuation differences from the transcript.
+    """
+    return "".join(ch for ch in (value or "").strip().lower() if ch.isalnum())
+
+
+async def _find_item_by_exact_name(session, outlet_id: str, name: str):
+    from models import InventoryItem
+
+    key = _normalize_lookup_key(name)
+    if not key:
+        return None
+    rows = (
+        await session.execute(
+            select(InventoryItem).where(
+                InventoryItem.outlet_id == outlet_id,
+                InventoryItem.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for item in rows:
+        if _normalize_lookup_key(item.name) == key:
+            return item
+    return None
+
+
+async def _stock_in(outlet_id: str, args: dict) -> dict:
+    """Stock-in proposal: add a quantity to an inventory item by exact name.
+
+    Resolves the item with EXACT name equality only (the model copies the
+    name from get_stock) and returns a ``stock_in`` proposal in the
+    stock-scan wire format — this tool never changes stock. The manager
+    reviews and confirms the proposal in the app, which applies it through
+    the same inventory APIs the stock scan uses. Names not in stock become
+    new-item lines that the app creates on confirmation (add-to-stock).
+    """
+    from database import AsyncSessionLocal
+
+    name = (args.get("name") or "").strip()
+    qty = args.get("qty") or 0.0
+    if not name:
+        return {
+            "ok": False,
+            "error": "item name is required — copy the exact name from get_stock",
+        }
+    if qty <= 0:
+        return {"ok": False, "error": "qty must be greater than zero"}
+    unit = (args.get("unit") or "").strip() or None
+    total_cost = args.get("totalCostBdt") or 0.0
+    supplier_name = (args.get("supplierName") or "").strip() or None
+    note = (args.get("note") or "").strip() or None
+
+    async with AsyncSessionLocal() as session:
+        item = await _find_item_by_exact_name(session, outlet_id, name)
+
+    warnings: list[str] = []
+    if item is not None:
+        unit_price = (
+            round(total_cost / qty, 2) if total_cost > 0 else _to_float(item.cost_per_unit)
+        )
+        item_unit = item.unit or "pcs"
+        if unit and _normalize_lookup_key(unit) != _normalize_lookup_key(item_unit):
+            warnings.append(f"unit '{unit}' differs from '{item_unit}'")
+        line = {
+            "nameEn": item.name,
+            "nameBn": None,
+            "qty": round(qty, 2),
+            "unit": item_unit,
+            "unitPriceBdt": unit_price,
+            "totalBdt": round(total_cost if total_cost > 0 else unit_price * qty, 2),
+            "matchedInventoryItemId": item.id,
+        }
+    else:
+        line = {
+            "nameEn": name,
+            "nameBn": None,
+            "qty": round(qty, 2),
+            "unit": unit or "pcs",
+            "unitPriceBdt": round(total_cost / qty, 2) if total_cost > 0 else 0.0,
+            "totalBdt": round(total_cost, 2),
+            "matchedInventoryItemId": None,
+        }
+        warnings.append("new item — created on confirmation")
+    return {"ok": True, "category": "stock_in", "items": [line], "warnings": warnings}
+
+
+async def _stock_count(outlet_id: str, args: dict) -> dict:
+    """Stock-count proposal: record the physical count for a day by exact name.
+
+    Resolves the item with EXACT name equality only and returns a ``count``
+    proposal in the stock-scan wire format — this tool never changes stock.
+    The manager reviews and confirms the proposal in the app, which applies
+    it through the same inventory APIs the stock scan uses. Unknown items
+    are rejected: counts never create items.
+    """
+    from database import AsyncSessionLocal
+
+    name = (args.get("name") or "").strip()
+    qty = args.get("qty") or 0.0
+    if not name:
+        return {
+            "ok": False,
+            "error": "item name is required — copy the exact name from get_stock",
+        }
+    if qty < 0:
+        return {"ok": False, "error": "qty cannot be negative"}
+    raw_date = (args.get("countDate") or "").strip() or None
+    count_date = _today_bdt().isoformat()
+    if raw_date:
+        try:
+            count_date = date.fromisoformat(raw_date).isoformat()
+        except ValueError:
+            return {"ok": False, "error": "countDate must be YYYY-MM-DD"}
+
+    async with AsyncSessionLocal() as session:
+        item = await _find_item_by_exact_name(session, outlet_id, name)
+    if item is None:
+        return {
+            "ok": False,
+            "error": f"'{name}' is not in stock — check get_stock; counts never create items",
+        }
+    return {
+        "ok": True,
+        "category": "count",
+        "countDate": count_date,
+        "items": [
+            {
+                "nameEn": item.name,
+                "nameBn": None,
+                "qty": round(qty, 2),
+                "unit": item.unit or "pcs",
+                "unitPriceBdt": 0.0,
+                "totalBdt": 0.0,
+                "matchedInventoryItemId": item.id,
+            }
+        ],
+        "warnings": [],
+    }
+
+
 async def _daily_sales(outlet_id: str, args: dict) -> dict:
     """Per-day sales totals (completed orders only) over a day window."""
     from database import AsyncSessionLocal
@@ -637,6 +823,45 @@ TOOLS: dict[str, ToolSpec] = {
             "limit": {"kind": "int", "default": TOOL_RESULT_LIMIT, "min": 1, "max": TOOL_RESULT_MAX},
         },
     ),
+    "stock_in": ToolSpec(
+        name="stock_in",
+        description=(
+            "PROPOSES adding a quantity to an inventory item by EXACT name "
+            "(call get_stock first and copy the name verbatim). Returns a "
+            "stock_in proposal the manager reviews and confirms in the app — "
+            "this tool never changes stock. A name that is not in stock "
+            "becomes a new-item line that gets created on confirmation "
+            "(add to stock). Owner/manager only."
+        ),
+        handler=_stock_in,
+        management_only=True,
+        args={
+            "name": {"kind": "str", "default": None, "max_len": 200},
+            "qty": {"kind": "float", "default": 0, "min": 0, "max": 1_000_000},
+            "unit": {"kind": "str", "default": None, "max_len": 20},
+            "totalCostBdt": {"kind": "float", "default": 0, "min": 0, "max": 1_000_000_000},
+            "supplierName": {"kind": "str", "default": None, "max_len": 100},
+            "note": {"kind": "str", "default": None, "max_len": 200},
+        },
+    ),
+    "stock_count": ToolSpec(
+        name="stock_count",
+        description=(
+            "PROPOSES recording the physical count of an inventory item for "
+            "a day by EXACT name (call get_stock first and copy the name "
+            "verbatim). Returns a count proposal the manager reviews and "
+            "confirms in the app — this tool never changes stock. "
+            "countDate defaults to today (Bangladesh); names not in stock "
+            "are rejected, counts never create items. Owner/manager only."
+        ),
+        handler=_stock_count,
+        management_only=True,
+        args={
+            "name": {"kind": "str", "default": None, "max_len": 200},
+            "qty": {"kind": "float", "default": 0, "min": 0, "max": 1_000_000},
+            "countDate": {"kind": "str", "default": None, "max_len": 10},
+        },
+    ),
     "get_daily_sales": ToolSpec(
         name="get_daily_sales",
         description=(
@@ -651,12 +876,26 @@ TOOLS: dict[str, ToolSpec] = {
 }
 
 
-async def execute_tool(name: str, raw_args, outlet_id: str) -> dict:
+async def execute_tool(name: str, raw_args, outlet_id: str, account=None) -> dict:
     """Validates and runs one tool. Never raises; failures return an
-    ``{"ok": False, "error": ...}`` dict so the model can recover."""
+    ``{"ok": False, "error": ...}`` dict so the model can recover.
+
+    ``account`` is the AdminAccount ORM object (or None for bootstrap /
+    non-account callers). Management-only tools run for an owner/manager
+    account or for bootstrap callers — mirroring the inventory API's
+    ``_require_inventory_account`` semantics; the final authority on the
+    apply side stays those same management-only endpoints.
+    """
     spec = TOOLS.get(name)
     if spec is None:
         return {"ok": False, "error": f"unknown tool '{name}'"}
+    if spec.management_only:
+        role = account if isinstance(account, str) else getattr(account, "role", None)
+        if role is not None and role not in MANAGEMENT_ROLES:
+            return {
+                "ok": False,
+                "error": "Only the owner or manager can manage stock.",
+            }
     try:
         args = validate_arguments(spec, raw_args)
         return await spec.handler(outlet_id, args)

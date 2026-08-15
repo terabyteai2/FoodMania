@@ -698,6 +698,12 @@ class SyncService {
         return;
       }
 
+      if (type == 'support_audio' || type == 'support_audio_done') {
+        _onRemoteEvent?.call(event);
+        _addLog('Cloud realtime support audio received.');
+        return;
+      }
+
       if (type == 'menu_scan_progress') {
         _onRemoteEvent?.call(event);
         _addLog('Cloud realtime menu scan progress received.');

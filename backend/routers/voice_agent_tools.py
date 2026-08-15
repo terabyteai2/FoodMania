@@ -3,9 +3,12 @@
 These endpoints back the agent's API tools and lifecycle hooks so the hosted
 Voice Agents runtime can create real orders in the Rastarant backend:
 
-- POST /api/voice-agent/session  (on_start hook)   -> outlet context + menu
-- POST /api/voice-agent/order    (place_order tool)-> validates + persists order
-- POST /api/voice-agent/end      (on_end hook)     -> transcript/outcome log
+- POST /api/voice-agent/session   (on_start hook)   -> outlet context + menu
+- POST /api/voice-agent/order     (place_order tool)-> validates + persists order
+- POST /api/voice-agent/stock/in  (stock_in tool)   -> restock by name (+ create)
+- POST /api/voice-agent/stock/count (stock_count tool) -> physical count for a day
+- POST /api/voice-agent/stock/items (add_stock_item tool) -> create item if missing
+- POST /api/voice-agent/end       (on_end hook)     -> transcript/outcome log
 
 All requests must carry the shared secret as the X-Voice-Agent-Secret header;
 the platform sends it from a secret stored in the Sarvam workspace. Requests
@@ -14,6 +17,7 @@ originate from Sarvam's servers (allowlist 4.213.167.70 in the firewall).
 
 import logging
 import uuid
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -22,9 +26,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
-from models import MenuItem, Outlet
+from models import DailyStockCount, InventoryItem, MenuItem, Outlet
+from routers.inventory import (
+    BDT_OFFSET,
+    COMMON_INVENTORY_NAME_BN,
+    _apply_stock_adjustment,
+    _normalize_category,
+    _normalize_name_key,
+    _normalize_unit,
+)
 from routers.orders import create_order_record
-from schemas import OrderLineItemPayload, OrderPayload, ok
+from schemas import OrderLineItemPayload, OrderPayload, StockAdjustmentPayload, ok
 from services.order_serial import format_serial
 
 logger = logging.getLogger(__name__)
@@ -74,6 +86,75 @@ async def _load_menu_items(db: AsyncSession, outlet_id: str) -> list[MenuItem]:
         .scalars()
         .all()
     )
+
+
+async def _load_inventory_items(db: AsyncSession, outlet_id: str) -> list[InventoryItem]:
+    return (
+        (
+            await db.execute(
+                select(InventoryItem).where(
+                    InventoryItem.outlet_id == outlet_id,
+                    InventoryItem.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+# Spoken names come from STT, so matching is fuzzy. Build the common
+# English↔Bengali inventory-name table once (see routers/inventory.py).
+_COMMON_BN_BY_EN = {
+    _normalize_name_key(en): _normalize_name_key(bn)
+    for en, bn in COMMON_INVENTORY_NAME_BN.items()
+}
+_COMMON_EN_BY_BN: dict[str, list[str]] = {}
+for _en, _bn in COMMON_INVENTORY_NAME_BN.items():
+    _COMMON_EN_BY_BN.setdefault(_normalize_name_key(_bn), []).append(_normalize_name_key(_en))
+
+
+def _match_inventory_items(spoken: str, items: list[InventoryItem]) -> list[InventoryItem]:
+    """Resolve a spoken item name against the outlet's inventory.
+
+    Matches on normalized keys (lowercase, alphanumeric only): exact match,
+    the common EN↔BN inventory-name table (``atta`` ↔ ``আটা``), and
+    one-sided substring containment for nearby transcriptions. Returns every
+    plausible match so callers can surface ambiguity instead of guessing.
+    """
+    key = _normalize_name_key(spoken)
+    if not key:
+        return []
+    spoken_bn = _COMMON_BN_BY_EN.get(key)
+    spoken_en = _COMMON_EN_BY_BN.get(key, [])
+    matches: list[InventoryItem] = []
+    seen: set[str] = set()
+    for item in items:
+        item_key = _normalize_name_key(item.name)
+        if not item_key or item.id in seen:
+            continue
+        if item_key == key:
+            matches.append(item)
+            seen.add(item.id)
+        elif spoken_bn and item_key == spoken_bn:
+            matches.append(item)
+            seen.add(item.id)
+        elif item_key in spoken_en or key in _COMMON_EN_BY_BN.get(item_key, []):
+            matches.append(item)
+            seen.add(item.id)
+        elif key in item_key or item_key in key:
+            matches.append(item)
+            seen.add(item.id)
+    return matches
+
+
+def _error_detail(exc: Exception) -> str:
+    detail = getattr(exc, "detail", None)
+    return str(detail or exc)
+
+
+def _tool_item_error(name: str, message: str) -> dict:
+    return {"name": name, "error": message}
 
 
 class VoiceSessionRequest(BaseModel):
@@ -262,6 +343,351 @@ async def voice_agent_place_order(
                 }
                 for item in (order.items or [])
             ],
+        }
+    )
+
+
+class VoiceStockInItem(BaseModel):
+    name: str
+    qty: float = Field(gt=0, le=1_000_000)
+    unit: str | None = None
+    totalCostBdt: float = Field(default=0, ge=0)
+    supplierName: str | None = None
+    note: str | None = None
+
+
+class VoiceStockInRequest(BaseModel):
+    conversationId: str | None = None
+    outletId: str = ""
+    createIfMissing: bool = True
+    items: list[VoiceStockInItem] = Field(min_length=1, max_length=50)
+
+
+class VoiceCountItem(BaseModel):
+    name: str
+    qty: float = Field(ge=0, le=1_000_000)
+    unit: str | None = None
+
+
+class VoiceCountRequest(BaseModel):
+    conversationId: str | None = None
+    outletId: str = ""
+    countDate: str | None = None
+    items: list[VoiceCountItem] = Field(min_length=1, max_length=50)
+
+
+class VoiceStockItemRequest(BaseModel):
+    conversationId: str | None = None
+    outletId: str = ""
+    name: str = Field(min_length=1, max_length=200)
+    unit: str | None = None
+    qty: float = Field(default=0, ge=0, le=1_000_000)
+    category: str | None = None
+    costPerUnitBdt: float = Field(default=0, ge=0)
+    minThreshold: float = Field(default=0, ge=0)
+
+
+@router.post("/stock/in")
+async def voice_agent_stock_in(
+    body: VoiceStockInRequest,
+    _: None = Depends(_require_tool_secret),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stock-in tool: add quantities to inventory by spoken item name.
+
+    Names are matched server-side (exact, common EN↔BN aliases, substring).
+    Lines that don't match are created on demand when ``createIfMissing`` is
+    true and then restocked, so one request covers both "restock rice" and
+    "add onion — we don't have it". Costs are optional: they only update the
+    item's cost per unit (totalCostBdt / qty). One bad line never aborts the
+    batch.
+    """
+    await _load_outlet(db, body.outletId)
+    outlet_id = body.outletId
+    inventory = await _load_inventory_items(db, outlet_id)
+
+    results: list[dict] = []
+    ok_count = 0
+    for raw in body.items:
+        name = (raw.name or "").strip()
+        if not name:
+            results.append(_tool_item_error(raw.name, "Item name is missing."))
+            continue
+        matches = _match_inventory_items(name, inventory)
+        if len(matches) > 1:
+            candidates = ", ".join(item.name for item in matches)
+            results.append(
+                _tool_item_error(name, f"Ambiguous item name — candidates: {candidates}.")
+            )
+            continue
+        try:
+            if matches:
+                item = matches[0]
+                created = False
+            elif body.createIfMissing:
+                now = datetime.now(timezone.utc)
+                item = InventoryItem(
+                    id=str(uuid.uuid4()),
+                    outlet_id=outlet_id,
+                    name=name,
+                    category="other",
+                    unit=_normalize_unit(raw.unit),
+                    quantity=0,
+                    min_threshold=0,
+                    cost_per_unit=0,
+                    notes="",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(item)
+                created = True
+                inventory.append(item)
+            else:
+                results.append(_tool_item_error(name, "Item not found in stock."))
+                continue
+            quantity_before = float(item.quantity)
+            _, adjustment = await _apply_stock_adjustment(
+                db,
+                outlet_id,
+                StockAdjustmentPayload(
+                    inventoryItemId=item.id,
+                    delta=raw.qty,
+                    type="restock",
+                    note=raw.note or "",
+                    totalCostBdt=raw.totalCostBdt,
+                    supplierName=raw.supplierName or "",
+                    reason="voice_agent_stock_in",
+                ),
+                None,
+            )
+            adjustment.created_by_role = "voice_agent"
+            quantity_after = float(item.quantity)
+            ok_count += 1
+            results.append(
+                {
+                    "name": item.name,
+                    "matched": not created,
+                    "created": created,
+                    "itemId": item.id,
+                    "unit": item.unit or "pcs",
+                    "quantityBefore": quantity_before,
+                    "quantityAfter": quantity_after,
+                    "unitCostBdt": float(item.cost_per_unit or 0),
+                }
+            )
+        except Exception as exc:
+            logger.warning(
+                "[voice-agent:stock-in] line failed outlet=%s name=%s: %s",
+                outlet_id,
+                name,
+                exc,
+            )
+            results.append(_tool_item_error(name, f"Could not apply stock-in: {_error_detail(exc)}"))
+    await db.commit()
+    logger.info(
+        "[voice-agent:stock-in] conversation=%s outlet=%s ok=%d errors=%d",
+        body.conversationId,
+        outlet_id,
+        ok_count,
+        len(results) - ok_count,
+    )
+    return ok(
+        {
+            "conversationId": body.conversationId,
+            "okCount": ok_count,
+            "errorCount": len(results) - ok_count,
+            "items": results,
+        }
+    )
+
+
+@router.post("/stock/count")
+async def voice_agent_stock_count(
+    body: VoiceCountRequest,
+    _: None = Depends(_require_tool_secret),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stock-count tool: record the physical count for a day by spoken name.
+
+    Each line sets the item's current quantity to the counted amount and
+    upserts a daily-stock-count row (defaults to today, Bangladesh local
+    time), matching the app's count flow. Unknown items are reported per
+    line — they are never auto-created here.
+    """
+    await _load_outlet(db, body.outletId)
+    outlet_id = body.outletId
+    if body.countDate and (body.countDate or "").strip():
+        try:
+            count_date = date.fromisoformat(body.countDate.strip())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="countDate must be YYYY-MM-DD.",
+            ) from exc
+        count_date = count_date.isoformat()
+    else:
+        count_date = (datetime.now(timezone.utc) + BDT_OFFSET).date().isoformat()
+
+    inventory = await _load_inventory_items(db, outlet_id)
+    results: list[dict] = []
+    ok_count = 0
+    for raw in body.items:
+        name = (raw.name or "").strip()
+        if not name:
+            results.append(_tool_item_error(raw.name, "Item name is missing."))
+            continue
+        matches = _match_inventory_items(name, inventory)
+        if len(matches) > 1:
+            candidates = ", ".join(item.name for item in matches)
+            results.append(
+                _tool_item_error(name, f"Ambiguous item name — candidates: {candidates}.")
+            )
+            continue
+        if not matches:
+            results.append(_tool_item_error(name, "Item not found in stock."))
+            continue
+        item = matches[0]
+        try:
+            existing = (
+                await db.execute(
+                    select(DailyStockCount).where(
+                        DailyStockCount.outlet_id == outlet_id,
+                        DailyStockCount.inventory_item_id == item.id,
+                        DailyStockCount.count_date == count_date,
+                    )
+                )
+            ).scalar_one_or_none()
+            now = datetime.now(timezone.utc)
+            if existing:
+                existing.quantity = raw.qty
+                existing.created_at = now
+            else:
+                db.add(
+                    DailyStockCount(
+                        id=str(uuid.uuid4()),
+                        outlet_id=outlet_id,
+                        inventory_item_id=item.id,
+                        count_date=count_date,
+                        quantity=raw.qty,
+                        created_at=now,
+                    )
+                )
+            item.quantity = max(0.0, float(raw.qty))
+            item.updated_at = now
+            ok_count += 1
+            results.append(
+                {
+                    "name": item.name,
+                    "itemId": item.id,
+                    "unit": item.unit or "pcs",
+                    "countDate": count_date,
+                    "quantity": float(raw.qty),
+                }
+            )
+        except Exception as exc:
+            logger.warning(
+                "[voice-agent:stock-count] line failed outlet=%s name=%s: %s",
+                outlet_id,
+                name,
+                exc,
+            )
+            results.append(_tool_item_error(name, f"Could not record count: {_error_detail(exc)}"))
+    await db.commit()
+    logger.info(
+        "[voice-agent:stock-count] conversation=%s outlet=%s date=%s ok=%d errors=%d",
+        body.conversationId,
+        outlet_id,
+        count_date,
+        ok_count,
+        len(results) - ok_count,
+    )
+    return ok(
+        {
+            "conversationId": body.conversationId,
+            "countDate": count_date,
+            "okCount": ok_count,
+            "errorCount": len(results) - ok_count,
+            "items": results,
+        }
+    )
+
+
+@router.post("/stock/items")
+async def voice_agent_add_stock_item(
+    body: VoiceStockItemRequest,
+    _: None = Depends(_require_tool_secret),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add-to-stock tool: create an inventory item when it doesn't exist.
+
+    Returns the existing item (``created: False``) when the name already
+    matches, so the agent can route to the stock-in tool instead of
+    duplicating the item.
+    """
+    await _load_outlet(db, body.outletId)
+    outlet_id = body.outletId
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Item name is required.",
+        )
+    inventory = await _load_inventory_items(db, outlet_id)
+    matches = _match_inventory_items(name, inventory)
+    if len(matches) > 1:
+        candidates = ", ".join(item.name for item in matches)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ambiguous item name — candidates: {candidates}.",
+        )
+    if matches:
+        item = matches[0]
+        return ok(
+            {
+                "conversationId": body.conversationId,
+                "name": item.name,
+                "itemId": item.id,
+                "unit": item.unit or "pcs",
+                "quantity": float(item.quantity),
+                "category": item.category or "",
+                "created": False,
+            }
+        )
+
+    now = datetime.now(timezone.utc)
+    item = InventoryItem(
+        id=str(uuid.uuid4()),
+        outlet_id=outlet_id,
+        name=name,
+        category=_normalize_category(body.category),
+        unit=_normalize_unit(body.unit),
+        quantity=float(body.qty),
+        min_threshold=float(body.minThreshold),
+        cost_per_unit=float(body.costPerUnitBdt),
+        notes="",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    logger.info(
+        "[voice-agent:stock-items] conversation=%s outlet=%s created=%s",
+        body.conversationId,
+        outlet_id,
+        item.id,
+    )
+    return ok(
+        {
+            "conversationId": body.conversationId,
+            "name": item.name,
+            "itemId": item.id,
+            "unit": item.unit or "pcs",
+            "quantity": float(item.quantity),
+            "category": item.category or "",
+            "minThreshold": float(item.min_threshold),
+            "costPerUnitBdt": float(item.cost_per_unit),
+            "created": True,
         }
     )
 

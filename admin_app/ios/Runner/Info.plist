@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Bolt uses the camera to scan printed restaurant menus and import menu items.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Bolt uses the microphone so you can talk to the support assistant by holding the mic button.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Bolt lets you choose menu item photos from your gallery.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

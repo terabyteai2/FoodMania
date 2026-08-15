@@ -22,13 +22,13 @@ import '../desktop_pos/widgets/menu_line_customizer.dart';
 
 /// The four rendering modes of the add-items picker.
 enum MenuViewMode {
-  /// 3-column color-coded card grid (current default).
+  /// 3-column color-coded card grid.
   colorGrid,
 
   /// 2-column grid without category color coding.
   plainGrid,
 
-  /// 2-column grid with item images.
+  /// 2-column grid with item images (current default).
   imageGrid,
 
   /// ⚡ numeric short-code quick-pick list.

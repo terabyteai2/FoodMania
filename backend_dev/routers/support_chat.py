@@ -12,7 +12,11 @@ from auth import (
 )
 from database import get_db
 from models import PlatformAdmin, SupportChatMessage
-from routers.ws import _persist_support_message, _support_message_dict
+from routers.ws import (
+    _persist_support_message,
+    _resolve_account,
+    _support_message_dict,
+)
 from services.support_llm import (
     auto_reply as support_llm_auto_reply,
     diagnostics as support_llm_diagnostics,
@@ -72,7 +76,10 @@ async def send_support_chat_message(
         payload["sub"],
         {"type": "support_msg", "data": _support_message_dict(message)},
     )
-    asyncio.create_task(support_llm_auto_reply(payload["sub"]))
+    account = await _resolve_account(
+        payload["sub"], str(payload.get("account_id") or "")
+    )
+    asyncio.create_task(support_llm_auto_reply(payload["sub"], account))
     return {"data": _support_message_dict(message), "error": None}
 
 

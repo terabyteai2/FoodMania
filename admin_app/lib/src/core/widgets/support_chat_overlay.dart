@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app_scope.dart';
+import '../../models/receipt_scan.dart';
 import '../localization/app_strings.dart';
 import '../theme/app_theme.dart';
+import '../../services/support_stt_controller.dart';
+import '../../services/support_tts_controller.dart';
 import 'guided_tour.dart';
 import 'notification_center.dart';
 import 'tf_design_system.dart';
@@ -28,15 +31,29 @@ import 'tf_design_system.dart';
 ///    live guide message auto-starts while the chat is open.
 
 class SupportChatAction {
-  const SupportChatAction({required this.label, required this.target});
+  const SupportChatAction({
+    required this.label,
+    required this.target,
+    this.proposal,
+  });
 
   final String label;
   final String target;
 
+  /// Optional stock proposal (stock-scan wire format) attached by the
+  /// assistant for the stock-management flow. When present, tapping the
+  /// action opens the stock-in / end-of-day-count editor prefilled with
+  /// these lines, exactly like a scan confirmation.
+  final StockScanResult? proposal;
+
   factory SupportChatAction.fromJson(Map<String, Object?> json) {
+    final rawProposal = json['proposal'];
     return SupportChatAction(
       label: json['label']?.toString() ?? 'Open',
       target: json['target']?.toString() ?? '',
+      proposal: rawProposal is Map
+          ? StockScanResult.fromJson(rawProposal.cast<String, Object?>())
+          : null,
     );
   }
 }
@@ -137,8 +154,13 @@ class SupportChatMessage {
   }
 }
 
-/// Executes a deeplink target at the shell level (tab switches, pushes, modals).
-typedef SupportChatNavigator = void Function(String target);
+/// Executes a deeplink target at the shell level (tab switches, pushes,
+/// modals). The optional [proposal] carries the stock-scan-format lines the
+/// assistant proposed, so the shell can open the review editor prefilled.
+typedef SupportChatNavigator = void Function(
+  String target, [
+  StockScanResult? proposal,
+]);
 
 class SupportChatController extends ChangeNotifier {
   SupportChatController._();
@@ -178,9 +200,12 @@ class SupportChatController extends ChangeNotifier {
   }
 
   /// Wires a long-lived host context (the shell) used for toast + overlay
-  /// insertion. Guarded by `mounted` at use sites.
+  /// insertion. Guarded by `mounted` at use sites. Also boots the spoken
+  /// assistant (loads persisted mute state and syncs it to the server).
   void attachHost(BuildContext context) {
     _hostContext = context;
+    unawaited(SupportTtsController.instance.attachHost(context));
+    SupportSttController.instance.attachHost(context);
   }
 
   void _refreshConnection() {
@@ -356,7 +381,7 @@ class SupportChatController extends ChangeNotifier {
       }
       return;
     }
-    if (_navigator != null) _navigator!(target);
+    if (_navigator != null) _navigator!(target, action.proposal);
   }
 
   /// Launches a single-step spotlight over the real UI (reuses the guided-tour
@@ -441,11 +466,15 @@ class _SupportChatOverlayState extends State<SupportChatOverlay> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onChanged);
+    SupportTtsController.instance.addListener(_onChanged);
+    SupportSttController.instance.addListener(_onChanged);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onChanged);
+    SupportTtsController.instance.removeListener(_onChanged);
+    SupportSttController.instance.removeListener(_onChanged);
     _input.dispose();
     super.dispose();
   }
@@ -583,13 +612,38 @@ class _Header extends StatelessWidget {
               TfText(strings.supportChatTitle, style: TfTextStyles.appBarTitle),
               const SizedBox(width: PosSpacing.sp2),
               _ConnectionDot(connected: controller.connected),
+              if (SupportTtsController.instance.speaking) ...[
+                const SizedBox(width: PosSpacing.sp2),
+                Icon(
+                  Icons.graphic_eq_rounded,
+                  size: 16,
+                  color: PosColors.primary,
+                ),
+              ],
             ],
           ),
-          TfIconButton(
-            icon: Icons.close_rounded,
-            tooltip: strings.supportChatTitle,
-            bare: true,
-            onPressed: controller.close,
+          Row(
+            children: [
+              TfIconButton(
+                icon: SupportTtsController.instance.muted
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
+                tooltip: SupportTtsController.instance.muted
+                    ? strings.supportChatUnmuteAudio
+                    : strings.supportChatMuteAudio,
+                bare: true,
+                onPressed: () {
+                  unawaited(SupportTtsController.instance
+                      .setMuted(!SupportTtsController.instance.muted));
+                },
+              ),
+              TfIconButton(
+                icon: Icons.close_rounded,
+                tooltip: strings.supportChatTitle,
+                bare: true,
+                onPressed: controller.close,
+              ),
+            ],
           ),
         ],
       ),
@@ -884,79 +938,252 @@ class _InputRow extends StatelessWidget {
   final bool sending;
   final VoidCallback onSend;
 
+  String? get _sttErrorText {
+    final error = SupportSttController.instance.lastError;
+    if (error == null) return null;
+    switch (error) {
+      case 'permission_denied':
+        return strings.supportChatSttPermission;
+      case 'empty':
+        return strings.supportChatSttEmpty;
+      case 'offline':
+        return strings.supportChatSttOffline;
+      default:
+        return strings.supportChatSttFailed;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final stt = SupportSttController.instance;
+    final recording = stt.isRecording;
+    final sttError = _sttErrorText;
+    final inputHint = recording
+        ? strings.supportChatListening
+        : strings.supportChatInputHint;
     return Container(
       padding: const EdgeInsets.all(PosSpacing.sp3),
       decoration: BoxDecoration(
         color: PosColors.surface,
         border: const Border(top: BorderSide(color: PosColors.line, width: 1)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
         children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              minLines: 1,
-              maxLines: 3,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSend(),
-              style: TfTextStyles.body.copyWith(color: PosColors.text),
-              decoration: InputDecoration(
-                hintText: strings.supportChatInputHint,
-                hintStyle: TfTextStyles.body.copyWith(color: PosColors.muted),
-                filled: true,
-                fillColor: PosColors.surfaceSunk,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: PosSpacing.sp3,
-                  vertical: PosSpacing.sp2,
+          if (sttError != null) ...[
+            _SttErrorBar(message: sttError),
+            const SizedBox(height: PosSpacing.sp2),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (SupportSttController.isPlatformSupported) ...[
+                _MicButton(
+                  recording: recording,
+                  sending: stt.isSending,
+                  onStart: () => unawaited(stt.start()),
+                  onStop: () => unawaited(stt.stopAndSend()),
+                  onCancel: () => unawaited(stt.cancel()),
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(PosRadii.md),
-                  borderSide: const BorderSide(color: PosColors.neutralWash),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(PosRadii.md),
-                  borderSide: const BorderSide(color: PosColors.neutralWash),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(PosRadii.md),
-                  borderSide: const BorderSide(
-                    color: PosColors.primary,
-                    width: 1.4,
+                const SizedBox(width: PosSpacing.sp2),
+              ],
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 3,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => onSend(),
+                  style: TfTextStyles.body.copyWith(color: PosColors.text),
+                  decoration: InputDecoration(
+                    hintText: inputHint,
+                    hintStyle: recording
+                        ? TfTextStyles.body.copyWith(color: PosColors.danger)
+                        : TfTextStyles.body.copyWith(color: PosColors.muted),
+                    filled: true,
+                    fillColor: recording
+                        ? PosColors.dangerSoft
+                        : PosColors.surfaceSunk,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: PosSpacing.sp3,
+                      vertical: PosSpacing.sp2,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      borderSide: recording
+                          ? const BorderSide(color: PosColors.danger, width: 1)
+                          : const BorderSide(color: PosColors.neutralWash),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      borderSide: recording
+                          ? const BorderSide(color: PosColors.danger, width: 1)
+                          : const BorderSide(color: PosColors.neutralWash),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(PosRadii.md),
+                      borderSide: const BorderSide(
+                        color: PosColors.primary,
+                        width: 1.4,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: PosSpacing.sp2),
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: Material(
-              color: sending ? PosColors.line : PosColors.primary,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: sending ? null : onSend,
-                child: sending
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.4,
-                          color: PosColors.accentInk,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.send_rounded,
-                        size: 20,
-                        color: PosColors.accentInk,
-                      ),
+              const SizedBox(width: PosSpacing.sp2),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: Material(
+                  color: sending ? PosColors.line : PosColors.primary,
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: sending || recording ? null : onSend,
+                    child: sending
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: PosColors.accentInk,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            size: 20,
+                            color: PosColors.accentInk,
+                          ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Hold-to-talk microphone button. Long-press starts recording; releasing
+/// sends the clip; the controller discards very short holds.
+class _MicButton extends StatelessWidget {
+  const _MicButton({
+    required this.recording,
+    required this.sending,
+    required this.onStart,
+    required this.onStop,
+    required this.onCancel,
+  });
+
+  final bool recording;
+  final bool sending;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: GestureDetector(
+        onLongPressStart: (_) => onStart(),
+        onLongPressEnd: (_) => onStop(),
+        onLongPressCancel: onCancel,
+        child: Material(
+          color: recording ? PosColors.danger : PosColors.primary,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              if (sending)
+                const Center(
+                  child: SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: PosColors.accentInk,
+                    ),
+                  ),
+                )
+              else
+                const Center(
+                  child: Icon(
+                    Icons.mic_rounded,
+                    size: 20,
+                    color: PosColors.accentInk,
+                  ),
+                ),
+              if (recording)
+                const Positioned(
+                  top: 8,
+                  right: 8,
+                  child: _PulseDot(),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small red pulsing dot shown while the mic is live.
+class _PulseDot extends StatefulWidget {
+  const _PulseDot();
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 1, end: 0.35).animate(_controller),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: PosColors.accentInk,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+class _SttErrorBar extends StatelessWidget {
+  const _SttErrorBar({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: PosSpacing.sp3,
+        vertical: PosSpacing.sp2,
+      ),
+      decoration: BoxDecoration(
+        color: PosColors.dangerSoft,
+        borderRadius: BorderRadius.circular(PosRadii.md),
+      ),
+      child: TfText(
+        message,
+        style: TfTextStyles.label.copyWith(color: PosColors.danger),
       ),
     );
   }

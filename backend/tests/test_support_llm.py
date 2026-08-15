@@ -820,8 +820,8 @@ async def test_auto_reply_runs_tool_then_replies(monkeypatch):
     )
     executed = []
 
-    async def fake_execute_tool(name, raw_args, outlet_id):
-        executed.append((name, raw_args, outlet_id))
+    async def fake_execute_tool(name, raw_args, outlet_id, account=None):
+        executed.append((name, raw_args, outlet_id, account))
         return {"ok": True, "count": 1, "items": [{"name": "Chicken", "quantity": 3}]}
 
     monkeypatch.setattr(support_llm, "execute_tool", fake_execute_tool)
@@ -835,6 +835,7 @@ async def test_auto_reply_runs_tool_then_replies(monkeypatch):
             "get_stock",
             {"query": "chicken", "lowStockOnly": True},
             "outlet-1",
+            None,  # no account resolved -> default (bootstrap) role
         )
     ]
     assert len(persisted) == 1
@@ -872,7 +873,7 @@ async def test_auto_reply_tool_budget_exhausted_fails(monkeypatch):
     _mock_llm_sequence(monkeypatch, [_tool_call_message("get_stock")] * 10)
     executed = []
 
-    async def fake_execute_tool(name, raw_args, outlet_id):
+    async def fake_execute_tool(name, raw_args, outlet_id, account=None):
         executed.append(name)
         return {"ok": True, "count": 0, "items": []}
 
@@ -898,7 +899,7 @@ async def test_auto_reply_malformed_arguments_recovers(monkeypatch):
     )
     results = []
 
-    async def fake_execute_tool(name, raw_args, outlet_id):
+    async def fake_execute_tool(name, raw_args, outlet_id, account=None):
         results.append(raw_args)
         return {"ok": True, "count": 0, "items": []}
 
@@ -944,7 +945,7 @@ async def test_auto_reply_parallel_tools_all_executed(monkeypatch):
     )
     executed = []
 
-    async def fake_execute_tool(name, raw_args, outlet_id):
+    async def fake_execute_tool(name, raw_args, outlet_id, account=None):
         executed.append(name)
         return {"ok": True, "count": 0, "items": []}
 
@@ -980,3 +981,197 @@ async def test_auto_reply_prose_final_persisted(monkeypatch):
     message_id, outcome = recorded[0]
     assert outcome["status"] == "replied"
     assert outcome["detail"] == {"tools": ["get_stock"], "toolCalls": 1}
+
+
+# ---------------------------------------------------------------------------
+# Stock-management proposals (tool -> sanitized action -> client review)
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_guide_keeps_proposal_action():
+    sanitized = sanitize_guide(
+        {
+            "reply": "Review this stock-in.",
+            "actions": [
+                {
+                    "label": "Review stock-in",
+                    "target": "screen:stock_in",
+                    "proposal": {
+                        "category": "stock_in",
+                        "items": [
+                            {
+                                "nameEn": "Rice",
+                                "qty": 5,
+                                "unit": "kg",
+                                "unitPriceBdt": 10,
+                                "totalBdt": 50,
+                                "matchedInventoryItemId": "s1",
+                                "hack": "drop",
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    action = sanitized["actions"][0]
+    assert action["label"] == "Review stock-in"
+    assert action["target"] == "screen:stock_in"
+    assert action["proposal"]["category"] == "stock_in"
+    (line,) = action["proposal"]["items"]
+    assert line == {
+        "nameEn": "Rice",
+        "qty": 5.0,
+        "unit": "kg",
+        "unitPriceBdt": 10.0,
+        "totalBdt": 50.0,
+        "matchedInventoryItemId": "s1",
+    }
+
+
+def test_sanitize_guide_drops_invalid_proposals():
+    # Wrong category, empty items, wrong target -> the action survives as a
+    # plain button (proposal dropped) or is dropped entirely.
+    sanitized = sanitize_guide(
+        {
+            "reply": "hi",
+            "actions": [
+                {
+                    "label": "Bad category",
+                    "target": "screen:stock_in",
+                    "proposal": {"category": "shopping", "items": [{"qty": 1}]},
+                },
+                {
+                    "label": "Empty items",
+                    "target": "screen:stock_in",
+                    "proposal": {"category": "count", "items": []},
+                },
+                {
+                    "label": "Bad target",
+                    "target": "tab:nope",
+                    "proposal": {"category": "stock_in", "items": [{"qty": 1}]},
+                },
+                {
+                    "label": "Count date",
+                    "target": "screen:stock_count",
+                    "proposal": {
+                        "category": "count",
+                        "countDate": "2026-01-05",
+                        "items": [
+                            {
+                                "nameEn": "Rice",
+                                "qty": 7,
+                                "matchedInventoryItemId": "s1",
+                            }
+                        ],
+                    },
+                },
+            ],
+        }
+    )
+    assert len(sanitized["actions"]) == 3
+    assert "proposal" not in sanitized["actions"][0]
+    assert "proposal" not in sanitized["actions"][1]
+    assert sanitized["actions"][2]["proposal"]["countDate"] == "2026-01-05"
+
+
+async def test_auto_reply_stock_in_proposal_surfaces_action(monkeypatch):
+    """The voice/typed support chat executes stock_in and carries the
+    resulting proposal to the client for confirmation (stock-scan style)."""
+    _mock_llm_sequence(
+        monkeypatch,
+        [
+            _tool_call_message(
+                "stock_in", '{"name": "Rice", "qty": 5, "totalCostBdt": 50}'
+            ),
+            json.dumps(
+                {
+                    "reply": "আমি স্টকে ৫ কেজি চাল যোগ করার প্রস্তাব দিচ্ছি — অ্যাপে কনফার্ম করুন।",
+                    "actions": [
+                        {
+                            "label": "Review stock-in",
+                            "target": "screen:stock_in",
+                            "proposal": {
+                                "category": "stock_in",
+                                "items": [
+                                    {
+                                        "nameEn": "Rice",
+                                        "qty": 5,
+                                        "unit": "kg",
+                                        "unitPriceBdt": 10,
+                                        "totalBdt": 50,
+                                        "matchedInventoryItemId": "s1",
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ),
+        ],
+    )
+    executed = []
+
+    async def fake_execute_tool(name, raw_args, outlet_id, account=None):
+        executed.append((name, raw_args, account))
+        return {
+            "ok": True,
+            "category": "stock_in",
+            "items": [
+                {
+                    "nameEn": "Rice",
+                    "qty": 5,
+                    "unit": "kg",
+                    "unitPriceBdt": 10,
+                    "totalBdt": 50,
+                    "matchedInventoryItemId": "s1",
+                }
+            ],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(support_llm, "execute_tool", fake_execute_tool)
+    recorded = _patch_outcome_recorder(monkeypatch)
+    persisted, _ = _auto_reply_env(monkeypatch, recorded)
+
+    await auto_reply("outlet-1")
+
+    assert executed == [("stock_in", {"name": "Rice", "qty": 5, "totalCostBdt": 50}, None)]
+    assert len(persisted) == 1
+    actions = persisted[0][4]
+    assert actions[0]["proposal"]["category"] == "stock_in"
+    assert actions[0]["proposal"]["items"][0]["nameEn"] == "Rice"
+    message_id, outcome = recorded[0]
+    assert outcome["status"] == "replied"
+    assert outcome["detail"] == {"tools": ["stock_in"], "toolCalls": 1}
+
+
+async def test_auto_reply_threads_account_to_management_tools(monkeypatch):
+    """The resolved AdminAccount from the device token reaches execute_tool,
+    so the management-only gate applies to the voice path too."""
+    state = _mock_llm_sequence(
+        monkeypatch,
+        [
+            _tool_call_message("stock_in", '{"name": "Rice", "qty": 2}'),
+            json.dumps({"reply": "প্রস্তাব পাঠালাম।"}),
+        ],
+    )
+    executed = []
+
+    async def fake_execute_tool(name, raw_args, outlet_id, account=None):
+        executed.append((name, getattr(account, "role", account)))
+        return {"ok": True, "category": "stock_in", "items": [], "warnings": []}
+
+    monkeypatch.setattr(support_llm, "execute_tool", fake_execute_tool)
+    recorded = _patch_outcome_recorder(monkeypatch)
+    persisted, _ = _auto_reply_env(monkeypatch, recorded)
+
+    await auto_reply("outlet-1", account=type("Account", (), {"role": "manager"})())
+
+    assert executed == [("stock_in", "manager")]
+
+    executed.clear()
+    support_llm._last_reply_at = {}  # reset cooldown for the second run
+    state["n"] = 0  # replay the tool-call round for the second run
+    await auto_reply("outlet-1", account=type("Account", (), {"role": "waiter"})())
+    assert executed == [("stock_in", "waiter")]

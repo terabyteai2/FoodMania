@@ -1812,4 +1812,22 @@ class AppStrings {
       isBn ? 'নতুন সাপোর্ট বার্তা' : 'New support message';
   String get supportChatMuteAudio => isBn ? 'ভয়েস বন্ধ করুন' : 'Mute voice';
   String get supportChatUnmuteAudio => isBn ? 'ভয়েস চালু করুন' : 'Unmute voice';
+  String get supportChatHoldToTalk =>
+      isBn ? 'চেপে ধরে কথা বলুন' : 'Hold to talk';
+  String get supportChatListening =>
+      isBn ? 'শুনছি… কথা বলুন' : 'Listening… speak now';
+  String get supportChatSendingVoice =>
+      isBn ? 'পাঠানো হচ্ছে…' : 'Sending…';
+  String get supportChatSttEmpty => isBn
+      ? 'কিছু শোনা যায়নি — আবার চেষ্টা করুন'
+      : "Couldn't hear anything — try again";
+  String get supportChatSttPermission => isBn
+      ? 'মাইক্রোফোনের অনুমতি প্রয়োজন'
+      : 'Microphone permission needed';
+  String get supportChatSttFailed => isBn
+      ? 'ভয়েস প্রসেস করা যায়নি — আবার চেষ্টা করুন'
+      : "Couldn't process voice — try again";
+  String get supportChatSttOffline => isBn
+      ? 'ভয়েস পাঠাতে ইন্টারনেট সংযোগ প্রয়োজন'
+      : 'Voice needs an internet connection';
 }

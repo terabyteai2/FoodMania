@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import './tf_design_system.dart';
@@ -313,6 +315,7 @@ class TfPeriodWithCalendar extends StatefulWidget {
     required this.onChanged,
     this.start,
     this.end,
+    this.compact = false,
     super.key,
   });
 
@@ -328,6 +331,9 @@ class TfPeriodWithCalendar extends StatefulWidget {
   final DateTime? start;
   final DateTime? end;
 
+  /// Passed through to [TfPeriodSelector] for tight rows.
+  final bool compact;
+
   @override
   State<TfPeriodWithCalendar> createState() => _TfPeriodWithCalendarState();
 }
@@ -336,17 +342,55 @@ class _TfPeriodWithCalendarState extends State<TfPeriodWithCalendar> {
   bool _calendarOpen = false;
   DateTime? _pendingStart;
   DateTime? _pendingEnd;
+  final GlobalKey _anchorKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void dispose() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    super.dispose();
+  }
+
+  void _closeCalendar() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    if (mounted) setState(() => _calendarOpen = false);
+  }
+
+  void _openCalendarOverlay() {
+    final anchor = _anchorKey.currentContext;
+    if (anchor == null) return;
+    final box = anchor.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    _overlayEntry = OverlayEntry(
+      builder: (_) => _CalendarOverlay(
+        anchorRect: rect,
+        start: _pendingStart,
+        end: _pendingEnd,
+        onRangeChanged: _onRangeChanged,
+        onDismiss: _closeCalendar,
+      ),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
 
   void _onSegment(String value) {
     if (value == TfPeriodWithCalendar.customValue) {
-      setState(() {
-        _calendarOpen = !_calendarOpen;
-        _pendingStart = widget.start;
-        _pendingEnd = widget.end;
-      });
+      if (_calendarOpen) {
+        _closeCalendar();
+      } else {
+        setState(() {
+          _calendarOpen = true;
+          _pendingStart = widget.start;
+          _pendingEnd = widget.end;
+        });
+        _openCalendarOverlay();
+      }
       return;
     }
-    setState(() => _calendarOpen = false);
+    _closeCalendar();
     widget.onChanged(value, null, null);
   }
 
@@ -356,7 +400,7 @@ class _TfPeriodWithCalendarState extends State<TfPeriodWithCalendar> {
       _pendingEnd = end;
     });
     if (start != null && end != null) {
-      setState(() => _calendarOpen = false);
+      _closeCalendar();
       widget.onChanged(TfPeriodWithCalendar.customValue, start, end);
     }
   }
@@ -365,32 +409,79 @@ class _TfPeriodWithCalendarState extends State<TfPeriodWithCalendar> {
   Widget build(BuildContext context) {
     final showCustomActive =
         _calendarOpen || widget.value == TfPeriodWithCalendar.customValue;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return KeyedSubtree(
+      key: _anchorKey,
+      child: TfPeriodSelector(
+        options: widget.options,
+        value: showCustomActive
+            ? TfPeriodWithCalendar.customValue
+            : widget.value,
+        onChanged: _onSegment,
+        customValue: TfPeriodWithCalendar.customValue,
+        customIcon: Icons.calendar_month_rounded,
+        compact: widget.compact,
+      ),
+    );
+  }
+}
+
+/// Full-screen barrier + anchored calendar card rendered in the app Overlay,
+/// so the picker floats over the page instead of pushing content down.
+class _CalendarOverlay extends StatelessWidget {
+  const _CalendarOverlay({
+    required this.anchorRect,
+    required this.start,
+    required this.end,
+    required this.onRangeChanged,
+    required this.onDismiss,
+  });
+
+  final Rect anchorRect;
+  final DateTime? start;
+  final DateTime? end;
+  final void Function(DateTime? start, DateTime? end) onRangeChanged;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final screen = MediaQuery.sizeOf(context);
+    const w = 360.0;
+    const h = 390.0;
+    final below = anchorRect.bottom + 6 + h <= screen.height - 8;
+    final top = below
+        ? anchorRect.bottom + 6
+        : math.max(8.0, anchorRect.top - 6 - h);
+    final left = ((screen.width - w) / 2).clamp(8.0, screen.width - w - 8);
+
+    return Stack(
       children: [
-        TfPeriodSelector(
-          options: widget.options,
-          value: showCustomActive
-              ? TfPeriodWithCalendar.customValue
-              : widget.value,
-          onChanged: _onSegment,
-          customValue: TfPeriodWithCalendar.customValue,
-          customIcon: Icons.calendar_month_rounded,
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onDismiss,
+          ),
         ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: _calendarOpen
-              ? Padding(
-                  padding: const EdgeInsets.only(top: PosSpacing.sp2),
-                  child: TfCalendarRangePicker(
-                    start: _pendingStart,
-                    end: _pendingEnd,
-                    onRangeChanged: _onRangeChanged,
-                  ),
-                )
-              : const SizedBox(width: double.infinity),
+        Positioned(
+          left: left,
+          top: top,
+          width: w,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: PosColors.surface,
+                borderRadius: BorderRadius.circular(PosRadii.lg),
+                border: Border.all(color: PosColors.line, width: 1),
+                boxShadow: PosShadows.soft,
+              ),
+              child: TfCalendarRangePicker(
+                start: start,
+                end: end,
+                onRangeChanged: onRangeChanged,
+              ),
+            ),
+          ),
         ),
       ],
     );

@@ -19,6 +19,8 @@ import 'core/localization/app_strings.dart';
 import 'core/theme/category_tints.dart';
 import 'core/utils/bounded_string_set.dart';
 import 'core/widgets/support_chat_overlay.dart';
+import 'services/support_stt_controller.dart';
+import 'services/support_tts_controller.dart';
 import 'features/orders/order_list_filters.dart';
 import 'models/account_role.dart';
 import 'models/admin_blocking_notice.dart';
@@ -2308,6 +2310,23 @@ class PosAppController extends ChangeNotifier {
     if (type == 'support_msg' && data is Map) {
       unawaited(
         SupportChatController.instance.handleRemoteEvent(event),
+      );
+      return;
+    }
+    if (type == 'support_audio' && data is Map) {
+      final audio = (Map<String, Object?>.from(data)['audio'] ?? '').toString();
+      if (audio.isNotEmpty) {
+        SupportTtsController.instance.handleAudioChunk(audio);
+      }
+      return;
+    }
+    if (type == 'support_audio_done') {
+      SupportTtsController.instance.handleAudioDone();
+      return;
+    }
+    if (type == 'support_stt_result' && data is Map) {
+      SupportSttController.instance.handleResult(
+        (Map<String, Object?>.from(data)['status'] ?? '').toString(),
       );
       return;
     }

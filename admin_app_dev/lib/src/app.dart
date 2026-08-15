@@ -781,8 +781,10 @@ class _MainShellState extends State<MainShell> {
 
   /// Support-chat deeplink dispatcher (wired via
   /// [SupportChatController.attachNavigator]). The chat overlay stays open
-  /// while the navigation happens underneath it.
-  void _handleChatDeepLink(String target) {
+  /// while the navigation happens underneath it. A [proposal] (stock-scan
+  /// format) prefills the stock editors when the assistant proposed stock
+  /// lines for review, mirroring the scan confirmation flow.
+  void _handleChatDeepLink(String target, [StockScanResult? proposal]) {
     if (target.startsWith('tab:')) {
       final name = target.substring('tab:'.length).trim();
       final tab = _AppTab.values.asNameMap()[name];
@@ -795,9 +797,13 @@ class _MainShellState extends State<MainShell> {
       case 'screen:audit':
         unawaited(_pushChatScreen(const AuditScreen()));
       case 'screen:stock_in':
-        unawaited(_pushThenRefreshInventory(const StockInScreen()));
+        unawaited(
+          _pushThenRefreshInventory(StockInScreen(initialScan: proposal)),
+        );
       case 'screen:stock_count':
-        unawaited(_pushThenRefreshInventory(const EndOfDayCountScreen()));
+        unawaited(
+          _pushThenRefreshInventory(EndOfDayCountScreen(initialScan: proposal)),
+        );
       case 'screen:settings':
         unawaited(_pushChatScreen(SettingsScreen(
           onNavigateToOrders: () {},

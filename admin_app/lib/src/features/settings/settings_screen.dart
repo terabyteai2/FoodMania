@@ -25,6 +25,7 @@ import '../../services/printer_service.dart';
 import 'customer_menu_themes.dart';
 import 'table_qr_labels_screen.dart';
 import '../audit/audit_screen.dart';
+import '../payments/billing_screen.dart';
 import '../staff/staff_screen.dart';
 
 const bool _showFacebookChatbotSettings = true;
@@ -176,6 +177,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     activeThumbColor: Colors.white,
                     inactiveThumbColor: Colors.white,
                   ),
+                ),
+                _SettingActionData(
+                  title: text.billingTitle,
+                  subtitle: text.billingEntrySubtitle,
+                  icon: Icons.receipt_long_outlined,
+                  trailing: _billingTrailing(app, text),
+                  onTap: _openBilling,
                 ),
                 _SettingActionData(
                   title: text.bkashNagadPayments,
@@ -338,6 +346,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _openBilling() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const BillingScreen()),
+    );
+  }
+
   Future<void> _openTableSettings() async {
     final app = AppScope.of(context);
     final text = app.strings;
@@ -378,6 +392,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return config.isEnabled
         ? text.facebookBotConnected
         : text.facebookBotDisabled;
+  }
+
+  String _billingTrailing(PosAppController app, AppStrings text) {
+    final plan = app.selectedSubscriptionPlan;
+    if (plan == 'monthly') return text.monthly;
+    if (plan == 'annual') return text.annual;
+    if (app.subscriptionState == 'trial') return text.subscriptionTrial;
+    return app.isSubscriptionExpiredLocally
+        ? text.subscriptionExpired
+        : text.subscriptionNone;
   }
 
   Future<void> _openFacebookChatbot() async {

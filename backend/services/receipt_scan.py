@@ -147,6 +147,8 @@ def _receipt_scan_instructions(category: str | None) -> str:
         "copy of nameEn. If one language is missing, translate or transliterate "
         "the missing side. Normalize the unit to one of: kg, gm, ltr, ml, pcs, "
         "pack, dozen — pick the closest. "
+        "Use the exact JSON keys for every item: nameEn, nameBn, qty (never "
+        "quantity), unit, unitPriceBdt, totalBdt, matchedInventoryItemId. "
         "For category stock_in: each line item must have a positive quantity, a "
         "unit, and a positive total in BDT (no currency symbols); if unitPriceBdt "
         "is not printed, compute it as totalBdt / qty (round to 2 decimals); set "
@@ -302,6 +304,13 @@ def _resolve_category(decoded: Any, requested: str | None) -> str:
     return "stock_in"
 
 
+def _pick_value(raw: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in raw:
+            return raw[key]
+    return None
+
+
 def _validated_items(
     raw_content: str,
     *,
@@ -326,9 +335,9 @@ def _validated_items(
     for raw in raw_items:
         if not isinstance(raw, dict):
             continue
-        qty = raw.get("qty")
-        total = raw.get("totalBdt")
-        unit_price = raw.get("unitPriceBdt")
+        qty = _pick_value(raw, "qty", "quantity")
+        total = _pick_value(raw, "totalBdt", "total")
+        unit_price = _pick_value(raw, "unitPriceBdt", "unitPrice", "unit_price")
         try:
             qty_f = float(qty) if qty is not None else 0.0
             total_f = float(total) if total is not None else 0.0
