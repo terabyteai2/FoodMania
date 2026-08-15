@@ -46,7 +46,7 @@ class AppPageHeader extends StatelessWidget {
           Expanded(
             child: brand
                 ? TfBrandHeader(
-                    title: 'QuickBytes',
+                    title: 'Bolt',
                     subtitle: outletName.isEmpty ? null : outletName,
                   )
                 : _SourceTitleHeader(title: title),

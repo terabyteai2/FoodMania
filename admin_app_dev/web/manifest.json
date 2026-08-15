@@ -1,11 +1,11 @@
 {
-    "name": "QuickBytes",
-    "short_name": "QuickBytes",
+    "name": "Bolt",
+    "short_name": "Bolt",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "QuickBytes — Restaurant POS",
+    "description": "Bolt — Restaurant POS",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

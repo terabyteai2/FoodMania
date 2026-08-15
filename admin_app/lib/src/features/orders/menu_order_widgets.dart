@@ -1067,8 +1067,8 @@ class _AddButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 32,
-        height: 32,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
           color: inCart ? PosColors.addBlue : PosColors.addBg,
           shape: BoxShape.circle,
@@ -1076,7 +1076,7 @@ class _AddButton extends StatelessWidget {
         ),
         child: Icon(
           Icons.add_rounded,
-          size: 20,
+          size: 16,
           color: inCart ? Colors.white : PosColors.addBlue,
         ),
       ),
@@ -2013,8 +2013,8 @@ class _OptionBtn extends StatelessWidget {
           children: [
             // Indicator dot/box
             Container(
-              width: 20,
-              height: 20,
+              width: 24,
+              height: 24,
               decoration: BoxDecoration(
                 shape: isRadio ? BoxShape.circle : BoxShape.rectangle,
                 borderRadius: isRadio
@@ -2031,7 +2031,7 @@ class _OptionBtn extends StatelessWidget {
               child: selected
                   ? const Icon(
                       Icons.check_rounded,
-                      size: 12,
+                      size: 16,
                       color: PosColors.accentInk,
                     )
                   : null,

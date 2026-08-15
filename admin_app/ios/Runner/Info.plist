@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>QuickBites</string>
+	<string>Bolt</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>QuickBites</string>
+	<string>Bolt</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,13 +27,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>QuickBites uses the camera to scan printed restaurant menus and import menu items.</string>
+	<string>Bolt uses the camera to scan printed restaurant menus and import menu items.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>QuickBites lets you choose menu item photos from your gallery.</string>
+	<string>Bolt lets you choose menu item photos from your gallery.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>QuickBites uses Bluetooth to connect 58mm thermal receipt printers.</string>
+	<string>Bolt uses Bluetooth to connect 58mm thermal receipt printers.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>QuickBites uses Bluetooth to print restaurant order tickets.</string>
+	<string>Bolt uses Bluetooth to print restaurant order tickets.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

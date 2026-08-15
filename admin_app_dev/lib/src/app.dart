@@ -1566,7 +1566,7 @@ class _DrawerHeader extends StatelessWidget {
         PosSpacing.sp4,
       ),
       child: TfBrandHeader(
-        title: 'QuickBytes',
+        title: 'Bolt',
         subtitle: outletName.isEmpty ? null : outletName,
       ),
     );

@@ -68,11 +68,19 @@ Build POS-terminal release APK:
 tool/build_terminal_apk.sh
 ```
 
+Build admin-app release APK (fat + per-ABI splits):
+
+```sh
+tool/build_admin_apk.sh
+```
+
 The terminal APK targets Android 5.1/API 22 for older SUNMI, iMin, and PAX POS
 devices (full ABI set, no ABI filter, minSdk 23 via `POS_TERMINAL_BUILD=true`). Normal
 phone builds use minSdk 24; only terminal builds use the lower SDK floor and
 compatible AndroidX dependency pins. The helper copies the result to
-`build/app/outputs/flutter-apk/app-terminal-release.apk`.
+`build/app/outputs/flutter-apk/app-terminal-release.apk`. Both release scripts also
+build `--split-per-abi` APKs (`app-<abi>-release.apk`, and
+`app-terminal-<abi>-release.apk` for the terminal variant) alongside the fat APK.
 
 The Flutter POS ships with compile‑defaults targeting **`backend/.env`**: **`POS_CLOUD_API_URL`** (HTTPS ngrok base, optional override).
 
