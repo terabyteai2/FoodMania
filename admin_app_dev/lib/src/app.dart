@@ -594,6 +594,7 @@ class _MainShellState extends State<MainShell> {
       (_) => InventoryScreen(
         onNavigateToOrders: goToOrders,
         onNavigateToTarget: _navigateNotificationTarget,
+        onRequestScan: () => unawaited(_handleStockScan()),
         pendingScan: _pendingStockScan,
         onPendingScanResolved: () {
           if (mounted) setState(() => _pendingStockScan = null);

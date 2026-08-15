@@ -1304,6 +1304,51 @@ class AppStrings {
   String get subscriptionIvePaid =>
       isBn ? 'পেমেন্ট করেছি' : "I've Paid";
 
+  // ── Billing / subscription page ────────────────────────────────────────────
+  String get billingTitle =>
+      isBn ? 'বিলিং ও সাবস্ক্রিপশন' : 'Billing & Subscription';
+  String get billingSubtitle => isBn
+      ? 'আপনার প্যাকেজ, মেয়াদ ও পেমেন্ট দেখুন'
+      : 'View your package, expiry & payments';
+  String get billingEntrySubtitle => isBn
+      ? 'বর্তমান প্যাকেজ ও মেয়াদের তারিখ'
+      : 'Current package & end date';
+  String get currentPackageLabel =>
+      isBn ? 'বর্তমান প্যাকেজ' : 'Current Package';
+  String get packageLabel => isBn ? 'প্যাকেজ' : 'Package';
+  String get planLabel => isBn ? 'প্ল্যান' : 'Plan';
+  String get statusLabel => isBn ? 'স্ট্যাটাস' : 'Status';
+  String get endDateLabel => isBn ? 'মেয়াদের শেষ তারিখ' : 'End Date';
+  String get renewNow => isBn ? 'রিনিউ করুন' : 'Renew Now';
+  String get upgradeNow => isBn ? 'আপগ্রেড করুন' : 'Upgrade Now';
+  String get checkNow => isBn ? 'চেক করুন' : 'Check Now';
+  String get checkingNow => isBn ? 'চেক হচ্ছে…' : 'Checking…';
+  String get subscriptionActive =>
+      isBn ? 'সক্রিয়' : 'Active';
+  String get subscriptionTrial =>
+      isBn ? 'ট্রায়াল' : 'Trial';
+  String get subscriptionExpired =>
+      isBn ? 'মেয়াদ উত্তীর্ণ' : 'Expired';
+  String get subscriptionInactive =>
+      isBn ? 'নিষ্ক্রিয়' : 'Inactive';
+  String get subscriptionPaid =>
+      isBn ? 'পরিশোধিত' : 'Paid';
+  String get subscriptionNone =>
+      isBn ? 'কোনো সাবস্ক্রিপশন নেই' : 'No subscription';
+  String get subscriptionPlanOptions =>
+      isBn ? 'প্ল্যান ও দাম' : 'Plans & pricing';
+  String get billingCheckedNow => isBn
+      ? 'সর্বশেষ সাবস্ক্রিপশন তথ্য আনা হয়েছে'
+      : 'Latest subscription info fetched';
+  String get billingSyncFailed => isBn
+      ? 'সাবস্ক্রিপশন তথ্য আনা যায়নি'
+      : 'Could not fetch subscription info';
+  String get billingCheckNowHint => isBn
+      ? 'সার্ভার থেকে সর্বশেষ প্যাকেজ ও মেয়াদ আনুন'
+      : 'Fetch the latest package & expiry from server';
+  String get billingTrialEnds => isBn
+      ? 'ট্রায়াল শেষ হবে' : 'Trial ends';
+
   // ── Hero media ─────────────────────────────────────────────────────────────
   String get heroMediaSubtitle => isBn
       ? 'কাস্টমার মেনু পেজের ফটো ও ভিডিও'
@@ -1536,7 +1581,7 @@ class AppStrings {
   String get statusOk => isBn ? 'ঠিক' : 'OK';
   String get statusLow => isBn ? 'কম' : 'LOW';
   String get statusOut => isBn ? 'শেষ' : 'OUT';
-  String get stockIn => isBn ? 'স্টক ইন' : 'Stock in';
+  String get stockIn => isBn ? 'স্টক যোগ' : 'Stock in';
   String get startCount => isBn ? 'গণনা শুরু' : 'Start count';
   // Stock (spec §4.7 ranked table)
   String get stockValue => isBn ? 'স্টক মূল্য' : 'Stock value';
@@ -1561,6 +1606,7 @@ class AppStrings {
   String get colQty => isBn ? 'পরিমাণ' : 'QTY';
   String get colCover => isBn ? 'কভার' : 'COVER';
   String get countAction => isBn ? 'অবশিষ্ট' : 'Remaining';
+  String get countStock => isBn ? 'স্টক বাকি' : 'Count';
   String get stockCountTitle => isBn ? 'স্টক অবশিষ্ট' : 'Stock Remaining';
   String get endOfDayCountInstruction => isBn
       ? 'দিন শেষে অবশিষ্ট স্টক গণনা করুন'

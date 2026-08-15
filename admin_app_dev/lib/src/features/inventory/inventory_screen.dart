@@ -20,6 +20,7 @@ import '../../models/inventory_summary.dart';
 import '../../models/inventory_unit.dart';
 import '../../models/pos_notification.dart';
 import '../../models/receipt_scan.dart';
+import 'end_of_day_count_screen.dart';
 import 'inventory_item_detail_screen.dart';
 import 'stock_in_screen.dart';
 import 'stock_suppliers_screen.dart';
@@ -33,6 +34,7 @@ class InventoryScreen extends StatefulWidget {
   const InventoryScreen({
     this.onNavigateToOrders,
     this.onNavigateToTarget,
+    this.onRequestScan,
     this.pendingScan,
     this.onPendingScanResolved,
     super.key,
@@ -40,6 +42,11 @@ class InventoryScreen extends StatefulWidget {
 
   final VoidCallback? onNavigateToOrders;
   final ValueChanged<PosNotificationTarget>? onNavigateToTarget;
+
+  /// Launches the stock scan (bill/count sheet) flow from the camera FAB.
+  /// Wired by the shell to its drawer Stock ▸ Scan handler so the parsed
+  /// result surfaces on the table in review mode.
+  final VoidCallback? onRequestScan;
 
   /// A stock inventory scan (supplier bill or count sheet) awaiting
   /// confirmation. When set, the table switches to review mode: changed rows
@@ -274,28 +281,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return null;
   }
 
-  _ScanReviewData _reviewData(List<InventorySummaryItem> items) {
+  Map<String, _ScanCellPreview> _reviewData(List<InventorySummaryItem> items) {
     final scan = widget.pendingScan;
-    if (scan == null) return const _ScanReviewData();
+    if (scan == null) return const {};
     final previews = <String, _ScanCellPreview>{};
-    final unmatched = <String>[];
-    var newItemCount = 0;
-    void addUnmatched(ReceiptScanLine line) {
-      final name = line.nameEn.trim().isNotEmpty
-          ? line.nameEn.trim()
-          : line.nameBn.trim();
-      newItemCount++;
-      if (name.isNotEmpty) unmatched.add(name);
-    }
-
     switch (scan.category) {
       case StockScanCategory.count:
         for (final line in scan.items) {
           final id = line.matchedInventoryItemId;
-          if (id == null || id.isEmpty) {
-            addUnmatched(line);
-            continue;
-          }
+          if (id == null || id.isEmpty) continue;
           InventorySummaryItem? item;
           for (final i in items) {
             if (i.id == id) {
@@ -304,15 +298,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
             }
           }
           if (item == null) continue;
-          previews[id] = _ScanCellPreview(qty: (item.onHand, line.qty));
+          previews[id] = _ScanCellPreview(
+            qty: (item.onHand, line.qty),
+            qtyStyle: _ScanQtyStyle.replace,
+          );
         }
       case StockScanCategory.stockIn:
         for (final line in scan.items) {
           final item = _matchSummaryItem(items, line);
-          if (item == null) {
-            addUnmatched(line);
-            continue;
-          }
+          if (item == null) continue;
           final prior = previews[item.id];
           final oldQty = prior?.qty.$1 ?? item.onHand;
           final newQty = (prior?.qty.$2 ?? oldQty) + line.qty;
@@ -323,15 +317,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
               : prior?.price;
           previews[item.id] = _ScanCellPreview(
             qty: (oldQty, newQty),
+            qtyStyle: _ScanQtyStyle.increment,
             price: price,
           );
         }
     }
-    return _ScanReviewData(
-      previews: previews,
-      unmatchedNames: unmatched,
-      newItemCount: newItemCount,
-    );
+    return previews;
   }
 
   void _cancelScan() {
@@ -433,6 +424,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (context.mounted) await AppScope.read(context).refreshInventorySummary();
   }
 
+  Future<void> _openEndOfDayCount(BuildContext context) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const EndOfDayCountScreen()),
+    );
+    if (context.mounted) await AppScope.read(context).refreshInventorySummary();
+  }
+
   Future<void> _openRow(
     BuildContext context,
     PosAppController app,
@@ -473,6 +472,47 @@ class _InventoryScreenState extends State<InventoryScreen> {
     await _openStockIn(context, itemId: item.id);
   }
 
+  Future<void> _onLongPressRow(
+    BuildContext context,
+    PosAppController app,
+    InventorySummaryItem item,
+  ) async {
+    final text = app.strings;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: TfText(text.deleteInventoryItem),
+        content: TfText(text.deleteInventoryConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: TfText(text.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: TfText(
+              text.deleteAction,
+              style: const TextStyle(color: PosColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await app.deleteInventoryItem(item.id);
+      if (context.mounted) {
+        await AppScope.read(context).refreshInventorySummary();
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: TfText(text.deleteInventoryConfirm)),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.selectMany(context, const [
@@ -492,7 +532,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final items = summary?.items ?? const <InventorySummaryItem>[];
     final sorted = _sorted(items);
     final reviewing = _reviewing;
-    final reviewData = _reviewData(items);
+    final reviewPreviews = _reviewData(items);
 
     return AppScaffold(
       title: text.stockTab,
@@ -503,6 +543,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
       pinHeader: true,
       fillBody: true,
+      floatingActionButton: !reviewing && app.hasFeature('inventory')
+          ? TourSpot(
+              name: 'stock.scanFab',
+              child: TfFab(
+                icon: Icons.photo_camera_outlined,
+                tooltip: text.scanStock,
+                onPressed: widget.onRequestScan ?? () {},
+              ),
+            )
+          : null,
       footer: reviewing
           ? TfStickyCTA(
               child: Row(
@@ -534,25 +584,59 @@ class _InventoryScreenState extends State<InventoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TourSpot(
-            name: 'stock.period',
-            child: TfPeriodWithCalendar(
-              options: [
-                ('today', text.rangeToday),
-                ('week', text.range7Days),
-                ('month', text.range30Days),
-              ],
-              value: _timeframe.name,
-              start: _rangeStart,
-              end: _rangeEnd,
-              onChanged: (value, start, end) {
-                if (value == TfPeriodWithCalendar.customValue) {
-                  _onRangeChanged(start, end);
-                } else {
-                  _updateTimeframe(TfTimeframe.values.byName(value));
-                }
-              },
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: TourSpot(
+                  name: 'stock.period',
+                  child: TfPeriodWithCalendar(
+                    compact: true,
+                    options: [
+                      ('today', text.rangeToday),
+                      ('week', '7d'),
+                      ('month', '30d'),
+                    ],
+                    value: _timeframe.name,
+                    start: _rangeStart,
+                    end: _rangeEnd,
+                    onChanged: (value, start, end) {
+                      if (value == TfPeriodWithCalendar.customValue) {
+                        _onRangeChanged(start, end);
+                      } else {
+                        _updateTimeframe(TfTimeframe.values.byName(value));
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: PosSpacing.sp2),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TfButton(
+                        label: text.countStock,
+                        icon: Icons.fact_check_outlined,
+                        variant: TfButtonVariant.paper,
+                        size: TfButtonSize.sm,
+                        onPressed: () => _openEndOfDayCount(context),
+                      ),
+                    ),
+                    const SizedBox(width: PosSpacing.sp2),
+                    Expanded(
+                      child: TfButton(
+                        label: text.stockIn,
+                        icon: Icons.add_box_outlined,
+                        variant: TfButtonVariant.paper,
+                        size: TfButtonSize.sm,
+                        onPressed: () => _openStockIn(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           Expanded(
             child: Builder(
@@ -574,6 +658,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                       message:
                                           'Use Stock in to add your first item.',
                                       messageBn: text.addFirstStockItem,
+                                      action: !reviewing &&
+                                              app.canManageStock
+                                          ? _AddItemButton(
+                                              text: text,
+                                              onPressed: () =>
+                                                  _showAddItem(context),
+                                            )
+                                          : null,
                                     ),
                                   )
                                 : SingleChildScrollView(
@@ -582,19 +674,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        if (reviewing) ...[
-                                          _ScanReviewBanner(
-                                            text: text,
-                                            changed: reviewData.previews.length,
-                                            category: widget.pendingScan!
-                                                .category,
-                                            unmatched:
-                                                reviewData.unmatchedNames,
-                                            newItemCount:
-                                                reviewData.newItemCount,
-                                          ),
-                                          const SizedBox(height: 10),
-                                        ],
                                         TourSpot(
                                           name: 'stock.table',
                                           child: _StockTable(
@@ -606,10 +685,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                             onSort: _toggleSort,
                                             onRowTap: (item) =>
                                                 _openRow(context, app, item),
+                                            onLongPressRow: app.canManageStock
+                                                ? (item) => _onLongPressRow(
+                                                      context,
+                                                      app,
+                                                      item,
+                                                    )
+                                                : null,
                                             onQtyCommit: _onQtyCommit,
                                             onPriceCommit: _onPriceCommit,
                                             previews: reviewing
-                                                ? reviewData.previews
+                                                ? reviewPreviews
                                                 : const {},
                                             readOnly: reviewing,
                                           ),
@@ -687,6 +773,7 @@ class _StockTable extends StatelessWidget {
     required this.onRowTap,
     required this.onQtyCommit,
     required this.onPriceCommit,
+    this.onLongPressRow,
     this.previews = const {},
     this.readOnly = false,
   });
@@ -698,6 +785,7 @@ class _StockTable extends StatelessWidget {
   final bool canEdit;
   final ValueChanged<_StockSort> onSort;
   final ValueChanged<InventorySummaryItem> onRowTap;
+  final ValueChanged<InventorySummaryItem>? onLongPressRow;
   final Future<void> Function(InventorySummaryItem item, double qty)
   onQtyCommit;
   final Future<void> Function(InventorySummaryItem item, double price)
@@ -736,7 +824,7 @@ class _StockTable extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 _HCell(
-                  label: text.colInOut,
+                  label: readOnly ? text.colValue : text.colInOut,
                   width: 68,
                   active: sort == _StockSort.inOut,
                   dir: dir,
@@ -768,7 +856,11 @@ class _StockTable extends StatelessWidget {
               last: i == items.length - 1,
               heroW: heroW,
               canEdit: canEdit && !readOnly,
+              reviewing: readOnly,
               onTap: () => onRowTap(items[i]),
+              onLongPress: onLongPressRow == null
+                  ? null
+                  : () => onLongPressRow!(items[i]),
               onQtyCommit: onQtyCommit,
               onPriceCommit: onPriceCommit,
               preview: previews[items[i].id],
@@ -840,9 +932,11 @@ class _StockRow extends StatelessWidget {
     required this.last,
     required this.heroW,
     required this.canEdit,
+    required this.reviewing,
     required this.onTap,
     required this.onQtyCommit,
     required this.onPriceCommit,
+    this.onLongPress,
     this.preview,
   });
 
@@ -851,7 +945,9 @@ class _StockRow extends StatelessWidget {
   final bool last;
   final double heroW;
   final bool canEdit;
+  final bool reviewing;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final Future<void> Function(InventorySummaryItem item, double qty)
   onQtyCommit;
   final Future<void> Function(InventorySummaryItem item, double price)
@@ -861,6 +957,7 @@ class _StockRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = _stockKind(item.onHand, item.minThreshold);
+    final p = preview;
     final name = InventoryItem.localizedNameParts(
       nameEn: item.nameEn,
       nameBn: item.nameBn,
@@ -872,6 +969,9 @@ class _StockRow extends StatelessWidget {
         : kind == 'low'
         ? PosColors.warning
         : PosColors.text;
+    final baseValue = item.onHand * item.costPerUnit;
+    final shownValue =
+        (p?.qty.$2 ?? item.onHand) * (p?.price?.$2 ?? item.costPerUnit);
 
     return Container(
       decoration: BoxDecoration(
@@ -885,6 +985,7 @@ class _StockRow extends StatelessWidget {
           Expanded(
             child: InkWell(
               onTap: onTap,
+              onLongPress: canEdit ? onLongPress : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 child: Row(
@@ -920,29 +1021,14 @@ class _StockRow extends StatelessWidget {
                               fontSize: 12,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 68,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (item.todayIn > 0)
+                          if (!reviewing) ...[
+                            const SizedBox(height: 2),
                             TfText(
-                              '+${tfFormatNumber(context, item.todayIn)}',
-                              style: TfTextStyles.label.copyWith(
-                                color: PosColors.success,
-                                fontSize: 10,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                          if (item.todayOut > 0)
-                            TfText(
-                              '-${tfFormatNumber(context, item.todayOut)}',
+                              shownValue == 0
+                                  ? '—'
+                                  : tfFormatCurrency(context, shownValue),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TfTextStyles.label.copyWith(
                                 color: PosColors.muted,
                                 fontSize: 10,
@@ -951,16 +1037,111 @@ class _StockRow extends StatelessWidget {
                                 ],
                               ),
                             ),
-                          if (item.todayIn == 0 && item.todayOut == 0)
-                            TfText(
-                              '—',
-                              style: TfTextStyles.bodyMuted.copyWith(
-                                color: PosColors.mutedSoft,
-                                fontSize: 10,
-                              ),
-                            ),
+                          ],
                         ],
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 68,
+                      child: reviewing
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children:
+                                  (p != null &&
+                                          (shownValue - baseValue).abs() >=
+                                              0.01)
+                                      ? [
+                                          TfText(
+                                            tfFormatCurrency(
+                                                context, baseValue),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TfTextStyles.rowMoney
+                                                .copyWith(
+                                              fontSize: 10,
+                                              color: PosColors.muted,
+                                              decoration: TextDecoration
+                                                  .lineThrough,
+                                              decorationColor:
+                                                  PosColors.muted,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 1),
+                                          TfText(
+                                            tfFormatCurrency(
+                                                context, shownValue),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TfTextStyles.rowMoney
+                                                .copyWith(
+                                              fontSize: 12,
+                                              color: shownValue > baseValue
+                                                  ? PosColors.success
+                                                  : PosColors.danger,
+                                              fontWeight: FontWeight.w700,
+                                              fontFeatures: const [
+                                                FontFeature
+                                                    .tabularFigures(),
+                                              ],
+                                            ),
+                                          ),
+                                        ]
+                                      : [
+                                          TfText(
+                                            shownValue == 0
+                                                ? '—'
+                                                : tfFormatCurrency(context,
+                                                    shownValue),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TfTextStyles.label
+                                                .copyWith(
+                                              color: PosColors.muted,
+                                              fontSize: 10,
+                                              fontFeatures: const [
+                                                FontFeature
+                                                    .tabularFigures(),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (item.todayIn > 0)
+                                  TfText(
+                                    '+${tfFormatNumber(context, item.todayIn)}',
+                                    style: TfTextStyles.label.copyWith(
+                                      color: PosColors.success,
+                                      fontSize: 10,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                if (item.todayOut > 0)
+                                  TfText(
+                                    '-${tfFormatNumber(context, item.todayOut)}',
+                                    style: TfTextStyles.label.copyWith(
+                                      color: PosColors.muted,
+                                      fontSize: 10,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                if (item.todayIn == 0 && item.todayOut == 0)
+                                  TfText(
+                                    '—',
+                                    style: TfTextStyles.bodyMuted.copyWith(
+                                      color: PosColors.mutedSoft,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                              ],
+                            ),
                     ),
                   ],
                 ),
@@ -977,7 +1158,9 @@ class _StockRow extends StatelessWidget {
               canEdit: canEdit,
               width: 68,
               onCommit: onPriceCommit,
-              preview: preview?.price,
+              preview: p == null || p.price == null
+                  ? null
+                  : _CellPreviewPair(p.price!),
             ),
           ),
           const SizedBox(width: 12),
@@ -992,7 +1175,13 @@ class _StockRow extends StatelessWidget {
               canEdit: canEdit,
               width: heroW,
               onCommit: onQtyCommit,
-              preview: preview?.qty,
+              preview: p == null
+                  ? null
+                  : _CellPreviewPair(
+                      p.qty,
+                      incrementStyle:
+                          p.qtyStyle == _ScanQtyStyle.increment,
+                    ),
             ),
           ),
         ],
@@ -1000,108 +1189,34 @@ class _StockRow extends StatelessWidget {
     );
   }
 }
+
+/// How a scan preview renders on the qty cell: stock-in shows the current
+/// value with a green +N increment below (no slash); count shows the
+/// struck-through old value with the new counted quantity in red below.
+enum _ScanQtyStyle { increment, replace }
 
 /// Review-mode preview pair (old, new) rendered by [_ScrubCell] in the exact
 /// manual-edit style: muted struck-through old on top, green/red new below.
 class _ScanCellPreview {
-  const _ScanCellPreview({required this.qty, this.price});
+  const _ScanCellPreview({
+    required this.qty,
+    this.qtyStyle = _ScanQtyStyle.replace,
+    this.price,
+  });
 
   final (double, double) qty;
+  final _ScanQtyStyle qtyStyle;
   final (double, double)? price;
 }
 
-/// Computed per-build review state for a pending stock scan.
-class _ScanReviewData {
-  const _ScanReviewData({
-    this.previews = const {},
-    this.unmatchedNames = const [],
-    this.newItemCount = 0,
-  });
+/// (old, new) value pair plus rendering style, handed to a [_ScrubCell] during
+/// scan review. With [incrementStyle] the cell keeps its current value and
+/// shows the signed delta below instead of a struck-through replacement.
+class _CellPreviewPair {
+  const _CellPreviewPair(this.value, {this.incrementStyle = false});
 
-  final Map<String, _ScanCellPreview> previews;
-  final List<String> unmatchedNames;
-
-  /// Stock-in lines that matched nothing and would be created as new items
-  /// on confirm.
-  final int newItemCount;
-}
-
-/// Slim status banner shown above the table during scan review: the change
-/// count plus any lines that couldn't be matched to an inventory item.
-class _ScanReviewBanner extends StatelessWidget {
-  const _ScanReviewBanner({
-    required this.text,
-    required this.changed,
-    required this.category,
-    required this.unmatched,
-    required this.newItemCount,
-  });
-
-  final AppStrings text;
-  final int changed;
-  final StockScanCategory category;
-  final List<String> unmatched;
-  final int newItemCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: PosColors.primaryWash,
-        borderRadius: BorderRadius.circular(PosRadii.card),
-        border: Border.all(color: PosColors.primary),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.document_scanner_outlined,
-            size: 19,
-            color: PosColors.primary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TfText(
-                  text.scanReviewCount(changed),
-                  style: TfTextStyles.bodyMuted.copyWith(
-                    color: PosColors.primaryDark,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
-                  ),
-                ),
-                if (unmatched.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  TfText(
-                    category == StockScanCategory.count
-                        ? text.countScanUnmatched
-                        : text.stockScanNewItems(newItemCount),
-                    style: TfTextStyles.bodyMuted.copyWith(
-                      color: PosColors.warning,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  TfText(
-                    unmatched.join(', '),
-                    style: TfTextStyles.bodyMuted.copyWith(
-                      color: PosColors.slate,
-                      fontWeight: FontWeight.w500,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  final (double, double) value;
+  final bool incrementStyle;
 }
 
 enum _ScrubMode { qty, price }
@@ -1136,7 +1251,7 @@ class _ScrubCell extends StatefulWidget {
 
   /// (old, new) value pair rendered like an in-progress edit. When set the
   /// cell is read-only and previews its delta instead of the live value.
-  final (double, double)? preview;
+  final _CellPreviewPair? preview;
 
   @override
   State<_ScrubCell> createState() => _ScrubCellState();
@@ -1261,8 +1376,8 @@ class _ScrubCellState extends State<_ScrubCell> {
       base = _flashOld;
       shown = _flashValue;
     } else if (widget.preview != null) {
-      base = widget.preview!.$1;
-      shown = widget.preview!.$2;
+      base = widget.preview!.value.$1;
+      shown = widget.preview!.value.$2;
     } else {
       base = current;
       shown = current;
@@ -1271,6 +1386,15 @@ class _ScrubCellState extends State<_ScrubCell> {
     final showPreview =
         (_editing || _flash || widget.preview != null) && delta.abs() >= 0.0001;
     final deltaColor = delta > 0 ? PosColors.success : PosColors.danger;
+    // Stock-in scan qty previews keep the current value and show only the
+    // signed increment below; count previews (and price) replace it.
+    final incrementStyle = !_isPrice &&
+        widget.preview != null &&
+        widget.preview!.incrementStyle;
+    // Count qty previews are corrections — always red, not delta-colored.
+    final newColor = !_isPrice && widget.preview != null && !incrementStyle
+        ? PosColors.danger
+        : deltaColor;
 
     return KeyedSubtree(
       key: _anchorKey,
@@ -1285,31 +1409,62 @@ class _ScrubCellState extends State<_ScrubCell> {
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      TfText(
-                        _line(base),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TfTextStyles.rowMoney.copyWith(
-                          fontSize: 10,
-                          color: PosColors.muted,
-                          decoration: TextDecoration.lineThrough,
-                          decorationColor: PosColors.muted,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      TfText(
-                        _line(shown),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TfTextStyles.rowMoney.copyWith(
-                          fontSize: 12,
-                          color: deltaColor,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
+                    children: incrementStyle
+                        ? [
+                            TfText(
+                              _line(base),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowMoney.copyWith(
+                                fontSize: 12,
+                                color: widget.qtyColor ?? PosColors.text,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            TfText(
+                              '${delta > 0 ? '+' : ''}${_line(delta)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowMoney.copyWith(
+                                fontSize: 12,
+                                color: PosColors.success,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ]
+                        : [
+                            TfText(
+                              _line(base),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowMoney.copyWith(
+                                fontSize: 10,
+                                color: PosColors.muted,
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: PosColors.muted,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            TfText(
+                              _line(shown),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TfTextStyles.rowMoney.copyWith(
+                                fontSize: 12,
+                                color: newColor,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
                   )
                 : FittedBox(
                     fit: BoxFit.scaleDown,

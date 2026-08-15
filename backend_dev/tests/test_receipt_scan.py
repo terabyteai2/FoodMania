@@ -235,6 +235,68 @@ async def test_receipt_scan_ocr_raises_when_every_page_fails(monkeypatch):
         )
 
 
+def test_receipt_scan_accepts_alternate_key_names_from_llm():
+    category, items = receipt_scan._validated_items(
+        json.dumps(
+            {
+                "category": "stock_in",
+                "items": [
+                    {
+                        "nameEn": "Sugar (50kg bag)",
+                        "nameBn": "চিনির বস্তা (৫০ কেজি)",
+                        "quantity": 1,
+                        "unit": "pcs",
+                        "unitPriceBdt": 3200,
+                        "total": 3200,
+                    },
+                    {
+                        "nameEn": "Flour (Maida)",
+                        "nameBn": "ময়দা",
+                        "quantity": 25,
+                        "unit": "kg",
+                        "unit_price": 55,
+                        "totalBdt": 1375,
+                    },
+                ],
+            }
+        )
+    )
+
+    assert category == "stock_in"
+    assert [item.nameEn for item in items] == ["Sugar (50kg bag)", "Flour (Maida)"]
+    assert items[0].qty == 1
+    assert items[0].totalBdt == 3200
+    assert items[1].qty == 25
+    assert items[1].unitPriceBdt == 55
+
+
+def test_receipt_scan_count_accepts_quantity_key():
+    category, items = receipt_scan._validated_items(
+        json.dumps(
+            {
+                "category": "count",
+                "items": [
+                    {
+                        "nameEn": "Rice",
+                        "nameBn": "চাল",
+                        "quantity": 12,
+                        "unit": "kg",
+                        "unitPriceBdt": 90,
+                        "totalBdt": 1080,
+                        "matchedInventoryItemId": "item-rice",
+                    }
+                ],
+            }
+        ),
+        known_ids={"item-rice"},
+    )
+
+    assert category == "count"
+    assert items[0].qty == 12
+    assert items[0].totalBdt == 0
+    assert items[0].matchedInventoryItemId == "item-rice"
+
+
 def test_receipt_scan_uses_json_object_mode_for_deepseek():
     deepseek = next(provider for provider in receipt_scan._providers() if provider.name == "deepseek")
 

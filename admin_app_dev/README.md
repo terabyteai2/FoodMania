@@ -74,6 +74,13 @@ Build admin-app release APK (fat + per-ABI splits):
 tool/build_admin_apk.sh
 ```
 
+Build **both** terminal and mobile variants in one run (fat + per-ABI APKs for
+each, collected into `build/app/outputs/flutter-apk/all/`):
+
+```sh
+tool/build_all_apk.sh
+```
+
 The terminal APK targets Android 5.1/API 22 for older SUNMI, iMin, and PAX POS
 devices (full ABI set, no ABI filter, minSdk 23 via `POS_TERMINAL_BUILD=true`). Normal
 phone builds use minSdk 24; only terminal builds use the lower SDK floor and

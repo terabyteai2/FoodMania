@@ -369,7 +369,7 @@ class _CounterModeState extends State<_CounterMode> {
   String _selectedCategory = 'All';
   final _searchCtrl = TextEditingController();
   String _query = '';
-  MenuViewMode _viewMode = MenuViewMode.colorGrid;
+  MenuViewMode _viewMode = MenuViewMode.imageGrid;
 
   // ── Computed ──────────────────────────────────────────────────
 
